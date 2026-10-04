@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenGrid</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 16px; color: #111; background: #fff; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  #status { color: #666; margin-bottom: 12px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 3px 10px 3px 0; border-bottom: 1px solid #eee; white-space: nowrap; }
+  th { font-weight: 600; user-select: none; }
+  #listings th[data-k] { cursor: pointer; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  .dim { color: #888; }
+  .stale { color: #b00; }
+  .chg-up { color: #c0392b; }      /* pricier: bad for a buyer */
+  .chg-down { color: #1a8f4c; }    /* cheaper */
+  .chg { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  #win { margin-bottom: 4px; }
+  #win button { font: inherit; padding: 2px 10px; border: 1px solid #ccc; background: #fff; cursor: pointer; margin-right: 4px; }
+  #win button.on { background: #111; color: #fff; border-color: #111; }
+  #chgsum { margin-bottom: 12px; font-size: 13px; }
+  .bar { background: #eee; height: 8px; }
+  .bar > i { display: block; height: 100%; background: #bbb; }
+  .bar > i.best { background: #1a8f4c; }
+  #tabs, #controls, #providers { margin-bottom: 12px; }
+  #tabs button { font: inherit; padding: 4px 12px; border: 1px solid #ccc; background: #fff; cursor: pointer; margin-right: 4px; }
+  #tabs button.on { background: #111; color: #fff; border-color: #111; }
+  #controls > * { margin-right: 12px; }
+  .view { display: none; }
+  .view.on { display: block; }
+  .note { color: #888; font-size: 12px; margin: 8px 0 16px; }
+  .chip { display: inline-block; border: 1px solid #1a8f4c; color: #1a8f4c; border-radius: 10px; padding: 0 8px; margin-right: 4px; font-size: 12px; }
+  #lb td { padding: 6px 12px 6px 0; }
+  #lb .rank { font-size: 18px; width: 2em; }
+  #lb .pts { font-weight: 700; font-size: 16px; }
+  #lb .barcell { width: 160px; }
+  #charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px 28px; }
+  .chart .ct { font-weight: 600; margin-bottom: 4px; }
+  .chart .row { display: grid; grid-template-columns: 96px 1fr 110px; gap: 8px; align-items: center; padding: 1px 0; }
+  .chart .row .p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chart .row .v { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<h1>OpenGrid</h1>
+<div id="status">loading…</div>
+
+<div id="win"><span class="dim">price change vs </span></div>
+<div id="chgsum" class="dim"></div>
+
+<table id="providers"><thead><tr><th>provider</th><th class="n">listings</th><th class="n">in stock</th><th class="n">unmapped</th><th>last seen</th></tr></thead><tbody></tbody></table>
+
+<div id="controls">
+  <label><input id="inc-int" type="checkbox"> include spot / interruptible</label>
+  <label><input id="inc-out" type="checkbox"> include sold out</label>
+  <span class="dim">applies to leaderboard and charts</span>
+</div>
+
+<div id="tabs">
+  <button data-v="lb" class="on">Leaderboard</button>
+  <button data-v="charts">Charts</button>
+  <button data-v="listings">Listings</button>
+</div>
+
+<div id="v-lb" class="view on">
+  <table id="lb"><tbody></tbody></table>
+  <div class="note" id="lb-note"></div>
+</div>
+
+<div id="v-charts" class="view">
+  <div id="controls2" style="margin-bottom:12px">
+    <input id="cq" type="search" placeholder="filter GPUs">
+    <label><input id="single" type="checkbox"> include GPUs with a single provider</label>
+    <span id="ccount" class="dim"></span>
+  </div>
+  <div id="charts"></div>
+  <div class="note">One bar per provider: its cheapest eligible listing, USD per GPU-hour, bars start at zero. Green is cheapest.</div>
+</div>
+
+<div id="v-listings" class="view">
+  <div style="margin-bottom:12px">
+    <input id="q" type="search" placeholder="filter: gpu, provider, region">
+    <select id="prov"><option value="">all providers</option></select>
+    <label><input id="stock" type="checkbox"> in stock only</label>
+    <span id="count" class="dim"></span>
+  </div>
+  <table id="listings">
+    <thead><tr>
+      <th data-k="gpu">GPU</th><th data-k="provider">provider</th><th data-k="gpu_count" class="n">GPUs</th>
+      <th data-k="price" class="n">$/GPU-hr</th><th data-k="chg" class="n" id="chg-head">change</th><th data-k="inst" class="n">$/instance-hr</th>
+      <th data-k="region">region</th><th data-k="stock">stock</th><th data-k="kind">type</th><th data-k="age" class="n">seen</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const STALE_MIN = 45;           // not seen for three polls: the listing has gone
+const POINTS = [3, 2, 1];       // cheapest, second, third on a GPU
+const MEDALS = ["🥇", "🥈", "🥉"];
+let rows = [], sortKey = "price", sortDir = 1;
+
+const mins = iso => (Date.now() - new Date(iso)) / 60000;
+function age(iso) {
+  const s = Math.max(0, (Date.now() - new Date(iso)) / 1000);
+  if (s < 90) return Math.round(s) + "s";
+  if (s < 5400) return Math.round(s / 60) + "m";
+  if (s < 172800) return Math.round(s / 3600) + "h";
+  return Math.round(s / 86400) + "d";
+}
+const money = (v, p) => v == null ? "–" : Number(v).toFixed(p);
+const stockOf = r => r.available === true ? "yes" : r.available === false ? "no" : "?";
+function el(tag, text, cls) { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; }
+
+/* ---------- price change vs an earlier time ---------- */
+const WINDOWS = [[0.5, "30m"], [1, "1h"], [6, "6h"], [24, "24h"], [168, "7d"], [720, "30d"]];
+let windowH = 24, changes = new Map(), changeMeta = null, reqSeq = 0;
+try { const w = Number(localStorage.getItem("window")); if (WINDOWS.some(x => x[0] === w)) windowH = w; } catch (e) {}
+const winLabel = () => WINDOWS.find(x => x[0] === windowH)[1];
+const lkey = r => r.provider + "\u0000" + r.listing_id;
+// A listing we have not seen lately has no current price to compare.
+const chgOf = r => mins(r.observed_at) > STALE_MIN ? undefined : changes.get(lkey(r));
+
+// Green down arrow = cheaper than before. Red up arrow = pricier. `full` also marks the other cases.
+function chgNode(c, full) {
+  if (!c) return document.createTextNode("");
+  const when = c.then_at ? `${new Date(c.then_at).toLocaleString()}` : "";
+  if (c.status === "up" || c.status === "down") {
+    const pct = Math.abs(c.pct * 100), up = c.status === "up";
+    const s = el("span", `${up ? "▲" : "▼"} ${pct < 10 ? pct.toFixed(1) : pct.toFixed(0)}%`, "chg " + (up ? "chg-up" : "chg-down"));
+    s.title = `$${c.price_then.toFixed(3)} → $${c.price_now.toFixed(3)} per GPU-hour (price in force since ${when})`;
+    return s;
+  }
+  if (!full) return document.createTextNode("");
+  const [t, tip] = c.status === "flat" ? ["·", `unchanged vs ${winLabel()} ago`]
+    : c.status === "new" ? ["new", `first listed less than ${winLabel()} ago`]
+    : ["–", `we were not recording this provider ${winLabel()} ago`];
+  const s = el("span", t, "chg dim"); s.title = tip; return s;
+}
+
+function renderChangeSummary() {
+  const n = { up: 0, down: 0, flat: 0, new: 0, nodata: 0 };
+  for (const r of rows) { const c = chgOf(r); if (c) n[c.status]++; }
+  const since = changeMeta && changeMeta.tracking_since ? new Date(changeMeta.tracking_since).toLocaleString() : null;
+  $("#chgsum").textContent = !changeMeta ? "price changes unavailable"
+    : `vs ${winLabel()} ago: ${n.down} cheaper ▼ · ${n.up} pricier ▲ · ${n.flat} unchanged · ${n.new} new · ${n.nodata} without history that far back · recording since ${since}`;
+  $("#chg-head").textContent = "vs " + winLabel() + " ago";
+  document.querySelectorAll("#win button").forEach(b => b.classList.toggle("on", Number(b.dataset.h) === windowH));
+}
+
+/* ---------- what counts as comparable ---------- */
+// A listing is compared only when it is a real, current, per-GPU on-demand price.
+// Vast's "cheapest" row is one host's ask, so its median row stands for Vast.
+// Nebius "from $x" prices are floors over several configs, not quotes.
+function eligible(r) {
+  if (!r.canonical_gpu_name || !(Number(r.price_per_gpu_hour) > 0)) return false;
+  if (mins(r.observed_at) > STALE_MIN) return false;
+  if (r.provider_tier === "cheapest" || r.provider_tier === "from_price") return false;
+  if (!$("#inc-int").checked && (r.interruptible || r.market_type !== "on_demand")) return false;
+  if (!$("#inc-out").checked && r.available === false) return false;
+  return true;
+}
+
+// gpu -> [{provider, price, row}], one entry per provider (its cheapest), cheapest first
+function groups() {
+  const best = new Map();
+  for (const r of rows) {
+    if (!eligible(r)) continue;
+    const key = r.canonical_gpu_name + "\u0000" + r.provider, price = Number(r.price_per_gpu_hour);
+    const cur = best.get(key);
+    if (!cur || price < cur.price) best.set(key, { gpu: r.canonical_gpu_name, provider: r.provider, price, row: r });
+  }
+  const by = new Map();
+  for (const b of best.values()) { if (!by.has(b.gpu)) by.set(b.gpu, []); by.get(b.gpu).push(b); }
+  for (const list of by.values()) list.sort((a, b) => a.price - b.price || a.provider.localeCompare(b.provider));
+  return by;
+}
+
+/* ---------- leaderboard ---------- */
+function renderLeaderboard(by) {
+  const stats = {};
+  const S = p => stats[p] ||= { name: p, pts: 0, place: [0, 0, 0], gpus: 0, inStock: 0, known: 0 };
+  for (const r of rows) {                       // stock rate over every current listing
+    if (mins(r.observed_at) > STALE_MIN) continue;
+    S(r.provider);
+    if (r.available != null) { stats[r.provider].known++; if (r.available) stats[r.provider].inStock++; }
+  }
+  let compared = 0;
+  for (const list of by.values()) {
+    for (const b of list) S(b.provider).gpus++;
+    if (list.length < 2) continue;              // a win needs someone to beat
+    compared++;
+    list.forEach((b, i) => {
+      // equal prices share the better place
+      let place = i; while (place > 0 && list[place - 1].price === b.price) place--;
+      if (place < 3) { stats[b.provider].pts += POINTS[place]; stats[b.provider].place[place]++; }
+    });
+  }
+  const board = Object.values(stats).sort((a, b) =>
+    b.pts - a.pts || b.place[0] - a.place[0] || b.gpus - a.gpus || a.name.localeCompare(b.name));
+  const pct = s => s.known >= 5 ? s.inStock / s.known : -1;
+  const top = (key, min) => { const c = board.filter(s => key(s) >= min).sort((a, b) => key(b) - key(a))[0]; return c && key(c) > 0 ? c.name : null; };
+  const badges = {};
+  const add = (name, label) => { if (name) (badges[name] ||= []).push(label); };
+  add(top(s => s.place[0], 1), "Price Hawk");
+  add(top(s => s.gpus, 1), "Catalog King");
+  add(top(pct, 0.0001), "Stock Champ");
+
+  const tb = $("#lb tbody"); tb.textContent = "";
+  const maxPts = Math.max(1, ...board.map(s => s.pts));
+  board.forEach((s, i) => {
+    const tr = el("tr");
+    tr.append(el("td", MEDALS[i] || String(i + 1), "rank"));
+    tr.append(el("td", s.name));
+    const barTd = el("td", null, "barcell"), bar = el("div", null, "bar"), fill = el("i", null, "best");
+    fill.style.width = (s.pts / maxPts * 100) + "%"; bar.append(fill); barTd.append(bar); tr.append(barTd);
+    tr.append(el("td", s.pts + " pts", "pts n"));
+    tr.append(el("td", `${MEDALS[0]} ${s.place[0]}  ${MEDALS[1]} ${s.place[1]}  ${MEDALS[2]} ${s.place[2]}`, "n"));
+    tr.append(el("td", `${s.gpus} GPU${s.gpus === 1 ? "" : "s"}`, "n"));
+    tr.append(el("td", s.known >= 5 ? Math.round(pct(s) * 100) + "% in stock" : "stock n/a", "n dim"));
+    const chips = el("td"); for (const b of badges[s.name] || []) chips.append(el("span", b, "chip")); tr.append(chips);
+    tb.append(tr);
+  });
+  $("#lb-note").textContent =
+    `Points: ${POINTS.join("/")} for the cheapest three providers on each GPU, over the ${compared} GPUs that at least two providers sell. ` +
+    `Same rules as the charts. Stock rate counts only providers that publish stock.`;
+}
+
+/* ---------- charts ---------- */
+function renderCharts(by) {
+  const q = $("#cq").value.trim().toLowerCase(), single = $("#single").checked;
+  const gpus = [...by.entries()]
+    .filter(([g, l]) => (single || l.length >= 2) && (!q || g.toLowerCase().includes(q)))
+    .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  $("#ccount").textContent = `${gpus.length} GPUs`;
+  const box = $("#charts"); box.textContent = "";
+  for (const [gpu, list] of gpus) {
+    const max = list[list.length - 1].price, min = list[0].price;
+    const c = el("div", null, "chart");
+    const t = el("div", gpu, "ct");
+    t.append(el("span", `  ${list.length} provider${list.length > 1 ? "s" : ""}` + (list.length > 1 ? ` · ${(max / min).toFixed(1)}x spread` : ""), "dim"));
+    c.append(t);
+    list.forEach((b, i) => {
+      const row = el("div", null, "row");
+      row.append(el("span", b.provider, "p"));
+      const bar = el("div", null, "bar"), fill = el("i", null, i === 0 && list.length > 1 ? "best" : "");
+      fill.style.width = (b.price / max * 100) + "%"; bar.append(fill); row.append(bar);
+      const val = el("span", "$" + b.price.toFixed(2), "v");
+      const move = chgOf(b.row);
+      if (move && (move.status === "up" || move.status === "down")) val.append(" ", chgNode(move, false));
+      row.append(val);
+      row.title = `${b.row.raw_gpu_name} · ${b.row.gpu_count}x · ${stockOf(b.row)} stock`;
+      c.append(row);
+    });
+    box.append(c);
+  }
+}
+
+/* ---------- listings ---------- */
+function view(r) {
+  return {
+    r, gpu: r.canonical_gpu_name || r.raw_gpu_name, provider: r.provider, gpu_count: r.gpu_count,
+    price: r.price_per_gpu_hour == null ? Infinity : Number(r.price_per_gpu_hour),
+    inst: r.price_per_instance_hour == null ? Infinity : Number(r.price_per_instance_hour),
+    region: r.region || r.country || "", stock: stockOf(r),
+    kind: [r.market_type, r.provider_tier].filter(Boolean).join(" / "), age: mins(r.observed_at),
+    chg: (c => c && c.pct != null ? c.pct : null)(chgOf(r)),     // null: no comparison, sorts last
+  };
+}
+function renderListings() {
+  const q = $("#q").value.trim().toLowerCase(), prov = $("#prov").value, inStock = $("#stock").checked;
+  const list = rows.map(view).filter(v =>
+    (!prov || v.provider === prov) && (!inStock || v.r.available === true) &&
+    (!q || (v.gpu + " " + v.r.raw_gpu_name + " " + v.provider + " " + v.region + " " + v.kind).toLowerCase().includes(q)));
+  list.sort((a, b) => {
+    const x = a[sortKey], y = b[sortKey];
+    if (x === null || y === null) return x === y ? a.price - b.price : x === null ? 1 : -1;   // empty cells last either way
+    return (typeof x === "string" ? x.localeCompare(y) : x - y) * sortDir || a.price - b.price;
+  });
+  $("#count").textContent = `${list.length} of ${rows.length} listings`;
+  const tb = $("#listings tbody"); tb.textContent = "";
+  for (const v of list.slice(0, 1000)) {
+    const tr = el("tr");
+    const cell = (text, cls) => tr.append(el("td", text, cls));
+    cell(v.gpu, v.r.canonical_gpu_name ? "" : "dim");   // grey = no canonical name yet
+    cell(v.provider); cell(v.gpu_count, "n");
+    cell(money(v.r.price_per_gpu_hour, 3), "n");
+    const ct = el("td", null, "n"); ct.append(chgNode(chgOf(v.r), true)); tr.append(ct);
+    cell(money(v.r.price_per_instance_hour, 2), "n");
+    cell(v.region); cell(v.stock, v.stock === "yes" ? "" : "dim"); cell(v.kind, "dim");
+    cell(age(v.r.observed_at), "n" + (v.age > STALE_MIN ? " stale" : ""));
+    tb.append(tr);
+  }
+}
+
+/* ---------- provider status ---------- */
+function renderProviders() {
+  const by = {};
+  for (const r of rows) {
+    const p = by[r.provider] ||= { n: 0, stock: 0, unmapped: 0, seen: 0 };
+    p.n++; if (r.available === true) p.stock++; if (!r.canonical_gpu_name) p.unmapped++;
+    p.seen = Math.max(p.seen, +new Date(r.observed_at));
+  }
+  const tb = $("#providers tbody"); tb.textContent = "";
+  for (const [name, p] of Object.entries(by).sort()) {
+    const tr = el("tr"), old = (Date.now() - p.seen) / 60000 > STALE_MIN;
+    tr.append(el("td", name), el("td", p.n, "n"), el("td", p.stock, "n"), el("td", p.unmapped, "n"),
+      el("td", age(new Date(p.seen).toISOString()) + " ago", old ? "stale" : ""));
+    tb.append(tr);
+  }
+  const sel = $("#prov"), have = new Set([...sel.options].map(o => o.value));
+  for (const name of Object.keys(by).sort()) if (!have.has(name)) sel.add(new Option(name, name));
+  $("#status").textContent = `${rows.length} listings · ${Object.keys(by).length} providers · refreshed ${new Date().toLocaleTimeString()}`;
+}
+
+function renderAll() {
+  const by = groups();
+  renderProviders(); renderChangeSummary(); renderLeaderboard(by); renderCharts(by); renderListings();
+}
+
+async function load() {
+  const seq = ++reqSeq;
+  const hours = windowH;
+  try {
+    const [res, chRes] = await Promise.all([
+      fetch("/listings"),
+      fetch(`/changes?hours=${hours}`).catch(() => null),   // the page still works without it
+    ]);
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    const ch = chRes && chRes.ok ? await chRes.json() : null;
+    if (seq !== reqSeq) return;                             // a newer request (another window) won
+    rows = data;
+    changeMeta = ch;
+    changes = new Map(ch ? ch.items.map(i => [lkey(i), i]) : []);
+    renderAll();
+  } catch (e) {
+    if (seq === reqSeq) $("#status").textContent = "cannot reach the API: " + e.message;
+  }
+}
+
+for (const [h, label] of WINDOWS) {
+  const b = el("button", label); b.dataset.h = h; $("#win").append(b);
+}
+$("#win").addEventListener("click", e => {
+  const h = Number(e.target.dataset.h);
+  if (!h || h === windowH) return;
+  windowH = h;
+  try { localStorage.setItem("window", String(h)); } catch (err) {}
+  changes = new Map(); changeMeta = null;                  // never show the old window's arrows under the new label
+  renderAll();
+  load();
+});
+
+for (const id of ["#inc-int", "#inc-out"]) $(id).addEventListener("change", renderAll);
+$("#cq").addEventListener("input", () => renderCharts(groups()));
+$("#single").addEventListener("change", () => renderCharts(groups()));
+for (const id of ["#q", "#prov", "#stock"]) $(id).addEventListener("input", renderListings);
+$("#listings thead").addEventListener("click", e => {
+  const k = e.target.dataset.k;
+  if (!k) return;
+  sortDir = k === sortKey ? -sortDir : 1; sortKey = k; renderListings();
+});
+$("#tabs").addEventListener("click", e => {
+  const v = e.target.dataset.v;
+  if (!v) return;
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b === e.target));
+  document.querySelectorAll(".view").forEach(d => d.classList.toggle("on", d.id === "v-" + v));
+});
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>

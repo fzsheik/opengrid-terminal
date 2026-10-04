@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenGrid</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23131920'/%3E%3Cpath d='M6 6h12M6 12h12M6 18h12M6 6v12M12 6v12M18 6v12' stroke='%234d94ff' stroke-width='1.6' fill='none'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#4d94ff" stroke-width="1.6" stroke-linecap="round"><path d="M4 4h16M4 12h16M4 20h16M4 4v16M12 4v16M20 4v16"/></svg>
+      OPENGRID
+    </div>
+    <nav class="nav" aria-label="Main">
+      <a href="#/market" data-tab="market">
+        <svg viewBox="0 0 24 24"><path d="M3 17l5-6 4 3 8-9"/><path d="M15 5h5v5"/></svg><span>Market</span>
+      </a>
+      <a href="#/routing" data-tab="routing">
+        <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.2"/><circle cx="18" cy="18" r="2.2"/><path d="M8.2 6H15a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h6.8"/></svg><span>Routing</span><em class="soon">soon</em>
+      </a>
+      <a href="#/deploy" data-tab="deploy">
+        <svg viewBox="0 0 24 24"><path d="M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7z"/><path d="M9 12l2 2 4-4"/></svg><span>Deploy</span><em class="soon">soon</em>
+      </a>
+    </nav>
+    <div class="side-foot" id="foot">
+      <div class="live"><i class="dot" id="live-dot"></i><span id="live-text">connecting</span></div>
+      <div id="foot-detail" class="dim"></div>
+    </div>
+  </aside>
+  <main class="main"><div class="page" id="page"></div></main>
+</div>
+<script src="/static/lib.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

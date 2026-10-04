@@ -1,0 +1,7 @@
+# Railway reads this at the repo root. The build itself is detected from pyproject.toml and uv.lock.
+[deploy]
+# ONE worker: the price poller runs inside the web process, and a second worker would poll twice.
+startCommand = "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"
+healthcheckPath = "/health"
+healthcheckTimeout = 60
+restartPolicyType = "ALWAYS"

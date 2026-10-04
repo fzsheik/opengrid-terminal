@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenGrid — The compute market, in focus</title>
+<meta name="description" content="Explore the GPU compute market. Compare live provider pricing, availability, and price history with OpenGrid.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root { color-scheme:light; --bg:#f7f8fa; --surface:#fff; --surface-2:#f3f5f8; --surface-3:#e9edf3; --border:#e8ebf0; --border-strong:#ccd3df; --text:#172335; --text-2:#536176; --text-3:#748094; --accent:#245eea; --accent-soft:#edf3ff; --up:#c45451; --down:#16836b; --up-soft:#fff0ed; --down-soft:#eaf7f1; --grid:#edf0f5; --p-salad:#56a17b; --p-hyperstack:#e49159; --p-lambda:#8c77cc; --p-runpod:#657de0; --p-hyperbolic:#d4688f; --p-voltagepark:#3aa7b8; --p-lium:#b5a23a; --p-vast:#c75b5b; --p-nebius:#4a8fd8; --p-massedcompute:#8a6d4f; --mono:Inter,system-ui,sans-serif; --display:Inter,system-ui,sans-serif; }
+:root[data-theme="dark"] { color-scheme:dark; --bg:#10151e; --surface:#171e29; --surface-2:#202938; --surface-3:#2c3749; --border:#2a3444; --border-strong:#48566e; --text:#ecf1fa; --text-2:#b2bfd1; --text-3:#92a0b5; --accent:#82a8ff; --accent-soft:#233653; --up:#ee9b91; --down:#72cbb0; --up-soft:#3a292d; --down-soft:#203c35; --grid:#293445; }
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:100px}body{margin:0;background:var(--bg);color:var(--text);font:13px/1.5 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}button,input{font:inherit;color:inherit}button,a,input{ -webkit-tap-highlight-color:transparent}button{cursor:pointer}a{color:inherit;text-decoration:none}button:focus-visible,a:focus-visible,th:focus-visible{outline:3px solid var(--accent);outline-offset:4px}button{transition:background .15s,color .15s}button:hover{filter:brightness(.97)}.num{font-variant-numeric:tabular-nums}.muted{color:var(--text-3)}.up{color:var(--up)}.down{color:var(--down)}.pdot{display:inline-block;width:7px;height:7px;border-radius:50%;flex:none}
+.topbar{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--border)}.topbar-inner{max-width:1440px;margin:auto;padding:0 48px;height:78px;display:flex;align-items:center;gap:38px}.brand{display:flex;align-items:center;gap:10px;font-size:21px;font-weight:700;letter-spacing:-1px}.brand-mark{width:29px;height:29px;display:grid;grid-template-columns:repeat(3,1fr);gap:3px;transform:rotate(-9deg)}.brand-mark i{background:var(--accent);border-radius:2px}.brand-mark i:nth-child(3n){opacity:.5}.nav{display:flex;gap:28px;height:100%;align-items:center}.nav a{height:100%;display:flex;align-items:center;color:var(--text-3);font-weight:500;border-bottom:2px solid transparent}.nav a.active{color:var(--accent);border-color:var(--accent)}.search{position:relative;margin-left:auto;width:300px}.search input{width:100%;border:1px solid var(--border);border-radius:8px;padding:11px 35px;background:var(--bg);outline:none;font-size:12px}.search input:focus{border-color:var(--accent)}.search svg{position:absolute;left:12px;top:12px;color:var(--text-3)}.search kbd{position:absolute;right:12px;top:10px;color:var(--text-3)}.live{display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:11px;color:var(--text-2)}.live-dot{height:6px;width:6px;background:var(--down);border-radius:50%}.live.off .live-dot{background:var(--up)}.icon-btn{border:1px solid var(--border);background:var(--surface);border-radius:8px;width:34px;height:34px;display:grid;place-items:center}.ticker{display:none}
+main{max-width:1344px;margin:auto;padding:42px 48px 60px}.intro{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:30px}.eyebrow{font-size:10px;letter-spacing:1.7px;font-weight:600;text-transform:uppercase;color:var(--accent);margin-bottom:10px}.intro h1{font-size:34px;line-height:1.2;letter-spacing:-1.4px;font-weight:600;margin:0 0 10px}.intro p{color:var(--text-3);margin:0;font-size:13px}.primary-link{padding:11px 17px;border-radius:8px;background:var(--accent);color:var(--surface);font-weight:600;white-space:nowrap}.primary-link span{margin-left:18px}.card{background:var(--surface);border:1px solid var(--border);border-radius:12px}.kpis{display:grid;grid-template-columns:repeat(5,1fr);margin-bottom:28px;padding:21px 0}.kpi{padding:0 24px;border-left:1px solid var(--border)}.kpi:first-child{border:0}.kpi label{display:block;color:var(--text-3);font-size:11px}.kpi strong{display:block;font-size:25px;letter-spacing:-.8px;font-weight:600;margin-top:7px;font-variant-numeric:tabular-nums}.kpi .split{display:none}
+.hero{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:22px}.hero-main{padding:24px 26px 18px;min-width:0}.panel-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;font-size:13px;font-weight:600}.panel-title span{font-size:10px;font-weight:400;color:var(--text-3)}.featured-pick{display:flex;gap:20px;overflow-x:auto;border-bottom:1px solid var(--border);margin:0 0 24px;scrollbar-width:thin}.pick{flex:none;background:none;border:0;border-bottom:2px solid transparent;border-radius:0;padding:0 0 12px;color:var(--text-3);font-size:11px}.pick[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600}.pick .gpu-art{display:none}.hero-id{display:flex;align-items:center;gap:12px}.hero-id .art{width:46px;height:46px}.hero-id .art .gpu-art{width:100%;height:100%;font-size:11px}.vendor{color:var(--text-3);display:flex;gap:6px;align-items:center;font-size:10px}.hero-id h2{font-size:18px;font-weight:600;letter-spacing:-.5px;margin:2px 0}.traits{display:flex;gap:5px;margin-top:5px}.trait{font-size:9px;padding:2px 6px;background:var(--surface-2);color:var(--text-2);border-radius:3px;text-transform:uppercase;letter-spacing:.3px}.price-block{margin-top:20px}.price-label{font-size:10px;color:var(--text-3)}.big-price{font-size:43px;line-height:1.2;letter-spacing:-1.7px;font-weight:600;margin:3px 0 8px;font-variant-numeric:tabular-nums}.big-price small{font-size:12px;color:var(--text-3);letter-spacing:0;font-weight:400;margin-left:8px}.price-sub{display:flex;align-items:center;gap:8px;font-size:10px;flex-wrap:wrap}.delta{padding:2px 5px;border-radius:4px}.delta.down{background:var(--down-soft)}.delta.up{background:var(--up-soft)}.flat{color:var(--text-3)}.chart{position:relative;height:180px;margin-top:16px}.chart svg{width:100%;height:100%;display:block;overflow:visible}.tip{position:absolute;top:0;pointer-events:none;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;transform:translateX(-50%);opacity:0;z-index:2;font-size:10px}.tip b{display:block;font-size:14px}.chart-foot{display:flex;justify-content:space-between;gap:10px;color:var(--text-3);font-size:9px;margin-top:8px}
+.book{padding:24px 20px;display:flex;flex-direction:column;min-width:0}.book h3{font-size:14px;font-weight:600;margin:0;display:flex;align-items:center;justify-content:space-between}.book h3 small{font-size:10px;color:var(--text-3);font-weight:400}.book-description{color:var(--text-3);font-size:11px;margin:8px 0 18px}.book-head{display:flex;justify-content:space-between;color:var(--text-3);font-size:9px;padding-bottom:12px;border-bottom:1px solid var(--border)}.lvl{position:relative;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 0;border-bottom:1px solid var(--border);font-size:11px}.lvl .bar{display:none}.who{display:flex;gap:7px;align-items:center;min-width:0;flex-wrap:wrap}.who .where{display:block;flex-basis:100%;padding-left:14px;font-size:9px;color:var(--text-3)}.px{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}.prem{display:block;color:var(--text-3);font-size:9px;text-align:right;font-weight:400}.lvl.best .px{color:var(--down)}.lvl.out{opacity:.5}.book-legend{margin-top:auto;padding-top:20px;display:flex;flex-wrap:wrap;gap:10px;font-size:9px;color:var(--text-3)}.book-legend span{display:inline-flex;align-items:center;gap:4px;text-transform:capitalize}.book-link{margin-top:18px;color:var(--accent);font-size:11px;font-weight:500;display:flex;justify-content:space-between}
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:34px 0 17px}.section-head h2{font-size:19px;letter-spacing:-.5px;font-weight:600;margin:0}.section-head p{font-size:11px;color:var(--text-3);margin:5px 0 0}.tabs{display:inline-flex;gap:3px;max-width:100%;overflow-x:auto;scrollbar-width:thin;background:var(--surface-2);padding:4px;border-radius:7px}.tabs button{border:0;border-radius:5px;background:transparent;padding:6px 11px;white-space:nowrap;font-size:10px;color:var(--text-3)}.tabs button[aria-pressed="true"]{background:var(--surface);color:var(--text);box-shadow:0 1px 3px #00000008}.trend{display:grid;grid-template-columns:1fr 1fr;column-gap:36px;padding:8px 20px}.trend-head,.trend-row{display:grid;grid-template-columns:18px minmax(0,1fr) 75px 64px 48px;gap:12px;align-items:center}.trend-head{padding:10px 4px;color:var(--text-3);font-size:9px;border-bottom:1px solid var(--border)}.trend-row{width:100%;border:0;border-bottom:1px solid var(--border);background:none;text-align:left;padding:14px 4px;cursor:pointer}.trend-row:last-child{border-bottom:0}.trend-row:hover{background:var(--surface-2)}.trend-head>:nth-child(n+3),.trend-row>:nth-child(n+3){text-align:right}.rank{font-size:11px;color:var(--text-3)}.coll{display:flex;align-items:center;gap:11px;min-width:0}.nm{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pv{display:flex;align-items:center;gap:3px;margin-top:4px}.pv .pdot{width:4px;height:4px}.pv .muted{font-size:9px!important}.v{font-size:12px;font-weight:500;font-variant-numeric:tabular-nums}.v small{display:block;color:var(--text-3);font-size:9px;font-weight:400}.gpu-art{width:37px;height:37px;flex:none;border-radius:9px;background:#e9f0fc;color:#4876be;display:inline-grid;place-items:center;position:relative;overflow:hidden;font-size:9px;font-weight:600;letter-spacing:-.5px;border:1px solid #dbe5f5}.gpu-art:before{content:"";position:absolute;width:21px;height:21px;border:1px solid currentColor;opacity:.18;transform:rotate(45deg);border-radius:4px}.gpu-art.workstation{background:#f1edfa;color:#8c6cc0;border-color:#e9e0f5}.gpu-art.consumer{background:#f8eee4;color:#b88754;border-color:#f1e3d2}.gpu-art.amd{background:#faeaea;color:#bf6b70;border-color:#f3dddd}
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border)}.chip-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:6px;padding:6px 9px;font-size:10px;background:var(--surface);color:var(--text-3);text-transform:capitalize}.chip-btn[aria-pressed="true"]{color:var(--accent);background:var(--accent-soft);border-color:var(--accent-soft)}.count{margin-left:auto;font-size:10px;color:var(--text-3)}.table-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:11px}th{text-align:left;padding:13px 16px;color:var(--text-3);font-size:9px;font-weight:500;background:var(--bg);white-space:nowrap;cursor:pointer}th[data-dir="asc"]:after{content:" ↑"}th[data-dir="desc"]:after{content:" ↓"}td{padding:16px;border-top:1px solid var(--border);white-space:nowrap}th.r,td.r{text-align:right}tbody tr:hover{background:var(--bg)}.gpu-cell{display:flex;gap:10px;align-items:center}.gpu-cell .gpu-art{width:30px;height:30px;font-size:8px}.n{font-weight:600;font-size:11px}.raw{font-size:9px;color:var(--text-3);margin-top:2px}.prov{display:inline-flex;gap:6px;align-items:center;text-transform:capitalize}.tag{font-size:9px;background:var(--surface-2);padding:3px 6px;border-radius:4px;color:var(--text-2)}.tag.spot{color:var(--accent);background:var(--accent-soft)}.stock{display:inline-flex;gap:5px;align-items:center;font-size:10px}.stock i{width:5px;height:5px;border-radius:50%;background:currentColor}.stock.in{color:var(--down)}.stock.out{color:var(--text-3)}.more{padding:16px;text-align:center;border-top:1px solid var(--border)}.more button{border:1px solid var(--border);background:var(--surface);border-radius:6px;padding:8px 20px;font-size:11px}.empty{text-align:center;padding:36px;color:var(--text-3)}.banner{display:none;padding:14px 18px;margin-bottom:24px;border:1px solid var(--border);border-radius:8px;color:var(--text-2);background:var(--surface)}.banner.show{display:block}.footer{display:flex;justify-content:space-between;gap:18px;margin-top:28px;padding-top:20px;border-top:1px solid var(--border);font-size:10px;color:var(--text-3)}
+@media(min-width:1450px){main{padding-top:48px}.chart{height:220px}}
+@media(max-width:1100px){.topbar-inner{padding:0 24px;gap:24px}main{padding:32px 24px}.search{width:230px}.hero{grid-template-columns:minmax(0,1fr) 290px}.kpi{padding:0 17px}.trend{column-gap:20px}.trend-head,.trend-row{gap:8px;grid-template-columns:15px minmax(0,1fr) 65px 52px}.trend-head>:last-child,.trend-row>.v:last-child{display:none}.col-hide{display:none}.nav{gap:18px}}
+@media(max-width:760px){.topbar-inner{height:auto;min-height:70px;flex-wrap:wrap;padding:18px 20px;gap:18px}.brand{margin-right:auto}.nav{order:4;width:100%;height:32px}.nav a{padding-bottom:10px}.search{order:5;width:100%;margin-top:-10px}.live{margin-left:auto}.intro{align-items:flex-start}.intro h1{font-size:27px}.intro p{max-width:280px}.intro .primary-link{display:none}main{padding:28px 18px}.kpis{grid-template-columns:repeat(2,1fr);padding:0}.kpi{padding:16px;border-bottom:1px solid var(--border)}.kpi:nth-child(odd){border-left:0}.kpi:last-child{grid-column:span 2;border-bottom:0}.kpi strong{font-size:22px}.hero{grid-template-columns:1fr}.hero-main{padding:20px}.book{padding:20px}.book-rows{display:grid;grid-template-columns:1fr 1fr;gap:0 20px}.section-head{align-items:flex-start;flex-direction:column;gap:12px}.trend{grid-template-columns:1fr;padding:8px 16px}.trend>div+div .trend-head{display:none}.trend-head,.trend-row{grid-template-columns:18px minmax(0,1fr) 65px 54px}.chart-foot{flex-direction:column;gap:3px}.toolbar{padding:12px;gap:10px}td,th{padding:12px}.footer{flex-direction:column;gap:8px}.big-price{font-size:38px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand"><div class="brand-mark"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>OpenGrid</div>
+    <nav class="nav">
+      <a href="#overview" class="active">Overview</a>
+      <a href="#trending">GPU index</a>
+      <a href="#market">Marketplace</a>
+    </nav>
+    <label class="search">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" aria-label="Search GPUs, providers, and regions" type="search" placeholder="Search the compute market" autocomplete="off">
+      <kbd>/</kbd>
+    </label>
+    <div class="live" id="live"><div class="live-dot"></div><span id="live-text">Connecting</span></div>
+    <button class="icon-btn" id="theme" title="Toggle theme" aria-label="Toggle theme">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+  </div>
+  <div class="ticker" aria-label="Floor prices"><div class="ticker-track" id="ticker"></div></div>
+</header>
+
+<main id="overview">
+  <section class="intro"><div><div class="eyebrow">The open compute market</div><h1>Compute, in perspective.</h1><p>Track GPU prices. Compare providers. Find your next advantage.</p></div><a class="primary-link" href="#market">Explore marketplace <span>↗</span></a></section>
+  <div class="banner" id="banner"></div>
+
+  <section class="card kpis" id="kpis" aria-label="Market overview"></section>
+
+  <!-- 1. Hero: one GPU, its floor, its history, its order book -->
+  <section class="hero">
+    <div class="card hero-main"><div class="panel-title">Price spotlight <span>USD / GPU-hour</span></div>
+      <div class="featured-pick" id="picks"></div>
+      <div class="hero-id" id="hero-id"></div>
+      <div class="price-block">
+        <div class="price-label">Lowest available price</div>
+        <div class="big-price" id="hero-price">—</div>
+        <div class="price-sub" id="hero-sub"></div>
+      </div>
+      <div class="chart" id="chart"><div class="tip" id="tip"></div></div>
+      <div class="chart-foot"><span>Recorded floor price · USD per GPU-hour</span><span id="chart-range"></span></div>
+    </div>
+    <aside class="card book">
+      <h3>Compare providers <small id="book-count"></small></h3><p class="book-description">Same GPU. A clearer view of your options.</p>
+      <div class="book-head"><span>Provider / region</span><span>Hourly price</span></div>
+      <div class="book-rows" id="book"></div>
+      <div class="book-legend" id="book-legend"></div><a href="#market" class="book-link">Explore all listings <span>↗</span></a>
+    </aside>
+  </section>
+
+  <!-- 2. KPI strip -->
+
+
+  <!-- 3. The GPU index -->
+  <div class="section-head" id="trending">
+    <div><h2>The GPU index</h2><p>Explore GPUs ranked by provider coverage.</p></div>
+    <div class="tabs" id="trend-tabs"></div>
+  </div>
+  <section class="card trend" id="trend"></section>
+
+  <!-- 4. Compute marketplace -->
+  <div class="section-head" id="market">
+    <div><h2>Compute marketplace</h2><p id="market-sub"></p></div>
+    <div class="tabs" id="market-tabs"></div>
+  </div>
+  <section class="card">
+    <div class="toolbar">
+      <div class="tabs" id="type-tabs">
+        <button data-v="all" aria-pressed="true">All</button>
+        <button data-v="on_demand" aria-pressed="false">On-demand</button>
+        <button data-v="spot" aria-pressed="false">Spot</button>
+      </div>
+      <div id="prov-chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      <button class="chip-btn" id="stock-toggle" aria-pressed="true">In stock</button>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th data-k="gpu">GPU</th>
+            <th data-k="provider">Provider</th>
+            <th data-k="config" class="col-hide">Config</th>
+            <th data-k="region" class="col-hide">Region</th>
+            <th data-k="market">Type</th>
+            <th data-k="price" class="r">$/GPU-hr</th>
+            <th data-k="chg" class="r col-hide">Chg</th>
+            <th data-k="inst" class="r col-hide">$/Inst-hr</th>
+            <th data-k="stock">Supply</th>
+            <th data-k="age" class="r col-hide">Seen</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="more" id="more" hidden><button>Show more</button></div>
+  </section>
+<footer class="footer"><span>OpenGrid <span aria-hidden="true">/</span> Independent compute market intelligence</span><span>Prices in USD per GPU-hour · Availability can change</span></footer>
+</main>
+
+<script>
+const API = "";  // same origin as the FastAPI app
+const PAGE = 40;
+const PROVIDER_COLOR = p => `var(--p-${p}, var(--text-3))`;
+const TIERS = [["datacenter", "Datacenter"], ["workstation", "Workstation"], ["consumer", "Consumer"], ["amd", "AMD"]];
+
+const state = {
+  listings: [], polling: null, featured: null, featuredHistory: [],
+  trendTier: "datacenter",
+  table: { tier: "all", q: "", market: "all", providers: new Set(), stock: true, sort: { k: "price", dir: "asc" }, shown: PAGE },
+};
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const n = v => (v === null || v === undefined ? null : Number(v));
+const money = (v, d = 3) => (v === null || v === undefined ? "—" : "$" + v.toFixed(d));
+const moneyAuto = v => money(v, v !== null && v < 0.1 ? 3 : 2);
+
+function age(ts) {
+  if (!ts) return "—";
+  const s = Math.max(0, (Date.now() - new Date(ts)) / 1000);
+  if (s < 90) return `${Math.round(s)}s`;
+  if (s < 5400) return `${Math.round(s / 60)}m`;
+  if (s < 172800) return `${Math.round(s / 3600)}h`;
+  return `${Math.round(s / 86400)}d`;
+}
+
+/* "NVIDIA H100 80GB SXM5" -> { vendor, model: "H100 80GB SXM5" } */
+function splitName(name) {
+  const m = /^(NVIDIA|AMD)\s+(.*)$/.exec(name || "");
+  return m ? { vendor: m[1], model: m[2] } : { vendor: "", model: name || "" };
+}
+function tierOf(name) {
+  if (!name) return "consumer";
+  if (/^AMD/.test(name)) return "amd";
+  if (/\b(B\d{3}|GH200|H\d{3}|A\d{2,3}|L40S?|L4|Tesla)\b/.test(name) && !/RTX A\d/.test(name)) return "datacenter";
+  if (/RTX (A\d|PRO|\d000 Ada)|Quadro/.test(name)) return "workstation";
+  return "consumer";
+}
+function traits(name) {
+  const t = [];
+  const vram = /(\d+)GB/.exec(name); if (vram) t.push(vram[1] + " GB");
+  const ff = /\b(SXM\d?|PCIe|NVL|NVLink|Laptop)\b/g; let m;
+  while ((m = ff.exec(name))) t.push(m[1]);
+  t.push(tierOf(name));
+  return t;
+}
+
+/* Compact, consistent GPU identity tiles. */
+function art(name, raw) {
+  const label = splitName(name || raw).model.split(" ")[0] || "GPU";
+  return `<span class="gpu-art ${tierOf(name)}" aria-hidden="true">${esc(label)}</span>`;
+}
+
+function row(r) {
+  return { ...r, price: n(r.price_per_gpu_hour), prev: n(r.previous_price_per_gpu_hour), inst: n(r.price_per_instance_hour), gpu: r.canonical_gpu_name || r.raw_gpu_name };
+}
+function pctChange(now, before) { return now === null || before === null || !before ? null : ((now - before) / before) * 100; }
+function deltaHTML(pct, cls = "") {
+  if (pct === null) return `<span class="${cls} flat">—</span>`;
+  if (Math.abs(pct) < 0.05) return `<span class="${cls} flat">—</span>`;
+  return `<span class="${cls} ${pct > 0 ? "up" : "down"}">${pct > 0 ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}%</span>`;
+}
+
+/* ---------- grouping ---------- */
+function groups() {
+  const g = new Map();
+  for (const r of state.listings) {
+    if (!r.canonical_gpu_name) continue;
+    const e = g.get(r.canonical_gpu_name) || { name: r.canonical_gpu_name, rows: [] };
+    e.rows.push(r); g.set(r.canonical_gpu_name, e);
+  }
+  return [...g.values()].map(e => {
+    const stocked = e.rows.filter(r => r.available && r.price !== null);
+    const floorRow = [...stocked].sort((a, b) => a.price - b.price)[0] || null;
+    const prevFloor = stocked.length ? Math.min(...stocked.map(r => r.prev ?? r.price)) : null;
+    return {
+      ...e, tier: tierOf(e.name), floorRow,
+      floor: floorRow ? floorRow.price : null,
+      change: floorRow ? pctChange(floorRow.price, prevFloor) : null,
+      inStock: stocked.length,
+      providers: [...new Set(e.rows.map(r => r.provider))],
+    };
+  });
+}
+const rankGroups = gs => gs.sort((a, b) => b.providers.length - a.providers.length || b.inStock - a.inStock || (a.floor ?? 1e9) - (b.floor ?? 1e9));
+
+/* ---------- data ---------- */
+async function load() {
+  try {
+    const [l, p] = await Promise.all([
+      fetch(`${API}/listings`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+      fetch(`${API}/polling`).then(r => r.json()).catch(() => null),
+    ]);
+    state.listings = l.map(row);
+    state.polling = p;
+    $("#banner").classList.remove("show");
+    $("#live").classList.remove("off");
+    $("#live-text").textContent = p?.running ? "Live" : "Snapshot";
+    if (!state.featured) {
+      const dc = rankGroups(groups().filter(g => g.tier === "datacenter" && g.floor !== null));
+      state.featured = (dc.find(g => /H100/.test(g.name)) || dc[0] || groups()[0])?.name;
+    }
+    await loadHistory();
+    render();
+  } catch (e) {
+    $("#banner").textContent = `Market data is temporarily unavailable. We’ll automatically retry shortly.`;
+    $("#banner").classList.add("show");
+    $("#live").classList.add("off");
+    $("#live-text").textContent = "Offline";
+  }
+}
+async function loadHistory() {
+  if (!state.featured) return;
+  const q = encodeURIComponent(splitName(state.featured).model);
+  const h = await fetch(`${API}/history?q=${q}&limit=5000`).then(r => r.json()).catch(() => []);
+  state.featuredHistory = h.filter(r => r.canonical_gpu_name === state.featured).map(row);
+}
+
+/* ---------- render ---------- */
+function render() {
+  renderTicker(); renderHero(); renderKpis(); renderTrending(); renderTable();
+}
+
+function renderTicker() {
+  const gs = rankGroups(groups().filter(g => g.floor !== null)).slice(0, 28);
+  const items = gs.map(g => `<span class="tick"><b>${esc(splitName(g.name).model)}</b>${moneyAuto(g.floor)}${g.change && Math.abs(g.change) >= 0.05 ? deltaHTML(g.change) : ""}</span>`).join("");
+  $("#ticker").innerHTML = items + items;  // doubled for a seamless loop
+}
+
+function renderHero() {
+  const all = groups();
+  const g = all.find(x => x.name === state.featured);
+  if (!g) {
+    $("#picks").innerHTML = "";
+    $("#hero-id").innerHTML = '<div class="muted">No GPU data available yet</div>';
+    $("#hero-price").textContent = "—";
+    $("#hero-sub").textContent = "Prices appear when providers report availability.";
+    $("#chart").querySelector("svg")?.remove();
+    $("#book").innerHTML = '<div class="empty">No provider listings yet.</div>';
+    $("#book-count").textContent = "";
+    $("#book-legend").innerHTML = "";
+    $("#chart-range").textContent = "Awaiting observations";
+    return;
+  }
+  const { vendor, model } = splitName(g.name);
+
+  const picks = rankGroups(all.filter(x => x.tier === "datacenter" && x.floor !== null)).slice(0, 6);
+  if (!picks.some(p => p.name === g.name)) picks.unshift(g);
+  $("#picks").innerHTML = picks.map(p =>
+    `<button class="pick" data-gpu="${esc(p.name)}" aria-pressed="${p.name === g.name}">${art(p.name)}${esc(splitName(p.name).model)}</button>`).join("");
+
+  $("#hero-id").innerHTML = `
+    <div class="art">${art(g.name)}</div>
+    <div>
+      <div class="vendor">${esc(vendor)} <span>·</span> ${g.providers.map(p => `<i class="pdot" style="background:${PROVIDER_COLOR(p)}" title="${esc(p)}"></i>`).join("")} ${g.providers.length} provider${g.providers.length > 1 ? "s" : ""}</div>
+      <h2>${esc(model)}</h2>
+      <div class="traits">${traits(g.name).map(t => `<span class="trait">${esc(t)}</span>`).join("")}</div>
+    </div>`;
+
+  $("#hero-price").innerHTML = g.floor === null ? "—" : `${money(g.floor, 2)}<small>/GPU-hr</small>`;
+
+  const series = floorSeries(g);
+  const first = series.find(p => p.v !== null);
+  const sinceStart = first && g.floor !== null ? pctChange(g.floor, first.v) : null;
+  $("#hero-sub").innerHTML = `
+    ${deltaHTML(sinceStart, "delta")}
+    <span class="muted">since ${first ? new Date(first.t).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "first seen"}</span>
+    ${g.floorRow ? `<span class="muted">·</span><span style="display:inline-flex;gap:6px;align-items:center;text-transform:capitalize"><i class="pdot" style="background:${PROVIDER_COLOR(g.floorRow.provider)}"></i>${esc(g.floorRow.provider)}${g.floorRow.region ? ` <span class="muted">${esc(g.floorRow.region)}</span>` : ""}</span>` : ""}
+    <span class="muted">·</span><span class="muted">${g.inStock}/${g.rows.length} in stock</span>`;
+
+  drawChart(series);
+  renderBook(g);
+}
+
+/* Floor over time, rebuilt from recorded changes: replay each listing's
+   observations in order and take the cheapest in-stock price after each step. */
+function floorSeries(g) {
+  const obs = [...state.featuredHistory].sort((a, b) => new Date(a.observed_at) - new Date(b.observed_at));
+  const last = new Map();
+  const pts = [];
+  for (const o of obs) {
+    last.set(o.provider + "|" + o.listing_id, o);
+    const best = [...last.values()].filter(x => x.available && x.price !== null).sort((a, b) => a.price - b.price)[0];
+    const p = { t: +new Date(o.observed_at), v: best ? best.price : null, who: best?.provider };
+    if (pts.length && pts.at(-1).t === p.t) pts[pts.length - 1] = p; else pts.push(p);
+  }
+  if (g.floor !== null) pts.push({ t: Date.now(), v: g.floor, who: g.floorRow.provider });
+  return pts;
+}
+
+function drawChart(pts) {
+  const el = $("#chart");
+  el.querySelector("svg")?.remove();
+  const W = el.clientWidth || 800, H = el.clientHeight || 260, padR = 56, padT = 16, padB = 22;
+  const vals = pts.filter(p => p.v !== null);
+  if (!vals.length) { $("#chart-range").textContent = "no history yet"; return; }
+  let lo = Math.min(...vals.map(p => p.v)), hi = Math.max(...vals.map(p => p.v));
+  if (hi - lo < 0.01) { lo *= 0.9; hi *= 1.1; } else { const pad = (hi - lo) * 0.25; lo = Math.max(0, lo - pad); hi += pad; }
+  const t0 = vals[0].t, t1 = Math.max(vals.at(-1).t, t0 + 1);
+  const x = t => ((t - t0) / (t1 - t0)) * (W - padR);
+  const y = v => padT + (1 - (v - lo) / (hi - lo)) * (H - padT - padB);
+  // step-after path: a gap between observations means "unchanged"
+  let d = "", open = false;
+  for (const p of pts) {
+    if (p.t < t0) continue;
+    if (p.v === null) { open = false; continue; }
+    d += open ? `H${x(p.t)}V${y(p.v)}` : `M${x(p.t)},${y(p.v)}`;
+    open = true;
+  }
+  const lastPt = vals.at(-1);
+  const moved = vals.length > 1 && lastPt.v !== vals[0].v;
+  const color = moved ? (lastPt.v > vals[0].v ? "var(--up)" : "var(--down)") : "var(--accent)";
+  const ticks = [0, 1, 2, 3].map(i => lo + ((hi - lo) * i) / 3);
+  const svg = `<svg viewBox="0 0 ${W} ${H}">
+    <defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".22"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
+    ${ticks.map(v => `<line x1="0" x2="${W - padR + 8}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/>
+      <text x="${W}" y="${y(v) + 4}" text-anchor="end" font-family="JetBrains Mono" font-size="11" fill="var(--text-3)">$${v.toFixed(2)}</text>`).join("")}
+    <path d="${d}V${H - padB}H0Z" fill="url(#fill)"/>
+    <path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>
+    <circle cx="${x(lastPt.t)}" cy="${y(lastPt.v)}" r="5" fill="${color}" stroke="var(--surface)" stroke-width="2"/>
+    <line id="xh" y1="${padT}" y2="${H - padB}" stroke="var(--text-3)" stroke-dasharray="3 3" opacity="0"/>
+    <circle id="xd" r="5" fill="${color}" stroke="var(--surface)" stroke-width="2" opacity="0"/>
+    <rect id="hit" x="0" y="0" width="${W - padR}" height="${H}" fill="transparent"/>
+  </svg>`;
+  el.insertAdjacentHTML("afterbegin", svg);
+  const fmt = t => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  $("#chart-range").textContent = `${fmt(t0)} → now`;
+
+  const tip = $("#tip"), xh = el.querySelector("#xh"), xd = el.querySelector("#xd"), hit = el.querySelector("#hit");
+  hit.addEventListener("mousemove", e => {
+    const px = e.clientX - el.getBoundingClientRect().left;
+    const t = t0 + (px / (W - padR)) * (t1 - t0);
+    const p = [...vals].reverse().find(q => q.t <= t) || vals[0];
+    xh.setAttribute("x1", px); xh.setAttribute("x2", px); xh.setAttribute("opacity", 1);
+    xd.setAttribute("cx", px); xd.setAttribute("cy", y(p.v)); xd.setAttribute("opacity", 1);
+    tip.innerHTML = `<b>${money(p.v)}</b>${fmt(t)} · <span style="text-transform:capitalize">${esc(p.who || "")}</span>`;
+    tip.style.left = Math.min(Math.max(px, 90), W - 90) + "px";
+    tip.style.opacity = 1;
+  });
+  hit.addEventListener("mouseleave", () => { tip.style.opacity = 0; xh.setAttribute("opacity", 0); xd.setAttribute("opacity", 0); });
+}
+
+function renderBook(g) {
+  const rows = [...g.rows].filter(r => r.price !== null).sort((a, b) => (b.available - a.available) || a.price - b.price).slice(0, 6);
+  // Bar length = premium over the floor, so the cheapest ask has no bar.
+  const floor = g.floor ?? Math.min(...rows.map(r => r.price));
+  const maxPrem = Math.max(...rows.map(r => r.price - floor), 0.0001);
+  $("#book-count").textContent = `${g.rows.length} listing${g.rows.length > 1 ? "s" : ""}`;
+  $("#book").innerHTML = rows.map((r, i) => `
+    <div class="lvl ${r.available ? "" : "out"} ${i === 0 && r.available ? "best" : ""}" title="${esc(r.sku)}">
+      <div class="bar" style="width:${Math.max(0, (r.price - floor) / maxPrem) * 100}%;background:${PROVIDER_COLOR(r.provider)}"></div>
+      <div class="who"><i class="pdot" style="background:${PROVIDER_COLOR(r.provider)}"></i><span style="text-transform:capitalize">${esc(r.provider)}</span><span class="where">${esc(r.region || r.provider_tier || "")}${r.gpu_count > 1 ? ` · ${r.gpu_count}×` : ""}${r.market_type === "spot" ? " · spot" : ""}</span></div>
+      <div class="px">${r.price > floor ? `<span class="prem">+${Math.round(((r.price - floor) / floor) * 100)}%</span>` : ""}${money(r.price)}</div>
+    </div>`).join("");
+  $("#book-legend").innerHTML = g.providers.map(p => `<span><i class="pdot" style="background:${PROVIDER_COLOR(p)}"></i>${esc(p)}</span>`).join("") + `<span style="margin-left:auto">faded = sold out</span>`;
+}
+
+function renderKpis() {
+  const L = state.listings;
+  const inStock = L.filter(r => r.available).length;
+  const counts = {};
+  L.forEach(r => (counts[r.provider] = (counts[r.provider] || 0) + 1));
+  const provs = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const newest = L.map(r => r.observed_at).sort().at(-1);
+  const models = new Set(L.map(r => r.canonical_gpu_name).filter(Boolean)).size;
+  const spot = L.filter(r => r.market_type === "spot").length;
+  $("#kpis").innerHTML = `
+    <div class="kpi"><label>Listings</label><strong>${L.length}</strong>
+      <div class="split">${provs.map(([p, c]) => `<span style="flex:${c};background:${PROVIDER_COLOR(p)}" title="${esc(p)} ${c}"></span>`).join("")}</div></div>
+    <div class="kpi"><label>In stock</label><strong>${inStock} <span class="muted" style="font-size:14px">${Math.round((100 * inStock) / (L.length || 1))}%</span></strong></div>
+    <div class="kpi"><label>GPU models</label><strong>${models}</strong></div>
+    <div class="kpi"><label>Spot / on-demand</label><strong>${spot} <span class="muted">/</span> ${L.length - spot}</strong></div>
+    <div class="kpi"><label>Providers · last seen</label><strong>${provs.length} <span class="muted" style="font-size:14px">${age(newest)} ago</span></strong></div>`;
+}
+
+function renderTiers(el, active, withAll) {
+  const counts = {}; groups().forEach(g => (counts[g.tier] = (counts[g.tier] || 0) + 1));
+  el.innerHTML = TIERS.filter(([k]) => counts[k]).concat(withAll ? [["all", "All"]] : [])
+    .map(([k, label]) => `<button data-v="${k}" aria-pressed="${k === active}">${label}</button>`).join("");
+}
+
+function renderTrending() {
+  renderTiers($("#trend-tabs"), state.trendTier, false);
+  const gs = rankGroups(groups().filter(g => g.tier === state.trendTier)).slice(0, 6);
+  const head = `<div class="trend-head"><span>#</span><span>GPU</span><span>Floor</span><span>Chg</span><span>Supply</span></div>`;
+  const rowHTML = (g, i) => `
+    <button class="trend-row" data-gpu="${esc(g.name)}" aria-label="View ${esc(g.name)} price history">
+      <span class="rank">${i + 1}</span>
+      <div class="coll">${art(g.name)}<div style="min-width:0">
+        <div class="nm">${esc(splitName(g.name).model)}</div>
+        <div class="pv">${g.providers.map(p => `<i class="pdot" style="background:${PROVIDER_COLOR(p)}" title="${esc(p)}"></i>`).join("")}<span class="muted" style="font-size:12px;margin-left:4px">${g.providers.length} provider${g.providers.length > 1 ? "s" : ""}</span></div>
+      </div></div>
+      <span class="v">${moneyAuto(g.floor)}<small>/GPU-hr</small></span>
+      <span class="v" style="font-size:13px">${deltaHTML(g.change)}</span>
+      <span class="v">${g.inStock}<small>of ${g.rows.length}</small></span>
+    </button>`;
+  const half = Math.ceil(gs.length / 2);
+  $("#trend").innerHTML = gs.length
+    ? `<div>${head}${gs.slice(0, half).map(rowHTML).join("")}</div><div>${head}${gs.slice(half).map((g, i) => rowHTML(g, i + half)).join("")}</div>`
+    : `<div class="empty">Nothing in this class yet.</div>`;
+}
+
+/* ---------- table ---------- */
+function filtered() {
+  const T = state.table, q = T.q.trim().toLowerCase();
+  const rows = state.listings.filter(r =>
+    (T.tier === "all" || q || tierOf(r.canonical_gpu_name) === T.tier) &&
+    (T.market === "all" || r.market_type === T.market) &&
+    (!T.providers.size || T.providers.has(r.provider)) &&
+    (!T.stock || r.available) &&
+    (!q || [r.canonical_gpu_name, r.raw_gpu_name, r.provider, r.region, r.sku, r.provider_tier].some(v => v && v.toLowerCase().includes(q))));
+  const key = {
+    gpu: r => r.gpu, provider: r => r.provider, config: r => r.gpu_count, region: r => r.region || "",
+    market: r => r.market_type || "", price: r => r.price, inst: r => r.inst, chg: r => pctChange(r.price, r.prev),
+    stock: r => (r.available ? 1 : 0) * 1e6 + (r.capacity || 0), age: r => -new Date(r.observed_at),
+  }[T.sort.k];
+  const sgn = T.sort.dir === "asc" ? 1 : -1;
+  return rows.sort((a, b) => {
+    const x = key(a), y = key(b);
+    if (x === null) return 1; if (y === null) return -1;
+    return (x < y ? -1 : x > y ? 1 : 0) * sgn;
+  });
+}
+
+function renderTable() {
+  const T = state.table;
+  renderTiers($("#market-tabs"), T.tier, true);
+  const provs = [...new Set(state.listings.map(r => r.provider))].sort();
+  $("#prov-chips").innerHTML = provs.map(p => `<button class="chip-btn" data-p="${esc(p)}" aria-pressed="${T.providers.has(p)}"><i class="pdot" style="background:${PROVIDER_COLOR(p)}"></i>${esc(p)}</button>`).join("");
+
+  const rows = filtered();
+  $("#count").textContent = `${rows.length} rows`;
+  $("#market-sub").textContent = `${state.listings.length} normalized listings across ${provs.length} providers`;
+  const view = rows.slice(0, T.shown);
+  $("#rows").innerHTML = view.length ? view.map(r => {
+    const supply = r.available
+      ? (r.capacity !== null ? `${r.capacity} ${esc(r.capacity_unit || "")}${r.capacity === 1 ? "" : "s"}` : "Available")
+      : "Sold out";
+    const cfg = [`${r.gpu_count}×`, r.vcpu && `${r.vcpu} vCPU`, r.ram_gb && `${Math.round(r.ram_gb)}GB`].filter(Boolean).join(" · ");
+    return `<tr>
+      <td><div class="gpu-cell">${art(r.canonical_gpu_name, r.raw_gpu_name)}<div>
+        <div class="n ${r.canonical_gpu_name ? "" : "unmapped"}">${esc(r.canonical_gpu_name ? splitName(r.canonical_gpu_name).model : r.raw_gpu_name)}</div>
+        <div class="raw">${esc(r.raw_gpu_name)}</div></div></div></td>
+      <td><span class="prov"><i class="pdot" style="background:${PROVIDER_COLOR(r.provider)}"></i>${esc(r.provider)}</span></td>
+      <td class="num col-hide muted">${cfg}</td>
+      <td class="col-hide">${esc(r.region || "—")}</td>
+      <td><span class="tag ${r.market_type === "spot" ? "spot" : ""}">${r.market_type === "spot" ? "Spot" : "On-demand"}</span>${r.provider_tier ? ` <span class="muted" style="font-size:11px">${esc(r.provider_tier)}</span>` : ""}</td>
+      <td class="r px">${money(r.price)}</td>
+      <td class="r chg col-hide">${deltaHTML(pctChange(r.price, r.prev))}</td>
+      <td class="r num col-hide muted">${money(r.inst, 2)}</td>
+      <td><span class="stock ${r.available ? "in" : "out"}"><i></i>${supply}</span></td>
+      <td class="r num col-hide muted">${age(r.observed_at)}</td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="10" class="empty">No listings match.</td></tr>`;
+  $("#more").hidden = rows.length <= T.shown;
+  document.querySelectorAll("th[data-k]").forEach(th => (th.dataset.dir = th.dataset.k === T.sort.k ? T.sort.dir : ""));
+}
+
+/* ---------- controls ---------- */
+const T = state.table;
+const pick = async name => { state.featured = name; await loadHistory(); renderHero(); window.scrollTo({ top: 0, behavior: "smooth" }); };
+$("#picks").addEventListener("click", e => { const b = e.target.closest("[data-gpu]"); if (b) pick(b.dataset.gpu); });
+$("#trend").addEventListener("click", e => { const b = e.target.closest("[data-gpu]"); if (b) pick(b.dataset.gpu); });
+$("#trend-tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { state.trendTier = b.dataset.v; renderTrending(); } });
+$("#market-tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { T.tier = b.dataset.v; T.shown = PAGE; renderTable(); } });
+$("#type-tabs").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  T.market = b.dataset.v; T.shown = PAGE;
+  $("#type-tabs").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  renderTable();
+});
+$("#prov-chips").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  T.providers.has(b.dataset.p) ? T.providers.delete(b.dataset.p) : T.providers.add(b.dataset.p);
+  T.shown = PAGE; renderTable();
+});
+$("#stock-toggle").addEventListener("click", e => { T.stock = !T.stock; e.currentTarget.setAttribute("aria-pressed", T.stock); T.shown = PAGE; renderTable(); });
+document.querySelector("thead").addEventListener("click", e => {
+  const th = e.target.closest("th[data-k]"); if (!th) return;
+  T.sort = { k: th.dataset.k, dir: T.sort.k === th.dataset.k && T.sort.dir === "asc" ? "desc" : "asc" };
+  renderTable();
+});
+$("#more").addEventListener("click", () => { T.shown += PAGE; renderTable(); });
+$("#q").addEventListener("input", e => {
+  T.q = e.target.value; T.shown = PAGE; renderTable();
+  if (T.q) $("#market").scrollIntoView({ behavior: "smooth" });
+});
+document.addEventListener("keydown", e => { if (e.key === "/" && document.activeElement !== $("#q")) { e.preventDefault(); $("#q").focus(); } });
+$("#theme").addEventListener("click", () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("og-theme-v2", next); } catch {}
+});
+try { const t = localStorage.getItem("og-theme-v2"); if (t) document.documentElement.dataset.theme = t; } catch {}
+let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(renderHero, 150); });
+
+document.querySelectorAll("th[data-k]").forEach(th => {
+  th.tabIndex = 0;
+  th.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); th.click(); } });
+});
+document.querySelectorAll(".nav a").forEach(link => link.addEventListener("click", () => {
+  document.querySelectorAll(".nav a").forEach(a => a.classList.toggle("active", a === link));
+}));
+render();
+load();
+setInterval(load, 15000);
+</script>
+</body>
+</html>

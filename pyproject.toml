@@ -1,0 +1,14 @@
+[project]
+name = "opengrid-terminal"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "alembic>=1.20.0",
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "psycopg[binary]>=3.3.6",
+    "pydantic-settings>=2.15.0",
+    "sqlalchemy>=2",
+    "textual>=8.2.8",
+    "uvicorn[standard]>=0.53.0",
+]
