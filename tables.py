@@ -148,3 +148,7 @@ class ReferencePrice(Base):
 
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+# Domain tables live in store/; importing registers them on Base.metadata.
+import store  # noqa: E402,F401

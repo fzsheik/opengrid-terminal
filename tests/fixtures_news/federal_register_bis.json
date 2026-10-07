@@ -1,0 +1,92 @@
+{
+ "description": "Documents from Industry and Security Bureau and of type Rule",
+ "count": 747,
+ "total_pages": 50,
+ "next_page_url": "https://www.federalregister.gov/api/v1/documents?conditions%5Bagencies%5D%5B%5D=industry-and-security-bureau&conditions%5Btype%5D%5B%5D=RULE&fields%5B%5D=title&fields%5B%5D=abstract&fields%5B%5D=html_url&fields%5B%5D=publication_date&fields%5B%5D=document_number&fields%5B%5D=type&fields%5B%5D=agencies&format=json&order=newest&page=2&per_page=3&search_after_cursor=WzE3ODc1Mjk2MDAwMDAsIjIwMjYtMTcyMzEiXQ",
+ "results": [
+  {
+   "title": "Measures To Restrict Stockpiling of Polysilicon and Polysilicon Derivatives Under Proclamation 11052",
+   "abstract": "On August 6, 2026, the President issued Proclamation 11052, \"Adjusting Imports of Polysilicon and Its Derivatives Into the United States\" (Proclamation 11052), ordering the Secretary of Commerce (Secretary) to take action to restrict imports by a company if he determines the company is stockpiling polysilicon or polysilicon derivatives (Polysilicon Products) in advance of import adjustments that will be effective on December 4, 2026. The Bureau of Industry and Security (BIS), in this temporary final rule (TFR), announces the criteria and process it will use to monitor existing companies for evidence of stockpiling, limit a newly established importer's ability to stockpile, and subject companies that are stockpiling to an import prohibition if necessary. This TFR also establishes the process for such companies to obtain a waiver from any import prohibitions imposed pursuant to this rule, and imposes certain import limitations on new importers that register with U.S. Customs and Border Protection (CBP) on or after August 6, 2026.",
+   "html_url": "https://www.federalregister.gov/documents/2026/09/24/2026-19537/measures-to-restrict-stockpiling-of-polysilicon-and-polysilicon-derivatives-under-proclamation-11052",
+   "publication_date": "2026-09-24",
+   "document_number": "2026-19537",
+   "type": "Rule",
+   "agencies": [
+    {
+     "raw_name": "DEPARTMENT OF COMMERCE",
+     "name": "Commerce Department",
+     "id": 54,
+     "url": "https://www.federalregister.gov/agencies/commerce-department",
+     "json_url": "https://www.federalregister.gov/api/v1/agencies/54",
+     "parent_id": null,
+     "slug": "commerce-department"
+    },
+    {
+     "raw_name": "Bureau of Industry and Security",
+     "name": "Industry and Security Bureau",
+     "id": 241,
+     "url": "https://www.federalregister.gov/agencies/industry-and-security-bureau",
+     "json_url": "https://www.federalregister.gov/api/v1/agencies/241",
+     "parent_id": 54,
+     "slug": "industry-and-security-bureau"
+    }
+   ]
+  },
+  {
+   "title": "Streamlining Export Controls for Drone Exports",
+   "abstract": null,
+   "html_url": "https://www.federalregister.gov/documents/2026/08/28/C1-2026-16628/streamlining-export-controls-for-drone-exports",
+   "publication_date": "2026-08-28",
+   "document_number": "C1-2026-16628",
+   "type": "Rule",
+   "agencies": [
+    {
+     "raw_name": "DEPARTMENT OF COMMERCE",
+     "name": "Commerce Department",
+     "id": 54,
+     "url": "https://www.federalregister.gov/agencies/commerce-department",
+     "json_url": "https://www.federalregister.gov/api/v1/agencies/54",
+     "parent_id": null,
+     "slug": "commerce-department"
+    },
+    {
+     "raw_name": "Bureau of Industry and Security",
+     "name": "Industry and Security Bureau",
+     "id": 241,
+     "url": "https://www.federalregister.gov/agencies/industry-and-security-bureau",
+     "json_url": "https://www.federalregister.gov/api/v1/agencies/241",
+     "parent_id": 54,
+     "slug": "industry-and-security-bureau"
+    }
+   ]
+  },
+  {
+   "title": "Revisions to the Entity List",
+   "abstract": "In this rule, the Bureau of Industry and Security (BIS) revises the Export Administration Regulations (EAR) by removing two addresses associated with Arrow Electronics (Hong Kong) Co., Ltd. from the Entity List under the destination of China, People's Republic of (China). This determination follows the removal from the Entity List of Arrow China Electronics Trading Co., Ltd., and the removal of six aliases for Arrow Electronics (Hong Kong) Co., Ltd. in November 2025.",
+   "html_url": "https://www.federalregister.gov/documents/2026/08/24/2026-17231/revisions-to-the-entity-list",
+   "publication_date": "2026-08-24",
+   "document_number": "2026-17231",
+   "type": "Rule",
+   "agencies": [
+    {
+     "raw_name": "DEPARTMENT OF COMMERCE",
+     "name": "Commerce Department",
+     "id": 54,
+     "url": "https://www.federalregister.gov/agencies/commerce-department",
+     "json_url": "https://www.federalregister.gov/api/v1/agencies/54",
+     "parent_id": null,
+     "slug": "commerce-department"
+    },
+    {
+     "raw_name": "Bureau of Industry and Security",
+     "name": "Industry and Security Bureau",
+     "id": 241,
+     "url": "https://www.federalregister.gov/agencies/industry-and-security-bureau",
+     "json_url": "https://www.federalregister.gov/api/v1/agencies/241",
+     "parent_id": 54,
+     "slug": "industry-and-security-bureau"
+    }
+   ]
+  }
+ ]
+}

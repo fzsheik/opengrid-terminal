@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel><title>Broken & Co Trade Press (test fixture)</title>
+<item><title>Nvidia & AMD ship MI355X and B300 SXM systems</title><link>http://www.broken.test/a/1/?utm_campaign=x#top</link>
+<description>Bare ampersands & a control char  here.</description><dc:creator>Jane Doe</dc:creator><pubDate>Mon, 05 Oct 2026 14:00:00 GMT</pubDate></item>
+<item><title>Second item survives</title><link>https://broken.test/a/2</link><pubDate>not a date</pubDate></item>
+</channel>

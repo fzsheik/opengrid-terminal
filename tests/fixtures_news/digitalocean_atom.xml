@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <id>tag:www.digitalocean.com,2005:/rss/blog.atom</id>
+    <title>DigitalOcean Blog</title>
+    <updated>2026-10-06T18:58:44.908Z</updated>
+    <generator>DigitalOcean</generator>
+    <author>
+        <name>DigitalOcean</name>
+    </author>
+    <link rel="alternate" href="https://www.digitalocean.com/blog"/>
+    <link rel="self" href="https://www.digitalocean.com/rss/blog.atom"/>
+    <subtitle>The latest from DigitalOcean, the developer cloud for modern apps.</subtitle>
+    <entry>
+        <title type="html"><![CDATA[Introducing Agent Droplets: everything an agent needs, one price, one bill]]></title>
+        <id>tag:www.digitalocean.com,2005:/blog/introducing-agent-droplets</id>
+        <link href="https://www.digitalocean.com/blog/introducing-agent-droplets"/>
+        <updated>2026-10-01T12:05:00.033Z</updated>
+        <content type="html"><![CDATA[<p>Last week we launched <a href="/products/managed-agents">DigitalOcean Managed Agents</a> in public preview: a managed runtime, governed access to more than 16,000 tools, serverless inference, and persistent memory and storage, all on one cloud. Developers have already started thousands of agent sessions. Today we’re making the next part simpler: paying for it.</p>
+<p>Building an agent that does something useful has gotten easy. Running it has not. A production agent needs a harness to drive t</p>]]></content>
+        <author>
+            <name>DigitalOcean</name>
+        </author>
+        <category label="product-updates" term="product-updates"/>
+        <published>2026-10-01T12:05:00.033Z</published>
+    </entry>
+<entry>
+        <title type="html"><![CDATA[DigitalOcean MicroVMs: the Compute foundation for building your AI agent infrastructure (private preview)]]></title>
+        <id>tag:www.digitalocean.com,2005:/blog/microvms-for-agents</id>
+        <link href="https://www.digitalocean.com/blog/microvms-for-agents"/>
+        <updated>2026-10-01T01:41:27.408Z</updated>
+        <content type="html"><![CDATA[<p>An AI agent uses compute differently than a traditional application. Over a single session, it writes and runs code, calls a model, and waits on a tool or a person before picking the work back up. As a result, it needs real compute in short, intensive bursts. It also needs a hard boundary around the code it just generated, so one agent’s mistake can’t spread to the host or to other customers.</p>
+<p>This pattern is not unique to agents. The same pattern of heavy bursts, long idle waits, and s</p>]]></content>
+        <author>
+            <name>Shridhar Pandey</name>
+        </author>
+        <category label="product-updates" term="product-updates"/>
+        <published>2026-10-01T01:41:27.408Z</published>
+    </entry>
+</feed>

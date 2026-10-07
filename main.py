@@ -21,6 +21,17 @@ from fetch import fetch_all
 from fetch import save as save_raw
 from poller import Ingest
 
+import jobs
+from api import accounts as accounts_api
+from api import events as events_api
+from api import families as families_api
+from api import indices as indices_api
+from api import news as news_api
+from api import ops as ops_api
+from api import pages as pages_api
+from api import routing as routing_api
+from api import structure as structure_api
+
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
@@ -31,9 +42,13 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("APP_PASSWORD must be set when deployed")
     init_db()
     ingest = Ingest()
-    ingest.start()
+    if settings.poller_enabled:
+        ingest.start()
     app.state.ingest = ingest
+    if not os.environ.get("OPENGRID_NO_JOBS"):
+        jobs.start()
     yield
+    await jobs.stop()
     await ingest.stop()
 
 
@@ -55,8 +70,18 @@ def password_ok(header: str) -> bool:
 
 @app.middleware("http")
 async def require_password(request, call_next):
-    """Everything sits behind one password, except /health so the host can check the app is up."""
-    if not settings.app_password or request.url.path == "/health":
+    """Everything sits behind one password, except /health so the host can check the app is up.
+
+    /v1 requests carrying an OpenGrid API key pass through: accounts.auth checks the key.
+    With PUBLIC_PAGES set, the read-only public surface (pages, assets, /v1 data reads)
+    is open too; anything that spends money or reads private data still needs a key.
+    """
+    path = request.url.path
+    if not settings.app_password or path == "/health":
+        return await call_next(request)
+    if path.startswith("/v1/") and request.headers.get("authorization", "").lower().startswith("bearer "):
+        return await call_next(request)
+    if settings.public_pages and pages_api.is_public(request):
         return await call_next(request)
     if password_ok(request.headers.get("authorization", "")):
         return await call_next(request)
@@ -82,12 +107,6 @@ def market_overview(hours: float = Query(24, ge=0, le=24 * 90)):
 @app.get("/market/detail", summary="One canonical GPU: every provider's price over time")
 def market_detail(gpu: str, hours: float = Query(24, ge=0, le=24 * 90)):
     return market.detail(gpu, hours)
-
-
-@app.get("/", include_in_schema=False)
-def index():
-    """The market web page. It reads the JSON endpoints below."""
-    return FileResponse(WEB / "index.html")
 
 
 @app.get("/health")
@@ -175,7 +194,18 @@ async def do_fetch():
     }
 
 
+for _module in (indices_api, structure_api, families_api, events_api, ops_api, news_api, accounts_api, routing_api):
+    app.include_router(_module.router)
+
+
 @app.post("/normalize")
 def do_normalize():
     """Re-run the normalizer over stored raw data."""
     return normalize.refresh()
+
+
+# Last: the page router owns "/" and the catch-all page paths.
+app.include_router(pages_api.router)
+
+# API-key usage logging + X-RateLimit-* headers (outermost middleware); refuses to start deployed without API_KEY_PEPPER.
+accounts_api.install(app)

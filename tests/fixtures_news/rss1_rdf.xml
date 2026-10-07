@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns="http://purl.org/rss/1.0/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+ <channel rdf:about="https://rdf.test/"><title>RDF fixture</title><link>https://rdf.test/</link><description>test</description></channel>
+ <item rdf:about="https://rdf.test/x"><title>BIS revises Entity List entries for advanced computing</title><link>https://rdf.test/x</link>
+  <description>Test fixture: export controls on advanced computing items.</description><dc:date>2026-09-30T12:00:00Z</dc:date></item>
+</rdf:RDF>

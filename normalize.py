@@ -11,13 +11,14 @@ pipeline can be re-run over history whenever a mapping improves.
 import logging
 import re
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import func, select, text
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 
 import canonical
+import quality  # lazy inside: its submodules import this module
 from db import SessionLocal
 from models import ComputeListing
 from providers import PROVIDERS, find_endpoint, to_decimal
@@ -34,15 +35,54 @@ TRACKED = (
     "capacity_unit",
 )
 
+# Each endpoint's newest successful fetch time. The recursive CTE walks distinct
+# endpoints through ix_raw_provider_endpoint_time (a loose index scan) instead of
+# grouping every row; the lateral LIMIT 1 then reads one index entry per endpoint.
+_NEWEST_PER_ENDPOINT = text(
+    """
+    WITH RECURSIVE eps AS (
+        (SELECT endpoint FROM raw_snapshots WHERE provider = :p ORDER BY endpoint LIMIT 1)
+        UNION ALL
+        SELECT (SELECT r.endpoint FROM raw_snapshots r
+                WHERE r.provider = :p AND r.endpoint > eps.endpoint ORDER BY r.endpoint LIMIT 1)
+        FROM eps WHERE eps.endpoint IS NOT NULL
+    )
+    SELECT eps.endpoint, n.fetched_at
+    FROM eps
+    CROSS JOIN LATERAL (
+        SELECT fetched_at FROM raw_snapshots r
+        WHERE r.provider = :p AND r.endpoint = eps.endpoint AND r.ok
+        ORDER BY r.fetched_at DESC LIMIT 1
+    ) n
+    WHERE eps.endpoint IS NOT NULL
+    """
+)
+
+
 def _latest_raw(session, provider: str) -> dict[str, list[RawSnapshot]]:
     """Most recent successful snapshot per endpoint.
 
     Endpoints called many times per fetch (Salad's per-class availability) keep
     every row from that newest fetch, not just one.
+
+    Reads only the newest round: a skip-scan finds the provider's endpoints, a LIMIT 1
+    per endpoint finds its newest ok fetch, and only rows within 120s of that are loaded,
+    rather than streaming every snapshot (and payload) the provider ever produced.
     """
+    newest = session.execute(_NEWEST_PER_ENDPOINT, {"p": provider}).all()
+    if not newest:
+        return defaultdict(list)  # same type as before: a missing endpoint reads as []
+    window = timedelta(seconds=120)
     rows = session.execute(
         select(RawSnapshot)
-        .where(RawSnapshot.provider == provider, RawSnapshot.ok.is_(True))
+        .where(
+            RawSnapshot.provider == provider,
+            RawSnapshot.ok.is_(True),
+            or_(*(
+                and_(RawSnapshot.endpoint == ep, RawSnapshot.fetched_at >= t - window, RawSnapshot.fetched_at <= t)
+                for ep, t in newest
+            )),
+        )
         .order_by(RawSnapshot.fetched_at.desc(), RawSnapshot.id.desc())
     ).scalars()
 
@@ -81,7 +121,13 @@ def normalize_all(only: list[str] | None = None) -> list[ComputeListing]:
             if cls is None:
                 log.warning("raw data for %r but no provider registered", provider)
                 continue
-            listings.extend(cls.normalize(_latest_raw(s, provider)))
+            try:
+                listings.extend(cls.normalize(_latest_raw(s, provider)))
+            except Exception as exc:
+                # A response that changed shape must not take the previous state (or the
+                # other providers) down with it: save nothing for this one, record why.
+                log.exception("%s: normalizer failed; keeping previous state", provider)
+                quality.normalizer_failed(provider, exc)
     return listings
 
 
@@ -259,6 +305,9 @@ def save_reference_prices(listed_names: set[tuple[str, str]]) -> int:
 def refresh(only: list[str] | None = None) -> dict:
     """Normalize the newest raw data, then persist state, history and references."""
     listings = normalize_all(only)
+    # Suspicious values are held back (quarantined) before they reach current state or
+    # history. Fails open: on its own error the listings pass through unchanged.
+    listings = quality.screen(listings, only)
     saved = save(listings)
     observations = record_observations(listings)
     references = 0

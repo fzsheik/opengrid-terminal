@@ -2,17 +2,18 @@
 
 Run:  .venv/bin/python tests/test_changes.py
 
-The database half builds `opengrid_test` (never the real one), fills it with
+The database half builds `og_test_changes` (never the real one), fills it with
 synthetic prices at known times, and drops it again.
 """
 
-import subprocess
+import scratchdb
 import sys
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal as D
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import normalize
 from normalize import classify_change
@@ -49,8 +50,6 @@ def test_classifier():
     assert cc("2.00", "2.50", first=CUT)[0] == "down"
 
 
-def run(cmd):
-    subprocess.run(cmd, check=True, capture_output=True)
 
 
 def test_sql():
@@ -59,13 +58,17 @@ def test_sql():
 
     from tables import Base, ComputeListingRow, ListingObservation, RawSnapshot
 
-    run(["dropdb", "--if-exists", "opengrid_test"])
-    run(["createdb", "opengrid_test"])
-    engine = create_engine("postgresql+psycopg://localhost:5432/opengrid_test")
+    scratchdb.drop("og_test_changes")
+    scratchdb.create("og_test_changes")
+    engine = create_engine("postgresql+psycopg://localhost:5432/og_test_changes")
     try:
         Base.metadata.create_all(engine)
         Session = sessionmaker(bind=engine, expire_on_commit=False)
-        now = datetime.now(timezone.utc)
+        # The database's clock, not ours: the SQL compares against its now(), and a client
+        # clock even milliseconds ahead would push the "exactly at the cutoff" row past it.
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            now = conn.execute(text("SELECT now()")).scalar()
         ago = lambda h: now - timedelta(hours=h)  # noqa: E731
 
         def listing(s, prov, lid, price):
@@ -137,7 +140,7 @@ def test_sql():
         assert one[("b", "young")] == "flat", one
     finally:
         engine.dispose()
-        run(["dropdb", "--if-exists", "opengrid_test"])
+        scratchdb.drop("og_test_changes")
 
 
 if __name__ == "__main__":

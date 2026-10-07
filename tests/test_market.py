@@ -3,13 +3,14 @@
 Run:  .venv/bin/python tests/test_market.py
 """
 
-import subprocess
+import scratchdb
 import sys
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal as D
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import market
 from market import aggregate, change_over, coherent_start, grid, price_at, provider_series
@@ -86,8 +87,6 @@ def test_change_over():
     assert change_over(lo2, grid(H(0), H(4), 4), 0)[0] == (4.0 - 5.0) / 5.0
 
 
-def run(cmd):
-    subprocess.run(cmd, check=True, capture_output=True)
 
 
 def test_sql():
@@ -97,9 +96,9 @@ def test_sql():
     import normalize
     from tables import Base, ComputeListingRow, ListingObservation
 
-    run(["dropdb", "--if-exists", "opengrid_test"])
-    run(["createdb", "opengrid_test"])
-    engine = create_engine("postgresql+psycopg://localhost:5432/opengrid_test")
+    scratchdb.drop("og_test_market")
+    scratchdb.create("og_test_market")
+    engine = create_engine("postgresql+psycopg://localhost:5432/og_test_market")
     try:
         Base.metadata.create_all(engine)
         Session = sessionmaker(bind=engine, expire_on_commit=False)
@@ -170,7 +169,7 @@ def test_sql():
         assert market.detail("NVIDIA NOPE", 24)["providers"] == []
     finally:
         engine.dispose()
-        run(["dropdb", "--if-exists", "opengrid_test"])
+        scratchdb.drop("og_test_market")
 
 
 if __name__ == "__main__":

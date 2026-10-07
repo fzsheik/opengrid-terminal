@@ -1,0 +1,23 @@
+{
+ "version": "https://jsonfeed.org/version/1.1",
+ "title": "Example Neocloud Blog (test fixture, invented content)",
+ "home_page_url": "https://example-neocloud.test/",
+ "feed_url": "https://example-neocloud.test/feed.json",
+ "items": [
+  {
+   "id": "https://example-neocloud.test/blog/h200-nvl-eu?utm_source=feed",
+   "url": "https://example-neocloud.test/blog/h200-nvl-eu?utm_source=feed&utm_medium=rss",
+   "title": "H200 NVL capacity now generally available in Frankfurt",
+   "summary": "Test fixture. New H200 NVL nodes are generally available in our Frankfurt region.",
+   "date_published": "2026-10-01T09:30:00-04:00",
+   "authors": [{"name": "Fixture Author"}],
+   "tags": ["capacity", "gpus"]
+  },
+  {
+   "id": "post-2",
+   "url": "https://example-neocloud.test/blog/no-date",
+   "title": "A post with no date",
+   "content_html": "<p>Has no <b>date_published</b>.</p>"
+  }
+ ]
+}
