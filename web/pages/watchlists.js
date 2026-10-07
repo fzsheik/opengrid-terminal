@@ -79,7 +79,7 @@
           h("form", { class: "wl-new", onsubmit: async e => {
             e.preventDefault();
             if (!name.value.trim()) return;
-            try { const w = await ctx.api("/v1/watchlists", { method: "POST", body: { name: name.value.trim() } }); st.sel = w.id; OG.qs.set({ wl: w.id }); await loadLists(); }
+            try { const w = await ctx.api("/v1/watchlists", { method: "POST", body: { name: name.value.trim() } }); if (OG.track) OG.track("watchlist_create", {}); st.sel = w.id; OG.qs.set({ wl: w.id }); await loadLists(); }
             catch (e2) { rail.append(OG.error(e2)); }
           } }, name, h("button", { class: "btn", type: "submit" }, "Create")));
       }

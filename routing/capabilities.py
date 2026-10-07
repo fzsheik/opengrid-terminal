@@ -10,9 +10,13 @@ Three separate claims per provider, never merged:
     level_supported_by_provider_api   what the provider's public API documents (None = not established)
     level_implemented                 what OpenGrid's adapter does: read from routing.adapters.level(),
                                       so it cannot exceed the code
-    verified_live                     False everywhere: no adapter has made a real call against a
-                                      provider account yet; adapters are tested against mocked HTTP
-                                      built from the documented request/response shapes
+    verified_live                     True only when the provider's adapter_status is 'validated' in
+                                      provider_execution_flags (a recorded validation cycle,
+                                      routing/validation.py -> control.mark_validated). Every adapter's code
+                                      says VALIDATION_STATUS = 'SIMULATED': tested against mocked HTTP built
+                                      from the documented request/response shapes only
+    matrix                            the adapter's own CAPABILITIES (the founder's rows, each with its
+                                      evidence), read from routing/adapters/<provider>.py: one source of truth
     availability_check_verified_live  True only where the check reads a public endpoint and was run
                                       against the real API (read-only): Vast, and Shadeform's catalogue
 
@@ -37,30 +41,35 @@ OPENGRID_MANAGED, BYO, COMMERCIAL = "opengrid_managed_key", "byo", "commercial_a
 
 _REG: dict[str, dict] = {
     "lambda": dict(
-        api=3, resource="vm", docs="https://docs.lambda.ai/api/cloud", docs_checked="docs (fetched 2026-10)",
+        api=3, resource="vm", docs="https://cloud.lambda.ai/api/v1/openapi.json", docs_checked="docs (fetched 2026-10)",
         credential=OPENGRID_MANAGED, settings=["lambda_api_key"],
         notes="Launch needs region_name, instance_type_name and ssh_key_names (keys registered in the Lambda "
               "account). Status booting/active/unhealthy/terminating/terminated/preempted. No stop endpoint "
-              "(terminate or restart only). Capacity error code instance-operations/launch/insufficient-capacity."),
+              "(terminate or restart only). Capacity error code instance-operations/launch/insufficient-capacity. "
+              "Host cloud.lambda.ai (cloud.lambdalabs.com is deprecated). Name + tags set at launch; no billing API."),
     "runpod": dict(
         api=3, resource="container pod", docs="https://docs.runpod.io/api-reference",
         docs_checked="docs (fetched 2026-10)", credential=OPENGRID_MANAGED, settings=["runpod_api_key"],
         notes="Pods are containers, not VMs: a container image is required. REST v1 (rest.runpod.io) creates, "
               "gets, stops and deletes pods; stock comes from the GraphQL lowestPrice the poller already reads. "
               "Only SECURE cloud is routed (community cloud is interruptible and excluded from the market). "
-              "desiredStatus is RunPod's target state, not proof the container is up."),
+              "desiredStatus is RunPod's target state, not proof the container is up. Deploying needs at least one "
+              "hour's worth of credits. Stopped pods bill volume storage only. /billing/pods reports per-pod cost."),
     "hyperstack": dict(
-        api=3, resource="vm", docs="https://docs.hyperstack.cloud/docs/api-reference/",
-        docs_checked="docs (search 2026-10)", credential=OPENGRID_MANAGED, settings=["hyperstack_api_key"],
+        api=3, resource="vm", docs="https://docs.hyperstack.cloud/openapi/hyperstack.json",
+        docs_checked="docs (fetched 2026-10)", credential=OPENGRID_MANAGED, settings=["hyperstack_api_key"],
         notes="A VM needs an environment (region-bound), a key pair registered in it, an image name and a flavor. "
-              "Environments per region come from ROUTING_LAUNCH_DEFAULTS. Stop is offered; whether a stopped VM "
-              "still bills is not verified (hibernate exists for that)."),
+              "Environments per region come from ROUTING_LAUNCH_DEFAULTS. New VMs have no inbound rules: the launch "
+              "adds SSH ingress. Stop is NOT offered: SHUTOFF keeps billing for all resources (confirmed, "
+              "states-and-billing); hibernate is not implemented. Delete is refused while CREATING and retried."),
     "digitalocean": dict(
         api=3, resource="vm (GPU Droplet)",
-        docs="https://docs.digitalocean.com/reference/api/digitalocean/#tag/Droplets", docs_checked="recalled",
-        credential=OPENGRID_MANAGED, settings=["digitalocean_api_key"],
-        notes="POST /v2/droplets with region, size slug, image (e.g. gpu-h100x1-base) and ssh key ids. "
-              "Power-off is offered but a powered-off Droplet is still billed; only destroy ends spend."),
+        docs="https://docs.digitalocean.com/reference/api/digitalocean/#tag/Droplets",
+        docs_checked="docs (fetched 2026-10)", credential=OPENGRID_MANAGED, settings=["digitalocean_api_key"],
+        notes="POST /v2/droplets with region, size slug, image (gpu-h100x1-base for 1-GPU, gpu-h100x8-base for "
+              "8-GPU) and ssh key ids. Droplet names allow only hostname characters (a-z, 0-9, '.', '-'): OpenGrid "
+              "names are og-<deployment>. Stop is NOT offered: a powered-off GPU Droplet is still billed; only "
+              "destroy ends spend. Size availability is catalogue data, not live stock."),
     "crusoe": dict(
         api=3, resource="vm", docs="https://docs.shadeform.ai/api-reference/instances/instances-create",
         docs_checked="docs (fetched 2026-10)", credential=OPENGRID_MANAGED, settings=["shadeform_api_key"],
@@ -89,7 +98,9 @@ _REG: dict[str, dict] = {
         api=3, resource="vm", docs="https://api.verda.com/v1/docs", docs_checked="docs (fetched 2026-10)",
         credential=OPENGRID_MANAGED, settings=["verda_client_id", "verda_client_secret"],
         notes="OAuth2 client credentials (client id + secret), then POST /v1/instances with instance_type, image, "
-              "location_code and ssh_key_ids; 503 means no capacity. Availability per location needs auth."),
+              "location_code and ssh_key_ids; 503 {code: service_unavailable} means no capacity (any other 503 is "
+              "ambiguous). Availability per location needs auth. Stop is NOT offered: shutdown keeps charging "
+              "(confirmed). Delete passes every volume id so detached storage does not keep billing."),
     "aws": dict(
         api=3, resource="vm (EC2)", docs="https://docs.aws.amazon.com/AWSEC2/latest/APIReference/",
         docs_checked="recalled", credential=COMMERCIAL, settings=[],
@@ -133,6 +144,39 @@ def _configured(entry: dict) -> bool:
     return bool(entry["settings"]) and all(getattr(settings, s, None) for s in entry["settings"])
 
 
+def _flags(provider: str) -> dict | None:
+    """The DB-recorded execution flags (adapter_status etc.), when the control plane is reachable."""
+    try:
+        from routing import control
+        return control.provider_flags(provider)
+    except Exception:  # noqa: BLE001 - no DB / table yet: report the code's own status only
+        return None
+
+
+def matrix(provider: str) -> dict | None:
+    """The founder's capability matrix for one provider, straight from its adapter (value + evidence)."""
+    caps = adapters.capabilities(provider)
+    return None if caps is None else caps.as_dict()
+
+
+def _execution(provider: str, cls) -> dict:
+    f = _flags(provider) if cls is not None else None
+    status = (f or {}).get("adapter_status") or "simulated"
+    return {
+        "validation_status": getattr(cls, "VALIDATION_STATUS", None) if cls else None,
+        "adapter_status": status if cls else None,
+        "verified_live": bool(cls) and status == "validated",
+        "validated_at": (f or {}).get("validated_at"),
+        "validation_deployment_id": (f or {}).get("validation_deployment_id"),
+        "supervised_enabled": bool((f or {}).get("supervised_enabled")),
+        "live_enabled": bool((f or {}).get("live_enabled")),
+        "killed": bool((f or {}).get("killed")),
+        "credential_provider": adapters.credential_provider(provider) if cls else None,
+        "stopped_billing": (cls.CAPABILITIES.stopped_billing[0] if cls else None),
+        "matrix": matrix(provider),
+    }
+
+
 def capability(provider: str) -> dict:
     """One provider's row. Unknown providers are level 0 with nothing established."""
     e = _REG.get(provider)
@@ -144,14 +188,14 @@ def capability(provider: str) -> dict:
                 "availability_check_verified_live": False, "via": None,
                 "resource": None, "credential_requirement": None, "credential_settings": [],
                 "credentials_configured": False, "supports_stop": bool(cls and cls.SUPPORTS_STOP),
-                "docs_url": None, "docs_checked": None, "notes": "not in the capability registry"}
+                "docs_url": None, "docs_checked": None, "notes": "not in the capability registry",
+                **_execution(provider, cls)}
     return {
         "provider": provider,
         "level_supported_by_provider_api": e["api"],
         "level_supported_label": None if e["api"] is None else LEVELS[e["api"]],
         "level_implemented": impl,
         "level_implemented_label": LEVELS[impl],
-        "verified_live": False,
         "availability_check_verified_live": provider in AVAILABILITY_CHECK_VERIFIED_LIVE,
         "via": e.get("via"),
         "resource": e["resource"],
@@ -163,6 +207,7 @@ def capability(provider: str) -> dict:
         "docs_url": e["docs"],
         "docs_checked": e["docs_checked"],
         "notes": e["notes"],
+        **_execution(provider, cls),
     }
 
 

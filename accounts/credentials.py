@@ -8,11 +8,20 @@ BYO                an account stores its own key for a provider; routing then pr
                    record_usage(kind="byo")).
 
 Secrets are Fernet-encrypted (AES-128-CBC + HMAC-SHA256) with settings.credentials_encryption_key.
-That setting may be a Fernet key or any passphrase (stretched with SHA-256). Deployed without it,
-storing/reading BYO secrets fails closed; in dev a derived key is used with a warning.
+Deployed (accounts.security.deployed()), that setting MUST be a real Fernet key
+(Fernet.generate_key(); deploy/make_env.py writes one): a passphrase is refused (503), and so is a
+missing key. Only on a developer's machine may it be a passphrase (stretched) or unset (a key derived
+from DATABASE_URL, with a warning).
+Rotation: put the new key in CREDENTIALS_ENCRYPTION_KEY and the old one(s) in
+CREDENTIALS_ENCRYPTION_KEYS_OLD (comma-separated). Decryption accepts all of them (MultiFernet);
+encryption always uses the new one. `python admin.py rotate-credentials` re-encrypts every stored
+secret (BYO credentials and alert webhook secrets) under the new key; then drop the old keys.
 No API ever returns a secret: listings carry only provider, label, the last 4 characters and dates.
 
-    resolve(account_id, provider) -> ("byo" | "opengrid", secret) | None      (for routing)
+    resolve(account_id, provider) -> ("byo" | "opengrid", secret) | None
+        Fails closed: an account's BYO credential that does not decrypt raises CredentialUnavailable,
+        it never falls back to OpenGrid-managed credentials. (Routing uses routing/credentials.py,
+        which follows the same rule and pins the credential to each deployment.)
 """
 
 from __future__ import annotations
@@ -22,7 +31,7 @@ import hashlib
 import logging
 from datetime import datetime, timezone
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from fastapi import HTTPException
 from sqlalchemy import select, update
 
@@ -35,12 +44,43 @@ log = logging.getLogger(__name__)
 _warned = False
 
 
+class CredentialUnavailable(RuntimeError):
+    """An account's BYO credential exists but cannot be used (does not decrypt). Never fall back."""
+
+
 def check_config() -> None:
-    if deployed() and not settings.credentials_encryption_key:
-        raise RuntimeError("CREDENTIALS_ENCRYPTION_KEY must be set when deployed")
+    """Startup check (api/accounts.install): deployed needs a real Fernet key, and old keys must parse."""
+    if deployed():
+        if not settings.credentials_encryption_key:
+            raise RuntimeError("CREDENTIALS_ENCRYPTION_KEY must be set when deployed")
+        _real_fernet(settings.credentials_encryption_key, "CREDENTIALS_ENCRYPTION_KEY")
+    for i, old in enumerate(_old_keys()):
+        _key_to_fernet(old, f"CREDENTIALS_ENCRYPTION_KEYS_OLD[{i}]")
 
 
-def _fernet() -> Fernet:
+def _old_keys() -> list[str]:
+    return [k.strip() for k in (settings.credentials_encryption_keys_old or "").split(",") if k.strip()]
+
+
+def _real_fernet(raw: str, name: str) -> Fernet:
+    try:
+        return Fernet(raw.encode())
+    except (ValueError, TypeError):
+        raise RuntimeError(f"{name} is not a Fernet key (32 url-safe base64 bytes; generate one with "
+                           "cryptography.fernet.Fernet.generate_key()); passphrases are refused when deployed")
+
+
+def _key_to_fernet(raw: str, name: str) -> Fernet:
+    if deployed():
+        return _real_fernet(raw, name)
+    try:
+        return Fernet(raw.encode())
+    except (ValueError, TypeError):  # dev only: a passphrase, stretched
+        return Fernet(base64.urlsafe_b64encode(hashlib.sha256(raw.encode()).digest()))
+
+
+def _fernet() -> MultiFernet:
+    """MultiFernet([current, *old]): encrypts with the current key, decrypts with any."""
     global _warned
     raw = settings.credentials_encryption_key
     if not raw:
@@ -51,9 +91,12 @@ def _fernet() -> Fernet:
             _warned = True
         raw = "opengrid-dev-credentials:" + settings.database_url
     try:
-        return Fernet(raw.encode())
-    except (ValueError, TypeError):
-        return Fernet(base64.urlsafe_b64encode(hashlib.sha256(raw.encode()).digest()))
+        keys = [_key_to_fernet(raw, "CREDENTIALS_ENCRYPTION_KEY")]
+        keys += [_key_to_fernet(k, "CREDENTIALS_ENCRYPTION_KEYS_OLD") for k in _old_keys()]
+    except RuntimeError as e:
+        log.error("%s", e)
+        raise HTTPException(503, "credential storage is disabled: the encryption key is not a valid Fernet key")
+    return MultiFernet(keys)
 
 
 def encrypt(secret: str) -> bytes:
@@ -62,6 +105,34 @@ def encrypt(secret: str) -> bytes:
 
 def decrypt(token: bytes) -> str:
     return _fernet().decrypt(bytes(token)).decode()
+
+
+def rotate() -> dict:
+    """Re-encrypt every stored secret under the CURRENT key (after moving the previous key to
+    CREDENTIALS_ENCRYPTION_KEYS_OLD). Rows that decrypt under none of the keys are left untouched
+    and counted, never dropped. Idempotent."""
+    from store.accounts import AlertRule
+
+    f = _fernet()
+    out = {"provider_credentials": 0, "alert_rules": 0, "undecryptable": []}
+    with normalize.SessionLocal.begin() as s:
+        for c in s.scalars(select(ProviderCredential)):
+            try:
+                c.secret_encrypted = f.rotate(bytes(c.secret_encrypted))
+                out["provider_credentials"] += 1
+            except InvalidToken:
+                out["undecryptable"].append(f"provider_credentials:{c.id}")
+        for r in s.scalars(select(AlertRule).where(AlertRule.webhook_secret_encrypted.is_not(None))):
+            try:
+                r.webhook_secret_encrypted = f.rotate(bytes(r.webhook_secret_encrypted))
+                out["alert_rules"] += 1
+            except InvalidToken:
+                out["undecryptable"].append(f"alert_rules:{r.id}")
+        from accounts.keys import audit
+
+        audit(s, "credentials_rotated", "cli", detail_counts={k: v for k, v in out.items() if k != "undecryptable"},
+              undecryptable=out["undecryptable"])
+    return out
 
 
 def _hint(secret: str) -> str:
@@ -136,7 +207,8 @@ def resolve(account_id: int | None, provider: str) -> tuple[str, str] | None:
     """The secret routing should use for (account, provider): BYO if the account has an active one,
     else OpenGrid-managed if configured, else None (cannot provision there).
 
-    A BYO secret that no longer decrypts (key rotated) is logged and skipped, falling back to managed.
+    A BYO secret that no longer decrypts raises CredentialUnavailable (fail closed): the account
+    set up its own credential, so OpenGrid must not silently provision (and pay) with its own.
     """
     provider = provider.lower()
     if account_id is not None:
@@ -149,7 +221,8 @@ def resolve(account_id: int | None, provider: str) -> tuple[str, str] | None:
             try:
                 secret = decrypt(c.secret_encrypted)
             except InvalidToken:
-                log.error("BYO credential %s for account %s does not decrypt; falling back", c.id, account_id)
+                log.error("BYO credential %s for account %s does not decrypt; failing closed", c.id, account_id)
+                raise CredentialUnavailable(f"the {provider} credential stored for this account does not decrypt")
             else:
                 with normalize.SessionLocal.begin() as s:
                     s.execute(update(ProviderCredential).where(ProviderCredential.id == c.id)

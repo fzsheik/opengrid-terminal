@@ -22,7 +22,7 @@ from api import markdown, pages  # noqa: E402
 from api.common import gpu_slugs  # noqa: E402
 from config import settings  # noqa: E402
 
-client = TestClient(main.app)  # no `with`: lifespan (DB init, poller) does not run
+client = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})  # CSRF header, as web/core.js sends  # no `with`: lifespan (DB init, poller) does not run
 BASE = settings.public_base_url.rstrip("/")
 
 FAKE = {
@@ -256,6 +256,37 @@ def test_public_pages_through_the_middleware():
         assert client.get("/gpus").status_code == 401, "off by default: pages need the password"
     finally:
         settings.app_password, settings.public_pages = None, False
+
+
+EXECUTION_PAGES = ["/deployments/dep-0123abcd", "/onboarding", "/admin/execution", "/admin/checklist", "/admin/partners", "/admin/value"]
+
+
+def test_execution_pages_are_private_and_noindex():
+    """The execution / partner / admin pages: served (reload works), never indexed, never in the sitemap."""
+    patterns = {p for p, *_ in pages.PAGES}
+    for p in ("/deployments/{id}", "/onboarding", "/admin/execution", "/admin/checklist", "/admin/partners", "/admin/value"):
+        assert p in patterns, p
+        assert next(x for x in pages.PAGES if x[0] == p)[3] is False, f"{p} must not be indexable"
+    locs = re.findall(r"<loc>([^<]+)</loc>", client.get("/sitemap.xml").text)
+    robots = client.get("/robots.txt").text
+    for path in EXECUTION_PAGES:
+        r = client.get(path)
+        assert r.status_code == 200 and 'id="page"' in r.text, path
+        assert 'name="robots" content="noindex"' in r.text, f"{path}: noindex"
+        assert not any(loc.endswith(path) or "/admin/" in loc or "/onboarding" in loc for loc in locs), f"{path} listed in the sitemap"
+    for p in ("/onboarding", "/admin/execution", "/admin/checklist", "/admin/partners", "/admin/value"):
+        assert f"Disallow: {p}" in robots, p
+    # the data behind them is never public, whatever PUBLIC_PAGES says
+    saved = settings.app_password, settings.public_pages
+    settings.app_password, settings.public_pages = "s3cret", True
+    try:
+        anon = TestClient(main.app)
+        for api in ("/v1/admin/execution/mode", "/v1/admin/orphans", "/v1/admin/checklist?provider=vast", "/v1/admin/partners", "/v1/economics",
+                    "/v1/onboarding", "/v1/partners/me", "/v1/deployments/dep-0123abcd", "/v1/admin/funnel"):
+            assert anon.get(api).status_code in (401, 403), api
+        assert anon.get("/admin/execution").status_code == 200, "the page shell itself holds no data"
+    finally:
+        settings.app_password, settings.public_pages = saved
 
 
 if __name__ == "__main__":

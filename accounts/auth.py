@@ -33,8 +33,9 @@ SCOPES = {
     "deployments:write": "stop / terminate your deployments",
     "watchlists": "manage watchlists and alerts",
     "billing:read": "see usage and invoices",
+    "keys:read": "list this account's API keys (metadata only)",
     "account:manage": "create / revoke this account's API keys and BYO provider credentials",
-    "admin": "operator functions",
+    "admin": "operator functions (on an API key, honoured only if the operator flagged it platform_admin)",
 }
 
 
@@ -44,6 +45,7 @@ class Principal:
     account_id: int | None = None  # None for the operator
     key_id: int | None = None
     scopes: frozenset = field(default_factory=frozenset)
+    platform_admin: bool = False   # an API key the operator explicitly allowed to act cross-tenant
 
     def has(self, scope: str) -> bool:
         return ALL in self.scopes or scope in self.scopes
@@ -57,7 +59,11 @@ PUBLIC = Principal(kind="public", scopes=frozenset({"data:read"}))
 def _site_auth_ok(header: str) -> bool:
     import main  # the site password check lives with the middleware
 
-    return not settings.app_password or main.password_ok(header)
+    if not settings.app_password:
+        from accounts.security import deployed
+
+        return not deployed()  # open only on a developer's machine; deployed without a password: closed
+    return main.password_ok(header)
 
 
 def _public_path(request: Request) -> bool:
@@ -83,6 +89,16 @@ def principal(request: Request) -> Principal:
         raise HTTPException(401, "OpenGrid API key required", headers={"WWW-Authenticate": "Bearer"})
     request.state.principal = who
     return who
+
+
+def require_any_scope(*scopes: str):
+    """Any one of `scopes` suffices (e.g. keys:read or account:manage)."""
+    def dep(who: Principal = Depends(principal)) -> Principal:
+        if not any(who.has(s) for s in scopes):
+            raise HTTPException(403, f"this key needs one of the scopes {sorted(scopes)}")
+        return who
+
+    return dep
 
 
 def require_scope(scope: str):

@@ -2,8 +2,10 @@
    "I need 8 H100s in the US under $2.50/hr": the ticket builds a POST /v1/route/preview body, the
    result shows the selected listing, its QUOTE (distinct from the observed market price), the score
    breakdown per candidate, exclusions with reasons and the factors that have no data.
-   "Route & provision" calls POST /v1/route only after an explicit confirmation, and shows what the
-   server actually did (e.g. not_provisioned: live provisioning disabled) — never more.
+   "Request route" calls POST /v1/route (one Idempotency-Key per intent) after a confirmation and shows the
+   PENDING APPROVAL ticket: provider, listing, quote vs observed, costs, fees, taxes (not computed), billing unit,
+   expiry countdown, limit violations; admins approve (type the provider name; override + reason when limits are
+   exceeded) or reject. /route?rr=<route_request_id> reopens a ticket.
    The command bar opens /route?gpu=<slug>&count=<n>&region=<group> ("r h100 8 us"); the ticket is URL-synced.
    Strict region (strict_region) and, for a GPU family, allow variants (allow_variants) are URL-synced too. */
 (() => {
@@ -98,8 +100,8 @@
         ex: new Set(String(query.ex || "").split(",").filter(Boolean)),
         lvl: query.lvl === "1", avail: query.avail === "1",
         strict: query.strict === "1", variants: query.variants === "1", family: null,
-        launch: { name: "", ssh_key: "", image: "", disk_gb: "" },
-        last: null, lastBody: null,
+        launch: { name: "", ssh_public_key: "", ssh_key: "", image: "", disk_gb: "" }, maxRun: num(query.maxrun),
+        last: null, lastBody: null, routeBody: null, admin: false, modeStatus: null,
       };
       const badRegion = query.region && !st.region ? query.region : null;
 
@@ -110,7 +112,14 @@
       const ticket = h("form", { class: "rt-ticket box", onsubmit: e => { e.preventDefault(); preview(); } });
       const out = h("div", { class: "rt-out" });
       const routed = h("div", { class: "rt-routed" });
-      root.append(h("div", { class: "rt-grid" }, ticket, h("div", { class: "rt-main" }, routed, out)));
+      const modeBox = h("div", { class: "rt-mode" });
+      root.append(h("div", { class: "rt-grid" }, ticket, h("div", { class: "rt-main" }, modeBox, routed, out)));
+      function drawMode() { modeBox.replaceChildren(st.modeStatus ? OG.modeBanner(st.modeStatus) : null); }
+      OG.me().then(me => {
+        if (!ctx.alive()) return;
+        st.admin = OG.isAdmin(me);
+        if (st.admin) OG.api.soft("/v1/admin/execution/mode", { nocache: true }).then(m => { if (m && ctx.alive()) { st.modeStatus = m; drawMode(); if (ticketT) renderTicket(ticketT); } });
+      });
 
       /* ----- GPU picker (fuzzy) ----- */
       let gpus = [];
@@ -193,6 +202,7 @@
       const maxIn = numIn("max", { min: 0, step: 0.01, placeholder: "none", "aria-label": "Max price per GPU-hour" });
       const durIn = numIn("dur", { min: 0, step: 1, placeholder: "–", "aria-label": "Duration hours" });
       const dlIn = numIn("dl", { min: 0, step: 1, placeholder: "–", "aria-label": "Deadline hours" });
+      const maxRunIn = numIn("maxRun", { min: 1, step: 1, placeholder: "–", "aria-label": "Auto-terminate after minutes" });
 
       const modeSeg = OG.seg(MODES, st.mode, v => { st.mode = v; modeHint.textContent = MODES.find(m => m[0] === v)[2]; drawWeights(); sync(); markDirty(); });
       modeSeg.classList.add("rt-modes");
@@ -241,14 +251,15 @@
       const strictLbl = h("label", { class: "rt-chk rt-strict", title: "strict_region: exclude listings whose region is not confirmed as the chosen group (otherwise unlocated listings can still rank, scored lower on region match)" }, strictIn, "Strict region");
       const launchIn = (key, ph, attrs) => h("input", Object.assign({ class: "field", placeholder: ph, "aria-label": key, oninput: e => { st.launch[key] = e.target.value.trim(); } }, attrs || {}));
       const launchBox = h("details", { class: "rt-launch" }, h("summary", {}, "Launch parameters (route only)"),
-        h("div", { class: "rt-h" }, "Used only by Route & provision on a provider that needs them (an SSH key registered with the provider for VMs; an image for RunPod / Vast pods). Env values are never stored."),
+        h("div", { class: "rt-h" }, "Used only by Request route, on a provider that needs them. On OpenGrid-managed accounts send your SSH PUBLIC key (registered for this deployment only); a provider key name works only with your own (BYO) credentials. Env values are never stored."),
         field("Name", launchIn("name", "opengrid-job", { pattern: "[A-Za-z0-9][A-Za-z0-9-]*", maxlength: 60 })),
-        field("SSH key", launchIn("ssh_key", "key name / id at the provider")),
+        field("SSH public key", launchIn("ssh_public_key", "ssh-ed25519 AAAA… you@host")),
+        field("SSH key name", launchIn("ssh_key", "BYO credentials only")),
         field("Image", launchIn("image", "e.g. pytorch/pytorch:latest")),
         field("Disk GB", launchIn("disk_gb", "–", { type: "number", min: 10, max: 20000, class: "field num" })));
 
       const previewBtn = h("button", { class: "btn pri rt-go", type: "submit" }, "Preview", h("kbd", {}, "↵"));
-      const routeBtn = h("button", { class: "btn rt-exec", type: "button", onclick: () => routeNow() }, "Route & provision…");
+      const routeBtn = h("button", { class: "btn rt-exec", type: "button", onclick: () => routeNow(), title: "POST /v1/route: live check + quote + cost guards; SUPERVISED mode waits for admin approval" }, "Request route…");
       const dirty = h("span", { class: "rt-dirty", hidden: true }, "ticket changed — preview again");
       function markDirty() { if (st.last) dirty.hidden = false; }
 
@@ -258,20 +269,21 @@
         h("div", { class: "rt-row" }, field("GPUs / instance", h("span", { class: "rt-inl" }, countIn, countChips))),
         h("div", { class: "rt-row2" }, field("Region group", h("span", { class: "rt-inl" }, regionSel, strictLbl)), field("Max $/GPU·h", maxIn)),
         h("div", { class: "rt-row2" }, field("Duration h", durIn, "cost = quote × GPUs × hours"), field("Deadline h", dlIn, "if no duration: cost of the full window")),
+        h("div", { class: "rt-row2" }, field("Auto-terminate min", maxRunIn, "max_runtime_minutes: terminated after this"), h("span")),
         h("div", { class: "rt-f" }, h("span", { class: "rt-l" }, "Mode"), modeSeg, modeHint, weightsBox),
         h("div", { class: "rt-f" }, h("span", { class: "rt-l" }, "Exclude providers ", h("span", { class: "dimmer" }, "· ", h("i", { class: "rt-prov-dot" }), " = OpenGrid can provision")), exBox),
         h("div", { class: "rt-f" }, chk("lvl", "Require provisionable (OpenGrid integration ≥ 2)", "Only providers where OpenGrid has a provisioning adapter"),
           chk("avail", "Require explicit availability", "Only listings whose provider reports stock")),
         launchBox,
         h("div", { class: "rt-acts" }, previewBtn, routeBtn), dirty,
-        h("p", { class: "rt-h" }, "Count is GPUs per instance; a route launches one instance. Preview writes an audit record but never calls a provider."));
+        h("p", { class: "rt-h" }, "Count is GPUs per instance; a route launches one instance. Preview writes an audit record but never calls a provider. Request route issues a quote; under SUPERVISED execution an OpenGrid admin approves it before anything launches."));
       if (badRegion) ticket.prepend(h("div", { class: "state insufficient" }, h("b", {}, "Unknown region"), ` "${badRegion}" is not a region group; one of ${REGIONS.join(", ")}.`));
       drawWeights();
       drawEx(null);
 
       function sync() {
         const w = st.mode === "USER_DEFINED" ? FACTORS.filter(f => !f.nodata && st.weights[f.key]).map(f => f.key + ":" + st.weights[f.key]).join(",") : null;
-        OG.qs.set({ gpu: st.gpu || null, count: st.count === 1 ? null : st.count, region: st.region, max: st.max, dur: st.dur, dl: st.dl,
+        OG.qs.set({ gpu: st.gpu || null, count: st.count === 1 ? null : st.count, region: st.region, max: st.max, dur: st.dur, dl: st.dl, maxrun: st.maxRun,
           mode: st.mode === "BALANCED" ? null : st.mode, w, ex: st.ex.size ? [...st.ex].join(",") : null, lvl: st.lvl ? 1 : null, avail: st.avail ? 1 : null,
           strict: st.strict && st.region ? 1 : null, variants: st.family && st.variants ? 1 : null });
       }
@@ -283,6 +295,7 @@
         if (st.max) b.max_price_per_gpu_hour = st.max;
         if (st.dur) b.duration_hours = st.dur;
         if (st.dl) b.deadline_hours = st.dl;
+        if (st.maxRun) b.max_runtime_minutes = Math.round(st.maxRun);
         if (st.mode === "USER_DEFINED") {
           b.weights = {};
           for (const f of FACTORS) if (!f.nodata && st.weights[f.key] > 0 && (f.key !== "region_match" || st.region)) b.weights[f.key] = st.weights[f.key];
@@ -451,7 +464,7 @@
             d.can_provision_selected ? "" : `OpenGrid cannot launch on ${OG.providerName(d.selected.provider)} (integration level ${d.selected.integration_level || 0}: ${LEVEL[d.selected.integration_level || 0]}). `,
             d.best_provisionable ? h("span", {}, "Best provisionable alternative: ", h("b", {}, OG.providerName(d.best_provisionable.provider)), ` at ${fmt.price(d.best_provisionable.price_per_gpu_hour)}/GPU·h (rank ${d.best_provisionable.rank}).`) :
               d.provisioning_note ? d.provisioning_note + "." : "",
-            " Route & provision would skip non-provisionable candidates."));
+            " Request route skips non-provisionable candidates."));
         }
         kids.push(selectedCard(d));
         if (d.best_provisionable) kids.push(h("div", { class: "rt-bp" }, h("span", { class: "eyebrow" }, "Best provisionable"), OG.providerLink(d.best_provisionable.provider),
@@ -494,80 +507,241 @@
         }));
       }
 
-      /* ----- route (spends money where live provisioning is on) ----- */
+      /* ----- route request -> PENDING APPROVAL ticket -> admin approve / reject (money moves only here) ----- */
+      // One Idempotency-Key per user intent (OG.intentFor): reused only to retry after an unknown outcome.
+      const I = { route: null, approve: null, cancel: null };
+      let ticketT = null;
+      function routeBodyFromRecord(req) {
+        // the audit record keeps the internal spec; map it back to a POST /v1/route body (for Re-quote)
+        const b = { gpu: req.family && req.variants ? req.family : req.gpu, count: req.count || 1, mode: req.mode || "BALANCED" };
+        if (req.family && req.variants) b.allow_variants = true;
+        if (req.region_group) b.region = req.region_group;
+        if (req.strict_region) b.strict_region = true;
+        for (const k of ["max_price_per_gpu_hour", "duration_hours", "deadline_hours", "weights", "max_runtime_minutes"]) if (req[k] != null) b[k] = req[k];
+        if (req.preferences && Object.keys(req.preferences).length) b.preferences = req.preferences;
+        if (req.launch) b.launch = Object.fromEntries(Object.entries(req.launch).filter(([k]) => !["env", "env_sealed"].includes(k)));
+        return b;
+      }
+
       async function routeNow() {
         if (!st.gpu) { out.replaceChildren(OG.empty("Pick a GPU first.")); return; }
         if (!st.last || !dirty.hidden) await preview();
         const d = st.last;
         if (!d) return;
         const q = d.quote || {};
-        const live = d.live_provisioning_enabled;
         const b = body();
-        const est = q.expected_cost_usd != null ? `${OG.money(q.expected_cost_usd)} (${fmt.price(q.price_per_gpu_hour)}/GPU·h × ${d.count} GPUs × ${q.hours} h)`
-          : q.price_per_hour != null ? `${OG.money(q.price_per_hour)} per hour, open-ended: billed until the deployment is terminated` : "no quote (no eligible listing)";
+        const eff = st.modeStatus && st.modeStatus.effective_mode;
+        const est = q.expected_cost_usd != null ? `${OG.money(q.expected_cost_usd)} (${fmt.price(q.price_per_gpu_hour)}/GPU·h × ${d.count} GPUs × ${q.hours} h, from the observed listing)`
+          : q.price_per_hour != null ? `${OG.money(q.price_per_hour)} per hour, open-ended: set a duration or the auto-terminate cap` : "no quote (no eligible listing)";
         const ok = await OG.dialog({
-          title: live ? "Route & provision — this spends real money" : "Route — live provisioning is off on this server",
-          danger: true, ack: live ? "I understand this can launch a paid instance billed to this account" : "I understand that routing can spend real money where live provisioning is enabled",
-          confirm: live ? "Route & provision" : "Route (check & quote only)",
+          title: eff === "LIVE" ? "Request route — LIVE mode may launch without approval" : "Request route — creates a quote for OpenGrid approval",
+          danger: eff === "LIVE", confirm: "Request route",
+          ack: eff === "LIVE" ? "I understand a validated, live-enabled provider can launch a paid instance immediately" : null,
           body: h("div", { class: "rt-dlg" },
-            h("p", {}, "POST /v1/route checks live availability on each provisionable candidate in rank order, gets a quote, and ",
-              live ? h("b", { class: "down" }, "launches a paid instance on the first one that passes.") : h("b", {}, "stops before launching: live provisioning is disabled in this environment, so nothing is launched or charged.")),
+            h("p", {}, "POST /v1/route checks live availability on the top provisionable candidates, issues a ", h("b", {}, "quote"), " and applies the account's cost guards. ",
+              eff === "SUPERVISED" ? h("b", {}, "Nothing launches until an OpenGrid admin approves that exact quote.") : eff === "LIVE" ? h("b", { class: "down" }, "In LIVE mode a validated, live-enabled provider launches at once (within cost guards).")
+                : eff ? h("b", {}, `Execution mode is ${eff}: nothing will be launched.`) : "The server's execution mode decides whether anything can launch (SUPERVISED: admin approval of every quote)."),
             h("table", { class: "rt-dlg-t" },
               h("tr", {}, h("th", {}, "Request"), h("td", { class: "mono" }, `${d.count}× ${OG.shortGpu(d.gpu)} · ${d.region_group || "any region"} · ${d.mode}`)),
-              h("tr", {}, h("th", {}, "Estimated cost"), h("td", { class: "mono" }, est)),
-              h("tr", {}, h("th", {}, "Price cap"), h("td", {}, b.max_price_per_gpu_hour ? `live quote must be ≤ ${fmt.price(b.max_price_per_gpu_hour)}/GPU·h` : h("span", { class: "warn-t" }, "none set: the live quote is not capped"))),
-              h("tr", {}, h("th", {}, "Top candidate"), h("td", {}, d.selected ? `${OG.providerName(d.selected.provider)} — ${d.can_provision_selected ? "provisionable" : "OpenGrid cannot provision it; it will be skipped"}` : "none"))),
-            !d.can_provision_selected && !d.best_provisionable ? h("p", { class: "warn-t" }, "No candidate in this preview is on a provider OpenGrid can provision; expect status not_provisioned.") : null,
-            h("p", { class: "dim" }, "The estimate uses the observed listing price. The live quote can differ; the result shows it."))
+              h("tr", {}, h("th", {}, "Estimate"), h("td", { class: "mono" }, est)),
+              h("tr", {}, h("th", {}, "Price cap"), h("td", {}, b.max_price_per_gpu_hour ? `live quote must be ≤ ${fmt.price(b.max_price_per_gpu_hour)}/GPU·h` : h("span", { class: "warn-t" }, "none set: cost guards still apply"))),
+              h("tr", {}, h("th", {}, "Top candidate"), h("td", {}, d.selected ? `${OG.providerName(d.selected.provider)} — ${d.can_provision_selected ? "provisionable" : "not provisionable: skipped"}` : "none")))),
         });
         if (!ok) return;
-        routed.replaceChildren(OG.loading("Routing: checking live availability and quoting…"));
+        await requestRoute(b);
+      }
+
+      async function requestRoute(b) {
+        I.route = OG.intentFor(I.route, "route", b);
+        st.routeBody = b;
+        routed.replaceChildren(OG.loading("Routing: live check, quote, cost guards…"));
         try {
-          const r = await ctx.api("/v1/route", { method: "POST", body: b, full: true });
+          const r = await OG.api.intent(I.route, "/v1/route", { method: "POST", body: b, full: true });
+          if (r.data && r.data.execution_mode && !st.modeStatus) { st.modeStatus = { effective_mode: r.data.execution_mode }; drawMode(); }
           renderRouted(r.data);
-        } catch (e) { routed.replaceChildren(OG.error(e)); }
+        } catch (e) {
+          routed.replaceChildren(h("div", { class: "box rt-res rt-res-failed" }, h("div", { class: "rt-res-h" }, h("span", { class: "eyebrow" }, "Route request"), OG.error(e)),
+            I.route.state === "unknown" ? h("p", { class: "note" }, "Outcome unknown. ", h("button", { class: "btn sm", type: "button", onclick: () => requestRoute(b) }, "Retry (same Idempotency-Key)"),
+              " — the server replays the first answer instead of routing twice.") : null));
+        }
       }
 
       function renderRouted(r) {
+        if (r.status === "pending_approval" && r.deployment) {
+          OG.qs.set({ rr: r.route_request_id });
+          renderTicket({ rr: r.route_request_id, quote: r.quote, dep: r.deployment, reason: r.reason, request: st.routeBody || null });
+          return;
+        }
         const S = {
           provisioned: ["PROVISIONED", "good"], not_provisioned: ["NOT PROVISIONED", "warn"], failed: ["FAILED", "bad"], no_candidates: ["NO CANDIDATES", "bad"],
-        }[r.status] || [String(r.status).toUpperCase(), ""];
+          launch_unknown: ["OUTCOME UNKNOWN", "warn"], provider_timeout: ["PROVIDER TIMEOUT", "warn"],
+        }[r.status] || [String(r.status).toUpperCase().replace(/_/g, " "), ""];
         const dep = r.deployment;
+        const depLink = dep ? h("a", { class: "lnk mono", href: "/deployments/" + dep.deployment_id }, dep.deployment_id) : null;
         let line;
-        if (r.status === "provisioned" && dep) line = h("span", {}, "Provider accepted the launch: deployment ", h("a", { class: "lnk mono", href: "/deployments?id=" + dep.deployment_id }, dep.deployment_id), ` on ${OG.providerName(dep.provider)}, status ${dep.status}.`);
-        else if (r.status === "not_provisioned") line = h("span", {}, h("b", {}, r.reason || "not provisioned"), ". No instance was launched", dep ? "." : " and no deployment record was created. Nothing was charged.");
-        else if (r.status === "failed") line = h("span", {}, h("b", { class: "down" }, r.reason || "failed"), dep ? h("span", {}, " · deployment ", h("a", { class: "lnk mono", href: "/deployments?id=" + dep.deployment_id }, dep.deployment_id)) : null);
-        else line = h("span", {}, r.reason || "");
+        if (r.status === "provisioned" && dep) line = h("span", {}, "Provider accepted the launch: ", depLink, ` on ${OG.providerName(dep.provider)}, state ${dep.status}.`);
+        else if (r.status === "not_provisioned") line = h("span", {}, h("b", {}, r.reason || "not provisioned"), ". Nothing was launched or charged", dep ? "." : "; no deployment was created.");
+        else line = h("span", {}, h("b", { class: S[1] === "bad" ? "down" : "warn-t" }, r.reason || r.status), depLink ? [" · ", depLink] : null);
         const q = r.quote;
-        const moved = q && r.selected && q.provider !== r.selected.provider;
         const kids = [
           h("div", { class: "rt-res-h" }, h("span", { class: "eyebrow" }, "Route result"), OG.badge(S[0], S[1]), line, h("span", { class: "spacer" }),
+            r.execution_mode ? OG.badge("mode " + r.execution_mode) : null,
             h("a", { class: "lnk mono rt-audit", href: "/v1/route/" + r.route_request_id, target: "_blank", rel: "external noopener" }, r.route_request_id, " ↗"),
             h("button", { class: "btn sm", type: "button", onclick: () => routed.replaceChildren() }, "Dismiss")),
         ];
-        if (q) kids.push(h("div", { class: "rt-res-q" },
-          OG.conceptBadge("quote"), h("b", { class: "mono" }, fmt.price(q.price_per_gpu_hour) + "/GPU·h"),
-          h("span", {}, "from ", OG.providerLink(q.provider)), h("span", { class: "mono dim" }, q.listing_id),
-          h("span", { class: "dim" }, q.basis === "live_provider_api" ? "read from the provider API on this request" : "from the observed listing (no live price available)"),
-          q.expected_cost_usd != null ? h("span", { class: "mono" }, "expected " + OG.money(q.expected_cost_usd)) : h("span", { class: "mono" }, OG.money(q.price_per_hour) + "/h"),
-          q.availability ? h("span", { class: "dim" }, "live check: " + (q.availability.available === true ? "available" : q.availability.available === false ? "unavailable" : "unknown") + (q.availability.note ? " — " + q.availability.note : "")) : null));
-        if (moved) kids.push(h("p", { class: "note" }, `Top-ranked ${OG.providerName(r.selected.provider)} could not be routed (see below); the quote is from the first candidate that passed the checks.`));
+        if (q) kids.push(h("div", { class: "rt-res-q" }, OG.conceptBadge("quote"),
+          h("b", { class: "mono" }, fmt.price(q.quote_price_per_gpu_hour ?? q.price_per_gpu_hour) + "/GPU·h"), h("span", {}, "from ", OG.providerLink(q.provider)), h("span", { class: "mono dim" }, q.listing_id),
+          h("span", { class: "dim" }, (q.price_source || q.basis) === "live_check" || q.basis === "live_provider_api" ? "read from the provider API on this request" : "from the observed listing")));
         if (r.considered && r.considered.length) kids.push(OG.table({
           title: "Candidates tried, in rank order",
           columns: [
-            { key: "rank", label: "#", num: true },
-            { key: "provider", label: "Provider", fmt: v => OG.providerLink(v) },
-            { key: "listing_id", label: "Listing", cls: "mono dim", fmt: v => String(v).slice(0, 30) },
-            { key: "step", label: "Step", cls: "mono" },
-            { key: "outcome", label: "Outcome", fmt: v => OG.badge(v.replace(/_/g, " "), v === "ok" ? "good" : v === "not_attempted" ? "warn" : v === "failed" || v === "error" ? "bad" : "") },
-            { key: "reason", label: "Reason", cls: "wrap dim" },
-            { key: "quote", label: "Quote", num: true, fmt: v => v != null ? fmt.price(v) : "–" },
+            { key: "rank", label: "#", num: true }, { key: "provider", label: "Provider", fmt: v => OG.providerLink(v) },
+            { key: "listing_id", label: "Listing", cls: "mono dim", fmt: v => String(v).slice(0, 30) }, { key: "step", label: "Step", cls: "mono" },
+            { key: "outcome", label: "Outcome", fmt: v => OG.badge(String(v).replace(/_/g, " "), v === "ok" || v === "accepted" ? "good" : ["not_attempted", "skipped", "pending_approval"].includes(v) ? "warn" : ["failed", "error", "unknown"].includes(v) ? "bad" : "") },
+            { key: "reason", label: "Reason", cls: "wrap dim" }, { key: "quote", label: "Quote", num: true, fmt: v => v != null ? fmt.price(v) : "–" },
           ], rows: r.considered, sort: { key: "rank", dir: "asc" }, compact: true, csv: false,
         }));
-        routed.replaceChildren(h("div", { class: "box rt-res rt-res-" + r.status }, kids));
+        routed.replaceChildren(h("div", { class: "box rt-res rt-res-" + (S[1] === "good" ? "provisioned" : S[1] === "bad" ? "failed" : "not_provisioned") }, kids));
       }
 
+      async function loadTicket(rr) {
+        routed.replaceChildren(OG.loading("Loading route " + rr + "…"));
+        try {
+          const rec = await ctx.api("/v1/route/" + encodeURIComponent(rr), { nocache: true });
+          if (!rec.deployment) { routed.replaceChildren(h("div", { class: "box rt-res rt-res-not_provisioned" }, h("div", { class: "rt-res-h" }, h("span", { class: "eyebrow" }, "Route " + rr), OG.badge(String(rec.status || "").replace(/_/g, " ")), h("span", { class: "dim" }, (rec.result && rec.result.reason) || "no deployment was created")))); return; }
+          renderTicket({ rr, quote: rec.quote, dep: rec.deployment, reason: rec.result && rec.result.reason, request: rec.request ? routeBodyFromRecord(rec.request) : null });
+        } catch (e) { routed.replaceChildren(OG.error(e, () => loadTicket(rr))); }
+      }
+
+      function renderTicket(t) {
+        ticketT = t;
+        modeBox.hidden = true;   // the ticket carries its own mode banner
+        const q = t.quote || {}, dep = t.dep, admin = st.admin;
+        const vs = dep.limit_violations || [];
+        const hard = vs.filter(v => !v.overridable);
+        const pending = ["pending_approval", "quote_expired"].includes(dep.status);
+        const qStatus = q.status || "active";
+        const expired = qStatus === "expired" || (q.expires_at && new Date(q.expires_at) <= new Date()) || dep.status === "quote_expired";
+        const fees = q.fees || {};
+        const cell2 = (label, value, sub, badge) => h("div", { class: "rt-c" }, h("div", { class: "rt-cl" }, label, badge || null), h("div", { class: "rt-cv" }, value), sub ? h("div", { class: "rt-cs" }, sub) : null);
+        const actions = h("div", { class: "tk-acts" });
+        const msg = h("div", { class: "tk-msg" });
+        const exp = h("span", {});
+        if (!pending) {
+          actions.append(h("span", {}, "This route is ", OG.stateBadge(dep.status), " — ", h("a", { class: "lnk", href: "/deployments/" + dep.deployment_id }, "open the deployment →")));
+        } else if (expired) {
+          actions.append(OG.badge("quote expired", "bad"), h("span", { class: "dim" }, "A launch never uses an expired quote."),
+            h("button", { class: "btn pri", type: "button", disabled: t.request ? null : true, title: t.request ? null : "the original request is not available", onclick: () => requote(t, msg) }, "Re-quote…"));
+        } else if (admin) {
+          actions.append(
+            h("button", { class: "btn w4-danger", type: "button", disabled: hard.length ? true : null, title: hard.length ? "a non-overridable limit blocks this launch" : null, onclick: () => approve(t, msg) }, vs.length ? "Approve with override…" : "Approve & launch…"),
+            h("button", { class: "btn", type: "button", onclick: () => reject(t, msg) }, "Reject…"),
+            hard.length ? h("span", { class: "down" }, "Blocked: " + hard.map(v => v.code).join(", ") + " cannot be overridden") : h("span", { class: "dim" }, "Approval re-validates the quote live; a price move beyond tolerance issues a new quote instead of launching."));
+        } else {
+          actions.append(h("span", { class: "tk-wait" }, h("i", { class: "spin" }), "Waiting for OpenGrid approval. Nothing is launched or charged until an admin approves this exact quote."));
+        }
+        if (q.expires_at && !expired && pending) exp.append(OG.countdown(q.expires_at, { onExpire: () => { if (ticketT === t) renderTicket(t); } }));
+        else exp.append(h("span", { class: expired ? "down" : "dim" }, expired ? "expired " + fmt.dateTime(q.expires_at) : qStatus));
+        routed.replaceChildren(h("div", { class: "box tk" + (vs.length ? " tk-viol" : "") },
+          h("div", { class: "rt-res-h" }, h("span", { class: "eyebrow" }, "Route ticket"), OG.badge(pending ? (expired ? "QUOTE EXPIRED" : "PENDING APPROVAL") : dep.status.toUpperCase().replace(/_/g, " "), pending ? (expired ? "bad" : "warn") : D_TONE(dep.status)),
+            dep.purpose === "validation" ? OG.badge("validation", "warn") : null,
+            h("span", { class: "dim" }, t.reason || ""), h("span", { class: "spacer" }),
+            h("a", { class: "lnk mono", href: "/deployments/" + dep.deployment_id }, dep.deployment_id),
+            h("a", { class: "lnk mono rt-audit", href: "/v1/route/" + t.rr, target: "_blank", rel: "external noopener" }, t.rr, " ↗"),
+            h("button", { class: "btn sm", type: "button", onclick: () => { ticketT = null; modeBox.hidden = false; OG.qs.set({ rr: null }); routed.replaceChildren(); } }, "Dismiss")),
+          OG.modeBanner(st.modeStatus),
+          h("div", { class: "rt-cells tk-cells" },
+            cell2("Provider", h("span", {}, OG.logo(dep.provider, 16), " ", OG.providerName(dep.provider)), h("span", { class: "mono" }, q.listing_id || "")),
+            cell2("Region", q.region || dep.region || h("span", { class: "dim" }, "not stated"), q.region_group ? "group " + q.region_group : "provider did not name one"),
+            cell2("GPU × count", h("span", {}, `${q.gpu_count || dep.gpu_count}× `, OG.gpuLink(q.gpu || dep.gpu)), "one instance"),
+            cell2("Quote", h("span", { class: "rt-q" }, fmt.price(q.quote_price_per_gpu_hour), h("small", {}, "/GPU·h")), q.price_source === "live_check" ? "live provider check" : "observed listing (no live price)", OG.conceptBadge("quote")),
+            cell2("Observed", h("span", {}, fmt.price(q.observed_price_per_gpu_hour), h("small", {}, "/GPU·h")), "market observation used", OG.conceptBadge("observed")),
+            cell2("Est. hourly", OG.money(q.est_hourly_cost), "quote × GPUs"),
+            cell2("Est. total", q.est_total_cost != null ? OG.money(q.est_total_cost) : OG.na("no duration given"), q.duration_hours ? `${fmt.num(q.duration_hours)} h` : dep.max_runtime_minutes ? `cap: auto-terminate after ${dep.max_runtime_minutes} min` : "open-ended"),
+            cell2("Quote expires", exp, q.expires_at ? fmt.dateTime(q.expires_at) : null),
+            cell2("Fees", fees.lines && fees.lines.length ? h("span", {}, OG.money(fees.total_usd)) : fees.total_usd === 0 ? OG.money(0) : OG.na(fees.note || "fee policy unavailable"),
+              fees.lines && fees.lines.length ? fees.lines.map(l => `${l.description} ${OG.money(l.amount_usd)}`).join(" · ") : fees.note),
+            cell2("Taxes", h("span", { class: "dim" }, "not computed"), (q.taxes && q.taxes.note) || "unknown: taxes not computed"),
+            cell2("Billing unit", q.billing_unit || "unknown", "from the adapter's capability matrix"),
+            cell2("Min. commitment", q.minimum_commitment || "unknown", null)),
+          vs.length ? h("div", { class: "tk-vs" }, h("div", { class: "rt-res-h" }, h("b", { class: "down" }, `${vs.length} limit violation${vs.length === 1 ? "" : "s"}`), h("span", { class: "dim" }, "the launch is blocked unless an admin overrides (recorded with a reason)")), OG.violationTable(vs)) : null,
+          actions, msg));
+      }
+      const D_TONE = s => ({ good: "good", bad: "bad", warn: "warn", busy: "warn" })[OG.dep.tone(s)] || "";
+
+      async function approve(t, msg) {
+        const q = t.quote || {}, dep = t.dep, vs = dep.limit_violations || [];
+        const name = OG.providerName(dep.provider);
+        const v = await OG.ask({
+          title: `Approve launch on ${name}`, danger: true, confirm: "Approve & launch",
+          body: h("div", {}, h("p", {}, `Launches ONE instance: ${q.gpu_count || dep.gpu_count}× ${OG.shortGpu(q.gpu || dep.gpu)} at the quote ${fmt.price(q.quote_price_per_gpu_hour)}/GPU·h (${OG.money(q.est_hourly_cost)}/h${q.est_total_cost != null ? ", est. " + OG.money(q.est_total_cost) + " total" : ""}). The quote is re-validated live first.`),
+            vs.length ? h("p", { class: "warn-t" }, "Overriding: " + vs.map(x => `${x.code} (${x.value} vs cap ${x.limit})`).join("; ")) : null),
+          fields: [
+            { key: "provider", label: `Type the provider name to confirm: ${dep.provider}`, match: dep.provider, required: true, placeholder: dep.provider },
+            vs.length ? { key: "override", type: "checkbox", label: "Override the limit violations above (recorded in the control log)", required: true } : null,
+            { key: "reason", type: "textarea", label: vs.length ? "Reason for the override (required)" : "Reason (optional)", required: vs.length > 0, minLength: 3, placeholder: "e.g. partner approved the price on the call" },
+          ].filter(Boolean),
+        });
+        if (!v) return;
+        const b = { quote_id: q.quote_id, override_limits: !!v.override, reason: v.reason || null };
+        I.approve = OG.intentFor(I.approve, "approve:" + t.rr, b);
+        msg.replaceChildren(OG.loading("Approving: re-validating the quote, then the single provision call…"));
+        try {
+          const r = await OG.api.intent(I.approve, `/v1/route/${encodeURIComponent(t.rr)}/approve`, { method: "POST", body: b });
+          const d2 = r.deployment;
+          msg.replaceChildren(h("div", { class: r.status === "provisioned" ? "og-ok" : "og-alarm t-warn" }, h("b", {}, r.already_approved ? "Already approved" : r.status === "provisioned" ? "Provider accepted the launch" : "Approved · " + String(r.status).replace(/_/g, " ")),
+            " ", r.reason || r.note || "", " ", d2 ? h("a", { class: "btn pri", href: "/deployments/" + d2.deployment_id }, "Open live deployment →") : null));
+          if (d2) { t.dep = d2; }
+        } catch (e) {
+          const det = e.body && e.body.detail;
+          if (det && det.new_quote) {
+            t.quote = det.new_quote;
+            if (det.deployment) t.dep = Object.assign({}, t.dep, det.deployment);
+            renderTicket(t);
+            msg.replaceChildren(h("div", { class: "og-alarm t-warn" }, h("b", {}, "Not launched: "), det.message || e.message, ". Review the NEW quote above and approve again."));
+            return;
+          }
+          msg.replaceChildren(OG.error(e), det && det.violations ? OG.violationTable(det.violations) : null,
+            I.approve.state === "unknown" ? h("p", { class: "warn-t" }, "Outcome unknown. ", h("button", { class: "btn sm", type: "button", onclick: () => retryApprove(t, b, msg) }, "Retry (same Idempotency-Key)"), " — cannot launch twice.") : null);
+        }
+      }
+      async function retryApprove(t, b, msg) {
+        msg.replaceChildren(OG.loading("Retrying with the same Idempotency-Key…"));
+        try {
+          const r = await OG.api.intent(I.approve, `/v1/route/${encodeURIComponent(t.rr)}/approve`, { method: "POST", body: b });
+          msg.replaceChildren(h("div", { class: "og-ok" }, h("b", {}, String(r.status).replace(/_/g, " ")), " ", r.deployment ? h("a", { class: "btn pri", href: "/deployments/" + r.deployment.deployment_id }, "Open deployment →") : null));
+        } catch (e) { msg.replaceChildren(OG.error(e)); }
+      }
+      async function reject(t, msg) {
+        const v = await OG.ask({ title: "Reject this route", confirm: "Reject", danger: true, body: h("p", {}, "Nothing is launched; the quote is expired and the deployment ends as rejected."),
+          fields: [{ key: "reason", type: "textarea", label: "Reason (required, shown to the partner)", required: true, minLength: 3 }] });
+        if (!v) return;
+        try {
+          const r = await ctx.api(`/v1/route/${encodeURIComponent(t.rr)}/reject`, { method: "POST", body: { reason: v.reason } });
+          t.dep = r.deployment || Object.assign({}, t.dep, { status: "rejected" });
+          renderTicket(t);
+        } catch (e) { msg.replaceChildren(OG.error(e)); }
+      }
+      async function requote(t, msg) {
+        const ok = await OG.dialog({ title: "Re-quote this route?", confirm: "Cancel & re-quote",
+          body: h("div", {}, h("p", {}, "1. Cancels this ticket (", h("span", { class: "mono" }, t.dep.deployment_id), ": nothing was launched)."), h("p", {}, "2. Sends the same request again: a fresh live check, a new quote and a new ticket for approval.")) });
+        if (!ok) return;
+        I.cancel = OG.intentFor(I.cancel, "cancel:" + t.dep.deployment_id, {});
+        try { await OG.api.intent(I.cancel, `/v1/deployments/${encodeURIComponent(t.dep.deployment_id)}/terminate`, { method: "POST" }); }
+        catch (e) { msg.replaceChildren(OG.error(e)); return; }
+        await requestRoute(t.request);
+      }
+
+      // a non-admin waiting on approval sees the state change without reloading
+      ctx.every(10000, async () => {
+        const t = ticketT;
+        if (!t || st.admin || !["pending_approval", "quote_expired"].includes(t.dep.status)) return;
+        const rec = await OG.api.soft("/v1/route/" + encodeURIComponent(t.rr), { nocache: true });
+        if (rec && rec.deployment && rec.deployment.status !== t.dep.status && ticketT === t) { t.dep = rec.deployment; t.quote = rec.quote || t.quote; renderTicket(t); }
+      });
+
       // capabilities (provisionable marks) + GPU list in the background
+      if (query.rr) loadTicket(query.rr);
       ctx.api("/v1/capabilities").then(caps => drawEx(new Map(caps.map(c => [c.provider, c.level_implemented]))), () => {});
       [gpus, fams] = await Promise.all([OG.data.gpus().catch(() => []), OG.data.families()]);
       if (!ctx.alive()) return;

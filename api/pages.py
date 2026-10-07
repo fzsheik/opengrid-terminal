@@ -55,6 +55,12 @@ PAGES: list[tuple[str, str, str, bool]] = [
     ("/heatmaps", "Heatmaps", "GPU price heatmaps by provider and region.", True),
     ("/route", "Route", "Best-execution routing for GPU workloads.", False),
     ("/deployments", "Deployments", "Your deployments.", False),
+    ("/deployments/{id}", "Deployment", "One deployment: state, costs, events and evidence.", False),
+    ("/onboarding", "Onboarding", "Design-partner onboarding: key, credentials, first route.", False),
+    ("/admin/execution", "Execution control", "Execution mode, kill switches, providers, orphans, reconciliation.", False),
+    ("/admin/checklist", "First real route checklist", "The gate before supervised execution.", False),
+    ("/admin/partners", "Design partners", "Design partners, their deployments and feedback.", False),
+    ("/admin/value", "Value", "Economic value, routing quality, reliability and funnel.", False),
     ("/watchlists", "Watchlists", "Your watchlists and alerts.", False),
     ("/keys", "API keys", "Your OpenGrid API keys.", False),
     ("/api", "API", "The OpenGrid API: market data, routing and deployments with one key.", True),
@@ -84,6 +90,8 @@ PUBLIC_LEGACY = ("/market", "/market/detail", "/listings", "/polling", "/changes
 
 def is_public(request: Request) -> bool:
     """With PUBLIC_PAGES on: which requests skip the site password. GETs of pages and data only."""
+    if request.method == "POST" and request.url.path == "/v1/events/track":
+        return True  # anonymous product analytics: rate-limited, no PII, writes only product_events
     if request.method not in ("GET", "HEAD"):
         return False
     path = request.url.path

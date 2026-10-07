@@ -22,6 +22,12 @@ def new_id(prefix: str) -> str:
     return f"{prefix}_{secrets.token_hex(10)}"
 
 
+def new_deployment_id() -> str:
+    """'dep-<hex>': only [a-z0-9-], so the provider instance name og-<deployment_id> needs no rewriting.
+    (Deployments created before 0010 keep their 'dep_<hex>' ids; they stay readable.)"""
+    return f"dep-{secrets.token_hex(10)}"
+
+
 def redacted(spec: dict) -> dict:
     """The request as stored: launch env VALUES may be secrets, so only their names are kept."""
     out = dict(spec)

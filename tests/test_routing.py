@@ -25,7 +25,7 @@ import normalize
 from accounts.auth import OPERATOR, Principal
 from analytics import rollups
 from config import settings
-from routing import adapters, audit, deployments, engine, scoring, tracker, transactions
+from routing import adapters, audit, control, deployments, engine, scoring, tracker, transactions
 from routing.adapters.base import (
     CAPACITY, PROVISIONING, RUNNING, STOPPED, TERMINATED, TIMEOUT,
     Adapter, AdapterError, Availability, Instance,
@@ -147,6 +147,25 @@ def spec(**kw):
             "deadline_hours": None, "mode": "CHEAPEST", "weights": None, "preferences": {}, "launch": None}
     base.update(kw)
     return base
+
+
+def live_on(*providers):
+    """Execution core (0010): env ceiling on, mode LIVE, providers validated + live-enabled."""
+    settings.routing_live_provisioning = True
+    control.set_mode("LIVE", reason="test", by="test")
+    for p in providers:
+        control.mark_validated(p, "dep-test", {"test": "synthetic"}, "test")
+        control.set_provider_flags(p, reason="test", by="test", live_enabled=True)
+
+
+def live_off():
+    settings.routing_live_provisioning = False
+    settings.routing_max_attempts = 1
+    control.set_mode("PREVIEW_ONLY", reason="test", by="test")
+
+
+def state_events(d):
+    return [e["to"] for e in d["events"] if e["from"] != e["to"]]
 
 
 def count(table, where="true", **params):
@@ -311,7 +330,7 @@ def test_route_live_disabled_never_provisions():
         adapters.register(p, FakeAdapter)
     settings.routing_live_provisioning = False
     try:
-        out = engine.route(spec(), OPERATOR)
+        code, out = engine.route(spec(), OPERATOR)
     finally:
         for p in ("syn_mid", "syn_stable"):
             adapters.unregister(p)
@@ -328,19 +347,10 @@ def test_route_live_disabled_never_provisions():
 
 def test_route_live_provisions_tracks_and_terminates():
     reset_fake()
-    calls = []
-
-    def fake_usage(**kw):
-        calls.append(kw)
-        return 42
-
-    import billing.usage as bu
-    real = bu.record_usage
-    bu.record_usage = fake_usage
     adapters.register("syn_mid", FakeAdapter)
-    settings.routing_live_provisioning = True
+    live_on("syn_mid")
     try:
-        out = engine.route(spec(), KEY)
+        code, out = engine.route(spec(), KEY)
         assert out["status"] == "provisioned", out
         dep = out["deployment"]
         assert dep["provider"] == "syn_mid" and dep["status"] == "provisioning" and dep["provider_instance_id"]
@@ -364,25 +374,36 @@ def test_route_live_provisions_tracks_and_terminates():
             row = s.get(Deployment, dep_id)
             row.running_since = row.running_since - timedelta(hours=1)
             row.provisioned_at = row.provisioned_at - timedelta(hours=1, minutes=5)
+            # metering (routing/tracker.py) bills from the state events: move them back too
+            s.execute(text("UPDATE deployment_events SET at = at - CASE WHEN to_status = 'running' "
+                           "THEN interval '60 minutes' ELSE interval '65 minutes' END WHERE deployment_id = :d"),
+                      {"d": dep_id})
         d = deployments.terminate(dep_id, KEY)
+        assert d["status"] == "terminating", "never terminated without provider confirmation"
+        tracker.track()  # the provider now reports it terminated: confirmed
+        d = deployments.get(dep_id, KEY)
         assert d["status"] == "terminated" and d["termination_reason"] == "user_requested"
         assert 3590 <= d["uptime_seconds"] <= 3700 and d["interruptions"] == 0
         t = d["transaction"]
         assert t["kind"] == "transaction" and t["provision_ok"] and t["attempts"] == 1
         assert t["quoted_price_per_gpu_hour"] == 1.10 and t["execution_price_per_gpu_hour"] == 1.25
-        assert t["cost_basis"] == "actual" and abs(t["provider_cost_usd"] - 1.25 * 65 / 60) < 0.01
-        assert t["usage_recorded"] and len(calls) == 1
-        u = calls[0]
-        assert u["account_id"] == 7 and u["deployment_id"] == dep_id and u["provider"] == "syn_mid"
-        assert u["gpu"] == G and u["gpu_count"] == 1 and u["kind"] == "compute"
-        assert isinstance(u["provider_cost_usd"], Decimal) and u["period_end"] > u["period_start"]
-        assert [e["to"] for e in d["events"]] == ["routing", "provisioning", "running", "terminated"]
+        # metered usage (hour slices, routing/tracker.py + billing.usage): running time at the execution price
+        assert t["cost_basis"] == "metered", t
+        assert 1.25 - 0.01 <= t["provider_cost_usd"] <= 1.25 * 65 / 60 + 0.01, t
+        assert t["usage_recorded"], t
+        with normalize.SessionLocal() as s:
+            urs = s.execute(text("SELECT account_id, provider, gpu, gpu_count, kind, provider_cost_usd, period_start, "
+                                 "period_end FROM usage_records WHERE deployment_id = :d"), {"d": dep_id}).all()
+        assert urs and all(u[0] == 7 and u[1] == "syn_mid" and u[2] == G and u[3] == 1 and u[4] == "compute"
+                           and isinstance(u[5], Decimal) and u[7] > u[6] for u in urs), urs
+        assert abs(float(sum(u[5] for u in urs)) - t["provider_cost_usd"]) < 0.001
+        assert state_events(d) == ["created", "quoted", "approved", "provisioning", "running", "terminating",
+                                   "terminated"], state_events(d)
         tracker.track()
-        assert len(calls) == 1, "billing is never repeated"
+        assert count("usage_records", "deployment_id = :d", d=dep_id) == len(urs), "billing is never repeated"
     finally:
-        bu.record_usage = real
         adapters.unregister("syn_mid")
-        settings.routing_live_provisioning = False
+        live_off()
 
 
 def test_failover_and_interruption():
@@ -390,13 +411,19 @@ def test_failover_and_interruption():
     for p in ("syn_mid", "syn_stable"):
         adapters.register(p, FakeAdapter)
     FakeAdapter.BEHAVIOR["syn_mid"] = "capacity"
-    settings.routing_live_provisioning = True
+    live_on("syn_mid", "syn_stable")
+    settings.routing_max_attempts = 2
     try:
-        out = engine.route(spec(), OPERATOR)
+        code, out = engine.route(spec(), OPERATOR)
         assert out["status"] == "provisioned" and out["deployment"]["provider"] == "syn_stable", out["considered"]
+        # failover after a DEFINITIVE rejection creates a NEW deployment; one provision call each
+        assert len(out["deployments"]) == 2
+        first = deployments.public(out["deployments"][0])
+        assert first["status"] == "provision_failed"
+        assert [(a["provider"], a["ok"], a["error_kind"]) for a in first["provision_attempts"]] == [
+            ("syn_mid", False, "capacity")]
         att = out["deployment"]["provision_attempts"]
-        assert [(a["provider"], a["ok"], a["error_kind"]) for a in att] == [("syn_mid", False, "capacity"),
-                                                                           ("syn_stable", True, None)]
+        assert [(a["provider"], a["ok"], a["error_kind"]) for a in att] == [("syn_stable", True, None)]
         dep_id = out["deployment"]["deployment_id"]
         iid = out["deployment"]["provider_instance_id"]
         FakeAdapter.STATE[iid] = RUNNING
@@ -411,7 +438,7 @@ def test_failover_and_interruption():
     finally:
         for p in ("syn_mid", "syn_stable"):
             adapters.unregister(p)
-        settings.routing_live_provisioning = False
+        live_off()
 
 
 def test_timeout_does_not_fail_over():
@@ -419,19 +446,20 @@ def test_timeout_does_not_fail_over():
     for p in ("syn_mid", "syn_stable"):
         adapters.register(p, FakeAdapter)
     FakeAdapter.BEHAVIOR["syn_mid"] = "timeout"
-    settings.routing_live_provisioning = True
+    live_on("syn_mid", "syn_stable")
+    settings.routing_max_attempts = 3  # even with attempts left, an ambiguous outcome never fails over
     try:
-        out = engine.route(spec(), OPERATOR)
+        code, out = engine.route(spec(), OPERATOR)
     finally:
         for p in ("syn_mid", "syn_stable"):
             adapters.unregister(p)
-        settings.routing_live_provisioning = False
-    assert out["status"] == "failed" and "not failing over" in out["reason"]
+        live_off()
+    assert out["status"] == "provider_timeout" and "NOT failing over" in out["reason"] and code == 202
     assert ("provision", "syn_stable") not in FakeAdapter.CALLS
     dep_id = out["deployment"]["deployment_id"]
     with normalize.SessionLocal() as s:
         d = s.get(Deployment, dep_id)
-        assert d.status == "failed" and d.provider_metadata["needs_reconciliation"] is True
+        assert d.status == "provider_timeout" and d.provider_metadata["needs_reconciliation"] is True
         assert s.get(ExecutionRecord, dep_id).provision_ok is False
 
 
@@ -440,18 +468,19 @@ def test_all_fail_and_launch_spec_and_unavailable():
     for p in ("syn_mid", "syn_stable", "syn_pricey"):
         adapters.register(p, FakeAdapter)
     FakeAdapter.BEHAVIOR.update(syn_mid="unavailable", syn_stable="needs_image", syn_pricey="capacity")
-    settings.routing_live_provisioning = True
+    live_on("syn_mid", "syn_stable", "syn_pricey")
+    settings.routing_max_attempts = 3
     try:
-        out = engine.route(spec(), OPERATOR)
+        code, out = engine.route(spec(), OPERATOR)
     finally:
         for p in ("syn_mid", "syn_stable", "syn_pricey"):
             adapters.unregister(p)
-        settings.routing_live_provisioning = False
+        live_off()
     by = {c["provider"]: c for c in out["considered"]}
     assert by["syn_mid"]["outcome"] == "unavailable"
     assert by["syn_stable"]["outcome"] == "skipped" and "image" in by["syn_stable"]["reason"]
-    assert by["syn_pricey"]["outcome"] == "failed"
-    assert out["status"] == "failed" and out["deployment"]["status"] == "failed"
+    assert by["syn_pricey"]["outcome"] == "rejected"
+    assert out["status"] == "provision_failed" and out["deployment"]["status"] == "provision_failed"
     assert ("provision", "syn_stable") not in FakeAdapter.CALLS
 
 
@@ -463,12 +492,12 @@ def test_live_quote_over_max_price_is_not_provisioned():
             return Availability(available=True, live=True, list_price_per_gpu_hour=2.0)
 
     adapters.register("syn_mid", Pricier)
-    settings.routing_live_provisioning = True
+    live_on("syn_mid")
     try:
-        out = engine.route(spec(max_price_per_gpu_hour=1.15), OPERATOR)
+        code, out = engine.route(spec(max_price_per_gpu_hour=1.15), OPERATOR)
     finally:
         adapters.unregister("syn_mid")
-        settings.routing_live_provisioning = False
+        live_off()
     assert out["considered"][-1]["outcome"] == "over_max_price" and ("provision", "syn_mid") not in FakeAdapter.CALLS
     assert out["status"] == "not_provisioned"
 
@@ -480,7 +509,7 @@ def test_live_quote_over_max_price_is_not_provisioned():
 def _client():
     import main
     from fastapi.testclient import TestClient
-    return main, TestClient(main.app)
+    return main, TestClient(main.app, headers={"X-OpenGrid-Request": "1"})  # CSRF header, as web/core.js sends
 
 
 def _as(main, who):
@@ -526,8 +555,9 @@ def test_endpoints_and_scopes():
         assert c.get("/v1/deployments").status_code == 403
         _as(main, KEY)
         before = count("deployments")
-        r = c.post("/v1/route", json=body)
-        assert r.status_code == 200 and r.json()["data"]["status"] in ("not_provisioned", "no_candidates")
+        assert c.post("/v1/route", json=body).status_code == 428, "Idempotency-Key is required"
+        r = c.post("/v1/route", json=body, headers={"Idempotency-Key": "scopes-1"})
+        assert r.status_code == 200 and r.json()["data"]["status"] in ("not_provisioned", "no_candidates"), r.text
         assert count("deployments") == before, "live provisioning is off: no deployment"
         mine = c.get("/v1/deployments").json()["data"]
         assert all(d["deployment_id"] for d in mine)
@@ -560,6 +590,15 @@ def main():
     rollups.refresh()
     scoring.history.cache_clear()
     settings.routing_live_provisioning = False
+    from store.accounts import Account
+    with Session.begin() as s:  # the accounts the test principals act as (route() refuses unknown/suspended ones)
+        for aid in (7, 8):
+            s.add(Account(id=aid, name=f"acct{aid}", status="active", plan="free", settings={}, is_operator=False))
+    try:
+        from accounts import accounts as acc
+        acc.reset_cache()
+    except Exception:
+        pass
     try:
         tests = [(n, f) for n, f in globals().items() if n.startswith("test_") and callable(f)]
         failed = 0

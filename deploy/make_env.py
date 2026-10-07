@@ -31,7 +31,10 @@ pepper = existing.get("API_KEY_PEPPER") or local.get("API_KEY_PEPPER") or secret
 enc_key = existing.get("CREDENTIALS_ENCRYPTION_KEY") or local.get("CREDENTIALS_ENCRYPTION_KEY")     or base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()   # a Fernet key
 
 lines = ["DATABASE_URL=${{Postgres.DATABASE_URL}}", "APP_USER=opengrid", f"APP_PASSWORD={password}",
-         f"API_KEY_PEPPER={pepper}", f"CREDENTIALS_ENCRYPTION_KEY={enc_key}"]
+         f"API_KEY_PEPPER={pepper}", f"CREDENTIALS_ENCRYPTION_KEY={enc_key}",
+         # Explicitly production (fail-closed deploy checks, methodology/security.md); Railway's edge
+         # appends the client to X-Forwarded-For, so the right-most hop is trustworthy there.
+         "ENVIRONMENT=production", "TRUST_PROXY_HEADERS=true"]
 missing = []
 for k in KEYS:
     if k in local:

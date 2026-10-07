@@ -28,7 +28,7 @@ from accounts import accounts, credentials, keys, ratelimit, usage  # noqa: E402
 from config import settings  # noqa: E402
 
 DB = "og_test_accounts"
-client = TestClient(main.app)
+client = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})  # CSRF header, as web/core.js sends
 TABLES = ("accounts", "api_keys", "api_key_usage", "provider_credentials", "usage_records", "fee_policies",
           "charges", "credits", "invoices", "watchlists", "watchlist_items", "alert_rules", "alert_firings")
 _Session = None
@@ -148,8 +148,13 @@ def test_last_used():
     k = keys.create_key(a["id"], "lu")
     assert keys.get_key(k["id"])["last_used_at"] is None
     r = Req()
-    r.headers = {"x-forwarded-for": "203.0.113.9, 10.0.0.1"}
-    keys.verify(k["secret"], r)
+    # SEC-P2-3: only the hop our trusted proxy appended (right-most) counts; the left part is client-controlled.
+    r.headers = {"x-forwarded-for": "6.6.6.6, 203.0.113.9"}
+    settings.trust_proxy_headers = True
+    try:
+        keys.verify(k["secret"], r)
+    finally:
+        settings.trust_proxy_headers = False
     got = keys.get_key(k["id"])
     assert got["last_used_at"] is not None and got["last_used_ip"] == "203.0.113.9"
 
@@ -265,7 +270,8 @@ def test_endpoints():
     r = client.post("/v1/admin/accounts", json={"name": "newco", "email": "a@b.test"})
     assert r.status_code == 201
     new_id = r.json()["data"]["id"]
-    r = client.post(f"/v1/admin/accounts/{new_id}/keys", json={"name": "k", "scopes": ["data:read", "admin"]})
+    r = client.post(f"/v1/admin/accounts/{new_id}/keys", json={"name": "k", "scopes": ["data:read", "admin"],
+                                                                    "platform_admin": True})  # SEC-P2-8: flag required
     assert r.status_code == 201
     adm = r.json()["data"]
     assert client.get("/v1/admin/accounts", headers=bearer(adm["secret"])).status_code == 200, "admin-scoped key"

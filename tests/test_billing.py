@@ -25,9 +25,10 @@ from accounts import accounts, keys, ratelimit, usage  # noqa: E402
 from billing import invoices, policy  # noqa: E402
 from billing.usage import record_usage  # noqa: E402
 from config import settings  # noqa: E402
+from store.accounts import UsageRecord  # noqa: E402
 
 DB = "og_test_accounts_billing"
-client = TestClient(main.app)
+client = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})  # CSRF header, as web/core.js sends
 GPU = "NVIDIA H100 80GB SXM5"
 T0 = datetime(2026, 9, 3, 10, tzinfo=timezone.utc)
 _Session = None
@@ -173,8 +174,68 @@ def test_no_hardcoded_fee():
         assert not re.search(r"\b0?\.05\b|\b5\s*%|pct\"?\s*[:=]\s*5\b", code), f"hardcoded fee in {f.name}"
 
 
+def test_usage_slices_incremental_metering():
+    """Hour slices: idempotent per (deployment, period_start), never across a month, stopped time per the
+    provider's stopped_billing, GPU-hours = billable time only, and a crash between the slice and its usage
+    record is completed on retry without double-charging."""
+    from billing.usage import complete_slice, incomplete_slices, record_usage_slice, slices_for
+    from store.reconcile import UsageSlice
+
+    S = setup()
+    a = accounts.create_account("meter")["id"]
+    policy.create("flat", [{"kind": "flat_per_gpu_hour", "usd": "0.10"}], effective_from=T0 - timedelta(days=30))
+    h = T0.replace(minute=0)
+    args = dict(deployment_id="dep-slice", account_id=a, provider="runpod", gpu=GPU, gpu_count=2, period_start=h,
+                period_end=h + timedelta(hours=1), running_seconds=1800, stopped_seconds=1800,
+                stopped_billing="storage_only", price_per_gpu_hour=Decimal("1.50"), price_basis="execution")
+    sid = record_usage_slice(**args)
+    assert record_usage_slice(**args) == sid, "idempotent per (deployment, period_start)"
+    assert record_usage_slice(**{**args, "running_seconds": 3600, "stopped_seconds": 0}) == sid, "never re-priced"
+    with S() as s:
+        sl = s.get(UsageSlice, sid)
+        u = s.get(UsageRecord, sl.usage_record_id)
+    assert sl.billable_seconds == 1800 and sl.cost_usd == Decimal("1.500000"), "storage_only: stopped GPU time is $0"
+    assert u.gpu_hours == Decimal("1.000000") and u.provider_cost_usd == Decimal("1.500000"), (u.gpu_hours, u.provider_cost_usd)
+    assert lines(S, u.id)[1][1] == Decimal("0.100000"), "per-GPU-hour fees on billable GPU-hours only"
+    full = record_usage_slice(**{**args, "period_start": h + timedelta(hours=1), "period_end": h + timedelta(hours=2),
+                                 "stopped_billing": "full"})
+    with S() as s:
+        assert s.get(UsageSlice, full).billable_seconds == 3600, "full: stopped time bills at the GPU rate"
+    only_stopped = record_usage_slice(**{**args, "period_start": h + timedelta(hours=2), "period_end": h + timedelta(hours=3),
+                                         "running_seconds": 0})
+    with S() as s:
+        assert s.get(UsageSlice, only_stopped).usage_record_id is None, "nothing billable: no usage record, no fee"
+    oct31 = datetime(2026, 10, 31, 23, 30, tzinfo=timezone.utc)
+    try:
+        record_usage_slice(**{**args, "period_start": oct31, "period_end": oct31 + timedelta(hours=1)})
+        raise AssertionError("a slice across a month boundary is refused")
+    except ValueError:
+        pass
+    ok = record_usage_slice(**{**args, "period_start": oct31, "period_end": oct31 + timedelta(minutes=30),
+                               "running_seconds": 1800, "stopped_seconds": 0})
+    assert ok
+    # crash between the slice row and its usage record -> completed later, exactly once
+    with S.begin() as s:
+        s.add(UsageSlice(deployment_id="dep-crash", account_id=a, provider="runpod", gpu=GPU, gpu_count=1,
+                         period_start=h, period_end=h + timedelta(hours=1), running_seconds=3600, stopped_seconds=0,
+                         unbilled_seconds=0, billable_seconds=3600, stopped_billing="storage_only",
+                         price_per_gpu_hour=Decimal("2"), price_basis="quote", cost_usd=Decimal("2"), kind="compute",
+                         end_estimated=False, final=False, created_at=T0))
+    pending = incomplete_slices()
+    assert len(pending) == 1
+    uid = complete_slice(pending[0])
+    assert complete_slice(pending[0]) == uid and not incomplete_slices()
+    assert [x["billable_seconds"] for x in slices_for("dep-slice")] == [1800, 3600, 0, 1800]
+    # record_usage keeps its public contract; gpu_hours is an optional override
+    u2 = record_usage(account_id=a, deployment_id="dep-legacy", provider="lambda", gpu=GPU, gpu_count=8, period_start=T0,
+                      period_end=T0 + timedelta(hours=2), provider_cost_usd=Decimal("40"))
+    with S() as s:
+        assert s.get(UsageRecord, u2).gpu_hours == Decimal("16.000000")
+
+
 TESTS = (test_no_policy_means_no_fee, test_pct_vs_flat_policies, test_versioning_and_composition,
-         test_credits_on_draft_invoice, test_billing_endpoints, test_no_hardcoded_fee)
+         test_credits_on_draft_invoice, test_billing_endpoints, test_no_hardcoded_fee,
+         test_usage_slices_incremental_metering)
 
 if __name__ == "__main__":
     try:

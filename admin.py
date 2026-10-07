@@ -3,10 +3,15 @@
     python admin.py create-account --name "Acme" [--email ops@acme.com] [--plan free]
     python admin.py list-accounts
     python admin.py create-key --account 3 [--name ci] [--scopes data:read,route:preview]
-                               [--expires-days 90] [--rate-limit 300]
+                               [--expires-days 90] [--rate-limit 300] [--platform-admin]
     python admin.py list-keys [--account 3]
-    python admin.py revoke-key 12
+    python admin.py revoke-key 12          (also revokes every key that key created)
     python admin.py suspend-account 3 | activate-account 3
+    python admin.py rotate-credentials     re-encrypt stored secrets under CREDENTIALS_ENCRYPTION_KEY
+                                           (old keys in CREDENTIALS_ENCRYPTION_KEYS_OLD)
+
+--platform-admin: the key's `admin` scope may act across accounts. Without it an API key's
+`admin` scope is ignored (methodology/security.md).
 
 The full key is printed ONCE by create-key; only its HMAC is stored. The pepper must match
 the server's (API_KEY_PEPPER), or the key will not verify there.
@@ -17,7 +22,7 @@ import json
 import sys
 from datetime import datetime, timedelta, timezone
 
-from accounts import accounts, keys
+from accounts import accounts, credentials, keys
 from accounts.auth import SCOPES
 
 
@@ -39,12 +44,14 @@ def main(argv=None) -> int:
     p.add_argument("--scopes", default="data:read", help=f"comma-separated, from: {', '.join(SCOPES)}")
     p.add_argument("--expires-days", type=float)
     p.add_argument("--rate-limit", type=int, help="requests per minute (read class) for this key")
+    p.add_argument("--platform-admin", action="store_true", help="honour this key's admin scope across accounts")
     p = sub.add_parser("list-keys")
     p.add_argument("--account", type=int)
     p = sub.add_parser("revoke-key")
     p.add_argument("key_id", type=int)
     for name in ("suspend-account", "activate-account"):
         sub.add_parser(name).add_argument("account_id", type=int)
+    sub.add_parser("rotate-credentials")
     a = ap.parse_args(argv)
 
     try:
@@ -54,16 +61,19 @@ def main(argv=None) -> int:
             _print(accounts.list_accounts())
         elif a.cmd == "create-key":
             expires = datetime.now(timezone.utc) + timedelta(days=a.expires_days) if a.expires_days else None
-            k = keys.create_key(a.account, a.name, [s.strip() for s in a.scopes.split(",") if s.strip()], expires, a.rate_limit)
+            k = keys.create_key(a.account, a.name, [s.strip() for s in a.scopes.split(",") if s.strip()], expires,
+                                a.rate_limit, platform_admin=a.platform_admin, created_by="cli")
             secret = k.pop("secret")
             _print(k)
             print(f"\nAPI key (shown once, store it now):\n{secret}", file=sys.stderr)
         elif a.cmd == "list-keys":
             _print(keys.list_keys(a.account))
         elif a.cmd == "revoke-key":
-            _print(keys.revoke_key(a.key_id))
+            _print(keys.revoke_key(a.key_id, actor="cli"))
         elif a.cmd in ("suspend-account", "activate-account"):
             _print(accounts.set_status(a.account_id, "suspended" if a.cmd == "suspend-account" else "active"))
+        elif a.cmd == "rotate-credentials":
+            _print(credentials.rotate())
     except (ValueError, KeyError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

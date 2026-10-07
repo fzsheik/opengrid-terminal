@@ -344,7 +344,7 @@ def test_endpoints():
         store.ingest(src, [{"guid": "1", "url": "https://nvidianews.nvidia.com/news/b300", "title": "NVIDIA ships HGX B300 systems to CoreWeave",
                             "summary": "Blackwell Ultra GPUs", "author": None, "published_raw": None,
                             "published_at": now - timedelta(hours=3), "raw": {}}], now)
-        client = TestClient(main.app)  # no context manager: no lifespan, so no migrations against the dev DB
+        client = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})  # CSRF header, as web/core.js sends  # no context manager: no lifespan, so no migrations against the dev DB
         r = client.get("/v1/news")
         assert r.status_code == 200, r.text
         body = r.json()

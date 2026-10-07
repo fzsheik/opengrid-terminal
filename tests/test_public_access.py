@@ -23,7 +23,7 @@ def test_matrix():
     saved = settings.app_password, settings.public_pages
     try:
         settings.app_password = "pw"
-        client = TestClient(main.app)
+        client = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})  # CSRF header, as web/core.js sends
         settings.public_pages = True
         assert client.get("/v1/methodology").status_code == 200, "public data read"
         for path in PRIVATE_GETS:

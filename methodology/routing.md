@@ -3,7 +3,7 @@
 OpenGrid routes a workload to one provider listing chosen by a transparent ranking, quotes it, and
 provisions only where an adapter exists and live provisioning is switched on; every decision is audited.
 
-Version `routing-1.0`. Code: `routing/` (engine, adapters, deployments, audit, transactions, tracker).
+Version `routing-1.1` (execution core, migration 0010). Code: `routing/` (engine, control, quotes, guards, idempotency, adapters, deployments, credentials, audit, transactions, tracker).
 Ranking: see [best-execution](/methodology/best-execution).
 
 ## Region: preferred vs strict (`strict_region`)
@@ -67,50 +67,58 @@ multi-instance alternatives, exclusions, the market median, a **quote** and savi
 whether OpenGrid can provision the selected candidate (if not, the best provisionable alternative).
 Preview never calls a provider: its quote has `basis: "observed_listing"` — the observed listing price
 × GPUs × hours (`duration_hours`, else `deadline_hours` read as "cost if it runs the full window"; with
-neither, hourly cost only). `deadline_hours` is not otherwise used: there is no performance data to
-estimate completion time.
+neither, hourly cost only). For the best provisionable candidate it also persists a quote record
+(`quote_record`: `quote_id`, `expires_at`, `price_source: "observed"`) that `POST /v1/route` can launch after a
+live re-validation. `deadline_hours` is not otherwise used: there is no performance data to estimate
+completion time.
 
-## Route — `POST /v1/route` (scope `route:execute`)
+## Route — `POST /v1/route` (scope `route:execute`, `Idempotency-Key` required)
 
-For each candidate in rank order (at most `routing_max_attempts` provision attempts):
+The full safety model (modes, quotes, idempotency, state machine, cost guards, credentials, SSH keys) is in
+[execution-safety](/methodology/execution-safety). In order:
 
-1. skip if OpenGrid cannot provision there (level < 2);
-2. resolve credentials (`accounts.credentials.resolve`: BYO first, then OpenGrid-managed); skip if none;
-3. live availability check through the adapter (public endpoints where the provider has them);
-   skip if unavailable;
-4. **quote**: the provider's live catalogue price when the check read one (`basis:
-   "live_provider_api"`), else the observed listing price (`basis: "observed_listing"`); skip if over
-   `max_price_per_gpu_hour`;
-5. **if `settings.routing_live_provisioning` is false: stop.** Return `status: "not_provisioned"`,
-   reason "live provisioning disabled in this environment", with the decision and quote. **No
-   deployment record is created.**
-6. check the launch spec has what that provider needs (e.g. an SSH key name for Lambda, an image for
-   RunPod/Vast, a region-bound environment for Hyperstack); skip with the missing fields if not;
-7. provision. On failure (capacity, auth, invalid request, provider error) the attempt is recorded and
-   the next candidate is tried (**failover**). On a **timeout or an unreadable success response** the
-   provider may have created the instance anyway, so OpenGrid does **not** fail over (that could buy two
-   instances): the deployment is marked `failed` with `needs_reconciliation`.
+1. the account must be active (suspension blocks new routes; never stop/terminate);
+2. the effective execution mode (env ceiling `ROUTING_LIVE_PROVISIONING` × the operator's mode). In
+   `DISABLED`/`PREVIEW_ONLY` the first provisionable candidate is live-checked and quoted and the route returns
+   `status: "not_provisioned"` ("live provisioning disabled in this environment" when the env flag is off);
+   **no deployment is created**;
+3. for each provisionable candidate in rank order: `control.launch_permission` (an unvalidated adapter never
+   launches customer compute), credentials (BYO first; an unusable BYO credential fails closed), launch spec
+   and SSH-key policy;
+4. a live availability check for at most `ROUTE_LIVE_CHECK_CANDIDATES` (3) candidates, each provider call
+   bounded by `PROVIDER_CALL_TIMEOUT_SECONDS` (20); skip if unavailable or over `max_price_per_gpu_hour`;
+5. a persisted **quote** (`price_source: live_check` when the provider API priced it), then the **cost guards**;
+6. a deployment `created → quoted →` either `pending_approval` (SUPERVISED provider, or any limit violated:
+   HTTP 202 with `approval` = provider, region, GPU, price, cost, fees, quote expiry) or `approved` (LIVE
+   provider, no violations) → the single provision call.
 
-Statuses returned: `provisioned`, `not_provisioned`, `failed`, `no_candidates`. "Provisioned" means the
-provider accepted the launch and returned an instance id; the deployment then tracks whether it runs.
+Outcomes of the provision call: `accepted` → `provisioning` (route `status: "provisioned"`); a definitive
+rejection → `provision_failed` / `provider_rejected`, and only then failover to the next candidate as a NEW
+deployment (at most `ROUTING_MAX_ATTEMPTS` provision calls, default 1 = none); anything ambiguous →
+`provider_timeout` / `launch_unknown` (HTTP 202) and **no failover**: reconciliation resolves it by instance
+name `og-<deployment_id>` first.
 
-Real provisioning requires all of: `ROUTING_LIVE_PROVISIONING=true` in that environment, a key with
-`route:execute`, credentials for the provider, a complete launch spec, and a quote within the caller's
-maximum.
+`quote_id` in the body launches exactly that quote (no reroute) after a live re-validation; a price move over
+`QUOTE_PRICE_TOLERANCE` (2%) or an expired quote is refused (409) with a new quote. `max_runtime_minutes` sets an
+auto-terminate deadline. Approval: `POST /v1/route/{id}/approve` (admin, `quote_id`, optional
+`override_limits` + `reason`, Idempotency-Key); `POST /v1/route/{id}/reject` (admin, reason).
 
 ## Deployments
 
-`GET /v1/deployments`, `GET /v1/deployments/{id}` (refreshes status from the provider),
-`POST /v1/deployments/{id}/terminate`, `POST /v1/deployments/{id}/stop` (only where the adapter
-implements stop; note several providers keep billing a stopped instance), `POST
+`GET /v1/deployments` (`?status=live|uncertain|<state>`, paginated), `GET /v1/deployments/{id}`
+(`refresh=true` asks the provider; default false), `POST /v1/deployments/{id}/terminate` and `/stop`
+(Idempotency-Key required; allowed for suspended accounts and in every execution mode), `POST
 /v1/deployments/{id}/outcome` (the caller's report of workload completion — OpenGrid cannot observe it).
-A key only ever sees its own account's deployments.
+A key only ever sees its own account's deployments. Admin: `GET /v1/admin/deployments?state=live`,
+`POST /v1/admin/deployments/{id}/terminate`.
 
-Statuses: `routing → provisioning → running → (stopped) → terminating → terminated`, or `failed`.
-Every transition is a `deployment_events` row. The `routing_tracker` job polls live deployments every
-60 s. **Uptime** is OpenGrid-observed (summed between status checks that saw it running; accurate to the
-polling interval, not the provider's billing clock). An **interruption** is a running deployment leaving
-`running` without OpenGrid having requested it (provider termination, preemption, failure).
+States: see the transition table in [execution-safety](/methodology/execution-safety). Every transition is a
+`deployment_events` row with actor, reason and evidence. Terminate moves to `terminating` and asks the
+provider; `terminated` is recorded only on provider evidence (status says terminated, or two `not_found` reads
+≥ 60 s apart, or the reconciler's instance list). Status, stop and terminate use the credential **pinned at
+launch**. The `routing_tracker` job polls live deployments. **Uptime** is OpenGrid-observed (summed between
+status checks that saw it running). An **interruption** is a running deployment leaving `running` without
+OpenGrid having requested it.
 
 ## Prices — four concepts, four fields
 

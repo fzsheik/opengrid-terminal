@@ -91,6 +91,28 @@ OG.page("/gpu/:slug", {
 - `OG.status.asOf(iso)`, `OG.status.live(ok, text)`, `OG.status.tape([nodes])` (top bar).
 - Shared interim views (pages/market.js): `OG.views.marketBoard(el, ctx)`, `OG.views.windowSeg(hours, onChange)`, `OG.views.hours()`.
 
+## Execution (money-moving actions, state, analytics)
+
+- **Idempotency.** `POST /v1/route`, `/v1/route/{id}/approve`, `/v1/deployments/{id}/terminate|stop` (and the admin
+  orphan / validation / force-terminate POSTs) need an `Idempotency-Key`. ONE key per user intent:
+  `intent = OG.intentFor(previous, "terminate:" + id, body)` then `OG.api.intent(intent, path, {method: "POST", body})`.
+  The key is reused only when the previous attempt of the SAME action + body ended with an unknown outcome
+  (network error, 5xx, 429, 409 `idempotency_in_progress`); any definitive answer settles it and the next click gets
+  a new key. Nothing retries automatically. `OG.api(path, {idempotencyKey})` sets the header directly.
+- **State machine** (mirrors routing/deployments.py): `OG.dep.{FLOW, UNCERTAIN, FAILED, LIVE, tone(s), strip(status, history)}`;
+  `OG.stateBadge(s)` (uncertain amber, failures red), `OG.stateStrip(status, events)`.
+- `OG.countdown(iso, {expired, onExpire, soon})`, `OG.modeBanner(modeStatus)` (+ `OG.MODE_HELP`),
+  `OG.ask({title, body, fields: [{key, label, type, required, minLength, match, show}], confirm, danger})` → values | null
+  (typed confirmations: provider name, instance id, "STOP"), `OG.violationTable(limit_violations)` (pages/deployments.js).
+- `OG.me()` (cached `/v1/me`), `OG.isAdmin(me)`; the nav's `.nav-admin` entries are shown only to admins.
+- **Product analytics**: `OG.track(event, props)` for page_view / search / gpu_view / provider_view / compare /
+  watchlist_create (page views, command-bar searches and GPU / provider / compare views are tracked by core.js).
+  Anonymous id in sessionStorage, no cookies, no PII; batches of ≤ 50 to `POST /v1/events/track` every 10 s and on
+  pagehide; failures dropped; nothing is tracked when `navigator.doNotTrack === "1"`. Pure part: `OG.makeTracker`.
+- Pages: `/route` (ticket: `?rr=<route_request_id>`), `/deployments`, `/deployments/:id`, `/onboarding`
+  (`?account=<id>` operator preview), `/admin/execution`, `/admin/checklist`, `/admin/partners`, `/admin/value`.
+  Tests: `node tests/test_web_exec.js`.
+
 ## Charts (`OG.charts`, pure SVG; each returns `{el, update(partialOpts), destroy()}`)
 
 - `timeseries(el, {times: [iso], series: [{key, label, values, color, step = true, width, dash, opacity, halo, strong}],

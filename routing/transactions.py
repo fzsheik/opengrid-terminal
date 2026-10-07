@@ -1,33 +1,53 @@
-"""Execution (transaction) records and the billing hook.
+"""Execution (transaction) records, the billing hook, and cost reconciliation.
 
-One execution_records row per deployment: quoted vs actual price, whether provisioning
-succeeded, how long it took, how many attempts, uptime, interruptions, why it ended, and
-(when the caller tells us) whether the workload completed. Kind: transaction. These are
-the only source reliability scoring may ever use; until enough exist, scoring does not.
+One execution_records row per deployment: quoted vs actual price, whether provisioning succeeded, how long
+it took, attempts, uptime, interruptions, why it ended, and (when the caller says) whether the workload
+completed. Kind: transaction. The only source reliability scoring may ever use.
 
-Cost, at termination: price x GPUs x instance lifetime (provisioned_at -> terminated_at),
-with price = the provider-reported execution price when known (cost_basis "actual"), else
-the quote (cost_basis "quote"). The provider's invoice is authoritative; no invoice
-reconciliation is implemented. billing.usage.record_usage is idempotent per period, so
-retrying after a failure cannot double-charge.
+Billing is INCREMENTAL (routing/tracker.py writes hour slices through billing.usage.record_usage_slice while
+the deployment runs). bill(deployment_id), called by the core when a deployment is confirmed terminated
+and retried by the tracker, writes the final slice, then reconciles cost. It never writes a second,
+whole-lifetime usage record (that would double-charge the metered hours). Deployments billed before
+incremental metering existed keep their single legacy usage record and are never re-metered.
+
+Cost reconciliation (reconcile_cost), after confirmed termination, records SEPARATELY and never merges:
+    quote                       per GPU-hour and total, from the quote the launch consumed
+    expected_cost               quote x the actually metered (billable) time
+    provider_reported_cost      adapter.reported_cost() where the provider exposes billing, else null + reason
+    opengrid_transaction_cost   the sum of the deployment's usage records (provider cost passed through),
+                                with OpenGrid's fee lines reported next to it, not inside it
+    quote_error                 opengrid_transaction_cost - expected_cost (usd and pct)
+    effective_hourly_rate       per GPU-hour, from the transaction cost and (separately) the provider's cost
+    unexpected_fees             provider_reported_cost - opengrid_transaction_cost - billing_rounding, when > 0
+    billing_rounding            what the provider's billing unit adds over exact metering (per minute, ...)
+stored in deployments.reconciliation (jsonb), provider_reported_cost and reconciled_at.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+import math
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 import normalize
 from store.routing import Deployment, ExecutionRecord
 
 log = logging.getLogger(__name__)
 
+RECONCILE_VERSION = "1"
+# How long to keep asking a provider whose billing lags (RunPod hourly buckets, Vast daily charges).
+PROVIDER_COST_RETRY_HOURS = 48
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
 
 def open_record(s, d: Deployment, *, ok: bool, attempts: int, latency_ms: int | None) -> None:
-    now = datetime.now(timezone.utc)
+    now = _now()
     r = s.get(ExecutionRecord, d.deployment_id)
     if r is None:
         r = ExecutionRecord(deployment_id=d.deployment_id, created_at=now, uptime_seconds=0, interruptions=0)
@@ -42,20 +62,18 @@ def open_record(s, d: Deployment, *, ok: bool, attempts: int, latency_ms: int | 
 
 
 def sync(s, d: Deployment) -> None:
-    """Copy the deployment's running totals onto its record."""
+    """Copy the deployment's running totals onto its record (cost is set by bill(), from metering)."""
     r = s.get(ExecutionRecord, d.deployment_id)
     if r is None:
         return
     r.actual_price_per_gpu_hour = d.actual_price_per_gpu_hour
     r.uptime_seconds, r.interruptions = d.uptime_seconds, d.interruptions
     r.termination_reason = d.termination_reason
-    r.updated_at = datetime.now(timezone.utc)
-    if d.status == "terminated" and r.provider_cost_usd is None:
-        cost, basis = cost_of(d)
-        r.provider_cost_usd, r.cost_basis = cost, basis
+    r.updated_at = _now()
 
 
 def cost_of(d: Deployment) -> tuple[Decimal | None, str | None]:
+    """Legacy wall-clock estimate (provisioned_at -> terminated_at). Kept for callers; billing uses slices."""
     if d.provisioned_at is None or d.terminated_at is None:
         return None, None
     price, basis = d.actual_price_per_gpu_hour, "actual"
@@ -67,42 +85,236 @@ def cost_of(d: Deployment) -> tuple[Decimal | None, str | None]:
     return (Decimal(str(price)) * d.gpu_count * hours).quantize(Decimal("0.0001")), basis
 
 
+def metered_totals(deployment_id: str) -> dict:
+    """Sums over the deployment's usage slices (billable seconds, cost) and its usage records / charges."""
+    from store.accounts import Charge, UsageRecord
+    from store.reconcile import UsageSlice
+
+    with normalize.SessionLocal() as s:
+        sl = s.execute(select(func.count(UsageSlice.id), func.coalesce(func.sum(UsageSlice.billable_seconds), 0),
+                              func.coalesce(func.sum(UsageSlice.running_seconds), 0),
+                              func.coalesce(func.sum(UsageSlice.stopped_seconds), 0),
+                              func.coalesce(func.sum(UsageSlice.cost_usd), 0),
+                              func.count(UsageSlice.id).filter(UsageSlice.usage_record_id.is_(None)
+                                                               & (UsageSlice.billable_seconds > 0)),
+                              func.bool_or(UsageSlice.end_estimated))
+                       .where(UsageSlice.deployment_id == deployment_id)).one()
+        ur = s.execute(select(func.count(UsageRecord.id), func.coalesce(func.sum(UsageRecord.provider_cost_usd), 0),
+                              func.coalesce(func.sum(UsageRecord.gpu_hours), 0), func.max(UsageRecord.id))
+                       .where(UsageRecord.deployment_id == deployment_id)).one()
+        fees = s.scalar(select(func.coalesce(func.sum(Charge.amount_usd), 0))
+                        .join(UsageRecord, UsageRecord.id == Charge.usage_record_id)
+                        .where(UsageRecord.deployment_id == deployment_id, Charge.kind == "fee"))
+    return {"slices": sl[0], "billable_seconds": int(sl[1]), "running_seconds": int(sl[2]),
+            "stopped_seconds": int(sl[3]), "slice_cost_usd": Decimal(str(sl[4])), "slices_unrecorded": sl[5],
+            "end_estimated": bool(sl[6]), "usage_records": ur[0], "usage_cost_usd": Decimal(str(ur[1])),
+            "usage_gpu_hours": Decimal(str(ur[2])), "last_usage_record_id": ur[3], "fees_usd": Decimal(str(fees))}
+
+
 def bill(deployment_id: str) -> int | None:
-    """Send a terminated deployment's usage to billing once. Returns the usage record id, or None."""
+    """Finish metering a terminated deployment and reconcile its cost. Returns the last usage record id (or
+    None when nothing was billable / not finished yet). Idempotent; the tracker retries."""
+    from routing import tracker
+
     with normalize.SessionLocal() as s:
         d = s.get(Deployment, deployment_id)
         r = s.get(ExecutionRecord, deployment_id)
-        if d is None or r is None or d.status != "terminated" or r.usage_record_id is not None:
-            return None if r is None else r.usage_record_id
-        if r.provider_cost_usd is None or d.provisioned_at is None:
-            return None
-        args = dict(account_id=d.account_id, deployment_id=d.deployment_id, provider=d.provider, gpu=d.gpu,
-                    gpu_count=d.gpu_count, period_start=d.provisioned_at, period_end=d.terminated_at,
-                    provider_cost_usd=r.provider_cost_usd,
-                    kind="byo" if d.credential_source == "byo" else "compute")
-    try:
-        from billing.usage import record_usage
-    except ImportError:
-        log.warning("billing.usage not available; usage for %s not recorded yet", deployment_id)
+    if d is None or d.status != "terminated":
         return None
-    try:
-        uid = record_usage(**args)
-    except Exception:
-        log.exception("record_usage failed for %s; will retry", deployment_id)
-        return None
+    legacy = r is not None and r.usage_record_id is not None and not metered_totals(deployment_id)["slices"]
+    if not legacy:
+        tracker.meter(deployment_id)
+    t = metered_totals(deployment_id)
+    if not legacy and t["slices_unrecorded"]:
+        return None      # a usage record failed to write; the tracker retries
     with normalize.SessionLocal.begin() as s:
-        r = s.get(ExecutionRecord, deployment_id)
-        r.usage_record_id = uid
-        r.updated_at = datetime.now(timezone.utc)
-    return uid
+        rec = s.get(ExecutionRecord, deployment_id)
+        if rec is not None and not legacy:
+            rec.provider_cost_usd = t["usage_cost_usd"].quantize(Decimal("0.0001"))
+            rec.cost_basis = "metered"
+            rec.usage_record_id = t["last_usage_record_id"]
+            rec.updated_at = _now()
+    try:
+        reconcile_cost(deployment_id)
+    except Exception:  # noqa: BLE001 - reconciliation is retried; billing is already recorded
+        log.exception("cost reconciliation of %s failed; retried", deployment_id)
+    return t["last_usage_record_id"]
 
 
 def unbilled() -> list[str]:
+    """Terminated deployments whose metering or cost reconciliation is not finished."""
+    from store.reconcile import DeploymentWatch
+
     with normalize.SessionLocal() as s:
-        return list(s.scalars(
-            select(ExecutionRecord.deployment_id).join(Deployment, Deployment.deployment_id == ExecutionRecord.deployment_id)
-            .where(Deployment.status == "terminated", ExecutionRecord.usage_record_id.is_(None),
-                   ExecutionRecord.provider_cost_usd.is_not(None))))
+        q = (select(Deployment.deployment_id)
+             .outerjoin(DeploymentWatch, DeploymentWatch.deployment_id == Deployment.deployment_id)
+             .where(Deployment.status == "terminated", Deployment.provider.is_not(None),
+                    (DeploymentWatch.metering_complete.is_not(True)) | Deployment.reconciled_at.is_(None))
+             .limit(500))
+        return list(s.scalars(q))
+
+
+# --------------------------------------------------------------------------
+# Cost reconciliation
+# --------------------------------------------------------------------------
+
+UNIT_SECONDS = {"per second": 1, "per minute": 60, "per hour": 3600}
+
+
+def billing_unit(provider: str | None) -> tuple[str, int | None, str]:
+    """(label, seconds per unit or None when unknown, evidence) from the adapter's capability matrix."""
+    from routing import adapters
+
+    cls = adapters.get(provider or "")
+    if cls is None:
+        return "unknown", None, "no adapter"
+    label, ev = cls.CAPABILITIES.billing_unit
+    if label in UNIT_SECONDS:
+        return label, UNIT_SECONDS[label], ev
+    if "refund" in (label or ""):
+        return label, 1, ev          # prepaid increments with the unused part refunded: effectively pro-rata
+    return label or "unknown", None, ev
+
+
+def _f(v) -> float | None:
+    return None if v is None else round(float(v), 6)
+
+
+def _quote(d: Deployment) -> dict:
+    from store.routing import QuoteRow
+
+    q = None
+    if d.quote_id:
+        with normalize.SessionLocal() as s:
+            q = s.get(QuoteRow, d.quote_id)
+    return {"quote_id": d.quote_id,
+            "price_per_gpu_hour": _f(q.quote_price_per_gpu_hour if q else d.quoted_price_per_gpu_hour),
+            "est_hourly_cost": _f(q.est_hourly_cost) if q else None,
+            "est_total_cost": _f(q.est_total_cost) if q else None,
+            "duration_hours": _f(q.duration_hours) if q else None,
+            "billing_unit": q.billing_unit if q else None, "fees": q.fees if q else None,
+            "basis": d.quote_basis, "kind": "quote"}
+
+
+def _provider_cost(d: Deployment, start: datetime | None, end: datetime | None) -> dict:
+    from routing import deployments
+    from routing.adapters.results import CostReport
+
+    if not d.provider_instance_id:
+        return {"amount_usd": None, "reason": "no provider instance id", "kind": "provider_reported"}
+    try:
+        a = deployments.adapter_for(d)
+    except Exception as exc:  # noqa: BLE001 - CredentialsUnavailable / no adapter
+        return {"amount_usd": None, "reason": f"pinned credentials unavailable: {getattr(exc, 'message', exc)}",
+                "kind": "provider_reported"}
+    try:
+        rep = a.reported_cost(d.provider_instance_id, start, end)
+    except Exception as exc:  # noqa: BLE001
+        rep = CostReport(None, start, end, reason=f"reported_cost failed: {type(exc).__name__}")
+    finally:
+        a.close()
+    return {"amount_usd": _f(rep.amount_usd), "reason": rep.reason, "basis": rep.basis,
+            "period_start": start.isoformat() if start else None, "period_end": end.isoformat() if end else None,
+            "kind": "provider_reported"}
+
+
+def compute_reconciliation(d: Deployment, totals: dict, provider_cost: dict, quote: dict) -> dict:
+    """The reconciliation numbers (pure: no I/O). Every figure is kept separate."""
+    gpus = d.gpu_count or 1
+    billable_h = totals["billable_seconds"] / 3600
+    gpu_h = billable_h * gpus
+    qp = quote.get("price_per_gpu_hour")
+    expected = None if qp is None else round(qp * gpu_h, 6)
+    txn = round(float(totals["usage_cost_usd"]), 6)
+    label, unit_s, unit_ev = billing_unit(d.provider)
+    price = d.actual_price_per_gpu_hour if d.actual_price_per_gpu_hour is not None else d.quoted_price_per_gpu_hour
+    rounding = None
+    if unit_s and price is not None and totals["billable_seconds"] > 0:
+        billed_s = math.ceil(totals["billable_seconds"] / unit_s) * unit_s
+        rounding = round(float(price) * gpus * (billed_s - totals["billable_seconds"]) / 3600, 6)
+    prov = provider_cost.get("amount_usd")
+    unexpected = None
+    if prov is not None:
+        unexpected = round(prov - txn - (rounding or 0), 6)
+        unexpected = unexpected if unexpected > 0.005 else 0.0
+    return {
+        "version": RECONCILE_VERSION, "currency": "USD", "kind": "transaction",
+        "quote": quote,
+        "runtime": {"billable_seconds": totals["billable_seconds"], "running_seconds": totals["running_seconds"],
+                    "stopped_seconds": totals["stopped_seconds"], "gpu_count": gpus, "gpu_hours": round(gpu_h, 6),
+                    "end_estimated": totals["end_estimated"], "uptime_seconds_observed": d.uptime_seconds},
+        "expected_cost": {"amount_usd": expected, "basis": "quote price x metered billable GPU-hours",
+                          "kind": "estimated"},
+        "provider_reported_cost": provider_cost,
+        "opengrid_transaction_cost": {"amount_usd": txn, "usage_records": totals["usage_records"],
+                                      "fees_usd": round(float(totals["fees_usd"]), 6),
+                                      "basis": "sum of usage records (provider cost passed through); OpenGrid "
+                                               "fees reported separately", "kind": "transaction"},
+        "quote_error": {"amount_usd": None if expected is None else round(txn - expected, 6),
+                        "pct": None if not expected else round((txn - expected) / expected * 100, 4),
+                        "basis": "transaction cost - expected cost (execution price vs quote)"},
+        "effective_hourly_rate": {
+            "per_gpu_hour_transaction": None if gpu_h <= 0 else round(txn / gpu_h, 6),
+            "per_gpu_hour_provider": None if prov is None or gpu_h <= 0 else round(prov / gpu_h, 6)},
+        "unexpected_fees": {"amount_usd": unexpected,
+                            "reason": None if prov is not None else "no provider-reported cost to compare",
+                            "basis": "provider-reported - transaction cost - billing rounding (> $0.005)"},
+        "billing_rounding": {"amount_usd": rounding, "billing_unit": label, "unit_seconds": unit_s,
+                             "evidence": unit_ev,
+                             "reason": None if rounding is not None else "billing unit unknown or nothing billed"},
+    }
+
+
+def reconcile_cost(deployment_id: str, *, force: bool = False) -> dict | None:
+    """Reconcile one confirmed-terminated deployment's cost. Re-asks the provider for its cost while it may
+    still be lagging (PROVIDER_COST_RETRY_HOURS); otherwise idempotent."""
+    with normalize.SessionLocal() as s:
+        d = s.get(Deployment, deployment_id)
+    if d is None or d.status != "terminated":
+        return None
+    prev = d.reconciliation or {}
+    prev_amount = ((prev.get("provider_reported_cost") or {}).get("amount_usd"))
+    if d.reconciled_at is not None and not force:
+        lagging = (prev_amount is None and d.terminated_at is not None
+                   and _now() - d.terminated_at < timedelta(hours=PROVIDER_COST_RETRY_HOURS)
+                   and _supports_reported_cost(d.provider)
+                   and _now() - d.reconciled_at >= timedelta(hours=1))
+        if not lagging:
+            return prev
+    totals = metered_totals(deployment_id)
+    start = d.provisioned_at or d.created_at
+    end = d.terminated_at
+    pc = _provider_cost(d, start, end)
+    rec = compute_reconciliation(d, totals, pc, _quote(d))
+    with normalize.SessionLocal.begin() as s:
+        row = s.get(Deployment, deployment_id, with_for_update=True)
+        row.reconciliation = rec
+        row.reconciled_at = _now()
+        row.provider_reported_cost = None if pc.get("amount_usd") is None else Decimal(str(pc["amount_usd"]))
+    return rec
+
+
+def _supports_reported_cost(provider: str | None) -> bool:
+    from routing import adapters
+
+    cls = adapters.get(provider or "")
+    return cls is not None and cls.CAPABILITIES.reported_cost[0] in ("YES", "PARTIAL")
+
+
+def reconcile_pending() -> int:
+    """Re-run cost reconciliation where the provider's billing may have caught up."""
+    since = _now() - timedelta(hours=PROVIDER_COST_RETRY_HOURS)
+    with normalize.SessionLocal() as s:
+        ids = list(s.scalars(select(Deployment.deployment_id).where(
+            Deployment.status == "terminated", Deployment.reconciled_at.is_not(None),
+            Deployment.provider_reported_cost.is_(None), Deployment.terminated_at >= since).limit(200)))
+    n = 0
+    for dep_id in ids:
+        try:
+            n += reconcile_cost(dep_id) is not None
+        except Exception:  # noqa: BLE001
+            log.exception("cost reconciliation retry for %s failed", dep_id)
+    return n
 
 
 def record_outcome(deployment_id: str, workload_completed: bool) -> None:
@@ -111,7 +323,7 @@ def record_outcome(deployment_id: str, workload_completed: bool) -> None:
         r = s.get(ExecutionRecord, deployment_id)
         if r is not None:
             r.workload_completed = workload_completed
-            r.updated_at = datetime.now(timezone.utc)
+            r.updated_at = _now()
 
 
 def as_dict(r: ExecutionRecord) -> dict:

@@ -43,12 +43,18 @@
     <div class="nav-g">Execute</div>
     <a href="/route" data-nav="route">Route</a>
     <a href="/deployments" data-nav="deployments">Deployments</a>
+    <a href="/onboarding" data-nav="onboarding">Onboarding</a>
     <a href="/watchlists" data-nav="watchlists">Watchlists</a>
     <a href="/keys" data-nav="keys">API keys</a>
     <div class="nav-g">Reference</div>
     <a href="/api" data-nav="api">API docs</a>
     <a href="/methodology" data-nav="methodology">Methodology</a>
     <a href="/ops" data-nav="ops">Ops</a>
+    <div class="nav-g nav-admin" hidden>Admin</div>
+    <a href="/admin/execution" data-nav="admin-execution" class="nav-admin" hidden>Execution</a>
+    <a href="/admin/checklist" data-nav="admin-checklist" class="nav-admin" hidden>Checklist</a>
+    <a href="/admin/partners" data-nav="admin-partners" class="nav-admin" hidden>Partners</a>
+    <a href="/admin/value" data-nav="admin-value" class="nav-admin" hidden>Value</a>
     <div class="nav-foot"><kbd>/</kbd> search<br><kbd>?</kbd> commands</div>
   </nav>
   <main class="main" id="main"><div class="page" id="page"><div id="ssr" data-path=""><!--OG:SSR--></div></div></main>
@@ -78,6 +84,10 @@
 <script src="/static/pages/api.js"></script>
 <script src="/static/pages/methodology.js"></script>
 <script src="/static/pages/ops.js"></script>
+<script src="/static/pages/execution.js"></script>
+<script src="/static/pages/checklist.js"></script>
+<script src="/static/pages/onboarding.js"></script>
+<script src="/static/pages/value.js"></script>
 <script>OG.start();</script>
 </body>
 </html>

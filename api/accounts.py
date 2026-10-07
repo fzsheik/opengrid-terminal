@@ -2,9 +2,11 @@
 
 Self-service (an API key acts on its own account; the operator acts on the operator account):
     GET    /v1/me                      who am I: account, key, scopes, rate-limit budget
-    GET    /v1/keys                    this account's keys (metadata only)
+    GET    /v1/keys                    this account's keys (metadata only)  [keys:read | account:manage]
     POST   /v1/keys                    create a key; the secret is returned ONCE      [account:manage]
-    DELETE /v1/keys/{id}               revoke                                          [account:manage]
+                                       (never more scopes, a higher rate limit or a later expiry than
+                                       the creating key; at most settings.max_keys_per_account active)
+    DELETE /v1/keys/{id}               revoke, cascading to keys it created            [account:manage]
     GET    /v1/usage                   recent API usage summary
     GET    /v1/credentials             BYO provider credentials, masked                [account:manage]
     POST   /v1/credentials             store one (encrypted)                           [account:manage]
@@ -16,6 +18,7 @@ Watchlists and alerts                                                           
 Operator                                                                               [admin]
     GET/POST /v1/admin/accounts, POST /v1/admin/accounts/{id}/keys, POST /v1/admin/accounts/{id}/status,
     POST /v1/admin/keys/{id}/revoke, GET /v1/admin/usage, GET/POST /v1/admin/fee-policies,
+    (an API key's `admin` scope counts only if the operator created it with platform_admin=true)
     POST /v1/admin/credits, POST /v1/admin/invoices/draft?period=YYYY-MM
 """
 
@@ -32,7 +35,7 @@ import alerts.evaluator  # noqa: F401  registers the `alerts` job
 from accounts import credentials, keys, ratelimit
 from accounts import usage as api_usage  # registers the usage flush / retention jobs
 from accounts.accounts import account_for, create_account, get_account, list_accounts, set_status
-from accounts.auth import ALL, SCOPES, Principal, principal, require_scope
+from accounts.auth import ALL, SCOPES, Principal, principal, require_any_scope, require_scope
 from alerts import rules, watchlists
 from api.common import TRANSACTION, envelope, resolve_gpu
 from billing import invoices, policy
@@ -49,6 +52,10 @@ def install(app) -> None:
     except RuntimeError as e:  # BYO storage fails closed at use; do not take the whole site down for it
         log.warning("%s: BYO credential storage disabled", e)
     app.add_middleware(api_usage.UsageMiddleware)
+
+
+def _actor(who: Principal) -> str:
+    return f"key:{who.key_id}" if who.key_id else who.kind
 
 
 def _404(what: str):
@@ -91,6 +98,9 @@ def rate_limit_defaults() -> dict:
         },
         "override_rule": "a key's rate_limit_per_minute replaces the read budget and caps write / execute "
                          "(it can lower, never raise, them)",
+        "account_budget": {"label": "every key request also spends from its account's per-class budget, so more "
+                                    "keys do not add up to more requests",
+                           "classes": {c: ratelimit.account_limit_for(c) for c in ("read", "write", "execute")}},
     }
 
 
@@ -105,16 +115,40 @@ class KeyIn(BaseModel):
     scopes: list[str] = Field(default_factory=lambda: ["data:read"])
     expires_in_days: float | None = Field(None, gt=0, le=3650)
     rate_limit_per_minute: int | None = Field(None, ge=1, le=100_000)
+    # Operator only (site login): this key's `admin` scope may act across accounts.
+    platform_admin: bool = False
 
 
 def _make_key(account_id: int, body: KeyIn, grantor: Principal) -> dict:
+    """A key-created key can never exceed its creator: scopes are a subset, the read rate limit is at
+    most the creator's effective limit (defaulting to it), the expiry is no later than the creator's,
+    and it is revoked whenever the creator is (lineage cascade)."""
+    expires = datetime.now(timezone.utc) + timedelta(days=body.expires_in_days) if body.expires_in_days else None
+    rate = body.rate_limit_per_minute
+    parent_id = None
+    if body.platform_admin and grantor.kind != "operator":
+        raise HTTPException(403, "only the operator (site login) can create platform_admin keys")
     if not grantor.has(ALL):
         extra = set(body.scopes) - set(grantor.scopes)
         if extra:
             raise HTTPException(403, f"a key cannot grant scopes it does not hold: {sorted(extra)}")
-    expires = datetime.now(timezone.utc) + timedelta(days=body.expires_in_days) if body.expires_in_days else None
+        parent = keys.get_key(grantor.key_id) if grantor.key_id else None
+        if parent is None:
+            raise HTTPException(403, "the creating key could not be found")
+        parent_id = parent["id"]
+        ceiling = ratelimit.limit_for("read", parent["rate_limit_per_minute"])
+        if rate is None:
+            rate = ceiling if parent["rate_limit_per_minute"] is not None else None
+        elif rate > ceiling:
+            raise HTTPException(403, f"a key cannot grant a higher rate limit than its own ({ceiling}/min)")
+        if parent["expires_at"] is not None and (expires is None or expires > parent["expires_at"]):
+            expires = parent["expires_at"]  # never outlives its creator
     try:
-        return keys.create_key(account_id, body.name, body.scopes, expires, body.rate_limit_per_minute)
+        return keys.create_key(account_id, body.name, body.scopes, expires, rate, parent_key_id=parent_id,
+                               platform_admin=body.platform_admin,
+                               created_by="operator" if grantor.kind == "operator" else "api_key")
+    except keys.KeyLimitError as e:
+        raise HTTPException(409, str(e))
     except ValueError as e:
         raise _400(e)
     except KeyError:
@@ -122,7 +156,7 @@ def _make_key(account_id: int, body: KeyIn, grantor: Principal) -> dict:
 
 
 @router.get("/v1/keys", tags=["accounts"], summary="This account's API keys (no secrets)")
-def list_my_keys(who: Principal = Depends(principal)):
+def list_my_keys(who: Principal = Depends(require_any_scope("keys:read", "account:manage"))):
     return envelope(keys.list_keys(account_for(who)))
 
 
@@ -135,7 +169,7 @@ def create_my_key(body: KeyIn, who: Principal = Depends(require_scope("account:m
 @router.delete("/v1/keys/{key_id}", tags=["accounts"], summary="Revoke one of this account's keys")
 def revoke_my_key(key_id: int, who: Principal = Depends(require_scope("account:manage"))):
     try:
-        return envelope(keys.revoke_key(key_id, account_for(who)))
+        return envelope(keys.revoke_key(key_id, account_for(who), actor=_actor(who)))
     except KeyError:
         raise _404("key")
 
@@ -405,7 +439,7 @@ def admin_create_key(account_id: int, body: KeyIn, who: Principal = Depends(admi
 @router.post("/v1/admin/keys/{key_id}/revoke", tags=["admin"])
 def admin_revoke_key(key_id: int, who: Principal = Depends(admin)):
     try:
-        return envelope(keys.revoke_key(key_id))
+        return envelope(keys.revoke_key(key_id, actor=_actor(who)))
     except KeyError:
         raise _404("key")
 

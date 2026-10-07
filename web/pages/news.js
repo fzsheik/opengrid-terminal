@@ -11,6 +11,8 @@
   const FILTERS = ["gpu", "provider", "region", "topic", "source", "min", "q"];
   const PAGE = 40, DEFAULT_MIN = 20;   // below 20 is mostly general semiconductor news; "all" shows it
   const relCls = r => (r >= 60 ? "r-hi" : r >= 35 ? "r-mid" : "r-lo");
+  // Feed links are third-party data: only absolute http(s) URLs become links (no javascript:/data:).
+  const safeHref = u => (typeof u === "string" && /^https?:\/\/[^\s]/i.test(u.trim()) ? u.trim() : null);
 
   OG.page("/news", {
     title: "News",
@@ -124,14 +126,14 @@
         const others = (n.sources || []).filter(s => s.item_id !== n.id);
         return h("article", { class: "nw-it" }, wrap,
           h("div", { class: "nw-body" },
-            h("a", { class: "nw-t", href: n.url, target: "_blank", rel: "noopener external" }, n.title),
+            h("a", { class: "nw-t", href: safeHref(n.url), target: "_blank", rel: "noopener external" }, n.title),
             n.summary ? h("div", { class: "nw-s" }, n.summary) : null,
             h("div", { class: "nw-m" },
               h("span", { class: "mono", title: (n.published_at_inferred ? "publication time inferred · " : "") + fmt.dateTime(n.published_at) }, fmt.age(n.published_at) + " ago"),
               h("a", { class: "lnk", href: "/news?source=" + encodeURIComponent(n.source_id) }, n.source_name),
               OG.badge(n.trust_tier || "–", n.trust_tier === "official" ? "good" : ""),
               n.source_count > 1 ? h("span", { class: "nw-srcs", title: others.map(s => `${s.source_name}: ${s.title}`).join("\n") }, `+${n.source_count - 1} source${n.source_count > 2 ? "s" : ""}: `,
-                others.slice(0, 4).map((s, i) => [i ? ", " : "", h("a", { class: "lnk", href: s.url, target: "_blank", rel: "noopener external" }, s.source_name)])) : null,
+                others.slice(0, 4).map((s, i) => [i ? ", " : "", h("a", { class: "lnk", href: safeHref(s.url), target: "_blank", rel: "noopener external" }, s.source_name)])) : null,
               ents.length ? h("span", { class: "nw-ents" }, ents) : null)));
       }
 

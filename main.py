@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Query
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -15,6 +15,7 @@ import mapping
 import market
 import normalize
 import raw_store
+from accounts import security
 from config import settings
 from db import get_db, init_db
 from fetch import fetch_all
@@ -38,8 +39,8 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Deployed with no password would publish prices, raw provider responses and the fetch button.
-    if os.environ.get("RAILWAY_ENVIRONMENT") and not settings.app_password:
-        raise RuntimeError("APP_PASSWORD must be set when deployed")
+    if security.deployed() and not settings.app_password:
+        raise RuntimeError(f"APP_PASSWORD must be set when deployed ({'; '.join(security.deployment_signals())})")
     init_db()
     ingest = Ingest()
     if settings.poller_enabled:
@@ -52,7 +53,9 @@ async def lifespan(app: FastAPI):
     await ingest.stop()
 
 
-app = FastAPI(title="opengrid-terminal", lifespan=lifespan)
+# strict_content_type pinned (it is FastAPI's default today): JSON bodies sent as text/plain or a
+# form are refused (422) instead of parsed, so a cross-site <form> cannot forge a JSON request.
+app = FastAPI(title="opengrid-terminal", lifespan=lifespan, strict_content_type=True)
 
 def password_ok(header: str) -> bool:
     """True when an Authorization header carries the site's user and password."""
@@ -68,24 +71,77 @@ def password_ok(header: str) -> bool:
     )
 
 
+def _deny(status: int, detail: str, headers: dict | None = None) -> Response:
+    return JSONResponse({"detail": detail}, status_code=status, headers=headers)
+
+
 @app.middleware("http")
 async def require_password(request, call_next):
     """Everything sits behind one password, except /health so the host can check the app is up.
 
     /v1 requests carrying an OpenGrid API key pass through: accounts.auth checks the key.
     With PUBLIC_PAGES set, the read-only public surface (pages, assets, /v1 data reads)
-    is open too; anything that spends money or reads private data still needs a key.
+    is open too (rate limited per IP); anything that spends money or reads private data still
+    needs a key. Deployed (accounts.security.deployed()) without APP_PASSWORD: closed (503).
+
+    CSRF (methodology/security.md): the site login is AMBIENT (browsers re-send cached basic auth,
+    and open dev needs none), so every state-changing request it authenticates must carry
+    X-OpenGrid-Request: 1 and, when the browser states it, a same-origin Origin / Sec-Fetch-Site.
+    Bearer-key requests are exempt: a cross-site page cannot make a browser attach a key.
+    Failed basic-auth logins are throttled per client IP.
     """
     path = request.url.path
-    if not settings.app_password or path == "/health":
+    if path == "/health":
         return await call_next(request)
-    if path.startswith("/v1/") and request.headers.get("authorization", "").lower().startswith("bearer "):
+    auth = request.headers.get("authorization", "")
+    if path.startswith("/v1/") and auth.lower().startswith("bearer "):
         return await call_next(request)
-    if settings.public_pages and pages_api.is_public(request):
+    ip = security.client_ip(request)
+    public = False
+    if not settings.app_password:
+        if security.deployed():
+            return _deny(503, "APP_PASSWORD is not configured on a deployed server")
+    elif security.is_basic(auth):
+        wait = security.login_locked(ip)
+        if wait:
+            return _deny(429, "too many failed logins from this address; try again later", {"Retry-After": str(wait)})
+        if not password_ok(auth):
+            security.login_failed(ip)
+            if not (settings.public_pages and pages_api.is_public(request)):
+                return Response("Authentication required", status_code=401,
+                                headers={"WWW-Authenticate": 'Basic realm="OpenGrid"'})
+            public = True
+    elif settings.public_pages and pages_api.is_public(request):
+        public = True
+    else:
+        return Response("Authentication required", status_code=401, headers={"WWW-Authenticate": 'Basic realm="OpenGrid"'})
+    if public:
+        if not path.startswith("/static/"):
+            d = security.public_allowed(ip)
+            if not d.allowed:
+                return _deny(429, "rate limit exceeded for anonymous access; sign in or use an API key", d.headers())
         return await call_next(request)
-    if password_ok(request.headers.get("authorization", "")):
-        return await call_next(request)
-    return Response("Authentication required", status_code=401, headers={"WWW-Authenticate": 'Basic realm="OpenGrid"'})
+    bad = security.csrf_violation(request)  # operator (site login or open dev) from here on
+    if bad:
+        return _deny(403, bad)
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    """nosniff / Referrer-Policy / X-Frame-Options on everything; on HTML a CSP that allows only our
+    own scripts plus the page's own inline boot script (by hash), no framing (clickjacking)."""
+    response = await call_next(request)
+    for k, v in security.COMMON_HEADERS.items():
+        if k not in response.headers:
+            response.headers[k] = v
+    if response.headers.get("content-type", "").startswith("text/html") and \
+            "content-security-policy" not in response.headers:
+        body = b"".join([chunk async for chunk in response.body_iterator])
+        headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
+        headers["Content-Security-Policy"] = security.csp(path=request.url.path, html=body.decode("utf-8", "replace"))
+        return Response(body, status_code=response.status_code, headers=headers)
+    return response
 
 
 WEB = Path(__file__).parent / "web"
@@ -204,8 +260,21 @@ def do_normalize():
     return normalize.refresh()
 
 
+from api import execution as execution_api  # noqa: E402
+from api import partners as partners_api  # noqa: E402
+from api import product as product_api  # noqa: E402
+from api import reconcile as reconcile_api  # noqa: E402
+
+for _module in (execution_api, partners_api, product_api, reconcile_api):
+    app.include_router(_module.router)
+
 # Last: the page router owns "/" and the catch-all page paths.
 app.include_router(pages_api.router)
 
 # API-key usage logging + X-RateLimit-* headers (outermost middleware); refuses to start deployed without API_KEY_PEPPER.
 accounts_api.install(app)
+
+# Request ids and structured logs (outermost, so every log line of a request carries its id).
+import observability  # noqa: E402
+
+observability.install(app)

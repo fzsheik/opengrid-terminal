@@ -2,7 +2,8 @@
 
 `level(provider)` is the ONLY source of "what OpenGrid implements" (capabilities.py
 reads it), so a provider without an adapter here is level 0 however capable its API is.
-Crusoe, Denvr and Latitude all map to the one Shadeform adapter (an aggregator route).
+Crusoe, Denvr and Latitude all map to the one Shadeform adapter (an aggregator route), and
+authenticate ONLY with a Shadeform credential: credential_provider("crusoe") == "shadeform".
 """
 
 from routing.adapters.base import Adapter
@@ -32,6 +33,21 @@ TRANSPORTS: dict = {}
 
 def get(provider: str) -> type[Adapter] | None:
     return ADAPTERS.get(provider)
+
+
+def credential_provider(provider: str) -> str:
+    """The provider name whose credentials this provider's adapter authenticates with.
+
+    The core must resolve (and pin) credentials under THIS name: a customer's native Crusoe key
+    stored as "crusoe" must never be sent to Shadeform (audit P0-4)."""
+    cls = ADAPTERS.get(provider)
+    return (cls.CREDENTIAL_PROVIDER if cls is not None and cls.CREDENTIAL_PROVIDER else provider)
+
+
+def capabilities(provider: str):
+    """The adapter's static capability matrix (results.Capabilities), or None without an adapter."""
+    cls = ADAPTERS.get(provider)
+    return None if cls is None else cls.CAPABILITIES
 
 
 def level(provider: str) -> int:

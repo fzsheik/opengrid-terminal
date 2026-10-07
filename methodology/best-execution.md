@@ -79,7 +79,9 @@ Weights are normalized to sum to 1. When a region group is requested, `region_ma
 
 `USER_DEFINED` validation: keys must be factor names; values finite and ≥ 0; not all zero;
 `reliability` / `performance` must be 0; `region_match` needs a region. `weights` with any other mode
-is rejected. Ties in score are broken by lower price, then fresher data.
+is rejected. Ties in score are broken by lower price, then fresher data. A complete tie (same price and
+data age; for CHEAPEST, same price and age) resolves to the alphabetically first provider, then listing id,
+so the same market always produces the same decision (tests/test_routing_benchmark.py).
 
 Total score = Σ weight × value. Each factor's `contribution` is reported, and they sum to the score.
 

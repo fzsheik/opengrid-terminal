@@ -617,7 +617,7 @@ def test_api():
         from config import settings
 
         settings.app_password = None  # open local dev: the caller is the operator
-        client = TestClient(main.app)  # no lifespan: no poller, no jobs, no migrations
+        client = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})  # CSRF header, as web/core.js sends  # no lifespan: no poller, no jobs, no migrations
         for _ in range(3):
             w.poll(base_items())
         w.poll(base_items(**{"0": {"price": 250}}))

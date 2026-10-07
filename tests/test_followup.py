@@ -86,7 +86,7 @@ def _client():
     if "c" not in _client_cache:
         import main
         from fastapi.testclient import TestClient
-        _client_cache["c"] = TestClient(main.app)
+        _client_cache["c"] = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})  # CSRF header, as web/core.js sends
     return _client_cache["c"]
 
 
@@ -205,7 +205,7 @@ def test_route_family_requires_allow_variants():
     # Execute: live provisioning is off and syn_* cannot be provisioned -> no deployment.
     with normalize.SessionLocal() as s:
         before = s.execute(text("SELECT count(*) FROM deployments")).scalar()
-    r = c.post("/v1/route", json={**body, "allow_variants": True})
+    r = c.post("/v1/route", json={**body, "allow_variants": True}, headers={"Idempotency-Key": "followup-family"})
     assert r.status_code == 200 and r.json()["data"]["status"] in ("not_provisioned", "no_candidates"), r.text
     assert r.json()["data"]["family"] == "H100"
     with normalize.SessionLocal() as s:

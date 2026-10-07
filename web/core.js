@@ -23,7 +23,8 @@ The most specific (most literal characters) matching pattern wins.
 
 Navigation   OG.go(url, {replace})  ·  plain <a href="/x"> links are intercepted when a page matches
 Query state  OG.qs.get(k, dflt) · OG.qs.all() · OG.qs.set({k: v|null}, {push}) (updates URL, no remount)
-API          OG.api(path, {params, method, body, full, slot, nocache}) -> Promise<data>
+API          OG.api(path, {params, method, body, full, slot, nocache, idempotencyKey, keepalive}) -> Promise<data>
+             money-moving POSTs: intent = OG.intentFor(prev, action, body); OG.api.intent(intent, path, opts)
                unwraps {data, meta}; {full:true} -> {data, meta}; throws OG.ApiError {status, message, path}
                identical concurrent GETs share one request; {slot:"x"}: only the newest request in a slot
                resolves, older ones reject with err.stale = true.
@@ -316,8 +317,120 @@ Full docs: web/README.md.
     return o.reason || o.unavailable_reason || o.insufficient_reason || o.coverage_reason || null;
   }
 
+  /* ================= pure: idempotency intents ================= */
+  // Money-moving POSTs (route, approve, terminate, stop) carry an Idempotency-Key. ONE key per user intent:
+  // a retry of the SAME action after an unknown outcome (network error, 5xx, 429, 409 idempotency_in_progress)
+  // reuses the key, so the server replays instead of acting twice; any definitive answer settles the intent
+  // and the next click is a new intent with a new key. The client never retries on its own.
+  function randomId(n, rand) {
+    const abc = "abcdefghijklmnopqrstuvwxyz0123456789";
+    let out = "";
+    const c = !rand && typeof crypto !== "undefined" && crypto.getRandomValues ? crypto.getRandomValues(new Uint8Array(n)) : null;
+    for (let i = 0; i < n; i++) out += abc[(c ? c[i] : Math.floor((rand || Math.random)() * 256)) % abc.length];
+    return out;
+  }
+  function stableJson(v) {
+    if (v === undefined) return "null";
+    if (v === null || typeof v !== "object") return JSON.stringify(v);
+    if (Array.isArray(v)) return "[" + v.map(stableJson).join(",") + "]";
+    return "{" + Object.keys(v).sort().filter(k => v[k] !== undefined).map(k => JSON.stringify(k) + ":" + stableJson(v[k])).join(",") + "}";
+  }
+  // Did the request possibly happen without us learning the answer? Then the same key must be reused.
+  function outcomeUnknown(err) {
+    if (!err) return false;
+    const s = err.status, d = err.body && err.body.detail;
+    if (s === 0 || s === 429 || s >= 500) return true;
+    return s === 409 && !!d && typeof d === "object" && d.code === "idempotency_in_progress";
+  }
+  // intentFor(previous, action, body): reuse `previous` only when it is the same action + body and its last
+  // attempt ended with an unknown outcome; else a new intent with a fresh key.
+  function intentFor(prev, action, body, rand) {
+    const b = stableJson(body == null ? {} : body);
+    if (prev && prev.state === "unknown" && prev.action === action && prev.body === b) return prev;
+    return { key: "ogui-" + randomId(26, rand), action, body: b, state: "new", attempts: 0 };
+  }
+  function settleIntent(intent, err) {
+    intent.attempts++;
+    intent.state = !err ? "done" : outcomeUnknown(err) ? "unknown" : "failed";
+    return intent;
+  }
+
+  /* ================= pure: deployment state machine (mirrors routing/deployments.py) ================= */
+  const DEP_FLOW = ["created", "quoted", "pending_approval", "approved", "provisioning", "running", "stopping", "stopped", "terminating", "terminated"];
+  const DEP_UNCERTAIN = ["provider_timeout", "launch_unknown", "orphan_suspected", "credentials_unavailable", "degraded"];
+  const DEP_FAILED = ["quote_failed", "quote_expired", "rejected", "provision_failed", "provider_rejected", "termination_failed"];
+  // Every state in which an instance may exist at the provider (may bill).
+  const DEP_LIVE = ["provisioning", "running", "degraded", "stopping", "stopped", "terminating", "termination_failed", "provider_timeout",
+    "launch_unknown", "orphan_suspected", "credentials_unavailable"];
+  function depTone(s) {
+    if (DEP_FAILED.includes(s)) return "bad";
+    if (DEP_UNCERTAIN.includes(s)) return "warn";
+    if (s === "running") return "good";
+    if (["pending_approval", "approved", "provisioning", "stopping", "terminating"].includes(s)) return "busy";
+    return "";
+  }
+  // The strip: the main flow with done / current / todo / skipped marks; a failure or uncertain current state
+  // is inserted right after the furthest main-flow state the deployment reached (from its event history).
+  function depStrip(status, history) {
+    const seen = new Set((history || []).filter(Boolean));
+    const known = seen.size > 0;
+    let cur = DEP_FLOW.indexOf(status);
+    let after = cur;
+    if (cur < 0) { after = -1; DEP_FLOW.forEach((s, i) => { if (seen.has(s)) after = i; }); if (!known) after = 0; }
+    const steps = DEP_FLOW.map((s, i) => {
+      let mark = i < (cur >= 0 ? cur : after + 1) ? "done" : "todo";
+      if (i === cur) mark = "current";
+      if (mark === "done" && known && !seen.has(s)) mark = "skipped";
+      return { state: s, mark, tone: mark === "current" ? depTone(s) : "" };
+    });
+    if (cur < 0 && status) steps.splice(after + 1, 0, { state: status, mark: "current", tone: depTone(status) || "bad", off: true });
+    return steps;
+  }
+
+  /* ================= pure: product analytics tracker ================= */
+  // Anonymous, cookie-less: a random id in sessionStorage, batched, max 50 events per POST, failures dropped,
+  // nothing tracked when Do Not Track is on. No PII: props are page paths, GPU slugs, provider names, queries.
+  const TRACK_EVENTS = ["page_view", "search", "gpu_view", "provider_view", "compare", "watchlist_create"];
+  function makeTracker(o) {
+    o = o || {};
+    const max = o.max || 50, q = [];
+    let anon = null;
+    function anonId() {
+      if (anon) return anon;
+      try { anon = o.storage && o.storage.getItem("og-anon"); } catch (e) { anon = null; }
+      if (!anon || !/^[A-Za-z0-9_-]{8,64}$/.test(anon)) {
+        anon = "a" + randomId(19, o.rand);
+        try { o.storage && o.storage.setItem("og-anon", anon); } catch (e) { /* private mode: per page load */ }
+      }
+      return anon;
+    }
+    return {
+      queue: q,
+      enabled: !o.dnt,
+      track(event, props) {
+        if (o.dnt || !TRACK_EVENTS.includes(event)) return false;
+        q.push({ event, anon_id: anonId(), props: props || {}, ts: new Date(o.now ? o.now() : Date.now()).toISOString() });
+        if (q.length > 500) q.splice(0, q.length - 500);
+        return true;
+      },
+      // Sends everything queued in batches of `max`; returns the number of batches. Never throws, never retries.
+      flush(opts) {
+        let n = 0;
+        while (q.length) {
+          const batch = q.splice(0, max);
+          n++;
+          try { Promise.resolve(o.send(batch, opts || {})).catch(() => {}); } catch (e) { /* dropped */ }
+        }
+        return n;
+      },
+      anonId,
+    };
+  }
+
   Object.assign(OG, { compile, matchRoute, legacyHash, slug, fmt, freshness, freshLimits, cleanKids, familyTarget, shortReason, sortRows, csvCell, csvString,
     fuzzy, fuzzyScore, parseCommand, command, findCommand, COMMANDS, unwrap, withParams, reasonOf,
+    randomId, stableJson, outcomeUnknown, intentFor, settleIntent, makeTracker, TRACK_EVENTS,
+    dep: { FLOW: DEP_FLOW, UNCERTAIN: DEP_UNCERTAIN, FAILED: DEP_FAILED, LIVE: DEP_LIVE, tone: depTone, strip: depStrip },
     qs: { parse: qsParse, stringify: qsStringify } });
 
   /* ================= API ================= */
@@ -328,8 +441,13 @@ Full docs: web/README.md.
   const inflight = new Map(), slots = new Map();
   async function doFetch(url, method, opts) {
     const init = { method, credentials: "same-origin", headers: { accept: "application/json" } };
+    // CSRF: the server refuses state changes under the site login without this header (main.py).
+    if (method !== "GET" && method !== "HEAD") init.headers["x-opengrid-request"] = "1";
     if (opts.body !== undefined) { init.body = typeof opts.body === "string" ? opts.body : JSON.stringify(opts.body); init.headers["content-type"] = "application/json"; }
     if (opts.headers) Object.assign(init.headers, opts.headers);
+    // one key per user intent (see intentFor); never generated here, so a retry can reuse it
+    if (opts.idempotencyKey) init.headers["idempotency-key"] = String(opts.idempotencyKey);
+    if (opts.keepalive) init.keepalive = true;
     if (opts.signal) init.signal = opts.signal;
     let r;
     try { r = await fetch(url, init); } catch (e) { throw new ApiError(0, "network error", url); }
@@ -362,7 +480,27 @@ Full docs: web/README.md.
   }
   api.soft = (path, opts) => api(path, opts).catch(() => null);
   api.full = (path, opts) => api(path, Object.assign({}, opts, { full: true }));
+  // api.intent(intent, path, opts): one attempt of a user intent with its Idempotency-Key; settles the intent
+  // (done / failed / unknown). Never retries by itself: the user retries, and an unknown outcome reuses the key.
+  api.intent = async (intent, path, opts) => {
+    try { const r = await api(path, Object.assign({}, opts, { idempotencyKey: intent.key })); settleIntent(intent); return r; }
+    catch (e) { settleIntent(intent, e); throw e; }
+  };
   OG.api = api;
+
+  /* ================= pure: URL guard ================= */
+  // One central guard for every URL-valued attribute OG.h / OG.s set, and for OG.go: only
+  // http(s)/mailto, relative paths, fragments and queries pass. javascript: / data: / vbscript:
+  // (any case, with embedded whitespace or control characters) become "#": data (e.g. a news
+  // feed link) must never run script on this origin.
+  const URL_ATTRS = new Set(["href", "src", "action", "formaction", "xlink:href", "srcdoc", "poster", "data"]);
+  function safeUrl(v) {
+    const raw = String(v).trim();
+    const m = /^([a-z][a-z0-9+.-]*):/i.exec(raw.replace(/[\x00-\x20\x7f]+/g, ""));
+    if (!m) return raw;  // no scheme: a relative path, #fragment or ?query
+    return /^(https?|mailto)$/i.test(m[1]) ? raw : "#";
+  }
+  OG.safeUrl = safeUrl;
 
   if (!HAS_DOM) return OG;
 
@@ -392,6 +530,8 @@ Full docs: web/README.md.
     const el = document.createElement(tag);
     for (const [k, v] of Object.entries(props || {})) {
       if (v == null || v === false) continue;
+      if (URL_ATTRS.has(k.toLowerCase())) { el.setAttribute(k, k.toLowerCase() === "srcdoc" ? "" : safeUrl(v)); continue; }
+      if (k.startsWith("on") && typeof v !== "function") continue;  // never inline handler strings
       if (k === "class") el.className = v;
       else if (k === "style" && typeof v === "object") Object.assign(el.style, v);
       else if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2), v);
@@ -406,7 +546,8 @@ Full docs: web/README.md.
     for (const [k, v] of Object.entries(attrs || {})) {
       if (v == null || v === false) continue;
       if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2), v);
-      else el.setAttribute(k, v);
+      else if (k.startsWith("on")) continue;
+      else el.setAttribute(k, URL_ATTRS.has(k.toLowerCase()) ? safeUrl(v) : v);
     }
     for (const kid of kids.flat(Infinity)) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
     return el;
@@ -549,6 +690,110 @@ Full docs: web/README.md.
     document.body.append(ov);
     (ackBox || ok).focus();
   });
+  // OG.ask({title, body, fields, confirm, danger}) -> Promise<values | null>. fields: [{key, label, type:
+  // "text" | "textarea" | "checkbox" | "select", required, minLength, placeholder, options, match (exact text the
+  // user must type, e.g. the provider name), show(values) (visible only when true), hint}]. Confirm stays
+  // disabled until every visible required field is valid. For approvals, overrides, kill switches, reasons.
+  OG.ask = o => new Promise(resolve => {
+    const prev = document.activeElement;
+    const inputs = {};
+    const vals = () => Object.fromEntries(Object.entries(inputs).map(([k, i]) => [k, i.type === "checkbox" ? i.checked : i.value.trim()]));
+    const rows = (o.fields || []).map(f => {
+      let i;
+      if (f.type === "textarea") i = h("textarea", { class: "field og-ask-ta", rows: 3, placeholder: f.placeholder || "", "aria-label": f.label });
+      else if (f.type === "select") i = h("select", { class: "field", "aria-label": f.label }, (f.options || []).map(([v, l]) => h("option", { value: v }, l)));
+      else i = h("input", { class: f.type === "checkbox" ? "" : "field og-ask-in", type: f.type === "checkbox" ? "checkbox" : "text", placeholder: f.placeholder || "", autocomplete: "off", spellcheck: "false", "aria-label": f.label });
+      if (f.value != null) { if (f.type === "checkbox") i.checked = !!f.value; else i.value = f.value; }
+      inputs[f.key] = i;
+      const row = h("label", { class: "og-ask-f" + (f.type === "checkbox" ? " chk" : "") }, f.type === "checkbox" ? [i, h("span", {}, f.label)] : [h("span", { class: "og-ask-l" }, f.label), i], f.hint ? h("span", { class: "og-ask-h" }, f.hint) : null);
+      return { f, row, i };
+    });
+    const ok = h("button", { class: "btn " + (o.danger ? "w4-danger" : "pri"), type: "button", disabled: true, onclick: () => close(true) }, o.confirm || "Confirm");
+    function valid() {
+      const v = vals();
+      let good = true;
+      for (const { f, row } of rows) {
+        const shown = !f.show || f.show(v);
+        row.hidden = !shown;
+        if (!shown) continue;
+        const x = v[f.key];
+        if (f.match != null && String(x).toLowerCase() !== String(f.match).toLowerCase()) good = false;
+        if (f.required && f.type !== "checkbox" && String(x).length < (f.minLength || 1)) good = false;
+        if (f.required && f.type === "checkbox" && !x) good = false;
+      }
+      ok.disabled = !good;
+    }
+    rows.forEach(r => { r.i.addEventListener("input", valid); r.i.addEventListener("change", valid); });
+    const box = h("div", { class: "w4-dlg og-ask", role: "dialog", "aria-modal": "true", "aria-label": o.title },
+      h("div", { class: "w4-dlg-h" }, o.title), h("div", { class: "w4-dlg-b" }, o.body, rows.map(r => r.row)),
+      h("div", { class: "w4-dlg-f" }, h("button", { class: "btn", type: "button", onclick: () => close(false) }, o.cancel || "Cancel"), ok));
+    const ov = h("div", { class: "w4-ov", onmousedown: e => { if (e.target === ov) close(false); } }, box);
+    const key = e => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); close(false); }
+      else if (e.key === "Enter" && e.target.tagName === "INPUT" && !ok.disabled) { e.preventDefault(); close(true); }
+    };
+    let done = false;
+    function close(v) {
+      if (done) return; done = true;
+      document.removeEventListener("keydown", key, true); ov.remove();
+      if (prev && prev.focus) prev.focus();
+      resolve(v ? vals() : null);
+    }
+    document.addEventListener("keydown", key, true);
+    document.body.append(ov);
+    valid();
+    const first = rows.find(r => !r.row.hidden);
+    (first ? first.i : ok).focus();
+  });
+
+  /* ---- shared: execution (deployment state, quote countdown, execution mode) ---- */
+  OG.stateBadge = s => h("span", { class: "badge og-st st-" + (depTone(s) || "plain"), title: DEP_UNCERTAIN.includes(s) ? "uncertain: an instance may exist and bill" : DEP_FAILED.includes(s) ? "failure state" : null }, String(s || "–").replace(/_/g, " "));
+  OG.stateStrip = (status, events) => h("ol", { class: "og-strip", "aria-label": "deployment state machine" },
+    depStrip(status, (events || []).map(e => e.to)).map(st => h("li", { class: "m-" + st.mark + (st.tone ? " t-" + st.tone : "") + (st.off ? " off" : ""), title: st.mark === "skipped" ? st.state + ": not passed through" : st.state, "aria-current": st.mark === "current" ? "step" : null }, st.state.replace(/_/g, " "))));
+  // A live countdown to `iso` ("4m 12s"); "expired" (or o.expired) after. Stops when removed from the page.
+  OG.countdown = (iso, o) => {
+    o = o || {};
+    const el = h("span", { class: "og-cd mono" });
+    const t = +new Date(iso);
+    let fired = false;
+    const tick = () => {
+      if (!iso || isNaN(t)) { el.textContent = "–"; return false; }
+      const s = Math.round((t - Date.now()) / 1000);
+      if (s <= 0) {
+        el.textContent = o.expired || "expired"; el.classList.add("over");
+        if (!fired && o.onExpire) { fired = true; o.onExpire(); }
+        return false;
+      }
+      const d = Math.floor(s / 86400), hh = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60;
+      el.textContent = (o.prefix || "") + (d ? d + "d " + hh + "h" : hh ? hh + "h " + p2(m) + "m" : m + "m " + p2(ss) + "s");
+      el.classList.toggle("soon", s < (o.soon || 60));
+      return true;
+    };
+    tick();
+    let mounted = false;
+    const id = setInterval(() => {
+      if (el.isConnected) mounted = true;
+      else if (mounted) { clearInterval(id); return; }   // removed from the page
+      if (!tick()) clearInterval(id);
+    }, 1000);
+    return el;
+  };
+  const MODE_HELP = {
+    DISABLED: "Kill switch: no new launch anywhere. Monitoring, reconciliation, stop and terminate keep working.",
+    PREVIEW_ONLY: "Routes rank, check and quote; nothing is ever launched.",
+    SUPERVISED: "Launches happen only after an OpenGrid admin approves each quote, on validated providers with supervised launches enabled.",
+    LIVE: "Validated, live-enabled providers launch without per-launch approval (within cost guards).",
+  };
+  OG.MODE_HELP = MODE_HELP;
+  // ms = GET /v1/admin/execution/mode (or {effective_mode} from a route response); null -> unknown
+  OG.modeBanner = ms => {
+    const eff = ms && (ms.effective_mode || ms.execution_mode);
+    if (!eff) return h("div", { class: "og-mode m-unknown" }, h("b", {}, "EXECUTION MODE UNKNOWN"), h("span", {}, "This page cannot read the execution mode (admin only). The server enforces it on every request."));
+    const capped = ms.stored_mode && ms.stored_mode !== eff;
+    return h("div", { class: "og-mode m-" + eff.toLowerCase() }, h("b", {}, eff.replace("_", " ")), h("span", {}, MODE_HELP[eff] || ""),
+      capped ? h("span", { class: "og-mode-cap" }, `stored mode ${ms.stored_mode}, capped by the deploy-level env flag (ROUTING_LIVE_PROVISIONING=false)`) : null);
+  };
+
   // Price-concept badge: the four concepts are never mixed (methodology/data-kinds).
   const CONCEPT = {
     list: ["list", "List price: the provider's published catalogue price"],
@@ -694,7 +939,7 @@ Full docs: web/README.md.
         const tr = h("tr", { class: (act ? "act " : "") + (spec.rowClass ? spec.rowClass(r) || "" : ""), tabindex: act ? "0" : null, "data-k": spec.rowKey ? spec.rowKey(r) : null },
           cols.map((c, i) => cell(c, r, i)));
         if (act) {
-          tr.addEventListener("click", e => { if (e.target.closest("a,button,input,select")) return; if (href) (e.metaKey || e.ctrlKey ? window.open(href) : OG.go(href)); else spec.onRow(r, e); });
+          tr.addEventListener("click", e => { if (e.target.closest("a,button,input,select")) return; if (href) (e.metaKey || e.ctrlKey ? window.open(safeUrl(href)) : OG.go(href)); else spec.onRow(r, e); });
           tr.addEventListener("keydown", e => { if (e.key === "Enter" && e.target === tr) { if (href) OG.go(href); else spec.onRow(r, e); } });
         }
         if (spec.onHover) { tr.addEventListener("mouseenter", () => spec.onHover(r)); tr.addEventListener("mouseleave", () => spec.onHover(null)); }
@@ -760,6 +1005,7 @@ Full docs: web/README.md.
 
   OG.go = (url, opts) => {
     const u = new URL(url, location.href);
+    if (!/^https?:$/.test(u.protocol)) return;  // never navigate to javascript: / data: (see safeUrl)
     if (u.origin !== location.origin || !OG.match(u.pathname)) { location.href = u.href; return; }
     history[opts && opts.replace ? "replaceState" : "pushState"](null, "", u.pathname + u.search + u.hash);
     render();
@@ -797,6 +1043,7 @@ Full docs: web/README.md.
     if (!m) { ctx.setTitle("Not found"); page.append(OG.head("Not found", path), OG.empty("No page at this address.")); return; }
     const t = typeof m.route.title === "function" ? m.route.title(m.params, ctx.query) : m.route.title;
     ctx.setTitle(t);
+    trackView(path, m.route.pattern, m.params);
     try {
       const ret = m.route.mount(page, m.params, ctx.query, ctx);
       if (typeof ret === "function") ctx._cleanups.push(ret);
@@ -804,6 +1051,29 @@ Full docs: web/README.md.
     } catch (e) { console.error(e); page.append(OG.error(e)); }
   }
   OG.render = render;
+
+  /* ================= product analytics (anonymous; see makeTracker) ================= */
+  let store = null;
+  try { store = root.sessionStorage; } catch (e) { store = null; }
+  const tracker = makeTracker({
+    dnt: (root.navigator && root.navigator.doNotTrack === "1") || root.doNotTrack === "1",
+    storage: store,
+    send: (batch, o) => api("/v1/events/track", { method: "POST", body: { events: batch }, keepalive: !!o.keepalive }),
+  });
+  OG.tracker = tracker;
+  OG.track = (event, props) => tracker.track(event, props);
+  function trackView(path, pattern, params) {
+    tracker.track("page_view", { page: path });
+    if (pattern === "/gpu/:slug") tracker.track("gpu_view", { gpu: params.slug });
+    else if (pattern === "/provider/:name") tracker.track("provider_view", { provider: params.name });
+    else if (pattern === "/compare/:a-vs-:b") tracker.track("compare", { a: params.a, b: params.b });
+  }
+
+  /* ================= who is this (GET /v1/me, cached) ================= */
+  let meP = null;
+  OG.me = () => { if (!meP) meP = api.soft("/v1/me", { nocache: true }); return meP; };
+  // Operator (site login / open dev) or a key with the admin scope.
+  OG.isAdmin = me => !!me && (me.principal === "operator" || (me.scopes || []).includes("*") || (me.scopes || []).includes("admin"));
 
   // Fetch the server-rendered summary block of a page path (for SPA navigation to SSR-heavy pages)
   OG.fetchSSR = async path => {
@@ -932,6 +1202,8 @@ Full docs: web/README.md.
     const refresh = async () => { const my = ++seq; const r = await suggestions(input.value); if (my !== seq) return; items = r; sel = 0; draw(); };
     async function exec(i) {
       const it = items[i];
+      const q = input.value.trim();
+      if (q) tracker.track("search", { q: q.slice(0, 100) });
       if (it && it.run) { input.value = ""; close(); input.blur(); await it.run(); return; }
       const t = input.value.trim(), hit = findCommand(t);
       if (hit) { input.value = ""; close(); input.blur(); await hit.cmd.handler(hit.match, t); }
@@ -986,6 +1258,10 @@ Full docs: web/README.md.
     render();
     loadPolling(); loadTape();
     setInterval(() => { if (!document.hidden) { loadTape(); drawStatus(); } }, 60000);
+    setInterval(() => tracker.flush(), 10000);
+    root.addEventListener("pagehide", () => tracker.flush({ keepalive: true }));
+    // Admin nav section: only for the operator / admin-scoped principals (the API enforces it regardless)
+    OG.me().then(me => document.querySelectorAll(".nav-admin").forEach(n => { n.hidden = !OG.isAdmin(me); }));
   };
   return OG;
 });

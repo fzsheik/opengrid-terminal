@@ -283,9 +283,29 @@ def parse_federal_register(body: bytes | str) -> list[dict]:
     return _finish(items)
 
 
+_SAFE_SCHEMES = ("http", "https")
+
+
+def safe_url(url) -> str | None:
+    """The link only if it is an absolute http(s) URL, else None. Feed links are third-party input
+    rendered as <a href>: a javascript: / data: / vbscript: link would run script on our origin
+    (stored XSS). Control characters and whitespace that browsers strip before parsing the scheme
+    (e.g. "java<TAB>script:") are removed before the check."""
+    if not isinstance(url, str):
+        return None
+    u = re.sub(r"[\t\n\r]", "", url.strip("".join(map(chr, range(0x21)))))  # what browsers strip
+    if not u or len(u) > 4096 or re.search(r"[\x00-\x1f\x7f]", u):
+        return None
+    scheme, sep, rest = u.partition(":")
+    if not sep or scheme.lower() not in _SAFE_SCHEMES or not rest.startswith("//") or len(rest) < 3:
+        return None
+    return u
+
+
 def _finish(items: list[dict]) -> list[dict]:
     out = []
     for d in items:
+        d["url"] = safe_url(d.get("url"))
         if not (d.get("title") or d.get("url")):
             continue  # nothing to show or link to
         d["published_at"] = parse_time(d.get("published_raw"))

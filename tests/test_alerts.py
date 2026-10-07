@@ -28,7 +28,7 @@ from analytics import rollups  # noqa: E402
 from config import settings  # noqa: E402
 
 DB = "og_test_accounts_alerts"
-client = TestClient(main.app)
+client = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})  # CSRF header, as web/core.js sends
 GPU = "NVIDIA H100 80GB SXM5"
 _Session = None
 META = {}
