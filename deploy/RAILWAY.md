@@ -7,7 +7,7 @@ No Docker image: Railway builds from `pyproject.toml` + `uv.lock` and starts it 
 
 1. **GitHub.** Push this folder to a *private* repo. `.env` is gitignored; check `git status` shows no `.env`.
 2. **Railway project.** New Project > *Provision PostgreSQL* first (leave the app for step 5).
-3. **Variables file.** `.venv/bin/python deploy/make_env.py` writes `deploy/railway.env` and prints the site password.
+3. **Variables file.** `.venv/bin/python deploy/make_env.py` writes `deploy/railway.env` and prints the site password. It also generates `API_KEY_PEPPER` (required: the app will not start without it) and `CREDENTIALS_ENCRYPTION_KEY`, and keeps both on later runs. Never change either once keys or credentials exist.
 4. **Copy your data.** In the Postgres service > Variables, copy `DATABASE_PUBLIC_URL`, then
    `deploy/restore.sh "<that url>"`. It prints matching row counts for Railway and local.
 5. **The app.** In the project: New > GitHub Repo > pick the repo. Open the service > Variables > *Raw Editor* >
