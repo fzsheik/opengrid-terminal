@@ -7,7 +7,8 @@ each its own buckets, i.e. N x the budget; move this to Postgres or Redis then.
 Request classes, so cheap reads are not starved by an expensive budget:
     read     GET / HEAD / OPTIONS                      settings.rate_limit_read_per_minute (120)
     write    other methods                             settings.rate_limit_write_per_minute (30)
-    execute  non-GET under /v1/route, /v1/deployments  settings.rate_limit_execute_per_minute (10)
+    execute  non-GET under /v1/route, /v1/deployments (and the admin validation launch)
+                                                       settings.rate_limit_execute_per_minute (10)
 A key's `rate_limit_per_minute` override replaces the read budget and caps the
 other two (an override can lower, never raise, write/execute).
 
@@ -29,12 +30,19 @@ from dataclasses import dataclass
 
 from config import settings
 
-_EXECUTE_PREFIXES = ("/v1/route", "/v1/deployments")
+# Everything that can launch or act on paid compute. The admin validation launch is on this list
+# too: a platform_admin key must not get a write-class (30/min) budget for real launches.
+_EXECUTE_PREFIXES = ("/v1/route", "/v1/deployments", "/v1/admin/execution/validation",
+                     "/v1/admin/validation/start")
 
 
 def request_class(method: str, path: str) -> str:
     if method.upper() in ("GET", "HEAD", "OPTIONS"):
         return "read"
+    # Stopping or terminating only ever reduces spend: never throttle an emergency shutdown as
+    # tightly as a launch. They stay rate-limited (write class), and idempotency makes repeats free.
+    if path.startswith("/v1/deployments/") and path.rstrip("/").endswith(("/terminate", "/stop")):
+        return "write"
     if path.startswith(_EXECUTE_PREFIXES):
         return "execute"
     return "write"

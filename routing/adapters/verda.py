@@ -28,6 +28,7 @@ from providers.verda import BASE_URL
 from routing.adapters.base import (
     AUTH, AdapterError, Adapter, Availability, Capabilities, InstanceState, Offer, TerminateResult, parse_time,
 )
+from routing.adapters.results import PER_DEPLOYMENT, ActionResult, ProviderKey, ProviderKeyRef
 
 STATE = {"running": "running", "provisioning": "pending", "ordered": "pending", "new": "pending",
          "validating": "pending", "offline": "stopped", "deleting": "terminating", "discontinued": "terminated",
@@ -44,7 +45,8 @@ class VerdaAdapter(Adapter):
     CREDENTIALS = ("client_id", "client_secret")
     REQUIRED_LAUNCH = ("ssh_key", "image")
     NAME_MAX = 60
-    SSH_KEY_REGISTRATION = True
+    SSH_KEY_REGISTRATION = PER_DEPLOYMENT
+    SSH_KEY_RESOURCE = True
     CAPABILITIES = Capabilities(
         quote=("YES", f"GET /v1/instance-types price_per_hour (whole instance) ({VE})"),
         live_availability=("YES", "GET /v1/instance-availability (authenticated)"),
@@ -67,6 +69,9 @@ class VerdaAdapter(Adapter):
         find_by_name=("YES", "tag filter opengrid=<og-name>, exact match on hostname or tag value"),
         reported_cost=("NO", "no per-instance cost endpoint (/v1/balance and /v1/journal carry no per-instance cost)"),
         error_semantics=("good", "{code,message}; 503 service_unavailable documented as no capacity"),
+        forces_account_ssh_key=("UNKNOWN", "ssh_key_ids lists the keys; the spec mentions no default-key injection "
+                                           "(api.verda.com/v1/docs, fetched 2026-10-07) but it is not validated"),
+        billing_starts=("UNKNOWN", "10-minute prepaid increments; start event not tied to an API field"),
         risks=["OAuth client credentials (token refreshed once on 401)",
                "Detached volumes keep billing: delete passes every volume id",
                "At zero balance instances are discontinued and volumes deleted"],
@@ -143,13 +148,7 @@ class VerdaAdapter(Adapter):
         if not availability.region:
             raise AdapterError("capacity", f"verda: no location has {offer.sku}", sent=False)
         self.preflight(self.token)
-        key = launch.ssh_key
-        if launch.ssh_public_key and not key:
-            k = self.preflight(self.request, "POST", "/v1/ssh-keys", json={"name": name, "key": launch.ssh_public_key},
-                               allow_text=True)
-            key = k.strip().strip('"') if isinstance(k, str) else (k or {}).get("id") if isinstance(k, dict) else None
-            if not key:
-                raise AdapterError("invalid", "verda: ssh key registration returned no id", sent=False)
+        key = self.launch_key(launch, name, use="id")     # only the key the core passed / registered now
         body = {"instance_type": offer.sku, "image": launch.image, "hostname": name,
                 "location_code": availability.region, "ssh_key_ids": [key],
                 "description": f"OpenGrid {name}", "is_spot": False,
@@ -175,6 +174,7 @@ class VerdaAdapter(Adapter):
             name=d.get("hostname"), provider_status=st, region=d.get("location"),
             gpu=d.get("instance_type"), gpu_count=(d.get("gpu") or {}).get("number_of_gpus"),
             price_per_hour=None if price is None else float(price), created_at=parse_time(d.get("created_at")),
+            time_fields={"created_at": "created_at"} if d.get("created_at") else {},
             ip=d.get("ip") or None, labels=labels, error_kind="provider_error_state" if err else None,
             raw_redacted={k: d.get(k) for k in ("id", "hostname", "status", "location", "instance_type",
                                                 "price_per_hour", "created_at", "os_volume_id", "volume_ids")})
@@ -223,3 +223,26 @@ class VerdaAdapter(Adapter):
 
     def _find(self, name):
         return self._list_q({"tag": f"opengrid={name}"})
+
+    # -- per-deployment SSH keys (spec: POST /v1/ssh-keys -> "<uuid>", GET /v1/ssh-keys [{id, name, key,
+    #    fingerprint}], DELETE /v1/ssh-keys {keys: [ids]}) --
+
+    def _register_ssh_key(self, name, public_key):
+        k = self.request("POST", "/v1/ssh-keys", json={"name": name, "key": public_key}, allow_text=True)
+        kid = k.strip().strip('"') if isinstance(k, str) else (k or {}).get("id") if isinstance(k, dict) else None
+        if not kid or " " in str(kid):
+            raise AdapterError("parse", "verda: ssh key registration returned no id", sent=True)
+        return ProviderKeyRef(key_id=str(kid), name=name, fingerprint=None)
+
+    def _delete_ssh_key(self, key_id):
+        self.preflight(self.token)
+        self.request("DELETE", "/v1/ssh-keys", json={"keys": [key_id]}, allow_text=True)
+        return ActionResult("accepted", "verda: ssh key deleted", 200)
+
+    def _list_ssh_keys(self):
+        self.preflight(self.token)
+        body = self.request("GET", "/v1/ssh-keys")
+        if not isinstance(body, list):
+            raise AdapterError("parse", "verda: ssh-keys list returned no array", sent=True)
+        return [ProviderKey(key_id=str(k.get("id")), name=k.get("name"), fingerprint=k.get("fingerprint"))
+                for k in body if isinstance(k, dict) and k.get("id")]

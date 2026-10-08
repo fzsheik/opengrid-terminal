@@ -26,6 +26,7 @@ from accounts.auth import OPERATOR, Principal
 from analytics import rollups
 from config import settings
 from routing import adapters, audit, control, deployments, engine, scoring, tracker, transactions
+from routing.adapters.results import Capabilities
 from routing.adapters.base import (
     CAPACITY, PROVISIONING, RUNNING, STOPPED, TERMINATED, TIMEOUT,
     Adapter, AdapterError, Availability, Instance,
@@ -96,6 +97,7 @@ class FakeAdapter(Adapter):
     SUPPORTS_STOP = True
     CREDENTIALS = ()
     CHECK_NEEDS_CREDENTIALS = False
+    CAPABILITIES = Capabilities(forces_account_ssh_key=("NO", "test fake"))
     BEHAVIOR: dict = {}
     CALLS: list = []
     STATE: dict = {}

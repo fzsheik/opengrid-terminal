@@ -46,23 +46,50 @@ Code: `routing/validation.py`. Caps come from the core: one instance, total pric
 `validation_max_price_per_hour` ($3.00), runtime <= `validation_max_runtime_minutes` (30), auto-terminate
 deadline, admin approval, execution mode SUPERVISED or LIVE, provider not killed.
 
-Manual procedure (operator):
+Manual procedure (operator). The exact HTTP calls, bodies, headers and UI clicks for the first Lambda run are in
+methodology/first-live-route.md ("The supervised Lambda validation run"); the Python names below are what they call.
 
 1. Configure the provider credential (OpenGrid-managed) and `ROUTING_LAUNCH_DEFAULTS[provider]` with the
-   operator SSH key reference and image (and Hyperstack environments / DigitalOcean images).
+   operator SSH key (`ssh_public_key`, registered per deployment; Lambda needs no image) (and Hyperstack
+   environments / DigitalOcean images).
 2. Set the execution mode to SUPERVISED (and `ROUTING_LIVE_PROVISIONING=true` in that one environment).
-3. `validation.start_validation(provider, by="<operator>")` — picks the cheapest 1-GPU on-demand listing within
+3. `POST /v1/admin/validation/start {"provider": "lambda"}` (`validation.start_validation`) — picks the cheapest 1-GPU on-demand listing within
    the cap and creates a validation route through `engine.create_validation_route`. It does NOT launch.
-4. Approve the route through the normal admin approval (quote re-validation applies). Keep the provider console
+4. Approve the route through the normal admin approval, `POST /v1/route/{id}/approve {"quote_id": ...}` (quote
+   re-validation applies; the $3.00/h cap is checked against the re-validated live price). Keep the provider console
    open.
 5. Watch: the tracker observes `running` and, for validation deployments, checks `find_instance(og-name)` and
    `list_instances()` while it runs.
 6. Terminate (or let the 30-minute deadline do it). The reconciler confirms termination by two signals and
    cost reconciliation runs.
-7. `validation.validation_report(deployment_id, by="<operator>")`. It checks: launch accepted with an instance
+7. `POST /v1/admin/validation/{deployment_id}/mark` (`validation.validation_report(deployment_id, by=...)`). It checks: launch accepted with an instance
    id; observed running; find_instance and list_instances saw it; terminate accepted; termination confirmed by two
    signals (and a fresh list without it); cost reconciled (transaction cost, provider cost or the reason it is
    unavailable). Only if every step passes does it call `control.mark_validated(...)`. Any missing step ->
    `{"validated": false, "missing": [...]}`. Validation never enables supervised or live customer launches;
    those remain separate operator decisions.
 8. Compare the provider's invoice line with `deployments.reconciliation` and note differences.
+
+## SSH keys: forced account keys and per-deployment registration
+
+`CAPABILITIES.forces_account_ssh_key` answers: does the provider ALWAYS install an account-level/default key on
+a launch, whatever the request names? The core refuses customer launches unless it is `NO` (or an admin
+override is recorded in `deployments.operator_access`). Adapters send only the key the core passed (a
+reference) or the per-deployment key they register as `og-<deployment>`; never an account default key.
+`SSH_KEY_REGISTRATION` is `per_deployment` | `account_only` | `none` (`results.KeyRegistration`, falsy for
+`none`); `SSH_KEY_RESOURCE` says registration creates a provider-side key object that OpenGrid records and
+deletes after confirmed termination (`routing/adapters/resources.py`, methodology/reconciliation.md).
+
+| Provider | forces_account_ssh_key | Evidence (fetched 2026-10-07) | Registration / key object |
+|---|---|---|---|
+| Lambda | NO | launch `ssh_key_names`: "Currently, exactly one SSH key must be specified"; the Instance reports `ssh_key_names` ("The names of the SSH keys that are allowed to access the instance"); no default-key injection in the OpenAPI spec. Runtime check: the tracker alerts `unexpected_ssh_key` if an instance lists any other key | per_deployment; POST / GET / DELETE /ssh-keys |
+| RunPod | YES | "Runpod will attempt to automatically inject the public SSH keys added in your account settings"; SSH_PUBLIC_KEY overrides "the default" but replacement is not stated | per-pod env, no key object |
+| Vast.ai | YES | "Adding a key to your account keys only applies to new instances" (account keys go on every new instance) | per-instance attach, no key object |
+| Shadeform (Crusoe / Denvr / Latitude) | UNKNOWN | the account has a default key used when none is given; whether it is also installed when one is given is not documented | per_deployment; /sshkeys/add, /sshkeys, /sshkeys/{id}/delete (unvalidated) |
+| DigitalOcean | UNKNOWN | the API reference could not be re-fetched to confirm the absence of default-key injection | per_deployment; /v2/account/keys (unvalidated) |
+| Hyperstack | UNKNOWN | docs page moved; not re-verified | per_deployment; /core/keypairs, /core/keypair/{id} (unvalidated) |
+| Verda | UNKNOWN | the spec mentions no default-key injection; not validated | per_deployment; /v1/ssh-keys (unvalidated) |
+
+`CAPABILITIES.billing_starts` (running | created | UNKNOWN) feeds the billable window: Lambda `running`
+("Billing begins the moment you launch an instance and the instance passes health checks", docs.lambda.ai
+public-cloud/billing); every other adapter UNKNOWN.

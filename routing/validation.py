@@ -12,6 +12,16 @@ validation caps, quote, pending_approval) and an admin still approves it through
         settings.validation_max_runtime_minutes, auto-terminate deadline, operator ssh key from launch
         defaults). Returns the route request + deployment, which waits for admin approval.
 
+    preconditions(provider, ...)  /  require_preconditions(...)
+        THE VALIDATION LAUNCH GATE, checked by engine.create_validation_route (start) and engine.approve
+        (approval): provider allowed (settings.validation_allowed_providers, default ["lambda"]), exactly 1
+        GPU, instance total $/h <= validation_max_price_per_hour, runtime <= validation_max_runtime_minutes
+        with a hard deadline, no other active/uncertain validation deployment (advisory-locked again at
+        approval), mode SUPERVISED + admin, global and provider kill switches functional (not engaged + a
+        kill/un-kill drill within settings.validation_drill_window_days), reconcile + routing_tracker jobs
+        healthy, ops alerts deliverable (a delivered test alert within the window). Every failed condition is
+        returned with its reason; the refusal is explicit (HTTP 409 validation_preconditions_failed).
+
     validation_report(deployment_id, *, by=None, mark=True)
         checks the evidence, step by step:
           1 launch_accepted        a provision attempt accepted (or adopted) with a provider instance id
@@ -95,7 +105,10 @@ def start_validation(provider: str, *, by: str, gpu: str | None = None) -> dict:
         rr_id = engine.create_validation_route(provider, pick["listing_id"], by=by,
                                                max_runtime_minutes=settings.validation_max_runtime_minutes)
     except Exception as exc:  # noqa: BLE001 - RouteRefused and friends
-        raise ValidationError(getattr(exc, "message", None) or getattr(exc, "detail", None) or str(exc)) from exc
+        detail = getattr(exc, "detail", None)
+        if isinstance(detail, dict) and detail.get("code") == "validation_preconditions_failed":
+            raise PreconditionsFailed(detail.get("failed") or [], detail.get("checks") or []) from exc
+        raise ValidationError(getattr(exc, "message", None) or detail or str(exc)) from exc
     d = deployments.for_request(rr_id)
     return {"route_request_id": rr_id, "deployment_id": d.deployment_id if d else None,
             "status": d.status if d else None, "quote_id": d.quote_id if d else None, "listing": pick,
@@ -202,3 +215,97 @@ def validation_report(deployment_id: str, *, by: str | None = None, mark: bool =
     report["validated"] = True
     report["provider_flags"] = flags
     return report
+
+
+# --------------------------------------------------------------------------
+# The validation launch gate (checked at start AND again at approval; every failure listed with its reason)
+# --------------------------------------------------------------------------
+
+PRECONDITIONS = ("provider_allowed", "one_gpu", "price_cap", "runtime_cap", "one_active_validation",
+                 "mode_supervised", "admin_approval", "global_kill_switch", "provider_kill_switch",
+                 "reconciliation_worker", "tracker_worker", "ops_alerts")
+
+
+class PreconditionsFailed(ValidationError):
+    def __init__(self, failed: list[dict], checks: list[dict]):
+        super().__init__("validation launch refused: " + "; ".join(f"{f['code']}: {f['reason']}" for f in failed))
+        self.failed, self.checks = failed, checks
+
+
+def preconditions(provider: str, *, gpu_count: int | None, hourly_price: float | None,
+                  runtime_minutes: int | None, admin: bool, listing: dict | None = None,
+                  exclude_deployment_id: str | None = None, deadline_set: bool | None = None) -> dict:
+    """Every condition of the validation launch gate. {ok, failed: [{code, reason}], checks: [{code, ok, reason}]}.
+
+    provider          in settings.validation_allowed_providers (default ["lambda"]: the first validation is Lambda)
+    gpu_count         exactly 1
+    hourly_price      the cheapest acceptable 1-GPU on-demand instance, TOTAL $/h <= validation_max_price_per_hour
+    runtime_minutes   <= validation_max_runtime_minutes, with a hard auto-termination deadline
+    one active        no other active / uncertain validation deployment (re-checked under the advisory lock)
+    mode              effective mode SUPERVISED, and an admin approves
+    kill switches     global: not killed now + a kill / un-kill drill within the window; provider: not killed +
+                      a drill within the window
+    workers           the reconcile and routing_tracker jobs ran successfully within 2x their interval with no
+                      consecutive failures; the last reconciliation pass reconciled this provider without error
+    ops alerts        alerts.ops.channel_configured() and a delivered test alert within the window
+    """
+    from routing import control, guards
+
+    provider = (provider or "").lower()
+    checks: list[dict] = []
+
+    def c(code, ok, reason):
+        checks.append({"code": code, "ok": bool(ok), "reason": reason})
+
+    allowed = [p.lower() for p in (settings.validation_allowed_providers or [])]
+    c("provider_allowed", provider in allowed,
+      f"{provider} is {'' if provider in allowed else 'not '}in validation_allowed_providers {allowed}")
+    c("one_gpu", gpu_count == 1, f"validation uses exactly 1 GPU (this: {gpu_count})")
+    cap = float(settings.validation_max_price_per_hour)
+    if listing is not None:
+        bad = [k for k, ok in (("on_demand", listing.get("market_type") in (None, "on_demand")),
+                               ("not interruptible", not listing.get("interruptible"))) if not ok]
+        c("listing_on_demand", not bad, "on-demand, non-interruptible instance" if not bad else
+          "listing is not " + " / ".join(bad))
+    c("price_cap", hourly_price is not None and hourly_price <= cap + 1e-9,
+      f"instance price ${hourly_price if hourly_price is not None else float('nan'):.4f}/h total vs cap ${cap:.2f}/h")
+    rcap = int(settings.validation_max_runtime_minutes)
+    rt_ok = runtime_minutes is not None and 0 < int(runtime_minutes) <= rcap and deadline_set is not False
+    c("runtime_cap", rt_ok, f"max runtime {runtime_minutes} min vs cap {rcap} min"
+      + ("" if deadline_set is not False else "; auto-termination deadline not set"))
+    n = guards.active_validation_count(exclude_deployment_id=exclude_deployment_id)
+    c("one_active_validation", n == 0, "no other validation deployment active or uncertain" if n == 0 else
+      f"{n} other validation deployment(s) still active or uncertain: one at a time")
+    mode = control.effective_mode()
+    c("mode_supervised", mode == control.SUPERVISED, f"effective execution mode is {mode} (must be SUPERVISED)")
+    c("admin_approval", bool(admin), "an admin starts and approves the validation launch" if admin else
+      "not an admin principal")
+    drills = control.drill_status(provider)
+    g = drills["global"]
+    c("global_kill_switch", mode != control.DISABLED and g["ok"],
+      ("global kill switch not engaged; " if mode != control.DISABLED else "global kill switch is ENGAGED; ")
+      + (f"drill: kill {g['kill_at']}, un-kill {g['unkill_at']}" if g["ok"] else
+         f"no global kill + un-kill drill in the last {drills['window_days']} days"))
+    flags = control.provider_flags(provider)
+    p = drills.get("provider") or {}
+    c("provider_kill_switch", not flags.get("killed") and p.get("ok"),
+      (f"{provider} is KILLED; " if flags.get("killed") else f"{provider} not killed; ")
+      + (f"drill: kill {p.get('kill_at')}, un-kill {p.get('unkill_at')}" if p.get("ok") else
+         f"no {provider} kill + un-kill drill in the last {drills['window_days']} days"))
+    jr = control.job_health("reconcile", settings.reconcile_interval_seconds)
+    rh = control.reconcile_health(provider, strict=True)
+    c("reconciliation_worker", jr["ok"] and rh["ok"], jr["reason"] + "; " + rh["reason"])
+    jt = control.job_health("routing_tracker", settings.tracker_interval_seconds)
+    c("tracker_worker", jt["ok"], jt["reason"])
+    oh = control.ops_alert_health()
+    c("ops_alerts", oh["ok"], oh["reason"])
+    failed = [{"code": x["code"], "reason": x["reason"]} for x in checks if not x["ok"]]
+    return {"ok": not failed, "failed": failed, "checks": checks, "provider": provider,
+            "checked_at": _now().isoformat()}
+
+
+def require_preconditions(provider: str, **kw) -> dict:
+    out = preconditions(provider, **kw)
+    if not out["ok"]:
+        raise PreconditionsFailed(out["failed"], out["checks"])
+    return out

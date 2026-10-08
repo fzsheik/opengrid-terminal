@@ -83,7 +83,7 @@ def deployment(dep, account, *, ran=True, created=None, purpose="customer", appr
         mode="CHEAPEST", gpu=H100, request={}, status="routing", created_at=created)
     put("deployments", deployment_id=dep, account_id=account, route_request_id="rr_" + dep, provider="lambda", gpu=H100,
         gpu_count=1, status="terminated" if terminated else ("running" if ran else "provision_failed"),
-        created_at=created, uptime_seconds=0, interruptions=0, purpose=purpose,
+        created_at=created, uptime_seconds=0, interruptions=0, purpose=purpose, effective_max_runtime_minutes=60,
         approved_at=created + timedelta(minutes=1) if approved else None)
     if ran:
         put("deployment_events", deployment_id=dep, at=created + timedelta(minutes=3), to_status="running")

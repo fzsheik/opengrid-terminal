@@ -17,6 +17,11 @@ Execution control (migration 0010_execution, methodology/execution-safety.md):
     idempotency_keys          Idempotency-Key replay store; UNIQUE(principal, scope, key)
     account_limits            per-account cost guards (settings hold the defaults)
 
+0014_limits: deployments gain the runtime ceiling (effective_max_runtime_minutes NOT NULL, runtime_ceiling_source),
+SSH access (ssh_key_fingerprint, operator_access) and lifecycle timestamps (requested_termination_at,
+provider_created_at / running_at / terminated_at, billable_start / end / basis); account_limits gains
+max_runtime_minutes and default_runtime_minutes.
+
 Prices are never merged into one column (methodology/data-kinds.md):
     observed_market_price_per_gpu_hour  OpenGrid's stored listing price used for ranking
     list_price_per_gpu_hour             the provider's catalogue price read on the live check
@@ -29,7 +34,8 @@ account_id is a plain integer (no cross-domain foreign key); None is the site op
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Index, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import (BigInteger, Boolean, CheckConstraint, DateTime, Index, Integer, Numeric, String, Text,
+                        UniqueConstraint)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -85,6 +91,7 @@ class Deployment(Base):
         Index("ix_dep_status", "status"),
         Index("ix_dep_request", "route_request_id"),
         Index("ux_dep_launch_token", "launch_token", unique=True),
+        CheckConstraint("effective_max_runtime_minutes > 0", name="ck_dep_effective_runtime_positive"),
     )
 
     deployment_id: Mapped[str] = mapped_column(String(32), primary_key=True)   # dep-<hex> (legacy: dep_<hex>)
@@ -137,6 +144,23 @@ class Deployment(Base):
     provider_reported_cost: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
     reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     reconciliation: Mapped[dict | None] = mapped_column(JSONB)
+    # --- 0014_limits: runtime ceiling, ssh access, lifecycle timestamps ----------------------------
+    # NEVER null (NOT NULL + CHECK > 0, no default on purpose): every deployment has a finite auto-terminate
+    # ceiling, computed by routing.guards.runtime_ceiling; code that forgets it fails at INSERT.
+    effective_max_runtime_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    # request | account | system_default | system_hard_max | validation_cap | legacy_backfill (0014 migration)
+    runtime_ceiling_source: Mapped[str | None] = mapped_column(String(24))
+    ssh_key_fingerprint: Mapped[str | None] = mapped_column(String(80))    # SHA256:... of the CUSTOMER key only
+    # none | validation_operator_key | provider_forced_account_key:override_by:<who>
+    operator_access: Mapped[str | None] = mapped_column(String(128))
+    requested_termination_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    provider_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    provider_running_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    provider_terminated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    billable_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    billable_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # provider_running_at | opengrid_observed_running | provider_created_at
+    billable_basis: Mapped[str | None] = mapped_column(String(32))
 
 
 class DeploymentEvent(Base):
@@ -343,5 +367,8 @@ class AccountLimits(Base):
     provider_allowlist: Mapped[list | None] = mapped_column(ARRAY(String(64)))
     region_allowlist: Mapped[list | None] = mapped_column(ARRAY(String(64)))
     monthly_spend_limit: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    # 0014_limits: runtime ceilings (NULL = system settings runtime_hard_max_minutes / runtime_default_minutes)
+    max_runtime_minutes: Mapped[int | None] = mapped_column(Integer)
+    default_runtime_minutes: Mapped[int | None] = mapped_column(Integer)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_by: Mapped[str | None] = mapped_column(String(64))

@@ -18,6 +18,80 @@
     if (s < 86400) return Math.floor(s / 3600) + "h " + String(Math.floor(s % 3600 / 60)).padStart(2, "0") + "m";
     return Math.floor(s / 86400) + "d " + Math.floor(s % 86400 / 3600) + "h";
   };
+  /* ---- pure execution text (shared with route.js; tested in tests/test_web_exec.js) ---- */
+  const p2 = n => String(n).padStart(2, "0");
+  const stampOf = (dt, utc) => utc
+    ? `${dt.getUTCFullYear()}-${p2(dt.getUTCMonth() + 1)}-${p2(dt.getUTCDate())} ${p2(dt.getUTCHours())}:${p2(dt.getUTCMinutes())}:${p2(dt.getUTCSeconds())}`
+    : `${dt.getFullYear()}-${p2(dt.getMonth() + 1)}-${p2(dt.getDate())} ${p2(dt.getHours())}:${p2(dt.getMinutes())}:${p2(dt.getSeconds())}`;
+  const CEILING_SOURCE = { request: "request", account: "account", system_default: "system default", system_hard_max: "hard max", validation_cap: "validation cap" };
+  const X = {
+    // "2026-10-07 09:05:00 local (UTC 2026-10-07 14:05:00)"; null when the time is unknown
+    exactTime(iso) {
+      if (!iso) return null;
+      const dt = new Date(iso);
+      if (isNaN(+dt)) return null;
+      return `${stampOf(dt, false)} local (UTC ${stampOf(dt, true)})`;
+    },
+    ceilingSource: s => s ? (CEILING_SOURCE[s] || String(s).replace(/_/g, " ")) : "unknown",
+    // "Auto-terminates: <exact> — max runtime N min, source <src>"
+    autoTerminate(iso, minutes, source) {
+      const t = X.exactTime(iso);
+      return `Auto-terminates: ${t || "not set yet"} — max runtime ${minutes != null ? minutes + " min" : "unknown"}, source ${X.ceilingSource(source)}`;
+    },
+    // the backend's duration_warning, or the same check done here when the response did not carry it
+    durationWarning(durationHours, minutes, backend) {
+      if (backend) return backend;
+      if (!durationHours || !minutes || +durationHours * 60 <= +minutes) return null;
+      return `duration ${+durationHours} h is longer than the ${minutes} min runtime ceiling: the instance WILL be terminated at the deadline`;
+    },
+    // {past, seconds, text}: "in 1h 04m" / "PAST DEADLINE by 3m 10s"
+    deadline(iso, now) {
+      if (!iso) return { past: false, seconds: null, text: "no deadline" };
+      const s = Math.round((+new Date(iso) - (now == null ? Date.now() : +now)) / 1000);
+      return s > 0 ? { past: false, seconds: s, text: "in " + dur(s) } : { past: true, seconds: s, text: "PAST DEADLINE by " + dur(-s) };
+    },
+    // Who can log in, in the founder's format. o: {purpose, keyRef}. -> {lines:[{label,value,tone}], text, missingKey, needsOverride}
+    sshAccess(sa, o) {
+      o = o || {};
+      const validation = o.purpose === "validation" || (sa && sa.operator_access === "validation_operator_key");
+      const raw = sa ? String(sa.operator_access || "none") : null;
+      let key, keyTone = null, missingKey = false;
+      if (validation) key = "none (validation launch on OpenGrid's account)";
+      else if (sa && sa.customer_key_fingerprint) key = sa.customer_key_fingerprint;
+      else if (o.keyRef) key = `provider key name "${o.keyRef}" (your own BYO account; no fingerprint)`;
+      else { key = "MISSING — no SSH public key on this request"; keyTone = "bad"; missingKey = true; }
+      let op, opTone = "bad", needsOverride = false;
+      if (raw == null) { op = "UNKNOWN (not reported)"; }
+      else if (validation) op = "OpenGrid operator key (validation only)";
+      else if (raw.toLowerCase() === "none") { op = "NONE"; opTone = null; }
+      else if (raw.startsWith("blocked:")) { op = `${raw} — the provider may install its account-level keys; needs an admin override`; needsOverride = true; }
+      else {
+        const m = raw.match(/^provider_forced_account_key:override_by:(.+)$/);
+        op = m ? `${raw} — provider-forced account key, override by ${m[1]}` : raw;
+      }
+      const lines = [{ label: "Customer supplied key", value: key, tone: keyTone }, { label: "OpenGrid operator access", value: op, tone: opTone }];
+      return { lines, missingKey, needsOverride, validation, text: ["SSH access:"].concat(lines.map(l => `${l.label}: ${l.value}`)).join("\n") };
+    },
+    // the red banner: past the deadline while an instance may exist, or an uncertain state
+    billingAlarm(d, now) {
+      if (!d) return null;
+      const live = OG.dep.LIVE.includes(d.status);
+      const dl = X.deadline(d.terminate_deadline_at, now);
+      if (live && d.terminate_deadline_at && dl.past) return { kind: "past_deadline", title: "PAST DEADLINE / POSSIBLY BILLING",
+        text: `The auto-terminate deadline ${X.exactTime(d.terminate_deadline_at)} passed ${dur(-dl.seconds)} ago and the instance may still exist and bill. Terminate now and confirm in the provider console.` };
+      if (d.uncertain || OG.dep.UNCERTAIN.includes(d.status) || d.status === "termination_failed") return { kind: "uncertain", title: "POSSIBLY BILLING",
+        text: `State ${String(d.status).replace(/_/g, " ")}: OpenGrid cannot confirm whether the instance exists. Treat it as billing until reconciliation or the provider says otherwise.` };
+      return null;
+    },
+  };
+  OG.execText = X;
+  // DOM: the SSH-access block (founder's format; red where operator access is not NONE or the key is missing)
+  OG.sshAccessBlock = (sa, o) => {
+    const r = X.sshAccess(sa, o);
+    return h("div", { class: "x-ssh" + (r.lines.some(l => l.tone) ? " x-ssh-bad" : "") }, h("b", {}, "SSH access:"),
+      r.lines.map(l => h("div", { class: "x-ssh-l" }, h("span", { class: "x-ssh-k" }, l.label + ": "), h("span", { class: "mono" + (l.tone ? " down x-ssh-red" : "") }, l.value))));
+  };
+
   const money = v => (v == null ? null : OG.money(v));
   const kv = rows => h("table", { class: "dep-kv" }, rows.filter(Boolean).map(([k, v, title]) =>
     h("tr", { title: title || null }, h("th", {}, k), h("td", {}, v == null || v === "" ? h("span", { class: "dim" }, "–") : v))));
@@ -193,6 +267,31 @@
           ]));
       }
 
+      function lifecycleBlock() {
+        const maxRun = d.effective_max_runtime_minutes ?? d.max_runtime_minutes;
+        const at = d.auto_termination || {};
+        const live = D.LIVE.includes(d.status);
+        const dl = X.deadline(d.terminate_deadline_at);
+        const ts = v => v ? h("span", { title: v }, X.exactTime(v)) : null;
+        const provBasis = d.billable_basis === "provider_running_at";
+        const billBadge = d.billable_basis ? (provBasis ? OG.badge("provider timestamp", "good", "billable time from the provider's own running timestamp") : OG.kindBadge("estimated")) : null;
+        return OG.section("Runtime ceiling · lifecycle timestamps · SSH access", h("div", { class: "cols-2" },
+          kv([
+            ["Max runtime", maxRun ? `${maxRun} min · source ${X.ceilingSource(d.runtime_ceiling_source)}` : null, "effective_max_runtime_minutes: OpenGrid terminates the instance at the deadline; never unlimited"],
+            ["Auto-terminates", d.terminate_deadline_at ? h("span", {}, X.exactTime(d.terminate_deadline_at), " ",
+              live ? h("b", { class: dl.past ? "down" : "" }, dl.text) : null) : h("span", { class: "dim" }, PRE_LAUNCH.includes(d.status) ? `set at approval: approval time + ${maxRun || "N"} min` : "no deadline"), at.basis ? "basis: " + at.basis : null],
+            ["Terminate requested", ts(d.requested_termination_at || d.terminate_requested_at), "when OpenGrid (deadline, user or admin) asked the provider to terminate"],
+            ["Provider created", ts(d.provider_created_at), "the provider's creation timestamp"],
+            ["Provider running", ts(d.provider_running_at), "the provider's running timestamp (or first observed running)"],
+            ["Provider terminated", ts(d.provider_terminated_at), "the provider confirmed the instance gone"],
+            ["Billable start", d.billable_start ? h("span", {}, X.exactTime(d.billable_start), " ", billBadge) : null, d.billable_basis ? "basis: " + d.billable_basis : "not known yet"],
+            ["Billable end", d.billable_end ? h("span", {}, X.exactTime(d.billable_end), " ", billBadge) : d.billable_start && !TERMINAL.includes(d.status) ? h("span", { class: "warn-t" }, "open: may still be billing") : null, d.billable_basis ? "basis: " + d.billable_basis : null],
+            ["Billable basis", d.billable_basis ? h("span", {}, d.billable_basis, " ", billBadge) : null, "provider_running_at = provider timestamp; opengrid_observed_running / provider_created_at = estimate"],
+          ]),
+          h("div", {}, OG.sshAccessBlock(d.ssh_access, { purpose: d.purpose, keyRef: d.launch && d.launch.ssh_key }),
+            d.ssh_access && d.ssh_access.note ? h("p", { class: "note" }, d.ssh_access.note) : null)));
+      }
+
       function qualityRow() {
         const outs = quality && quality.outcomes;
         const o = Array.isArray(outs) ? outs.find(x => x.deployment_id === id) : null;
@@ -320,22 +419,27 @@
         const banner = STATE_NOTE[d.status] ? h("div", { class: "og-alarm t-" + (D.tone(d.status) || "plain") }, OG.stateBadge(d.status), h("span", {}, STATE_NOTE[d.status]),
           d.failure_reason ? h("span", { class: "mono dim" }, " · " + d.failure_reason) : null) : null;
         const est = (d.prices.execution_price ?? d.prices.quote);
+        const alarm = X.billingAlarm(d);
+        const billAlarm = alarm ? h("div", { class: "og-alarm t-bad x-billing" }, h("b", {}, alarm.title), h("span", {}, alarm.text),
+          canTerm ? h("button", { class: "btn sm w4-danger", type: "button", onclick: () => act("terminate") }, "Terminate…") : null) : null;
+        const maxRun = d.effective_max_runtime_minutes ?? d.max_runtime_minutes;
         root.replaceChildren(
           OG.head(h("span", { class: "dep-title" }, "Deployment ", h("span", { class: "mono" }, id)),
             h("span", {}, d.provider ? OG.providerLink(d.provider) : "not placed", " · ", `${d.gpu_count}× `, OG.gpuLink(d.gpu || ""), d.region ? " · " + d.region : "", " · ",
               d.purpose === "validation" ? OG.badge("validation", "warn") : "customer", d.route_request_id ? [" · ", h("a", { class: "lnk mono", href: "/route?rr=" + d.route_request_id }, d.route_request_id)] : null),
             OG.stateBadge(d.status), acts),
-          flash, banner, OG.stateStrip(d.status, d.events),
+          flash, billAlarm, banner, OG.stateStrip(d.status, d.events),
           OG.stats([
             { label: "State since", value: d.state_changed_at ? fmt.age(d.state_changed_at) : null, sub: d.state_changed_at ? fmt.dateTime(d.state_changed_at) : null },
             { label: "Runtime", value: dur(d.uptime_seconds), sub: "OpenGrid-observed running", kind: "transaction" },
-            { label: "Max runtime", value: d.max_runtime_minutes ? d.max_runtime_minutes + " min" : null, reason: "no runtime cap: cost guards apply" },
-            { label: "Auto-terminate", value: d.terminate_deadline_at ? (live ? OG.countdown(d.terminate_deadline_at, { expired: "past deadline" }) : fmt.dateTime(d.terminate_deadline_at)) : null, reason: PRE_LAUNCH.includes(d.status) ? "set at launch" : "no deadline", sub: d.terminate_deadline_at ? fmt.dateTime(d.terminate_deadline_at) : null },
+            { label: "Max runtime", value: maxRun ? maxRun + " min" : null, reason: "not reported", sub: "source " + X.ceilingSource(d.runtime_ceiling_source) },
+            { label: "Auto-terminate", value: d.terminate_deadline_at ? (live ? OG.countdown(d.terminate_deadline_at, { expired: "PAST DEADLINE" }) : fmt.dateTime(d.terminate_deadline_at)) : null, reason: PRE_LAUNCH.includes(d.status) ? "set at approval: approval time + " + (maxRun || "N") + " min" : "no deadline", sub: d.terminate_deadline_at ? X.exactTime(d.terminate_deadline_at) : null },
             { label: "Accrued (est.)", value: est != null && d.uptime_seconds ? OG.money(est * d.gpu_count * d.uptime_seconds / 3600) : null, reason: "nothing ran", kind: "estimated", sub: "price × GPUs × observed runtime" },
             { label: "Last checked", value: d.last_checked_at ? fmt.age(d.last_checked_at) : null, reason: "never read from the provider", sub: d.last_checked_at ? fmt.dateTime(d.last_checked_at) : null },
             { label: "Reconciled", value: d.reconciled_at ? fmt.dateTime(d.reconciled_at) : null, reason: TERMINAL.includes(d.status) ? "pending" : "after termination" },
           ]),
           h("div", { class: "cols-2" }, costBlock(), pricesBlock()),
+          lifecycleBlock(),
           (d.limit_violations || []).length ? OG.section("Limit violations at approval", violationTable(d.limit_violations)) : null,
           h("div", { class: "cols-2" }, h("div", {}, eventsBlock(), attemptsBlock()), h("div", {}, qualityRow(), validationBlock(), feedbackBlock())),
           traceBlock(),

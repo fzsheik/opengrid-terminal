@@ -160,7 +160,8 @@ def mkdep(status, *, provider="syn_w", iid=None, ref=REF, purpose="customer", ag
                        uptime_seconds=0, interruptions=0, purpose=purpose, client_name=instance_name(dep_id),
                        credential_source="opengrid", credential_ref=ref, launch_token=secrets.token_hex(8),
                        state_changed_at=t, quoted_price_per_gpu_hour=Decimal("2.0"), provider_metadata={},
-                       override_limits=False, provisioned_at=t if iid else None, **kw)
+                       override_limits=False, provisioned_at=t if iid else None,
+                         effective_max_runtime_minutes=kw.pop("effective_max_runtime_minutes", 1440), **kw)
         s.add(d)
         for at, to in (events or [(t, status)]):
             s.add(DeploymentEvent(deployment_id=dep_id, at=at, from_status=None, to_status=to, actor="system"))

@@ -22,6 +22,20 @@ Each tick (settings.tracker_interval_seconds, default 60):
   3. retry  usage records that failed to write, and cost reconciliation of terminated deployments.
 
 Every stopped-time decision records its basis (the provider's documented stopped_billing) on the slice.
+
+Billable window (0014/0015 lifecycle columns; methodology/reconciliation.md "Billable window"):
+  record_lifecycle() copies the earliest trustworthy provider timestamps onto the deployment every time the
+  provider is read (status, list, adoption): provider_created_at / provider_running_at / provider_terminated_at
+  (InstanceState.created_at / running_at / ended_at; which provider field each came from is kept in
+  provider_metadata.lifecycle_time_fields). billable_start = provider_running_at when the API exposes it
+  (billable_basis 'provider_running_at'), else the first OpenGrid observation of running
+  ('opengrid_observed_running'), else -- only for an instance that existed but was never seen running, on a
+  provider whose billing start is 'created' or undocumented -- provider_created_at ('provider_created_at',
+  an estimate). billable_end = provider_terminated_at when exposed, else the first confirmed-gone observation
+  (deployment_watch.ended_basis 'first_observed'; the final slice is end_estimated). Metering bills from
+  billable_start even when OpenGrid itself never recorded 'running' (terminate requested mid-launch): the
+  provider's own running time is real consumption and is never discarded.
+  A terminate requested before the instance id was known is issued as soon as the instance is known.
 """
 
 from __future__ import annotations
@@ -72,7 +86,8 @@ OPS_KINDS = {"orphan": "orphan_detected", "termination_failed": "termination_fai
              "launch_unresolved": "launch_unknown", "credentials_unavailable": "credentials_unavailable",
              "reconciliation_failed": "reconciliation_failed", "deadline_terminate": "deadline_terminate",
              "provider_terminated": "provider_terminated", "duplicate_launch": "orphan_detected",
-             "rejected_but_created": "orphan_detected", "boot_timeout": "boot_timeout"}
+             "rejected_but_created": "orphan_detected", "boot_timeout": "boot_timeout",
+             "unexpected_ssh_key": "unexpected_ssh_key"}
 ALERT_REPEAT = timedelta(hours=6)     # the same kind for the same deployment is not re-sent sooner
 
 
@@ -131,6 +146,81 @@ def error_state_billed(provider: str | None) -> bool:
 # 1. Polling
 # --------------------------------------------------------------------------
 
+def _terminate_requested(d) -> bool:
+    return getattr(d, "terminate_requested_at", None) is not None or getattr(d, "requested_termination_at", None) is not None
+
+
+PRE_RUN_STATES = ("approved", "provisioning", "provider_timeout", "launch_unknown")
+
+
+def record_lifecycle(dep_id: str, st, observed_at: datetime | None = None) -> dict:
+    """Copy provider lifecycle timestamps and the billable start onto the deployment. Idempotent; earliest
+    provider-reported value wins; a provider running time replaces an OpenGrid observation (more exact)."""
+    observed_at = observed_at or getattr(st, "observed_at", None) or _now()
+    if st is None or st.state == "unknown":
+        return {}
+    changed: dict = {}
+    with normalize.SessionLocal.begin() as s:
+        d = s.get(Deployment, dep_id, with_for_update=True)
+        if d is None:
+            return {}
+        fields = dict(getattr(st, "time_fields", None) or {})
+
+        def earliest(col, v):
+            if v is None:
+                return
+            cur = getattr(d, col, None)
+            if cur is None or v < cur:
+                setattr(d, col, v)
+                changed[col] = v.isoformat()
+
+        earliest("provider_created_at", getattr(st, "created_at", None))
+        earliest("provider_running_at", getattr(st, "running_at", None))
+        if st.state in ("terminated", "not_found") and getattr(st, "ended_at", None) is not None:
+            earliest("provider_terminated_at", st.ended_at)
+        if d.provider_running_at is not None:
+            if d.billable_basis != "provider_running_at" or d.billable_start != d.provider_running_at:
+                d.billable_start, d.billable_basis = d.provider_running_at, "provider_running_at"
+                changed["billable_start"] = d.billable_start.isoformat()
+        elif d.billable_start is None:
+            # The FIRST OpenGrid observation of running: the earliest 'running' event, else this read.
+            first_run = s.scalar(select(DeploymentEvent.at).where(DeploymentEvent.deployment_id == dep_id,
+                                                                  DeploymentEvent.to_status == "running")
+                                 .order_by(DeploymentEvent.at).limit(1))
+            t0 = first_run if first_run is not None else (observed_at if st.state == "running" else None)
+            if t0 is not None:
+                d.billable_start, d.billable_basis = t0, "opengrid_observed_running"
+                changed["billable_start"] = t0.isoformat()
+        if fields or changed:
+            # Evidence: which provider field each timestamp came from, and when OpenGrid recorded it.
+            md = dict(d.provider_metadata or {})
+            tf = dict(md.get("lifecycle_time_fields") or {})
+            tf.update(fields)
+            md["lifecycle_time_fields"] = tf
+            if changed:
+                md["lifecycle_log"] = ([{"at": _now().isoformat(), "observed_at": observed_at.isoformat(),
+                                         "state": st.state, **changed, "billable_basis": d.billable_basis}]
+                                       + list(md.get("lifecycle_log") or []))[:20]
+            d.provider_metadata = md
+    return changed
+
+
+def _check_keys(d: Deployment, st) -> None:
+    """The provider says which keys can access the instance (Lambda ssh_key_names): any key other than the one
+    OpenGrid launched with means the provider (or someone) added access: alert, never silently accept."""
+    names = getattr(st, "ssh_key_names", None)
+    if not names or st.state != "running":
+        return
+    launch = d.launch or {}
+    expected = {launch.get("ssh_key")} if launch.get("ssh_key") else {d.client_name}
+    extra = sorted(set(map(str, names)) - {x for x in expected if x})
+    if extra:
+        alert("unexpected_ssh_key", d.deployment_id,
+              f"instance {d.provider_instance_id} lists ssh keys OpenGrid did not request: {', '.join(extra)}",
+              dep_id=d.deployment_id, provider=d.provider, detail={"ssh_key_names": list(names), "expected": sorted(
+                  x for x in expected if x)})
+
+
 def poll(dep_id: str) -> dict:
     """One status read with the pinned credentials, applied through the core's observe()."""
     d = deployments.load_row(dep_id)
@@ -164,6 +254,12 @@ def poll(dep_id: str) -> dict:
                 w.ended_at = st.ended_at or checked_at
                 w.ended_basis = "provider_reported" if st.ended_at else "first_observed"
             w.last_observed_at, w.last_observed_state, w.updated_at = checked_at, st.state, _now()
+    if st.state != "unknown":
+        try:
+            record_lifecycle(dep_id, st, checked_at)
+            _check_keys(d, st)
+        except Exception:  # noqa: BLE001 - never blocks observation
+            log.exception("lifecycle timestamps for %s failed", dep_id)
     r = deployments.observe(dep_id, st, checked_at=checked_at, extra_evidence=extra)
     with normalize.SessionLocal.begin() as s:
         w = watch_row(s, dep_id)
@@ -181,6 +277,15 @@ def poll(dep_id: str) -> dict:
     if errors and errors in (5, 30, 120):
         alert("status_errors", dep_id, f"{errors} consecutive failed status reads ({st.error_kind})", dep_id=dep_id,
               provider=d.provider)
+    fresh = deployments.load_row(dep_id)
+    if fresh is not None and _terminate_requested(fresh) and fresh.provider_instance_id and st.alive \
+            and st.state != "unknown" and fresh.status not in ("terminating", "termination_failed", "terminated"):
+        # Terminate was requested before the launch resolved; the instance now exists: terminate immediately.
+        try:
+            deployments.terminate(dep_id, None, reason="terminate requested before the instance was known; "
+                                                       "instance now confirmed at the provider")
+        except Exception:  # noqa: BLE001 - reconciliation retries
+            log.exception("deferred terminate of %s failed", dep_id)
     return {"polled": True, "state": st.state, **r}
 
 
@@ -225,16 +330,36 @@ def _floor_hour(t: datetime) -> datetime:
     return t.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
 
 
-def segments(events: list[tuple[datetime, str]], end: datetime, *, provider: str | None) -> list[tuple]:
+def with_billable_start(events: list[tuple[datetime, str]], billable_start: datetime) -> list[tuple[datetime, str]]:
+    """Re-label the status events for a provider-reported billable start: nothing before it is billed, and from
+    it the instance is billed as running even where OpenGrid's own state never said 'running' (provisioning /
+    unresolved launches while the provider already ran it)."""
+    before = [(t, st) for t, st in events if t < billable_start]
+    after = [(t, st) for t, st in events if t >= billable_start]
+    if any(st == "terminated" for _, st in before):
+        return events          # ended before the provider says it ran: nothing to re-label
+    at_start = before[-1][1] if before else (after[0][1] if after else "running")
+    lift = ("running",) + PRE_RUN_STATES
+    out = [(t, "pre_billable" if st in lift else st) for t, st in before]
+    out.append((billable_start, "running" if at_start in lift else at_start))
+    out += [(t, "running" if st in PRE_RUN_STATES else st) for t, st in after]
+    return out
+
+
+def segments(events: list[tuple[datetime, str]], end: datetime, *, provider: str | None,
+             billable_start: datetime | None = None) -> list[tuple]:
     """[(t0, t1, cls)] with cls 'run' | 'stopped' | 'unbilled', from the ordered status events, clipped at end.
 
     Time before the instance is first observed running is never billed; degraded time is billed unless the
-    provider documents no charge in error states."""
+    provider documents no charge in error states. With a provider-reported billable_start, billing starts
+    exactly there (see with_billable_start)."""
+    if billable_start is not None and events:
+        events = with_billable_start(events, billable_start)
     out, ran = [], False
     err_billed = error_state_billed(provider)
     for i, (t, status) in enumerate(events):
         t1 = events[i + 1][0] if i + 1 < len(events) else end
-        if status == "running":
+        if status == "running" or (billable_start is not None and t >= billable_start):
             ran = True
         if status == "terminated" or t >= end:
             break
@@ -291,6 +416,9 @@ def meter(dep_id: str, *, now: datetime | None = None) -> dict:
             .order_by(DeploymentEvent.at, DeploymentEvent.id)) if e.to_status != e.from_status]
         last_obs = w.last_observed_at if w else None
         ended_basis = w.ended_basis if w else None
+        bstart, bbasis = getattr(d, "billable_start", None), getattr(d, "billable_basis", None)
+        if bbasis not in ("provider_running_at", "provider_created_at"):
+            bstart = None             # an OpenGrid observation equals the first running event: events decide
     if legacy:
         _complete(dep_id, "legacy single usage record")
         return {"metered": 0, "complete": True, "legacy": True}
@@ -310,11 +438,22 @@ def meter(dep_id: str, *, now: datetime | None = None) -> dict:
             return {"metered": 0, "reason": "never observed"}
     if not events:
         return {"metered": 0, "reason": "no events"}
-    segs = segments(events, end, provider=d.provider)
+    if bstart is None and d.status == "terminated" and not any(st == "running" for _, st in events):
+        bstart = _created_fallback(d)
+    segs = segments(events, end, provider=d.provider, billable_start=bstart)
+    bbasis_used = (bbasis if bbasis in ("provider_running_at", "provider_created_at") else
+                   ("provider_created_at" if bstart is not None else None))
     first = next((t0 for t0, _, cls in segs if cls != "unbilled"), None)
     if first is None:
         if d.status == "terminated":
             _complete(dep_id, "never ran")
+            if getattr(d, "billable_start", None) is not None:
+                # the provider reported a start but the window is empty (ended at that instant): still close it,
+                # so a terminated deployment never shows a billable_start without a billable_end
+                with normalize.SessionLocal.begin() as s:
+                    row = s.get(Deployment, dep_id, with_for_update=True)
+                    if row.billable_end is None:
+                        row.billable_end = max(end, row.billable_start)
         return {"metered": 0, "reason": "nothing billable yet"}
     sb = stopped_billing(d.provider)
     price, basis = d.actual_price_per_gpu_hour, "execution"
@@ -354,7 +493,33 @@ def meter(dep_id: str, *, now: datetime | None = None) -> dict:
             w.ended_at = w.ended_at or end
             w.ended_basis = w.ended_basis or ("first_observed" if estimated else "provider_reported")
         w.updated_at = _now()
+    with normalize.SessionLocal.begin() as s:      # the billable window, recorded on the deployment
+        row = s.get(Deployment, dep_id, with_for_update=True)
+        if row.billable_start is None and first is not None:
+            row.billable_start, row.billable_basis = first, (bbasis_used or "opengrid_observed_running")
+        if d.status == "terminated" and row.billable_end is None:
+            row.billable_end = end
+            if not estimated and row.provider_terminated_at is None:
+                row.provider_terminated_at = end
     return {"metered": written, "complete": d.status == "terminated"}
+
+
+def _created_fallback(d: Deployment) -> datetime | None:
+    """An instance that existed at the provider but was never seen running, on a provider whose billing start
+    is 'created' or undocumented: bill from the provider's creation time (basis provider_created_at, an
+    estimate). Lambda bills from first health check, so never there."""
+    c = caps(d.provider)
+    starts = (getattr(c, "billing_starts", ("UNKNOWN", ""))[0] if c is not None else "UNKNOWN") or "UNKNOWN"
+    created = getattr(d, "provider_created_at", None)
+    if created is None or starts == "running" or not d.provider_instance_id:
+        return None
+    with normalize.SessionLocal.begin() as s:
+        row = s.get(Deployment, d.deployment_id, with_for_update=True)
+        if row.billable_start is None:
+            row.billable_start, row.billable_basis = created, "provider_created_at"
+            deployments.note_event(s, row, "billable start: provider creation time (never observed running; "
+                                           f"billing start {starts})", {"billable_start": created.isoformat()})
+    return created
 
 
 def _complete(dep_id: str, why: str) -> None:
@@ -402,6 +567,12 @@ def track() -> dict:
             retried += complete_slice(sid) is not None
         except Exception:  # noqa: BLE001
             log.exception("usage record for slice %s failed; retried next tick", sid)
+    keys = None
+    try:
+        from routing.adapters import resources
+        keys = len(resources.cleanup_due())
+    except Exception:  # noqa: BLE001 - retried next tick / by reconciliation
+        log.exception("provider resource cleanup failed")
     billed = 0
     for dep_id in transactions.unbilled():
         try:
@@ -409,7 +580,7 @@ def track() -> dict:
         except Exception:  # noqa: BLE001
             log.exception("billing %s failed", dep_id)
     return {"live": len(ids), "polled": polled, "not_polled": skipped, "errors": failed, "slices_written": metered,
-            "usage_retried": retried, "billed": billed}
+            "usage_retried": retried, "billed": billed, "resource_cleanups": keys}
 
 
 @job("routing_tracker", every_seconds=settings.tracker_interval_seconds, initial_delay_seconds=40)

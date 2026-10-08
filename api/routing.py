@@ -22,7 +22,10 @@
     POST     /v1/admin/execution/kill                   global kill switch (mode DISABLED)
     POST     /v1/admin/execution/providers/{p}/kill     provider kill switch;  .../unkill lifts it
     GET      /v1/admin/execution/log                    the control log
-    POST     /v1/admin/execution/validation             a validation route for one provider (pending approval)
+    POST     /v1/admin/execution/validation     (*)     a validation route for one provider (pending approval;
+                                                        refused unless every validation precondition holds)
+    GET      /v1/admin/execution/validation/preconditions?provider=lambda   the validation launch gate, item by item
+    POST     /v1/admin/ops/test-alert                   send one ops test alert; the result is recorded
     GET/POST /v1/admin/execution/limits/{account_id}    cost guards
     GET      /v1/admin/deployments?state=live           every account's deployments with accrued cost estimate
     POST     /v1/admin/deployments/{id}/terminate       force-terminate (idempotent)
@@ -41,13 +44,17 @@ from config import settings
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 import routing.tracker  # noqa: F401  registers the routing_tracker job
 from accounts.auth import Principal, require_scope
 from api.common import INFERRED, TRANSACTION, envelope, gpu_slug, resolve_gpu_or_family
-from routing import (audit, capabilities, control, deployments, engine, guards, idempotency, quotes, scoring,
-                     transactions)
+from routing import (audit, capabilities, control, credentials, deployments, engine, guards, idempotency, quotes,
+                     scoring, transactions)
+
+# Durable job heartbeats (execution_controls 'job:<name>') so the validation gate and the checklist can see
+# the reconcile / tracker workers from any process.
+control.install_job_heartbeats()
 
 router = APIRouter()
 READ = require_scope("data:read")
@@ -162,21 +169,53 @@ class Preferences(BaseModel):
     require_available: bool = Field(False, description="only listings with explicit availability")
 
 
-SSH_PUBLIC_KEY = r"^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com) [A-Za-z0-9+/=]{40,8192}( [^\r\n]{0,200})?$"
+PRIVATE_DISCARDED = "<private key discarded>"
 
 
 class Launch(BaseModel):
-    """Canonical launch parameters; each adapter translates them (see routing/adapters/base.py)."""
+    """Canonical launch parameters; each adapter translates them (see routing/adapters/base.py).
+
+    ssh_public_key is validated by routing.credentials.parse_public_key (in _launch_dict, so a rejection never
+    echoes the value back); anything that looks like a PRIVATE key, in any field, is discarded before
+    validation and refused with ssh_private_key_rejected."""
     model_config = ConfigDict(extra="forbid")
     name: str | None = Field(None, max_length=60, pattern=r"^[A-Za-z0-9][A-Za-z0-9-]*$",
                              description="ignored for the provider: OpenGrid names every instance og-<deployment_id>")
-    ssh_key: str | None = Field(None, max_length=256, description="name/id of a key registered with the provider: "
-                                                                  "ONLY with your own (BYO) provider credentials")
-    ssh_public_key: str | None = Field(None, max_length=9000, pattern=SSH_PUBLIC_KEY,
-                                       description="your SSH public key; registered for this deployment only")
+    ssh_key: str | None = Field(None, max_length=65536,
+                                description="name/id of a key registered with the provider: ONLY with your own (BYO) "
+                                            "provider credentials")
+    ssh_public_key: str | None = Field(None, max_length=65536,
+                                       description="your SSH public key (ssh-ed25519 / ecdsa / rsa >= 2048, one line); "
+                                                   "registered for this deployment only; only its SHA256 fingerprint "
+                                                   "is logged")
     image: str | None = Field(None, max_length=256, description="OS image (VMs) or container image (RunPod, Vast)")
     disk_gb: int | None = Field(None, ge=10, le=20000)
     env: dict[str, str] = Field(default_factory=dict, max_length=50)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _discard_private_keys(cls, data):
+        if isinstance(data, dict):
+            return {k: (PRIVATE_DISCARDED if k != "env" and credentials.looks_private(v) else v)
+                    for k, v in data.items()}
+        return data
+
+
+def _launch_dict(launch: Launch | None) -> dict | None:
+    """The validated launch block (422 with a clean message; the submitted key is never echoed)."""
+    if launch is None:
+        return None
+    d = launch.model_dump(exclude_none=True)
+    if any(v == PRIVATE_DISCARDED for v in d.values()):
+        raise HTTPException(422, {"code": "ssh_private_key_rejected", "message": credentials.PRIVATE_KEY_MESSAGE})
+    if d.get("ssh_key") and len(d["ssh_key"]) > 256:
+        raise HTTPException(422, {"code": "ssh_key_invalid", "message": "ssh_key is a key NAME (<= 256 chars)"})
+    if d.get("ssh_public_key"):
+        try:
+            d["ssh_public_key"] = credentials.parse_public_key(d["ssh_public_key"])["public_key"]
+        except credentials.SSHKeyError as exc:
+            raise HTTPException(422, {"code": "ssh_public_key_invalid", "message": str(exc)})
+    return d
 
 
 class RouteBody(BaseModel):
@@ -199,7 +238,9 @@ class RouteBody(BaseModel):
     quote_id: str | None = Field(None, max_length=40, pattern=r"^q_[0-9a-f]{8,32}$",
                                  description="launch exactly this quote (from preview), after a live re-validation")
     max_runtime_minutes: int | None = Field(None, ge=1, le=60 * 24 * 31,
-                                            description="auto-terminate deadline after launch")
+                                            description="auto-terminate after this many minutes; clamped to the "
+                                                        "account / system maximum (default: account default, else "
+                                                        "settings.runtime_default_minutes). Never unlimited.")
 
     @field_validator("mode", mode="before")
     @classmethod
@@ -230,7 +271,7 @@ def _spec(body: RouteBody) -> dict:
         "max_price_per_gpu_hour": body.max_price_per_gpu_hour, "duration_hours": body.duration_hours,
         "deadline_hours": body.deadline_hours, "mode": body.mode, "weights": body.weights,
         "preferences": body.preferences.model_dump() if body.preferences else {},
-        "launch": body.launch.model_dump(exclude_none=True) if body.launch else None,
+        "launch": _launch_dict(body.launch),
         "quote_id": body.quote_id, "max_runtime_minutes": body.max_runtime_minutes,
     }
     try:  # validate mode/weights before anything is written
@@ -284,6 +325,8 @@ class Approve(BaseModel):
     model_config = ConfigDict(extra="forbid")
     quote_id: str = Field(..., max_length=40)
     override_limits: bool = False
+    allow_provider_account_keys: bool = Field(False, description="admin override: the provider may install its "
+                                                                 "account-level ssh keys (operator access); needs a reason")
     reason: str | None = Field(None, max_length=2000)
 
 
@@ -292,7 +335,8 @@ def route_approve(route_request_id: str, body: Approve, request: Request,
                   who: Principal = Depends(require_scope("admin"))):
     def run():
         code, out = engine.approve(route_request_id, who, quote_id=body.quote_id,
-                                   override_limits=body.override_limits, reason=body.reason)
+                                   override_limits=body.override_limits, reason=body.reason,
+                                   allow_provider_account_keys=body.allow_provider_account_keys)
         return code, envelope(out, kind=TRANSACTION, methodology="execution-safety")
 
     return _idem(request, who, f"approve:{route_request_id}", body.model_dump(mode="json"), run)
@@ -467,15 +511,45 @@ class ValidationBody(BaseModel):
 
 
 @router.post("/v1/admin/execution/validation", tags=["admin"], status_code=202,
-             summary="Create a validation route for one provider (pending approval; validation caps)")
-def post_validation(body: ValidationBody, who: Principal = Depends(ADMIN)):
-    rr_id = engine.create_validation_route(body.provider, body.listing_id, by=_by(who),
-                                           max_runtime_minutes=body.max_runtime_minutes,
-                                           launch=body.launch.model_dump(exclude_none=True) if body.launch else None)
-    d = deployments.for_request(rr_id)
-    return envelope({"route_request_id": rr_id, "deployment": deployments.public(d.deployment_id, operator=True),
-                     "quote": quotes.get(d.quote_id),
-                     "approve": f"POST /v1/route/{rr_id}/approve"}, kind=TRANSACTION, methodology="execution-safety")
+             summary="Create a validation route for one provider (pending approval; validation gate; Idempotency-Key)")
+def post_validation(body: ValidationBody, request: Request, who: Principal = Depends(ADMIN)):
+    launch = _launch_dict(body.launch)
+
+    def run():
+        rr_id = engine.create_validation_route(body.provider, body.listing_id, by=_by(who),
+                                               max_runtime_minutes=body.max_runtime_minutes, launch=launch)
+        d = deployments.for_request(rr_id)
+        return 202, envelope({"route_request_id": rr_id,
+                              "deployment": deployments.public(d.deployment_id, operator=True),
+                              "quote": quotes.get(d.quote_id), "approve": f"POST /v1/route/{rr_id}/approve"},
+                             kind=TRANSACTION, methodology="execution-safety")
+
+    return _idem(request, who, "validation", body.model_dump(mode="json"), run,
+                 resource_of=lambda p: (p.get("data") or {}).get("route_request_id"))
+
+
+@router.get("/v1/admin/execution/validation/preconditions", tags=["admin"],
+            summary="The validation launch gate for a provider, condition by condition")
+def get_validation_preconditions(provider: str = Query("lambda", max_length=64), who: Principal = Depends(ADMIN)):
+    from routing import validation
+
+    pick = validation.pick_listing(provider.lower())
+    out = validation.preconditions(provider, gpu_count=1 if pick else None,
+                                   hourly_price=pick["price_per_instance_hour"] if pick else None,
+                                   runtime_minutes=settings.validation_max_runtime_minutes, admin=who.has("admin"))
+    return envelope({**out, "listing": pick}, methodology="execution-safety")
+
+
+class TestAlertBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str | None = Field(None, max_length=2000)
+
+
+@router.post("/v1/admin/ops/test-alert", tags=["admin"],
+             summary="Send one ops test alert through the configured channel and record whether it was delivered")
+def post_ops_test_alert(body: TestAlertBody | None = None, who: Principal = Depends(ADMIN)):
+    return envelope(control.send_test_alert(by=_by(who), reason=(body.reason if body else None)),
+                    methodology="execution-safety")
 
 
 class LimitsBody(BaseModel):
@@ -488,6 +562,10 @@ class LimitsBody(BaseModel):
     provider_allowlist: list[str] | None = Field(None, max_length=100)
     region_allowlist: list[str] | None = Field(None, max_length=100)
     monthly_spend_limit: float | None = Field(None, ge=0, le=100000000)
+    max_runtime_minutes: int | None = Field(None, ge=1, le=60 * 24 * 31,
+                                            description="account runtime ceiling (still capped by the system hard max)")
+    default_runtime_minutes: int | None = Field(None, ge=1, le=60 * 24 * 31,
+                                                description="used when a route sets no max_runtime_minutes")
     reason: str = Field(..., min_length=3, max_length=2000)
 
 

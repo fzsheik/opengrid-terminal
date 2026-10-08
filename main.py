@@ -101,6 +101,8 @@ async def require_password(request, call_next):
     if not settings.app_password:
         if security.deployed():
             return _deny(503, "APP_PASSWORD is not configured on a deployed server")
+        if not security.open_dev_host_ok(request):  # DNS rebinding against an open dev server
+            return _deny(403, "this development server (no APP_PASSWORD) only answers to localhost or an IP address")
     elif security.is_basic(auth):
         wait = security.login_locked(ip)
         if wait:

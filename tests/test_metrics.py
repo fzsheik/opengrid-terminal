@@ -89,6 +89,7 @@ def deployment(dep, rr, *, provider="A", account=7, status="running", purpose="c
     created = created or NOW - timedelta(hours=4)
     put("deployments", deployment_id=dep, account_id=account, route_request_id=rr, provider=provider, gpu=H100,
         gpu_count=gpu_count, status=status, created_at=created, uptime_seconds=uptime, interruptions=interruptions,
+        effective_max_runtime_minutes=60,
         quoted_price_per_gpu_hour=quote, actual_price_per_gpu_hour=actual, purpose=purpose,
         approved_at=created + timedelta(seconds=30) if approved else None, approved_by="operator" if approved else None,
         termination_reason=termination_reason, terminated_at=created + timedelta(hours=2) if terminated else None)
@@ -493,6 +494,9 @@ def test_checklist_transitions():
         assert item()[1]["reconciliation_running"]["status"] in ("red", "unknown")
         j = jobs.Job("reconcile", lambda: None, 120)
         jobs.JOBS["reconcile"] = j
+        jt = jobs.Job("routing_tracker", lambda: None, 60)   # the checklist also checks the tracker job (0014)
+        jt.last_finished, jt.last_error, jt.runs = NOW, None, 5
+        jobs.JOBS["routing_tracker"] = jt
         j.last_finished, j.last_error, j.runs = NOW - timedelta(seconds=30), None, 5
         put("reconciliation_runs", started_at=NOW - timedelta(seconds=40), finished_at=NOW - timedelta(seconds=30),
             trigger="job", status="ok")
@@ -551,6 +555,7 @@ def test_checklist_transitions():
             setattr(settings, k, v)
         checklist._control = saved_ctl
         jobs.JOBS.pop("reconcile", None)
+        jobs.JOBS.pop("routing_tracker", None)
         jobs.JOBS.update(saved_jobs)
         obs.INSTALLED.update(saved_inst)
         adapters.unregister("syn_ck")

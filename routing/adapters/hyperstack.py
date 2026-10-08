@@ -34,6 +34,7 @@ from routing.adapters.base import (
     AdapterError, Adapter, Availability, Capabilities, CostReport, InstanceState, LaunchSpec, Offer,
     TerminateResult, parse_time,
 )
+from routing.adapters.results import PER_DEPLOYMENT, ActionResult, ProviderKey, ProviderKeyRef
 
 STATE = {"CREATING": "pending", "BUILD": "pending", "STARTING": "pending", "REBOOTING": "pending",
          "RESTORING": "pending", "ACTIVE": "running", "SHUTOFF": "stopped", "STOPPED": "stopped",
@@ -51,7 +52,8 @@ class HyperstackAdapter(Adapter):
     BASE_URL = BASE_URL
     REQUIRED_LAUNCH = ("ssh_key", "image")
     NAME_MAX = 50
-    SSH_KEY_REGISTRATION = True
+    SSH_KEY_REGISTRATION = PER_DEPLOYMENT
+    SSH_KEY_RESOURCE = True
     ERROR_STATE_BILLED = False     # "ERROR incurs no charges" (docs/billing/states-and-billing)
     CAPABILITIES = Capabilities(
         quote=("YES", "GET /pricebook value per GPU-hour x flavor gpu_count (docs.hyperstack.cloud/docs/billing/pricebook)"),
@@ -76,6 +78,9 @@ class HyperstackAdapter(Adapter):
         reported_cost=("YES", "GET /billing/billing/history/virtual-machine/{id} incurred_bill (spec: returns 500 "
                               "intermittently)"),
         error_semantics=("medium", "real HTTP codes + error_reason; capacity error undocumented -> never inferred"),
+        forces_account_ssh_key=("UNKNOWN", "key_name names one keypair of the environment; no default-key injection is "
+                                           "documented, not re-verified 2026-10-07 (docs page moved)"),
+        billing_starts=("UNKNOWN", "per-minute billing; start event not tied to an API field"),
         risks=["New VMs have no inbound rules: SSH rule added at launch",
                "Terminate refused while CREATING (retried)", "Environment + keypair needed per region",
                "ERROR state incurs no charges per docs but the VM must still be deleted"],
@@ -117,14 +122,8 @@ class HyperstackAdapter(Adapter):
         env = self.environment(launch, region)
         if not env:
             raise AdapterError("config", f"hyperstack: no environment configured for region {region}")
-        key_name = launch.ssh_key
-        if launch.ssh_public_key and not launch.ssh_key:
-            kp = self.preflight(self.request, "POST", "/core/keypairs", json={"environment_name": env, "name": name,
-                                                               "public_key": launch.ssh_public_key}) or {}
-            key_name = ((kp.get("keypair") or {}).get("name")) if isinstance(kp, dict) else None
-            if not key_name:
-                # Key registration creates no compute, so a failure here is a clean rejection.
-                raise AdapterError("invalid", "hyperstack: keypair registration returned no name", sent=False)
+        self._key_env = env                              # keypairs are per environment
+        key_name = self.launch_key(launch, name, use="name")
         cidr = launch.extra.get("ssh_ingress_cidr") or "0.0.0.0/0"
         body = {"name": name, "environment_name": env, "image_name": launch.image, "flavor_name": offer.sku,
                 "key_name": key_name, "count": 1, "assign_floating_ip": True, "labels": ["opengrid", name],
@@ -148,6 +147,7 @@ class HyperstackAdapter(Adapter):
             state="error" if err else STATE.get(st, "unknown"), instance_id=str(vm.get("id")),
             name=vm.get("name"), provider_status=st, region=env.get("region"), gpu=flavor.get("gpu") or None,
             gpu_count=flavor.get("gpu_count"), created_at=parse_time(vm.get("created_at")),
+            time_fields={"created_at": "created_at"} if vm.get("created_at") else {},
             ip=vm.get("floating_ip") or None, labels=[str(x) for x in vm.get("labels") or []],
             error_kind="provider_error_state" if err else None,
             raw_redacted={k: vm.get(k) for k in ("id", "name", "status", "vm_state", "power_state", "labels",
@@ -215,3 +215,27 @@ class HyperstackAdapter(Adapter):
             return CostReport(None, start, end, reason="hyperstack billing history has no rows for this VM yet")
         return CostReport(round(total, 6), start, end, basis="hyperstack billing history incurred_bill",
                           raw_redacted=self.redact(rows[:20]))
+
+    # -- per-deployment SSH keys (keypairs; shapes per the spec header, unvalidated) --
+
+    def _register_ssh_key(self, name, public_key):
+        env = getattr(self, "_key_env", None)
+        if not env:
+            raise AdapterError("config", "hyperstack: keypair registration needs an environment", sent=False)
+        r = self.request("POST", "/core/keypairs", json={"environment_name": env, "name": name, "public_key": public_key})
+        k = (r or {}).get("keypair") if isinstance(r, dict) else None
+        if not isinstance(k, dict) or not k.get("name"):
+            raise AdapterError("parse", "hyperstack: keypair registration returned no keypair", sent=True)
+        return ProviderKeyRef(key_id=str(k.get("id") or ""), name=k["name"], fingerprint=None)
+
+    def _delete_ssh_key(self, key_id):
+        self.request("DELETE", f"/core/keypair/{key_id}")
+        return ActionResult("accepted", "hyperstack: keypair deleted", 200)
+
+    def _list_ssh_keys(self):
+        body = self.request("GET", "/core/keypairs")
+        if not isinstance(body, dict) or not isinstance(body.get("keypairs"), list):
+            raise AdapterError("parse", "hyperstack: keypairs list returned no keypairs array", sent=True)
+        return [ProviderKey(key_id=str(k.get("id")), name=k.get("name"), fingerprint=k.get("fingerprint"),
+                            created_at=parse_time(k.get("created_at")))
+                for k in body["keypairs"] if isinstance(k, dict) and k.get("id") is not None]

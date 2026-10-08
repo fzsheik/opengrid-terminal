@@ -29,7 +29,7 @@
       if (!OG.isAdmin(me)) { root.append(OG.head("Execution control"), OG.error({ status: 403, message: "admin scope required" })); return; }
       const I = {};   // intents: one Idempotency-Key per user intent
       const B = {};
-      for (const k of ["alarm", "orphans", "kill", "mode", "queue", "live", "flags", "matrix", "validation", "recon", "limits", "log"]) B[k] = h("div", { class: "ex-b ex-" + k });
+      for (const k of ["alarm", "orphans", "kill", "mode", "queue", "live", "resources", "flags", "matrix", "validation", "recon", "limits", "log"]) B[k] = h("div", { class: "ex-b ex-" + k });
       const modeBadge = h("span");
       root.append(
         OG.head("Execution control", "Mode, kill switches, providers, orphans and reconciliation · every change needs a reason and is logged",
@@ -37,6 +37,7 @@
         B.alarm, B.orphans,
         h("div", { class: "cols-2 ex-ctl" }, B.kill, B.mode),
         B.queue, B.live,
+        OG.section("Temporary provider resources · leftover og-* SSH keys etc.", B.resources),
         OG.section("Provider execution flags", B.flags),
         h("details", { class: "sec ex-mx", open: query.matrix === "1" ? true : null }, h("summary", { class: "sec-h" }, "Capability matrix · what each adapter can really do (evidence on hover)"), B.matrix),
         h("div", { class: "cols-2" }, OG.section("Validation launcher", B.validation), OG.section("Reconciliation", B.recon)),
@@ -113,6 +114,50 @@
         I[k] = OG.intentFor(I[k], k, body);
         try { await OG.api.intent(I[k], `/v1/admin/orphans/${o.id}/resolve`, { method: "POST", body }); loadOrphans(); loadLog(); }
         catch (e) { B.orphans.append(notYet("POST /v1/admin/orphans/{id}/resolve", e)); }
+      }
+
+      /* ---------- temporary provider resources (per-deployment SSH keys, ...) ---------- */
+      const cleanable = r => r.cleanable != null ? !!r.cleanable : !!r.provably_ours && !["deleted", "not_created"].includes(r.status);
+      let resMsg = null;
+      async function loadResources() {
+        let r;
+        try { r = await ctx.api("/v1/admin/resources", { full: true, nocache: true }); }
+        catch (e) { B.resources.replaceChildren(notYet("GET /v1/admin/resources", e)); return; }
+        const rows = Array.isArray(r.data) ? r.data : [];
+        const unproven = (r.meta && r.meta.not_provably_ours) ?? rows.filter(x => !x.provably_ours).length;
+        B.resources.replaceChildren(resMsg || "",
+          h("p", { class: "note" }, rows.length ? `${rows.length} not yet deleted${unproven ? ` · ${unproven} not provably OpenGrid's (never deleted by OpenGrid: remove in the provider console if yours)` : ""}. Keys are deleted only after the deployment's termination is confirmed.`
+            : "No leftover temporary provider resources: every per-deployment key OpenGrid created is deleted."),
+          rows.length ? OG.table({
+            columns: [
+              { key: "provider", label: "Provider", fmt: v => v ? OG.providerLink(v) : "–" },
+              { key: "resource_type", label: "Type", cls: "mono" },
+              { key: "name", label: "Name", cls: "mono" },
+              { key: "provider_resource_id", label: "Resource id", cls: "mono dim", fmt: v => v || h("span", { class: "dim" }, "not created / unknown") },
+              { key: "deployment_id", label: "Deployment", cls: "mono", fmt: v => v ? h("a", { class: "lnk", href: "/deployments/" + v }, v) : h("span", { class: "dim" }, "none") },
+              { key: "status", label: "Status", fmt: v => OG.badge(v, v === "delete_failed" || v === "abandoned" ? "bad" : v === "active" ? "" : "warn") },
+              { key: "created_at", label: "Age", num: true, fmt: v => v ? fmt.age(v) : "–" },
+              { key: "last_error", label: "Last error", cls: "wrap dim", fmt: (v, r) => v ? h("span", { class: "down" }, v) : r.ownership_basis ? h("span", { class: "dim", title: "ownership basis" }, r.ownership_basis) : "" },
+              { key: "act", label: "", sort: false, csv: false, fmt: (v, r) => cleanable(r) ? h("button", { class: "btn sm w4-danger", type: "button", onclick: () => cleanupResource(r) }, "Cleanup…")
+                : h("span", { class: "dim", title: r.provably_ours ? "" : "not provably OpenGrid's: OpenGrid never deletes it" }, r.provably_ours ? "" : "not ours?") },
+            ], rows, compact: true, csv: "opengrid-provider-resources.csv", sort: { key: "created_at", dir: "asc" },
+          }) : null);
+      }
+      async function cleanupResource(r) {
+        const ok = await OG.dialog({ title: `Delete ${r.resource_type} ${r.name} on ${OG.providerName(r.provider)}?`, danger: true, confirm: "Delete now",
+          body: h("div", {}, h("p", {}, "Deletes this temporary resource at the provider now, with the credential that created it. The server refuses unless it is provably OpenGrid's and its deployment's termination is confirmed."),
+            h("p", { class: "mono dim" }, `${r.provider_resource_id || "?"} · deployment ${r.deployment_id || "none"}`)) });
+        if (!ok) return;
+        const k = "resource_cleanup:" + r.id;
+        I[k] = OG.intentFor(I[k], k, {});
+        try {
+          const out = await OG.api.intent(I[k], `/v1/admin/resources/${encodeURIComponent(r.id)}/cleanup`, { method: "POST" });
+          const res = (out && out.result) || {};
+          resMsg = h("div", { class: ["deleted", "absent", "noop"].includes(res.outcome) ? "og-ok" : "og-alarm t-warn" }, h("b", {}, `Cleanup ${r.name}: `), evText(res) || (out && out.status) || "requested");
+        } catch (e) {
+          resMsg = h("div", {}, notYet("POST /v1/admin/resources/{id}/cleanup", e), I[k].state === "unknown" ? h("p", { class: "warn-t" }, "Outcome unknown: retrying reuses the same Idempotency-Key.") : null);
+        }
+        loadResources(); loadLog();
       }
 
       /* ---------- kill switch + mode ---------- */
@@ -273,15 +318,53 @@
 
       /* ---------- validation launcher ---------- */
       let valFollow = query.vdep || null, valEv = null;
+      let valProv = null, pre = null, preErr = null, alertRes = null;
+      async function loadPre(provider) {
+        if (!provider) return;
+        const want = provider;
+        pre = null; preErr = null;
+        try { const r = await ctx.api("/v1/admin/execution/validation/preconditions", { params: { provider }, nocache: true }); if (valProv === want) pre = r; }
+        catch (e) { if (valProv === want) preErr = e; }
+        drawValidation();
+      }
+      async function sendTestAlert() {
+        alertRes = OG.loading("Sending one ops test alert…"); drawValidation();
+        try {
+          const r = await ctx.api("/v1/admin/ops/test-alert", { method: "POST", body: { reason: "validation precondition: ops test alert" } });
+          alertRes = h("div", { class: r.delivered ? "og-ok" : "og-alarm t-bad" }, h("b", {}, r.delivered ? "Test alert delivered" : "Test alert NOT delivered"),
+            " · channel " + (r.channel_configured ? "configured" : "NOT configured") + " · recorded " + (r.recorded ? "yes" : "no") + (r.at ? " · " + fmt.dateTime(r.at) : ""),
+            r.error ? h("span", { class: "mono" }, " · " + r.error) : null, r.reason ? h("div", { class: "dim" }, r.reason) : null);
+        } catch (e) { alertRes = notYet("POST /v1/admin/ops/test-alert", e); }
+        loadPre(valProv); loadLog();
+      }
+      function preconditionsPanel() {
+        const head = h("div", { class: "sec-h" }, "Validation preconditions · " + OG.providerName(valProv || ""), h("span", { class: "spacer" }),
+          h("button", { class: "btn sm", type: "button", onclick: () => sendTestAlert() }, "Send test ops alert"),
+          h("button", { class: "btn sm", type: "button", onclick: () => loadPre(valProv) }, "Re-check"));
+        let body;
+        if (preErr) body = notYet("GET /v1/admin/execution/validation/preconditions", preErr);
+        else if (!pre) body = OG.loading("Checking preconditions…");
+        else body = h("div", {}, h("ul", { class: "ck-list" }, (pre.checks || []).map(c => h("li", { class: "ck-" + (c.ok ? "green" : "red") }, h("i", { class: "ck-dot" }),
+            h("b", {}, String(c.code).replace(/_/g, " ")), h("span", { class: c.ok ? "dim" : "down" }, c.reason || "")))),
+          h("p", { class: pre.ok ? "up" : "down" }, pre.ok ? "All preconditions green: the launcher is enabled." : `${(pre.failed || []).length} precondition(s) red: the launcher stays disabled.`,
+            pre.checked_at ? h("span", { class: "dim" }, " · checked " + fmt.dateTime(pre.checked_at)) : null));
+        return h("div", { class: "ex-pre" }, head, body, alertRes || null);
+      }
       function drawValidation() {
         const provs = caps.filter(c => (c.level_implemented || 0) >= 2).map(c => c.provider);
         if (!provs.length) { B.validation.replaceChildren(OG.loading()); return; }
-        const sel = h("select", { class: "field" }, provs.map(p => h("option", { value: p }, OG.providerName(p) + " · " + ((flags.find(f => f.provider === p) || {}).adapter_status || "simulated"))));
+        if (!valProv || !provs.includes(valProv)) { valProv = provs.includes("lambda") ? "lambda" : provs[0]; loadPre(valProv); }
+        const sel = h("select", { class: "field", onchange: () => { valProv = sel.value; alertRes = null; loadPre(valProv); } },
+          provs.map(p => h("option", { value: p, selected: p === valProv ? true : null }, OG.providerName(p) + " · " + ((flags.find(f => f.provider === p) || {}).adapter_status || "simulated"))));
+        sel.value = valProv;
+        const ready = !!(pre && pre.ok && pre.provider === valProv);
         const gpu = h("input", { class: "field", placeholder: "GPU slug (optional)" });
         const vdeps = all.filter(r => r.purpose === "validation");
         B.validation.replaceChildren(
           h("div", { class: "ex-cap" }, h("b", {}, "Validation cap (not overridable): "), "1 instance · 1 GPU · ≤ $3.00/h total · ≤ 30 min runtime · auto-terminate · admin approval"),
-          h("div", { class: "bar" }, sel, gpu, h("button", { class: "btn pri", type: "button", onclick: () => startValidation(sel.value, gpu.value.trim()) }, "Validate provider…")),
+          preconditionsPanel(),
+          h("div", { class: "bar" }, sel, gpu, h("button", { class: "btn pri", type: "button", disabled: ready ? null : true, title: ready ? null : "every validation precondition must be green", onclick: () => startValidation(sel.value, gpu.value.trim()) }, "Validate provider…"),
+            ready ? null : h("span", { class: "down" }, "disabled until every precondition is green")),
           h("p", { class: "note" }, "Creates a purpose=validation route pending approval. Approve it on its ticket, watch it run, terminate it (or let the deadline do it); the evidence below must be complete before the adapter becomes validated."),
           vdeps.length ? OG.table({
             columns: [{ key: "status", label: "State", fmt: v => OG.stateBadge(v) }, { key: "deployment_id", label: "Validation deployment", cls: "mono", fmt: v => h("button", { class: "lnk mono", type: "button", onclick: () => follow(v) }, v) },
@@ -413,11 +496,11 @@
       async function loadMode() {
         try { modeSt = await ctx.api("/v1/admin/execution/mode", { nocache: true }); drawMode(); drawKill(); } catch (e) { B.mode.replaceChildren(OG.error(e, loadMode)); }
       }
-      function loadAll() { loadMode(); loadDeps(); loadOrphans(); loadFlags(); loadRecon(); loadLimits(); loadLog(); }
+      function loadAll() { loadMode(); loadDeps(); loadOrphans(); loadResources(); loadFlags(); loadRecon(); loadLimits(); loadLog(); if (valProv) loadPre(valProv); }
       drawValidation();
       loadAll();
       if (valFollow) follow(valFollow);
-      ctx.every(20000, () => { loadDeps(); loadOrphans(); });
+      ctx.every(20000, () => { loadDeps(); loadOrphans(); loadResources(); });
     },
   });
 })();

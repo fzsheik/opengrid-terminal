@@ -31,6 +31,22 @@ OpenGrid-managed credential when configured), it lists every instance on that ac
                            credential that lists it (provably_ours). Never touch an instance OpenGrid cannot prove
                            it owns: anything not named og-* is ignored entirely.
 
+  deadline (outages)       a deployment past terminate_deadline_at is marked past_deadline (deployment_watch
+                           .past_deadline_at) and its terminate is re-issued EVERY run while the provider's
+                           answers are failed/unknown (API down), whatever the backoff, with a re-escalating
+                           past_deadline ops alert until termination is confirmed. The deadline pass is the
+                           first thing every run does, so the first run after a restart enforces overdue
+                           deadlines before anything else.
+  ssh keys                 per credential: list_ssh_keys() vs provider_resources (routing/adapters/resources.py):
+                           ids filled, abandoned og-* keys flagged (deleted only when provably ours, else an
+                           unowned_provider_resource alert), then due keys of confirmed-terminated deployments
+                           are deleted.
+  cost exposure            every run ends with _exposures(): the alert catalogue of alerts/ops.exposure()
+                           (resource_state_unknown, termination_failed, past_deadline, suspected_orphan,
+                           provider_api_unavailable, overspend, active_without_billing,
+                           unowned_provider_resource), raised / re-escalated while true, resolved only with
+                           evidence that the condition is over.
+
 Every pass is recorded in reconciliation_runs with its findings. Functions for the admin API (owned by the
 core / metrics agents): run_once(provider=None), orphans(status=None), resolve_orphan(id, action, by),
 runs(limit), last_run().
@@ -50,10 +66,11 @@ import normalize
 from config import settings
 from jobs import job
 from routing import adapters, credentials, deployments, tracker, transactions
+from routing.adapters import resources
 from routing.adapters.base import AdapterError
 from routing.adapters.results import InstanceState, instance_name
 from routing.credentials import CredentialsUnavailable
-from store.reconcile import DeploymentWatch, OrphanResource, ReconciliationRun
+from store.reconcile import DeploymentWatch, OrphanResource, ProviderResource, ReconciliationRun, UsageSlice
 from store.routing import Deployment, ProvisionAttempt
 
 log = logging.getLogger(__name__)
@@ -91,6 +108,10 @@ def _ref(d: Deployment) -> str | None:
     return None
 
 
+def _term_requested(d) -> bool:
+    return getattr(d, "terminate_requested_at", None) is not None or getattr(d, "requested_termination_at", None) is not None
+
+
 def _creds(ref: str, provider: str) -> dict:
     return credentials.for_ref(ref, provider)
 
@@ -104,6 +125,8 @@ class _Run:
     def __init__(self, trigger: str, provider: str | None):
         self.findings: list[dict] = []
         self.providers: dict = {}
+        self.listed_ok: set = set()        # (provider, credential_ref) listed successfully this run
+        self.list_failed: dict = {}        # (provider, credential_ref) -> error kind
         self.now = _now()
         self.trigger, self.provider = trigger, provider
 
@@ -154,6 +177,18 @@ def _run(provider: str | None, trigger: str) -> dict:
             run.providers.setdefault("_cost", {})["reconciled"] = transactions.reconcile_pending()
         except Exception:  # noqa: BLE001
             log.exception("cost reconciliation retries failed")
+        try:
+            cleaned = resources.cleanup_due()
+            run.providers.setdefault("_resources", {})["cleanup"] = cleaned
+            for c in cleaned:
+                run.find("ssh_key_cleanup", resource_id=c.get("id"), outcome=c.get("outcome"),
+                         attempts=c.get("attempts"))
+        except Exception:  # noqa: BLE001
+            log.exception("provider resource cleanup failed")
+        try:
+            run.providers.setdefault("_alerts", {})["exposure"] = _exposures(run)
+        except Exception:  # noqa: BLE001
+            log.exception("cost-exposure alert evaluation failed")
     except Exception as exc:  # noqa: BLE001
         log.exception("reconciliation pass failed")
         error = f"{type(exc).__name__}: {str(exc)[:500]}"
@@ -211,6 +246,18 @@ def _provider(run: _Run, p: str) -> dict:
                     _credentials_unavailable(run, d, exc)
             run.find("credentials_unavailable", provider=p, credential_ref=ref, message=exc.message)
             continue
+        # The ref names where the key comes from, not which key: a deployment launched with a DIFFERENT secret
+        # (the managed key was replaced -- possibly by another provider account's key) must not be judged by
+        # this listing (its absence there would look like termination).
+        kept = []
+        for d in ref_deps:
+            try:
+                credentials.check_pinned(creds, credentials.pinned_fingerprint(d), ref)
+                kept.append(d)
+            except CredentialsUnavailable as exc:
+                if d.status in deployments.LIVE_STATES:
+                    _credentials_unavailable(run, d, exc)
+        ref_deps = kept
         a = adapters.build(p, creds)
         if a is None:
             continue
@@ -219,9 +266,11 @@ def _provider(run: _Run, p: str) -> dict:
             try:
                 listing = a.list_instances()
                 out["listed"] += len(listing)
+                run.listed_ok.add((p, ref))
             except AdapterError as exc:
                 listing = None
                 out["list_errors"] += 1
+                run.list_failed[(p, ref)] = exc.kind
                 run.find("list_failed", provider=p, credential_ref=ref, error_kind=exc.kind,
                          message=a.scrub(exc.message)[:300])
             for d in ref_deps:
@@ -233,6 +282,16 @@ def _provider(run: _Run, p: str) -> dict:
                              message=f"{type(exc).__name__}: {str(exc)[:300]}")
             if listing is not None:
                 _orphans(run, a, p, ref, listing)
+            if getattr(a, "SSH_KEY_RESOURCE", False):
+                try:
+                    out["ssh_keys"] = resources.reconcile_keys(a, p, ref, find=run.find)
+                except AdapterError as exc:
+                    run.find("ssh_key_list_failed", provider=p, credential_ref=ref, error_kind=exc.kind,
+                             message=a.scrub(exc.message)[:300])
+                except Exception as exc:  # noqa: BLE001 - the key pass never breaks instance reconciliation
+                    log.exception("ssh key reconciliation for %s failed", p)
+                    run.find("ssh_key_list_failed", provider=p, credential_ref=ref, error_kind="internal",
+                             message=f"{type(exc).__name__}"[:300])
         finally:
             a.close()
     return out
@@ -277,7 +336,11 @@ def _deployment(run: _Run, a, d: Deployment, listing: list[InstanceState] | None
     if not present or not present[0].alive:
         _confirm_gone(run, a, d, present[0] if present else None, why="provider_terminated")
         return
-    if d.terminate_requested_at is not None and d.status not in ("terminating", "termination_failed"):
+    try:
+        tracker.record_lifecycle(d.deployment_id, present[0], present[0].observed_at or run.now)
+    except Exception:  # noqa: BLE001
+        log.exception("lifecycle timestamps for %s failed", d.deployment_id)
+    if _term_requested(d) and d.status not in ("terminating", "termination_failed"):
         _terminate(run, d, "terminate requested earlier; instance now known")
         return
     if d.status == "provisioning":
@@ -400,6 +463,10 @@ def _adopt(run: _Run, d: Deployment, st: InstanceState, *, basis: str) -> None:
             w.last_running_at = st.observed_at or now
         status = row.status
     _close_attempt(d.deployment_id, str(st.instance_id), f"adopted by reconciliation ({basis})")
+    try:
+        tracker.record_lifecycle(d.deployment_id, st, st.observed_at or now)
+    except Exception:  # noqa: BLE001
+        log.exception("lifecycle timestamps for %s failed", d.deployment_id)
     tracker.alert("adopted", d.deployment_id, f"instance {st.instance_id} adopted ({st.state}) after an ambiguous "
                                              f"launch", dep_id=d.deployment_id)
     run.find("adopted", provider=d.provider, deployment_id=d.deployment_id, instance_id=st.instance_id,
@@ -408,7 +475,7 @@ def _adopt(run: _Run, d: Deployment, st: InstanceState, *, basis: str) -> None:
         transactions.bill(d.deployment_id)
         return
     fresh = deployments.load_row(d.deployment_id)
-    if fresh.terminate_requested_at is not None and fresh.status not in ("terminating", "terminated"):
+    if _term_requested(fresh) and fresh.status not in ("terminating", "terminated"):
         _terminate(run, fresh, "terminate was requested before the instance was known")
 
 
@@ -421,6 +488,12 @@ def _confirm_gone(run: _Run, a, d: Deployment, listed: InstanceState | None, *, 
                        + f" AND status() = {st.state}",
               "list_checked_at": run.now.isoformat(), "status": _brief(st), "listed": _brief(listed) if listed else None,
               "ended_at": _iso(ended) or _iso(st.observed_at) or run.now.isoformat()}
+        if ended is not None:
+            try:
+                tracker.record_lifecycle(d.deployment_id, InstanceState("terminated", instance_id=st.instance_id,
+                                                                        ended_at=ended), run.now)
+            except Exception:  # noqa: BLE001
+                log.exception("lifecycle timestamps for %s failed", d.deployment_id)
         with normalize.SessionLocal.begin() as s:
             w = tracker.watch_row(s, d.deployment_id)
             w.ended_at = ended or st.observed_at or run.now
@@ -445,13 +518,13 @@ def _confirm_gone(run: _Run, a, d: Deployment, listed: InstanceState | None, *, 
         _retry_terminate(run, a, d)
 
 
-def _retry_terminate(run: _Run, a, d: Deployment) -> None:
+def _retry_terminate(run: _Run, a, d: Deployment, *, ignore_backoff: bool = False) -> None:
     now = _now()
     with normalize.SessionLocal() as s:
         w = s.get(DeploymentWatch, d.deployment_id)
         attempts = w.terminate_attempts if w else 0
         nxt = w.next_terminate_at if w else None
-    if nxt is not None and now < nxt:
+    if nxt is not None and now < nxt and not ignore_backoff:
         run.find("terminate_backoff", provider=d.provider, deployment_id=d.deployment_id, next_at=nxt.isoformat())
         return
     if attempts >= settings.termination_retry_max and d.status != "termination_failed" \
@@ -533,23 +606,77 @@ def _credentials_unavailable(run: _Run, d: Deployment, exc: CredentialsUnavailab
 
 
 def _enforce_deadlines(run: _Run, provider: str | None) -> None:
+    """Runs FIRST in every pass (so the first pass after a restart enforces overdue deadlines before anything
+    else). Every live deployment past terminate_deadline_at: terminate it; if termination was already asked for
+    and the provider's last answer was failed/unknown (API unavailable), re-issue it THIS run, whatever the
+    backoff; mark past_deadline (deployment_watch.past_deadline_at). The past_deadline ops alert is raised and
+    re-escalated by _exposures() until termination is confirmed."""
     with normalize.SessionLocal() as s:
         q = select(Deployment).where(Deployment.terminate_deadline_at.is_not(None),
                                      Deployment.terminate_deadline_at <= run.now,
-                                     Deployment.status.in_(deployments.LIVE_STATES),
-                                     Deployment.terminate_requested_at.is_(None))
+                                     Deployment.status.in_(deployments.LIVE_STATES))
         if provider:
             q = q.where(Deployment.provider == provider)
-        due = list(s.scalars(q))
+        due = list(s.scalars(q.order_by(Deployment.terminate_deadline_at)))
     for d in due:
-        _terminate(run, d, f"terminate_deadline_at {d.terminate_deadline_at.isoformat()} passed: auto-terminate "
-                           f"(max_runtime_minutes={d.max_runtime_minutes})", termination_reason="max_runtime_exceeded")
-        run.find("deadline_terminated", provider=d.provider, deployment_id=d.deployment_id,
-                 deadline=d.terminate_deadline_at.isoformat())
-        tracker.alert("deadline_terminate", d.deployment_id,
-                      f"{d.provider} deployment {d.deployment_id} auto-terminated at its deadline "
-                      f"({d.terminate_deadline_at.isoformat()})", dep_id=d.deployment_id, provider=d.provider,
-                      severity="notable", detail={"max_runtime_minutes": d.max_runtime_minutes})
+        with normalize.SessionLocal.begin() as s:
+            w = tracker.watch_row(s, d.deployment_id)
+            first_seen = w.past_deadline_at is None
+            if first_seen:
+                w.past_deadline_at = run.now
+            w.deadline_retries = (w.deadline_retries or 0) + (0 if first_seen else 1)
+            w.updated_at = run.now
+            last_outcome = w.last_terminate_outcome
+        if first_seen:
+            row = deployments.load_row(d.deployment_id)
+            with normalize.SessionLocal.begin() as s:
+                r2 = s.get(Deployment, d.deployment_id, with_for_update=True)
+                deployments.note_event(s, r2, "past_deadline: terminate_deadline_at passed while the deployment is "
+                                              f"{r2.status}", {"deadline": d.terminate_deadline_at.isoformat(),
+                                                                "max_runtime_minutes": d.max_runtime_minutes},
+                                       actor="reconciler")
+            del row
+        if not _term_requested(d):
+            _terminate(run, d, f"terminate_deadline_at {d.terminate_deadline_at.isoformat()} passed: auto-terminate "
+                               f"(max_runtime_minutes={d.max_runtime_minutes})", termination_reason="max_runtime_exceeded")
+            run.find("deadline_terminated", provider=d.provider, deployment_id=d.deployment_id,
+                     deadline=d.terminate_deadline_at.isoformat())
+            tracker.alert("deadline_terminate", d.deployment_id,
+                          f"{d.provider} deployment {d.deployment_id} auto-terminated at its deadline "
+                          f"({d.terminate_deadline_at.isoformat()})", dep_id=d.deployment_id, provider=d.provider,
+                          severity="notable", detail={"max_runtime_minutes": d.max_runtime_minutes})
+            continue
+        if not d.provider_instance_id:
+            run.find("past_deadline_instance_unknown", provider=d.provider, deployment_id=d.deployment_id,
+                     status=d.status)
+            continue      # terminated as soon as reconciliation adopts the instance
+        prev = last_outcome or ((d.provider_metadata or {}).get("last_terminate") or {}).get("outcome")
+        if d.status not in ("terminating", "termination_failed", "credentials_unavailable") or \
+                prev in (None, "failed", "unknown"):
+            _deadline_retry(run, d, prev)
+
+
+def _deadline_retry(run: _Run, d: Deployment, prev: str | None) -> None:
+    """Re-issue the terminate of a past-deadline deployment with its pinned credential, now."""
+    try:
+        a = deployments.adapter_for(d, job="reconcile_deadline")
+    except CredentialsUnavailable as exc:
+        run.find("past_deadline_credentials_unavailable", provider=d.provider, deployment_id=d.deployment_id,
+                 message=exc.message)
+        return
+    except Exception as exc:  # noqa: BLE001 - no adapter
+        run.find("past_deadline_no_adapter", provider=d.provider, deployment_id=d.deployment_id,
+                 message=str(getattr(exc, "detail", exc))[:200])
+        return
+    try:
+        if d.status not in ("terminating", "termination_failed") and deployments.can_transition(d.status, "terminating") \
+                and d.status != "credentials_unavailable":
+            deployments.transition(d.deployment_id, "terminating", "past deadline: terminate re-issued",
+                                   {"previous_outcome": prev}, actor="reconciler")
+        _retry_terminate(run, a, deployments.load_row(d.deployment_id), ignore_backoff=True)
+        run.find("past_deadline_retry", provider=d.provider, deployment_id=d.deployment_id, previous_outcome=prev)
+    finally:
+        a.close()
 
 
 # --------------------------------------------------------------------------
@@ -681,6 +808,268 @@ def _reopen_and_terminate(run: _Run, d: Deployment, st: InstanceState) -> None:
                   provider=d.provider, detail={"instance_id": st.instance_id,
                                                "estimated_hourly_cost_usd": st.price_per_hour})
     _terminate(run, deployments.load_row(d.deployment_id), "orphan of a rejected launch: auto-terminate")
+
+
+# --------------------------------------------------------------------------
+# Cost-exposure alerts (alerts/ops.exposure): evaluated at the end of every pass
+# --------------------------------------------------------------------------
+
+UNCERTAIN = ("provider_timeout", "launch_unknown", "orphan_suspected", "credentials_unavailable")
+
+
+def _hourly(d: Deployment) -> float | None:
+    price = d.actual_price_per_gpu_hour if d.actual_price_per_gpu_hour is not None else d.quoted_price_per_gpu_hour
+    return None if price is None else round(float(price) * (d.gpu_count or 1), 4)
+
+
+def _ops():
+    from alerts import ops
+    return ops
+
+
+def _expose(kind: str, d: Deployment | None, subject: str, title: str, since: datetime | None, action: str,
+            run: _Run, *, provider: str | None = None, est: float | None = None, detail: dict | None = None) -> None:
+    r = _ops().exposure(kind, subject, title, deployment_id=d.deployment_id if d else None,
+                        provider=provider or (d.provider if d else None), account_id=d.account_id if d else None,
+                        est_hourly_exposure_usd=est if est is not None else (_hourly(d) if d else None),
+                        time_in_state_seconds=None if since is None else (run.now - since).total_seconds(),
+                        suggested_action=action, detail=detail, now=run.now)
+    run.find("exposure_alert", alert_kind=kind, subject=subject, sent=r.get("sent"), escalation=r.get("sent_count"))
+
+
+def _resolve_missing(kind: str, active: set, evidence_for) -> int:
+    """Resolve open conditions of `kind` that are no longer true, each WITH its evidence (evidence_for(subject)
+    returns a dict, or None when there is no proof yet: then it stays open)."""
+    n = 0
+    for subject in _ops().open_subjects(kind):
+        if subject in active:
+            continue
+        ev = evidence_for(subject)
+        if ev:
+            n += _ops().resolve(kind, subject, ev, by="system:reconciler")
+    return n
+
+
+def _dep_evidence(why_ok):
+    def ev(subject: str):
+        d = deployments.load_row(subject.split(":", 1)[1]) if subject.startswith("dep:") else None
+        if d is None:
+            return None
+        return why_ok(d)
+    return ev
+
+
+def _exposures(run: _Run) -> dict:
+    st = settings
+    unknown_after = timedelta(minutes=int(getattr(st, "alert_unknown_minutes", 10)))
+    pct = float(getattr(st, "alert_overspend_pct", 20.0))
+    counts: dict = {}
+    with normalize.SessionLocal() as s:
+        live = list(s.scalars(select(Deployment).where(Deployment.status.in_(deployments.LIVE_STATES))))
+        watches = {w.deployment_id: w for w in s.scalars(select(DeploymentWatch).where(
+            DeploymentWatch.deployment_id.in_([d.deployment_id for d in live])))} if live else {}
+        orphans_open = list(s.scalars(select(OrphanResource).where(OrphanResource.status.in_(("open", "terminating")))))
+        unowned = list(s.scalars(select(ProviderResource).where(ProviderResource.status == "abandoned",
+                                                                ProviderResource.recorded_by == "reconcile_unowned")))
+    active = {k: set() for k in ("resource_state_unknown", "termination_failed", "past_deadline", "overspend",
+                                 "active_without_billing", "suspected_orphan", "provider_api_unavailable",
+                                 "unowned_provider_resource")}
+    for d in live:
+        subj = f"dep:{d.deployment_id}"
+        w = watches.get(d.deployment_id)
+        since = d.state_changed_at or d.created_at
+        # 1. unknown / uncertain state too long
+        stale_obs = (d.provider_instance_id and w is not None and (w.consecutive_errors or 0) > 0
+                     and run.now - (w.last_observed_at or since) > unknown_after)
+        if (d.status in UNCERTAIN and run.now - since > unknown_after) or stale_obs:
+            active["resource_state_unknown"].add(subj)
+            _expose("resource_state_unknown", d, subj,
+                    f"{d.provider} {d.deployment_id}: state unknown ({d.status}"
+                    + (f", {w.consecutive_errors} failed reads" if stale_obs else "") + ") - it may be billing",
+                    (w.last_observed_at if stale_obs and w and w.last_observed_at else since),
+                    "check the instance in the provider console; resolve the launch (adopt/terminate) or restore the "
+                    "pinned credential", run, detail={"status": d.status, "client_name": d.client_name})
+        # 2. termination failed
+        if d.status == "termination_failed":
+            active["termination_failed"].add(subj)
+            _expose("termination_failed", d, subj, f"{d.provider} {d.deployment_id}: termination failed; instance "
+                                                    f"{d.provider_instance_id} may still be billing", since,
+                    "terminate the instance in the provider console; OpenGrid keeps retrying and confirms by list",
+                    run, detail={"instance_id": d.provider_instance_id,
+                                 "attempts": w.terminate_attempts if w else None})
+        # 3. past deadline
+        if d.terminate_deadline_at is not None and d.terminate_deadline_at <= run.now:
+            active["past_deadline"].add(subj)
+            _expose("past_deadline", d, subj, f"{d.provider} {d.deployment_id} is past its deadline "
+                                               f"({d.terminate_deadline_at.isoformat()}) and still {d.status}",
+                    d.terminate_deadline_at,
+                    "OpenGrid re-issues terminate every run; if the provider API stays down terminate it in the "
+                    "provider console", run, detail={"deadline": d.terminate_deadline_at.isoformat(),
+                                                     "status": d.status, "instance_id": d.provider_instance_id,
+                                                     "retries": w.deadline_retries if w else 0,
+                                                     "last_terminate_outcome": w.last_terminate_outcome if w else None})
+        # 4. overspend vs the quote
+        _overspend(run, d, pct, active)
+        # 5. live billable state without usage slices for > 2 intervals (1 h slices)
+        if d.status in tracker.BILLED_STATES and d.provider_instance_id:
+            start = d.billable_start or d.provisioned_at
+            if start is not None:
+                covered = (w.metered_through if w and w.metered_through else tracker._floor_hour(start))
+                lag = tracker._floor_hour(run.now) - covered
+                if lag > 2 * tracker.HOUR:
+                    active["active_without_billing"].add(subj)
+                    _expose("active_without_billing", d, subj,
+                            f"{d.provider} {d.deployment_id} is {d.status} but has no usage slice since "
+                            f"{covered.isoformat()}", covered,
+                            "check the routing_tracker job and the deployment's price; usage is metered hourly",
+                            run, detail={"metered_through": w.metered_through.isoformat() if w and w.metered_through
+                                         else None, "billable_start": start.isoformat()})
+    # 6. suspected orphans
+    for o in orphans_open:
+        subj = f"orphan:{o.id}"
+        active["suspected_orphan"].add(subj)
+        d = deployments.load_row(o.deployment_id) if o.deployment_id else None
+        r = _ops().exposure("suspected_orphan", subj, f"suspected orphan on {o.provider}: {o.instance_name or o.instance_id} "
+                                                      f"({o.kind})", deployment_id=o.deployment_id, provider=o.provider,
+                            account_id=d.account_id if d else None,
+                            est_hourly_exposure_usd=None if o.price_per_hour is None else float(o.price_per_hour),
+                            time_in_state_seconds=(run.now - o.first_seen_at).total_seconds(),
+                            suggested_action="POST /v1/admin/orphans/{id}/resolve (terminate | adopt | ignore); OpenGrid "
+                                             "auto-terminates only provably-ours instances",
+                            detail={"orphan_id": o.id, "instance_id": o.instance_id, "kind_of_orphan": o.kind,
+                                    "provably_ours": o.provably_ours}, now=run.now)
+        run.find("exposure_alert", alert_kind="suspected_orphan", subject=subj, sent=r.get("sent"))
+    # 7. provider API unavailable while it has active deployments
+    by_key: dict = {}
+    for d in live:
+        by_key.setdefault((d.provider, _ref(d)), []).append(d)
+    for (p, ref), kind in run.list_failed.items():
+        deps = by_key.get((p, ref)) or []
+        if not deps:
+            continue
+        subj = f"provider:{p}:{ref}"
+        active["provider_api_unavailable"].add(subj)
+        est = sum(x for x in (_hourly(d) for d in deps) if x is not None)
+        oldest = min((d.state_changed_at or d.created_at) for d in deps)
+        r = _ops().exposure("provider_api_unavailable", subj,
+                            f"{p} API unavailable ({kind}) with {len(deps)} active deployment(s)",
+                            deployment_id=deps[0].deployment_id if len(deps) == 1 else None, provider=p,
+                            account_id=deps[0].account_id if len({d.account_id for d in deps}) == 1 else None,
+                            est_hourly_exposure_usd=est, time_in_state_seconds=_since_first(run, "provider_api_unavailable", subj),
+                            suggested_action=f"check {p} status / the pinned credential {ref}; terminate in the provider "
+                                             "console if deadlines pass",
+                            detail={"credential_ref": ref, "deployments": [d.deployment_id for d in deps],
+                                    "error_kind": kind, "oldest_state_change": oldest.isoformat()}, now=run.now)
+        run.find("exposure_alert", alert_kind="provider_api_unavailable", subject=subj, sent=r.get("sent"))
+    # 8. og-* provider resources without an ownership record
+    for r0 in unowned:
+        subj = f"provider_resource:{r0.id}"
+        active["unowned_provider_resource"].add(subj)
+        r = _ops().exposure("unowned_provider_resource", subj,
+                            f"{r0.provider} ssh key {r0.name} exists with no OpenGrid ownership record",
+                            deployment_id=None, provider=r0.provider, account_id=None, est_hourly_exposure_usd=0.0,
+                            time_in_state_seconds=(run.now - r0.created_at).total_seconds(),
+                            suggested_action="verify who created it; delete it in the provider console if it is not "
+                                             "in use (OpenGrid never deletes keys it cannot prove it created)",
+                            detail={"resource_id": r0.id, "key_id": r0.provider_resource_id, "name": r0.name,
+                                    "credential_ref": r0.credential_ref}, now=run.now)
+        run.find("exposure_alert", alert_kind="unowned_provider_resource", subject=subj, sent=r.get("sent"))
+    # Resolution: only on evidence.
+    resolved = 0
+
+    def ended(d):
+        if d.status in deployments.TERMINAL_STATES:
+            return {"basis": f"deployment is {d.status}", "terminated_at": _iso(d.terminated_at)}
+        return None
+
+    resolved += _resolve_missing("termination_failed", active["termination_failed"], _dep_evidence(
+        lambda d: ended(d) or ({"basis": f"status now {d.status}"} if d.status != "termination_failed" else None)))
+    resolved += _resolve_missing("past_deadline", active["past_deadline"], _dep_evidence(ended))
+    resolved += _resolve_missing("resource_state_unknown", active["resource_state_unknown"], _dep_evidence(
+        lambda d: ended(d) or ({"basis": f"state known: {d.status}", "last_checked_at": _iso(d.last_checked_at)}
+                               if d.status not in UNCERTAIN else None)))
+    resolved += _resolve_missing("active_without_billing", active["active_without_billing"], _dep_evidence(
+        lambda d: ended(d) or {"basis": "usage slices caught up", "metered_through": _iso(_metered_through(d))}))
+    resolved += _resolve_missing("overspend", active["overspend"], _dep_evidence(
+        lambda d: {"basis": "spend back within the quote tolerance", "status": d.status}))
+
+    def orphan_ev(subject):
+        o = orphans_by_id(int(subject.split(":", 1)[1]))
+        if o and o.get("status") not in ("open", "terminating"):
+            return {"basis": f"orphan {o['status']}", "resolution_note": o.get("resolution_note"),
+                    "resolved_by": o.get("resolved_by")}
+        return None
+
+    resolved += _resolve_missing("suspected_orphan", active["suspected_orphan"], orphan_ev)
+    resolved += _resolve_missing("provider_api_unavailable", active["provider_api_unavailable"], lambda subj: (
+        {"basis": "list_instances succeeded", "at": run.now.isoformat()}
+        if tuple(subj.split(":", 2)[1:]) in {(p, r) for p, r in run.listed_ok} else
+        ({"basis": "no active deployments on this credential any more", "at": run.now.isoformat()}
+         if tuple(subj.split(":", 2)[1:]) not in {(p, str(r)) for p, r in by_key} and
+         tuple(subj.split(":", 2)[1:]) not in {(p, str(r)) for p, r in run.list_failed} else None)))
+
+    def res_ev(subject):
+        r = resources.get(int(subject.split(":", 1)[1]))
+        if r and r["status"] != "abandoned":
+            return {"basis": f"resource {r['status']}", "deleted_at": r.get("deleted_at")}
+        return None
+
+    resolved += _resolve_missing("unowned_provider_resource", active["unowned_provider_resource"], res_ev)
+    counts = {k: len(v) for k, v in active.items()}
+    counts["resolved"] = resolved
+    return counts
+
+
+def _since_first(run: _Run, kind: str, subject: str) -> float:
+    from store.reconcile import OpsAlertState
+    with normalize.SessionLocal() as s:
+        t = s.scalar(select(OpsAlertState.first_at).where(OpsAlertState.kind == kind, OpsAlertState.subject == subject,
+                                                          OpsAlertState.status == "open"))
+    return 0.0 if t is None else (run.now - t).total_seconds()
+
+
+def _metered_through(d: Deployment):
+    with normalize.SessionLocal() as s:
+        w = s.get(DeploymentWatch, d.deployment_id)
+        return w.metered_through if w else None
+
+
+def _overspend(run: _Run, d: Deployment, pct: float, active: dict) -> None:
+    """Spend above the quote by more than pct: the execution price vs the quoted price, the metered cost vs
+    quote x metered time, and the metered cost vs the quote's estimated total."""
+    from sqlalchemy import func
+
+    q = d.quoted_price_per_gpu_hour
+    if q is None or float(q) <= 0:
+        return
+    q = float(q)
+    with normalize.SessionLocal() as s:
+        cost, secs = s.execute(select(func.coalesce(func.sum(UsageSlice.cost_usd), 0),
+                                      func.coalesce(func.sum(UsageSlice.billable_seconds), 0))
+                               .where(UsageSlice.deployment_id == d.deployment_id)).one()
+        est_total = None
+        if d.quote_id:
+            from store.routing import QuoteRow
+            qr = s.get(QuoteRow, d.quote_id)
+            est_total = None if qr is None or qr.est_total_cost is None else float(qr.est_total_cost)
+    cost, secs = float(cost), int(secs)
+    expected = q * (d.gpu_count or 1) * secs / 3600
+    reasons = []
+    if d.actual_price_per_gpu_hour is not None and float(d.actual_price_per_gpu_hour) > q * (1 + pct / 100):
+        reasons.append(f"execution price {float(d.actual_price_per_gpu_hour):.4f}/GPU-h vs quote {q:.4f}")
+    if expected > 0 and cost > expected * (1 + pct / 100):
+        reasons.append(f"metered cost ${cost:.2f} vs expected ${expected:.2f}")
+    if est_total and cost > est_total * (1 + pct / 100):
+        reasons.append(f"metered cost ${cost:.2f} vs quoted total ${est_total:.2f}")
+    if not reasons:
+        return
+    subj = f"dep:{d.deployment_id}"
+    active["overspend"].add(subj)
+    _expose("overspend", d, subj, f"{d.provider} {d.deployment_id}: spend exceeds the quote by > {pct:g}%: "
+                                  + "; ".join(reasons), d.billable_start or d.provisioned_at,
+            "review the provider price and the quote; terminate if the workload does not justify it", run,
+            detail={"reasons": reasons, "metered_cost_usd": round(cost, 4), "expected_cost_usd": round(expected, 4),
+                    "quote_price_per_gpu_hour": q, "quote_est_total_cost": est_total})
 
 
 # --------------------------------------------------------------------------

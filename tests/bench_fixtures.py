@@ -46,7 +46,7 @@ from sqlalchemy import text  # noqa: E402
 from tables import ComputeListingRow, ListingObservation  # noqa: E402
 
 SCOPES = frozenset({"data:read", "route:preview", "route:execute", "deployments:read", "deployments:write"})
-PK = "ssh-ed25519 " + "A" * 68 + " bench@test"
+PK = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f bench@test"  # valid ed25519 framing, test-only bytes
 
 
 def now() -> datetime:
@@ -174,7 +174,7 @@ class Sim(Adapter):
     CHECK_NEEDS_CREDENTIALS = False
     SSH_KEY_REGISTRATION = True
     CAPABILITIES = Capabilities(billing_unit=("per second", "sim"), stopped_billing=("n/a", "sim"),
-                                minimum_commitment=("NO", "sim"))
+                                minimum_commitment=("NO", "sim"), forces_account_ssh_key=("NO", "test fake"))
     CHECK: dict = {}
     PRICE: dict = {}
     PROVISION: dict = {}

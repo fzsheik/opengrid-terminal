@@ -11,6 +11,16 @@
     find_instance(name) -> InstanceState | None     match by OpenGrid's og-* name/tag; RAISES on failure,
                                                     raises AdapterError(AMBIGUOUS) when >1 live match
     reported_cost(instance_id, start, end) -> CostReport   amount None + reason where the API has no billing
+    register_ssh_key(name, public_key) -> ProviderKeyRef   per-deployment key (SSH_KEY_RESOURCE adapters);
+                                                    recorded in provider_resources BEFORE the call
+    delete_ssh_key(key_id) -> ActionResult          never raises; 404 -> already_gone
+    list_ssh_keys() -> list[ProviderKey]            every key on the account; RAISES on failure
+
+SSH keys (methodology/provider-capabilities.md "SSH keys"): SSH_KEY_REGISTRATION is 'per_deployment' |
+'account_only' | 'none' (results.KeyRegistration; falsy for 'none'). SSH_KEY_RESOURCE says registration
+creates a provider-side key object (which OpenGrid must delete after confirmed termination);
+CAPABILITIES.forces_account_ssh_key says whether the provider installs account/default keys whatever the
+launch names. An adapter sends ONLY the key(s) the core passed: never an account default key.
 
 The result types live in routing/adapters/results.py. The rule they encode: a provider call that may
 have created (or may not have deleted) real infrastructure never reads as a clean success or failure.
@@ -53,7 +63,8 @@ from typing import Any
 import httpx
 
 from routing.adapters.results import (  # noqa: F401  (re-exported for the core)
-    ActionResult, Capabilities, CostReport, InstanceState, ProvisionResult, TerminateResult, instance_name,
+    ActionResult, Capabilities, CostReport, InstanceState, KeyRegistration, ProviderKey, ProviderKeyRef,
+    ProvisionResult, TerminateResult, instance_name, key_registration,
 )
 
 log = logging.getLogger("routing.adapters")
@@ -289,7 +300,8 @@ class Adapter:
     CREDENTIAL_PROVIDER: str | None = None
     CHECK_NEEDS_CREDENTIALS: bool = True
     NAME_MAX: int = 63
-    SSH_KEY_REGISTRATION: bool = False        # can register ssh_public_key under the instance name
+    SSH_KEY_REGISTRATION: KeyRegistration = KeyRegistration("none")   # per_deployment | account_only | none
+    SSH_KEY_RESOURCE: bool = False            # registration creates a provider key object (delete after use)
     FIND_RELIABLE: bool = True                # False: find_instance cannot match on a name/tag we set
     # Does the provider bill an instance it reports in an error state? (metering of "degraded" time)
     ERROR_STATE_BILLED: bool = True
@@ -587,6 +599,66 @@ class Adapter:
         """The provider's own cost for this instance, where its API exposes one."""
         return CostReport(amount_usd=None, reason=self.CAPABILITIES.reported_cost[1]
                           or f"{self.provider}'s API exposes no per-instance cost")
+
+    # -- per-deployment SSH keys (provider_resources lifecycle) ---------------
+
+    def register_ssh_key(self, name: str, public_key: str) -> ProviderKeyRef:
+        """Register `public_key` under `name` (og-<deployment>). The provider_resources row is written
+        (status 'creating') BEFORE the call and completed with the key id after it, so a crash between
+        the two leaves a record reconciliation resolves by name. Raises AdapterError; a failure to write
+        the record raises before any provider call (fail closed: no untracked key is ever created)."""
+        from routing.adapters import resources
+
+        if not self.SSH_KEY_RESOURCE:
+            raise AdapterError(CONFIG, f"{self.provider}: no provider-side ssh key registration", sent=False)
+        rid = resources.before_register(self, name, public_key)
+        try:
+            ref = self._register_ssh_key(name, public_key)
+        except AdapterError as exc:
+            resources.register_failed(rid, exc, self.scrub(exc.message))
+            raise
+        except Exception as exc:  # noqa: BLE001 - after the call: the key may exist
+            resources.register_failed(rid, AdapterError(PARSE, str(exc), sent=True), f"unexpected {type(exc).__name__}")
+            raise AdapterError(PARSE, f"{self.provider}: ssh key registration answer unusable", sent=True)
+        resources.after_register(rid, ref)
+        return ref
+
+    def _register_ssh_key(self, name: str, public_key: str) -> ProviderKeyRef:
+        raise AdapterError(CONFIG, f"{self.provider}: ssh key registration is not implemented", sent=False)
+
+    def delete_ssh_key(self, key_id: str) -> ActionResult:
+        """Delete one provider key by id. Never raises. Callers (routing/adapters/resources.py) only pass
+        ids of keys OpenGrid recorded or provably created."""
+        try:
+            r = self._delete_ssh_key(str(key_id))
+        except AdapterError as exc:
+            return self.action_failure(exc)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("%s: unexpected error in delete_ssh_key", self.provider)
+            return ActionResult("unknown", f"{self.provider}: unexpected {type(exc).__name__}", error_kind="internal")
+        r.message = self.scrub(r.message)
+        return r
+
+    def _delete_ssh_key(self, key_id: str) -> ActionResult:
+        raise AdapterError(CONFIG, f"{self.provider}: ssh key delete is not implemented", sent=False)
+
+    def list_ssh_keys(self) -> list[ProviderKey]:
+        """Every SSH key on the account (no key material). Raises AdapterError on any failure."""
+        return list(self._list_ssh_keys())
+
+    def _list_ssh_keys(self) -> list[ProviderKey]:
+        raise AdapterError(CONFIG, f"{self.provider}: list_ssh_keys is not implemented", sent=False)
+
+    def launch_key(self, launch: LaunchSpec, name: str, *, use: str = "name") -> str:
+        """The key reference for the create call: the core-passed reference, else a per-deployment key
+        registered (pre-create, so a failure is a clean rejection). `use` = 'name' | 'id'."""
+        if launch.ssh_key:
+            return launch.ssh_key
+        ref = self.preflight(self.register_ssh_key, name, launch.ssh_public_key)
+        v = ref.name if use == "name" else ref.key_id
+        if not v:
+            raise AdapterError(INVALID, f"{self.provider}: ssh key registration returned no {use}", sent=False)
+        return v
 
     # -- helpers for subclasses -----------------------------------------------
 

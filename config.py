@@ -88,7 +88,14 @@ class Settings(BaseSettings):
     quote_price_tolerance: float = 0.02          # re-validation refuses a launch if the price moved more
     validation_max_price_per_hour: float = 3.0   # validation launch: total instance $/h cap
     validation_max_runtime_minutes: int = 30     # validation launch: auto-terminate deadline
-    default_max_runtime_minutes: int | None = None   # customer launches: None = no deadline (guards apply)
+    default_max_runtime_minutes: int | None = None   # DEPRECATED (ignored since 0014_limits): see runtime_* below
+    # Runtime ceilings (routing/guards.runtime_ceiling; 0014_limits). Every deployment gets an auto-terminate
+    # deadline: effective = min(hard max, account max, request | account default | system default). Never unlimited.
+    runtime_hard_max_minutes: int = 1440         # system hard max (24 h); requests above are clamped
+    runtime_default_minutes: int = 60            # when neither the request nor the account sets one
+    # Validation launch gate (routing/validation.preconditions): providers allowed for a validation launch.
+    validation_allowed_providers: list[str] = ["lambda"]
+    validation_drill_window_days: int = 7        # kill-switch drills / ops test alert must be this recent
     default_max_price_per_gpu_hour: float | None = None
     default_max_hourly_cost: float = 50.0
     default_max_total_cost: float | None = None
@@ -104,6 +111,12 @@ class Settings(BaseSettings):
     termination_retry_max: int = 5               # terminate re-issues before termination_failed + alert
     termination_retry_base_seconds: int = 60     # backoff base: base * 2^attempt between terminate retries
     tracker_interval_seconds: int = 60           # status polling + usage metering job period
+    # --- lifecycle: cost-exposure alerts, provider resources (alerts/ops.py, routing/adapters/resources.py) ---
+    alert_unknown_minutes: int = 10              # resource state unknown longer than this -> ops alert
+    alert_overspend_pct: float = 20.0            # spend above the quote by more than this % -> ops alert
+    alert_reescalate_minutes: int = 30           # an unresolved cost-exposure alert is re-sent this often
+    ssh_key_delete_retry_max: int = 5            # provider key deletes before delete_failed + ops alert
+    ssh_key_delete_retry_base_seconds: int = 60  # backoff base between key delete retries (x 2^attempt)
     idempotency_ttl_hours: int = 24
     idempotency_stale_seconds: int = 600         # an in_progress key older than this may be reclaimed
     # Observability (observability.py). JSON log lines; None = JSON when deployed (RAILWAY_ENVIRONMENT), text in dev.

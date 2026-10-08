@@ -167,3 +167,18 @@ replicas multiplies them.
   `GET /v1/deployments/{id}` (SEC-P2-9) belong to the routing modules.
 - Supply chain (SEC-P2-10): build with `uv sync --locked`.
 - HSTS is left to the TLS-terminating edge.
+
+## Re-audit hardening (before the first real launch)
+
+- **CSP inline scripts.** The only inline scripts allowed are the ones in OpenGrid's own `web/*.html`
+  templates, by hash (CRLF and LF forms). A script injected into a response is never hashed into the policy.
+- **Key lineage under concurrency.** Creating a child key locks the parent row and refuses when the parent or
+  any ancestor is revoked or expired; revoking re-reads descendants until none are left. The locks are in
+  Postgres, so this holds with several workers.
+- **Private webhook targets.** `ALERTS_WEBHOOK_ALLOW_PRIVATE` is ignored (with a warning) whenever the app is
+  deployed; it exists only for local development.
+- **Open dev servers.** With no `APP_PASSWORD` (local development only), the app answers only when the Host is
+  an IP literal, `localhost` / `*.localhost`, `testserver` or the public base host, so a DNS-rebinding page
+  cannot reach it as same-origin.
+- **Rate-limit classes.** Validation launches are in the strict execute class. Terminate and stop are in the
+  write class: they only ever reduce spend, so an emergency shutdown is never throttled like a launch.

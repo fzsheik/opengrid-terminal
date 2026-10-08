@@ -102,13 +102,26 @@ def resolve_public(host: str, port: int) -> list[str]:
     return addrs
 
 
+def allow_private() -> bool:
+    """settings.alerts_webhook_allow_private, honoured ONLY on a developer machine: a deployed server
+    with the flag left on would otherwise be an SSRF into its own network."""
+    if not settings.alerts_webhook_allow_private:
+        return False
+    from accounts.security import deployed
+
+    if deployed():
+        log.warning("alerts_webhook_allow_private is ignored on a deployed server")
+        return False
+    return True
+
+
 def check_url(url: str) -> str:
     u = urlparse(url or "")
     if u.scheme not in ("https", "http") or not u.hostname:
         raise ValueError("webhook url must be an absolute https URL")
     if u.username or u.password:
         raise ValueError("webhook url must not contain credentials")
-    if settings.alerts_webhook_allow_private:
+    if allow_private():
         return url
     if u.scheme != "https":
         raise ValueError("webhook url must be https")
@@ -162,7 +175,7 @@ def deliver(channels: list[dict], payload: dict, secret: str | None) -> tuple[li
             headers = {"Content-Type": "application/json", "User-Agent": "OpenGrid-Alerts/1",
                        "X-OpenGrid-Timestamp": str(ts), "X-OpenGrid-Signature": sign(secret, ts, body)}
             try:
-                if settings.alerts_webhook_allow_private:  # dev only: no pinning, plain hostname
+                if allow_private():  # dev only: no pinning, plain hostname
                     check_url(c["url"])
                     url, extra, ext = c["url"], {}, {}
                 else:

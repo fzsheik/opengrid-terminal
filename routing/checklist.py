@@ -318,20 +318,50 @@ def kill_switch_tested(provider: str):
                  fix="kill_all with a reason, confirm a preview still works and a launch is refused, then restore")
 
 
-def reconciliation_running():
+def _job(name: str):
+    return jobs.JOBS.get(name) or next((v for k, v in jobs.JOBS.items() if name in k), None)
+
+
+def _job_ev(j, interval: float, what: str = "reconciliation"):
+    """(ok | None, evidence) from the in-process jobs registry; None when the job is not registered here."""
+    if j is None:
+        return None, f"no {what} job registered in this process"
+    if j.last_finished is None and not j.runs:
+        return None, f"job {j.name}: registered but not run in this process (jobs run elsewhere or disabled)"
+    fin = j.last_finished
+    fresh = fin is not None and _now() - fin < timedelta(seconds=2 * max(interval, j.every_seconds))
+    return (fresh and not j.last_error), (f"job {j.name}: last finished {fin.isoformat() if fin else 'never'}, error "
+                                          f"{j.last_error!r}, runs {j.runs}, failures {j.failures}")
+
+
+def _heartbeat(name: str, interval: float):
+    """(ok | None, evidence) from the durable heartbeat (execution_controls 'job:<name>'); None when absent."""
+    try:
+        from routing import control as rc
+
+        with normalize.SessionLocal() as s:
+            if not obs.has_table(s, "execution_controls"):
+                return None, None
+            r = obs.rows(s, "execution_controls", "key = :k", {"k": f"job:{name}"}, None, 1)
+        if not r:
+            return None, None
+        h = rc.job_health(name, interval)
+        return h["ok"], "heartbeat: " + h["reason"]
+    except Exception as e:  # noqa: BLE001
+        return None, f"heartbeat unavailable: {type(e).__name__}"
+
+
+def reconciliation_running(provider: str | None = None):
+    """Fresh, successful reconciliation. Only the SELECTED provider's errors count: a list failure at an
+    unrelated provider (a 'partial' run) does not turn this item red."""
     label = "Reconciliation worker running (last run < 2x interval, no failure)"
     interval = float(getattr(settings, "reconcile_interval_seconds", 120))
-    j = next((v for k, v in jobs.JOBS.items() if "reconcil" in k), None)
     ev = []
-    ok_job = None
-    if j is None:
-        ev.append("no reconciliation job registered in this process")
-    else:
-        fin = j.last_finished
-        fresh = fin is not None and _now() - fin < timedelta(seconds=2 * max(interval, j.every_seconds))
-        ok_job = fresh and not j.last_error
-        ev.append(f"job {j.name}: last finished {fin.isoformat() if fin else 'never'}, error {j.last_error!r}, "
-                  f"runs {j.runs}, failures {j.failures}")
+    ok_job, e = _job_ev(_job("reconcil"), interval)
+    ev.append(e)
+    ok_hb, e = _heartbeat("reconcile", interval)
+    if e:
+        ev.append(e)
     ok_db = None
     with normalize.SessionLocal() as s:
         if obs.has_table(s, "reconciliation_runs"):
@@ -341,25 +371,50 @@ def reconciliation_running():
             if last:
                 r = last[0]
                 t = _ts(r.get(tcol)) if tcol else None
-                failed = bool(r.get("error")) or str(r.get("status") or "ok").lower() in ("failed", "error")
-                if str(r.get("status") or "").lower() == "partial":
-                    failed = True  # some provider errored in that pass; the evidence shows which
+                status = str(r.get("status") or "ok").lower()
+                provs = r.get("providers") if isinstance(r.get("providers"), dict) else {}
+                mine = provs.get(provider) if provider else None
+                mine_err = isinstance(mine, dict) and bool(mine.get("error") or mine.get("list_errors"))
+                if status == "partial":
+                    # some provider errored in that pass: red only when it is the selected provider (or unknown)
+                    failed = mine_err or (provider is None)
+                else:
+                    failed = status in ("failed", "error") or (bool(r.get("error")) and status != "ok") or mine_err
                 ok_db = t is not None and _now() - t < timedelta(seconds=2 * interval) and not failed
                 ev.append(f"last reconciliation_runs row {t.isoformat() if t else '?'} status {r.get('status')!r}"
-                          f" error {r.get('error')!r}")
+                          f" error {r.get('error')!r}" + (f"; {provider}: {json.dumps(mine, default=str)}"
+                                                          if provider and mine is not None else ""))
             else:
                 ok_db = False
                 ev.append("reconciliation_runs is empty")
         else:
             ev.append("reconciliation_runs table not present")
-    if ok_job or ok_db:
-        if ok_job is False or ok_db is False:
+    proc = ok_job if ok_job is not None else ok_hb
+    if proc or ok_db:
+        if proc is False or ok_db is False:
             return _item("reconciliation_running", label, RED, "; ".join(ev))
         return _item("reconciliation_running", label, GREEN, "; ".join(ev))
-    if j is None and ok_db is None:
+    if proc is None and ok_db is None:
         return _item("reconciliation_running", label, UNKNOWN, "unavailable: " + "; ".join(ev))
     return _item("reconciliation_running", label, RED, "; ".join(ev),
-                 fix="the reconciliation job must run in this process (OPENGRID_NO_JOBS unset) and succeed")
+                 fix="the reconciliation job must run (OPENGRID_NO_JOBS unset in one process) and succeed")
+
+
+def tracker_running():
+    """The routing_tracker job (status polling, usage metering, billing retries) ran successfully recently."""
+    label = "Tracker worker running (status polling + metering; last run < 2x interval, no failure)"
+    interval = float(getattr(settings, "tracker_interval_seconds", 60))
+    ok_job, e1 = _job_ev(_job("routing_tracker"), interval, "tracker")
+    ok_hb, e2 = _heartbeat("routing_tracker", interval)
+    ev = "; ".join(x for x in (e1 if ok_job is not None else None, e2) if x) or (e1 or "no tracker evidence")
+    ok = ok_job if ok_job is not None else ok_hb
+    if ok is None:
+        return _item("tracker_running", label, UNKNOWN, "unavailable: " + ev,
+                     fix="the routing_tracker job must run (OPENGRID_NO_JOBS unset in one process) and succeed")
+    if ok and ok_hb is not False:
+        return _item("tracker_running", label, GREEN, ev)
+    return _item("tracker_running", label, RED, ev,
+                 fix="the routing_tracker job must run and succeed (see /v1/ops jobs and ERROR logs)")
 
 
 def termination_tested(provider: str):
@@ -457,7 +512,8 @@ def checklist(provider: str, route_request_id: str | None = None, account_id: in
     provider = provider.lower()
     makers = [pepper, fernet_key, migrations, lambda: provider_credential(provider, probe), lambda: ssh_key(provider),
               lambda: launch_params(provider), lambda: spend_limits(account_id), lambda: execution_mode(provider),
-              lambda: provider_validated(provider), lambda: kill_switch_tested(provider), reconciliation_running,
+              lambda: provider_validated(provider), lambda: kill_switch_tested(provider),
+              lambda: reconciliation_running(provider), tracker_running,
               lambda: termination_tested(provider), logging_active, alerts_active,
               lambda: quote_approved(route_request_id)]
     items = []

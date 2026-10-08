@@ -27,6 +27,7 @@ from routing.adapters.base import (
     AdapterError, Adapter, Availability, Capabilities, CostReport, InstanceState, Offer, TerminateResult,
     parse_time, pick_region,
 )
+from routing.adapters.results import PER_DEPLOYMENT, ActionResult, ProviderKey, ProviderKeyRef
 
 STATE = {"creating": "pending", "pending_provider": "pending", "pending": "pending", "active": "running",
          "deleting": "terminating", "deleted": "terminated"}
@@ -40,7 +41,8 @@ class ShadeformAdapter(Adapter):
     CREDENTIAL_PROVIDER = "shadeform"
     CHECK_NEEDS_CREDENTIALS = False
     REQUIRED_LAUNCH = ("ssh_key",)   # without one Shadeform's managed key is used and the user cannot log in
-    SSH_KEY_REGISTRATION = True
+    SSH_KEY_REGISTRATION = PER_DEPLOYMENT
+    SSH_KEY_RESOURCE = True
     CAPABILITIES = Capabilities(
         quote=("YES", f"hourly_price in cents per instance ({SF})"),
         live_availability=("YES", "availability[{region, available, rental_type}] (public catalogue)"),
@@ -64,6 +66,10 @@ class ShadeformAdapter(Adapter):
         reported_cost=("PARTIAL", "cost_estimate (string, 'cost incurred ... via Shadeform'; unit assumed USD, "
                                   "UNVERIFIED) on /instances/{id}/info while the instance is not deleted"),
         error_semantics=("poor", "spec documents only 200 responses; 5xx/402/429 semantics unknown"),
+        forces_account_ssh_key=("UNKNOWN", "ssh_key_id is 'The ID of the SSH Key'; the account has a default key used "
+                                           "when none is given and the docs do not say whether it is also installed "
+                                           "when one is (docs.shadeform.ai instances-create, fetched 2026-10-07)"),
+        billing_starts=("UNKNOWN", "active_at is exposed; billing start not documented against it"),
         risks=["Aggregator: Shadeform is the counterparty and bills the wallet",
                "Only non-deleted instances are listed: absence after delete is the confirmation signal",
                "Bare-metal types (Latitude) can take long to become active"],
@@ -93,12 +99,7 @@ class ShadeformAdapter(Adapter):
     def _provision(self, offer, availability, launch, name):
         if not availability.region:
             raise AdapterError("capacity", f"shadeform: no available region for {offer.listing_id}", sent=False)
-        key = launch.ssh_key
-        if launch.ssh_public_key and not key:
-            k = self.preflight(self.request, "POST", "/sshkeys/add", json={"name": name, "public_key": launch.ssh_public_key})
-            key = (k or {}).get("id") if isinstance(k, dict) else None
-            if not key:
-                raise AdapterError("invalid", "shadeform: ssh key registration returned no id", sent=False)
+        key = self.launch_key(launch, name, use="id")     # never omitted: Shadeform would use its default key
         body = {"cloud": self.provider, "region": availability.region, "shade_instance_type": offer.listing_id,
                 "shade_cloud": True, "name": name, "tags": ["opengrid", name], "ssh_key_id": key}
         if launch.image:
@@ -123,7 +124,9 @@ class ShadeformAdapter(Adapter):
             state="error" if err else STATE.get(st, "unknown"), instance_id=str(d.get("id")),
             name=d.get("name"), provider_status=st, region=d.get("region"),
             gpu=(d.get("configuration") or {}).get("gpu_type"), gpu_count=n,
-            price_per_hour=None if cents is None else float(cents) / 100, created_at=parse_time(d.get("created_at")),
+            price_per_hour=None if cents is None else float(cents) / 100, created_at=parse_time(d.get("created_at")), running_at=parse_time(d.get("active_at")),
+            time_fields={k: v for k, v in (("created_at", "created_at"), ("running_at", "active_at"),
+                                           ("ended_at", "deleted_at")) if d.get(v)},
             ip=d.get("ip") or None, labels=[str(t) for t in d.get("tags") or []],
             error_kind="provider_error_state" if err else None, ended_at=ended,
             raw_redacted={k: d.get(k) for k in ("id", "cloud", "name", "status", "status_details", "region",
@@ -163,3 +166,23 @@ class ShadeformAdapter(Adapter):
             return CostReport(None, start, end, reason="shadeform returned no cost_estimate")
         return CostReport(amount, start, end, basis="shadeform cost_estimate (lifetime; unit assumed USD, UNVERIFIED)",
                           raw_redacted={"cost_estimate": v, "status": d.get("status")})
+
+    # -- per-deployment SSH keys (shapes per the spec header, unvalidated) --
+
+    def _register_ssh_key(self, name, public_key):
+        r = self.request("POST", "/sshkeys/add", json={"name": name, "public_key": public_key})
+        if not isinstance(r, dict) or not r.get("id"):
+            raise AdapterError("parse", "shadeform: ssh key registration returned no id", sent=True)
+        return ProviderKeyRef(key_id=str(r["id"]), name=name, fingerprint=None)
+
+    def _delete_ssh_key(self, key_id):
+        self.request("POST", f"/sshkeys/{key_id}/delete", allow_text=True)
+        return ActionResult("accepted", "shadeform: ssh key deleted", 200)
+
+    def _list_ssh_keys(self):
+        body = self.request("GET", "/sshkeys")
+        keys = body.get("ssh_keys") if isinstance(body, dict) else None
+        if not isinstance(keys, list):
+            raise AdapterError("parse", "shadeform: sshkeys list returned no ssh_keys array", sent=True)
+        return [ProviderKey(key_id=str(k.get("id")), name=k.get("name"), fingerprint=None)
+                for k in keys if isinstance(k, dict) and k.get("id")]

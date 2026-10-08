@@ -27,6 +27,7 @@ from datetime import datetime
 from routing.adapters.base import (
     AdapterError, Adapter, Availability, Capabilities, CostReport, InstanceState, Offer, TerminateResult, parse_time,
 )
+from routing.adapters.results import PER_DEPLOYMENT, ActionResult, ProviderKey, ProviderKeyRef
 
 GRAPHQL = "https://api.runpod.io/graphql"
 STATE = {"RUNNING": "running", "EXITED": "stopped", "TERMINATED": "terminated", "CREATED": "pending"}
@@ -40,7 +41,8 @@ class RunPodAdapter(Adapter):
     BASE_URL = "https://rest.runpod.io/v1"
     REQUIRED_LAUNCH = ("image",)
     NAME_MAX = 191
-    SSH_KEY_REGISTRATION = True        # per-pod SSH_PUBLIC_KEY env
+    SSH_KEY_REGISTRATION = PER_DEPLOYMENT   # per-pod SSH_PUBLIC_KEY env: no provider key object to delete
+    SSH_KEY_RESOURCE = False
     CAPABILITIES = Capabilities(
         quote=("YES", "GraphQL lowestPrice(gpuCount).uninterruptablePrice = pod total (verified live 2026-10)"),
         live_availability=("PARTIAL", "stockStatus High/Medium/Low/null; no datacenter"),
@@ -64,6 +66,10 @@ class RunPodAdapter(Adapter):
         find_by_name=("YES", "GET /pods?name=og-<dep>, exact match (names are not unique: >1 = ambiguous)"),
         reported_cost=("YES", "GET /billing/pods?podId&startTime&endTime&grouping=podId -> amount (USD)"),
         error_semantics=("weak", "create documents only 201/400"),
+        forces_account_ssh_key=("YES", "'Runpod will attempt to automatically inject the public SSH keys added in your "
+                                       "account settings'; SSH_PUBLIC_KEY overrides 'the default' but replacement is "
+                                       "not stated (docs.runpod.io/pods/configuration/use-ssh, fetched 2026-10-07)"),
+        billing_starts=("UNKNOWN", "per-second billing; start event not tied to an API field"),
         risks=["Container pods, not VMs: image must run sshd", "GraphQL stock endpoint may be retired (UNCONFIRMED)",
                "desiredStatus is a target state"],
     )
@@ -122,6 +128,7 @@ class RunPodAdapter(Adapter):
             gpu=(pod.get("gpu") or {}).get("displayName"),
             gpu_count=(pod.get("gpu") or {}).get("count") or pod.get("gpuCount"),
             price_per_hour=None if cost is None else float(cost), created_at=parse_time(pod.get("lastStartedAt")),
+            time_fields={"created_at": "lastStartedAt"} if pod.get("lastStartedAt") else {},
             ip=pod.get("publicIp") or None,
             raw_redacted={k: pod.get(k) for k in ("id", "name", "desiredStatus", "costPerHr", "lastStartedAt",
                                                   "lastStatusChange", "machineId")})

@@ -31,6 +31,7 @@ from providers.vast import BASE_URL
 from routing.adapters.base import (
     AdapterError, Adapter, Availability, Capabilities, CostReport, InstanceState, Offer, TerminateResult, parse_time,
 )
+from routing.adapters.results import PER_DEPLOYMENT, ActionResult, ProviderKey, ProviderKeyRef
 
 STATE = {"created": "pending", "loading": "pending", "scheduling": "pending", "running": "running",
          "exited": "stopped", "stopped": "stopped"}
@@ -47,7 +48,8 @@ class VastAdapter(Adapter):
     REQUIRED_LAUNCH = ("image",)
     CHECK_NEEDS_CREDENTIALS = False
     NAME_MAX = 63
-    SSH_KEY_REGISTRATION = True      # attached per instance after create
+    SSH_KEY_REGISTRATION = PER_DEPLOYMENT   # attached per instance after create (no key object to delete)
+    SSH_KEY_RESOURCE = False
     CAPABILITIES = Capabilities(
         quote=("YES", "dph_total of the chosen ask with allocated_storage = launch disk (search-offers docs)"),
         live_availability=("YES", "public bundles search, verified + rentable"),
@@ -70,6 +72,10 @@ class VastAdapter(Adapter):
         find_by_name=("YES", "client-side exact match on label over the full list"),
         reported_cost=("YES", "GET /api/v0/charges source instance-<id> amount (day-granular filter)"),
         error_semantics=("good", "410 no_such_ask, 400 invalid_args, 429"),
+        forces_account_ssh_key=("YES", "'Adding a key to your account keys only applies to new instances' - account "
+                                       "keys are installed on every new instance (docs.vast.ai/instances/sshscp, "
+                                       "fetched 2026-10-07)"),
+        billing_starts=("UNKNOWN", "per-second billing; start event not tied to an API field"),
         risks=["Single unvetted hosts with variable reliability", "Bandwidth billed per GB, not in the quote",
                "Hosts can go offline: instance never reaches running"],
     )
@@ -145,6 +151,7 @@ class VastAdapter(Adapter):
             state=state, instance_id=str(d.get("id") or instance_id), name=d.get("label"), provider_status=st,
             region=d.get("geolocation"), gpu=d.get("gpu_name"), gpu_count=d.get("num_gpus"),
             price_per_hour=None if price is None else float(price), created_at=parse_time(d.get("start_date")),
+            time_fields={"created_at": "start_date"} if d.get("start_date") else {},
             ip=d.get("public_ipaddr") or None, labels=[d["label"]] if d.get("label") else [],
             error_kind="provider_error_state" if err else None,
             raw_redacted={k: d.get(k) for k in ("id", "label", "actual_status", "intended_status", "cur_state",

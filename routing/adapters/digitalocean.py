@@ -22,6 +22,7 @@ launch defaults {"images": {"<size slug>": "<image>"}} or a single `image`.
 from routing.adapters.base import (
     AdapterError, Adapter, Availability, Capabilities, InstanceState, Offer, TerminateResult, parse_time, pick_region,
 )
+from routing.adapters.results import PER_DEPLOYMENT, ActionResult, ProviderKey, ProviderKeyRef
 from providers.digitalocean import BASE_URL
 
 STATE = {"new": "pending", "active": "running", "off": "stopped", "archive": "terminated"}
@@ -35,7 +36,8 @@ class DigitalOceanAdapter(Adapter):
     BASE_URL = BASE_URL
     REQUIRED_LAUNCH = ("ssh_key", "image")
     NAME_MAX = 63
-    SSH_KEY_REGISTRATION = True
+    SSH_KEY_REGISTRATION = PER_DEPLOYMENT
+    SSH_KEY_RESOURCE = True
     CAPABILITIES = Capabilities(
         quote=("YES", "GET /v2/sizes price_hourly (whole droplet) / gpu_info.count"),
         live_availability=("PARTIAL", "size.available + regions is catalogue availability; capacity only known at create"),
@@ -58,6 +60,10 @@ class DigitalOceanAdapter(Adapter):
         find_by_name=("YES", "GET /v2/droplets?tag_name=og-<dep>"),
         reported_cost=("NO", "billing is per monthly invoice only; no per-droplet cost endpoint used"),
         error_semantics=("good", "{id, message}; 422 for invalid size/region (text undocumented)"),
+        forces_account_ssh_key=("UNKNOWN", "droplet create embeds the ssh_keys listed; no account-default injection is "
+                                           "documented, but the API reference could not be re-fetched 2026-10-07 to "
+                                           "confirm: treated as UNKNOWN until validated"),
+        billing_starts=("UNKNOWN", "per-second billing documented; the start event is not stated per API field"),
         risks=["Image must match the GPU shape", "Droplet limit and 10 concurrent creates",
                "Catalogue availability is not live stock"],
     )
@@ -94,12 +100,7 @@ class DigitalOceanAdapter(Adapter):
         region = availability.region
         if not region:
             raise AdapterError("capacity", f"digitalocean: no region offers {offer.sku}", sent=False)
-        key = launch.ssh_key
-        if launch.ssh_public_key and not key:
-            k = self.preflight(self.request, "POST", "/v2/account/keys", json={"name": name, "public_key": launch.ssh_public_key})
-            key = ((k or {}).get("ssh_key") or {}).get("id") if isinstance(k, dict) else None
-            if key is None:
-                raise AdapterError("invalid", "digitalocean: ssh key registration returned no id", sent=False)
+        key = self.launch_key(launch, name, use="id")     # only the key the core passed / registered now
         body = {"name": name, "region": region, "size": offer.sku, "image": self.image_for(launch, offer),
                 "ssh_keys": [int(key) if str(key).isdigit() else key], "tags": ["opengrid", name]}
         if launch.startup_script:
@@ -121,6 +122,7 @@ class DigitalOceanAdapter(Adapter):
             state=STATE.get(st, "unknown"), instance_id=str(d.get("id")), name=d.get("name"), provider_status=st,
             region=(d.get("region") or {}).get("slug"), gpu=gi.get("model"), gpu_count=gi.get("count"),
             price_per_hour=None if price is None else float(price), created_at=parse_time(d.get("created_at")),
+            time_fields={"created_at": "created_at"} if d.get("created_at") else {},
             ip=ip, labels=[str(t) for t in d.get("tags") or []],
             raw_redacted={k: d.get(k) for k in ("id", "name", "status", "created_at", "tags", "size_slug")})
 
@@ -155,3 +157,29 @@ class DigitalOceanAdapter(Adapter):
 
     def _find(self, name):
         return self._droplets({"tag_name": name})
+
+    # -- per-deployment SSH keys (account keys API; shapes per the API reference, unvalidated) --
+
+    def _register_ssh_key(self, name, public_key):
+        r = self.request("POST", "/v2/account/keys", json={"name": name, "public_key": public_key})
+        k = (r or {}).get("ssh_key") if isinstance(r, dict) else None
+        if not isinstance(k, dict) or k.get("id") is None:
+            raise AdapterError("parse", "digitalocean: ssh key registration returned no id", sent=True)
+        return ProviderKeyRef(key_id=str(k["id"]), name=k.get("name") or name, fingerprint=None)
+
+    def _delete_ssh_key(self, key_id):
+        self.request("DELETE", f"/v2/account/keys/{key_id}", allow_text=True)
+        return ActionResult("accepted", "digitalocean: ssh key deleted", 204)
+
+    def _list_ssh_keys(self):
+        out, page = [], 1
+        for _ in range(100):
+            body = self.request("GET", "/v2/account/keys", params={"per_page": 200, "page": page})
+            if not isinstance(body, dict) or not isinstance(body.get("ssh_keys"), list):
+                raise AdapterError("parse", "digitalocean: keys list returned no ssh_keys array", sent=True)
+            out += [ProviderKey(key_id=str(k.get("id")), name=k.get("name"), fingerprint=None)
+                    for k in body["ssh_keys"] if isinstance(k, dict) and k.get("id") is not None]
+            if not (((body.get("links") or {}).get("pages") or {}).get("next")):
+                return out
+            page += 1
+        raise AdapterError("parse", "digitalocean: more than 100 pages of keys; refusing a partial list", sent=True)

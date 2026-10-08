@@ -173,3 +173,153 @@ def for_ref(ref: str | None, provider: str) -> dict:
         except Exception as exc:  # noqa: BLE001
             raise CredentialsUnavailable("the BYO credential used at launch does not decrypt", ref=ref) from exc
     raise CredentialsUnavailable(f"unknown credential reference {ref!r}", ref=ref)
+
+
+# --------------------------------------------------------------------------
+# The exact secret pinned at launch (money-loss invariant)
+# --------------------------------------------------------------------------
+# A ref like 'platform:lambda' names WHERE the key comes from, not WHICH key. If the OpenGrid-managed key in
+# settings is replaced by a key of a DIFFERENT provider account, that account lists nothing and answers 404
+# for the instance -- two "signals" that would mark a live, billing instance terminated. So the launch also
+# pins a one-way fingerprint of the secret (deployments.provider_metadata.credential_fingerprint; never the
+# secret) and every management call checks it: a changed secret -> CredentialsUnavailable (state kept, alert),
+# never "terminated". Restoring the launch key resumes management. Rows without a fingerprint (launched
+# before this check) are not checked.
+
+def secret_fingerprint(creds: dict | None) -> str | None:
+    """A short one-way fingerprint of a credential dict (domain-separated SHA-256; not reversible)."""
+    import hashlib
+    import json
+
+    if not creds:
+        return None
+    blob = json.dumps(sorted((str(k), str(v)) for k, v in creds.items() if v), separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(b"opengrid-credential-pin:" + blob.encode()).hexdigest()[:24]
+
+
+def check_pinned(creds: dict | None, pinned: str | None, ref: str | None) -> None:
+    """Raise CredentialsUnavailable when `creds` is not the secret the deployment was launched with."""
+    if pinned and secret_fingerprint(creds) != pinned:
+        raise CredentialsUnavailable(
+            "the credential pinned at launch was replaced (its secret changed since launch); OpenGrid will not "
+            "manage this instance with a different key -- it may belong to another provider account. Restore the "
+            "launch key (or manage the instance in the provider console)", ref=ref)
+
+
+def pinned_fingerprint(d) -> str | None:
+    return ((getattr(d, "provider_metadata", None) or {}).get("credential_fingerprint")) if d is not None else None
+
+
+# --------------------------------------------------------------------------
+# Customer SSH public keys (0014_limits; methodology/execution-safety.md section 6)
+# --------------------------------------------------------------------------
+# Only a customer's explicitly supplied PUBLIC key is ever installed on a customer machine. It is validated
+# here (type, structure, RSA >= 2048 bits, single line, no authorized_keys options / command prefix) and
+# identified by its SHA256 fingerprint, which is what OpenGrid persists in deployments.ssh_key_fingerprint
+# and logs. Anything that looks like a PRIVATE key is rejected with an error that never repeats the value.
+
+SSH_KEY_TYPES = ("ssh-ed25519", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521", "ssh-rsa")
+SSH_MIN_RSA_BITS = 2048
+_PRIVATE_MARKERS = ("private key", "begin openssh", "putty-user-key-file", "private-lines", "begin ssh2 encrypted",
+                    "begin rsa", "begin dsa", "begin ec ", "begin encrypted")
+PRIVATE_KEY_MESSAGE = ("this looks like a PRIVATE key. Never send a private key to OpenGrid: send your PUBLIC key "
+                       "(the one-line .pub file starting with ssh-ed25519, ecdsa-sha2-... or ssh-rsa). The value was "
+                       "discarded: it was not stored or logged")
+
+
+class SSHKeyError(ValueError):
+    """A rejected public key. The message never contains the submitted value."""
+
+
+def looks_private(value) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    low = value.lower()
+    return low.lstrip().startswith("-----begin") or any(m in low for m in _PRIVATE_MARKERS)
+
+
+def _ssh_string(blob: bytes, off: int) -> tuple[bytes, int]:
+    import struct
+    if off + 4 > len(blob):
+        raise SSHKeyError("ssh public key data is truncated")
+    (n,) = struct.unpack(">I", blob[off:off + 4])
+    off += 4
+    if n > len(blob) - off:
+        raise SSHKeyError("ssh public key data is truncated")
+    return blob[off:off + n], off + n
+
+
+def parse_public_key(value) -> dict:
+    """Validate one OpenSSH public key line. {type, bits, fingerprint ('SHA256:...'), public_key (normalised),
+    comment}. Raises SSHKeyError (message safe to return: it never echoes the input)."""
+    import base64
+    import hashlib
+    import re
+
+    if not isinstance(value, str) or not value.strip():
+        raise SSHKeyError("ssh_public_key is empty")
+    if looks_private(value):
+        raise SSHKeyError(PRIVATE_KEY_MESSAGE)
+    s = value.strip()
+    if "\n" in s or "\r" in s:
+        raise SSHKeyError("ssh_public_key must be a single line: '<type> <base64> [comment]'")
+    if len(s) > 16384:
+        raise SSHKeyError("ssh_public_key is too long")
+    parts = s.split(None, 2)
+    kt = parts[0]
+    if kt not in SSH_KEY_TYPES:
+        if any(t in s for t in SSH_KEY_TYPES):
+            raise SSHKeyError("authorized_keys options / command prefixes (command=, from=, no-pty, ...) are not "
+                              "allowed: send only '<type> <base64> [comment]'")
+        raise SSHKeyError("unsupported ssh key type; use one of " + ", ".join(SSH_KEY_TYPES))
+    if len(parts) < 2 or not re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", parts[1]):
+        raise SSHKeyError("ssh_public_key key data is not valid base64")
+    b64 = parts[1]
+    try:
+        blob = base64.b64decode(b64, validate=True)
+    except Exception:  # noqa: BLE001
+        raise SSHKeyError("ssh_public_key key data is not valid base64") from None
+    inner, off = _ssh_string(blob, 0)
+    if inner != kt.encode():
+        raise SSHKeyError("ssh_public_key key data does not match its declared type")
+    if kt == "ssh-ed25519":
+        pk, off = _ssh_string(blob, off)
+        if len(pk) != 32:
+            raise SSHKeyError("ssh-ed25519 key data has the wrong length")
+        bits = 256
+    elif kt == "ssh-rsa":
+        _e, off = _ssh_string(blob, off)
+        n, off = _ssh_string(blob, off)
+        bits = int.from_bytes(n, "big").bit_length()
+        if bits < SSH_MIN_RSA_BITS:
+            raise SSHKeyError(f"RSA keys must be at least {SSH_MIN_RSA_BITS} bits (this one has {bits}); "
+                              "ssh-ed25519 is recommended")
+    else:
+        curve, off = _ssh_string(blob, off)
+        if curve != kt.rsplit("-", 1)[1].encode():
+            raise SSHKeyError("ecdsa key data does not match its declared curve")
+        _q, off = _ssh_string(blob, off)
+        bits = {"nistp256": 256, "nistp384": 384, "nistp521": 521}[kt.rsplit("-", 1)[1]]
+    if off != len(blob):
+        raise SSHKeyError("ssh_public_key key data has trailing bytes")
+    try:  # structural check by the cryptography library too (e.g. an ECDSA point must be on its curve)
+        from cryptography.hazmat.primitives.serialization import load_ssh_public_key
+        load_ssh_public_key(f"{kt} {b64}".encode())
+    except ImportError:
+        pass
+    except Exception:  # noqa: BLE001
+        raise SSHKeyError("ssh_public_key is not a valid public key") from None
+    comment = parts[2].strip() if len(parts) > 2 else ""
+    if len(comment) > 200 or any(ord(ch) < 32 for ch in comment):
+        raise SSHKeyError("ssh_public_key comment must be printable and at most 200 characters")
+    fp = "SHA256:" + base64.b64encode(hashlib.sha256(blob).digest()).decode().rstrip("=")
+    return {"type": kt, "bits": bits, "fingerprint": fp, "comment": comment,
+            "public_key": f"{kt} {b64}" + (f" {comment}" if comment else "")}
+
+
+def public_key_fingerprint(value) -> str | None:
+    """SHA256 fingerprint of a public key, or None when it does not parse (never raises, never logs it)."""
+    try:
+        return parse_public_key(value)["fingerprint"]
+    except SSHKeyError:
+        return None

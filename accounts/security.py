@@ -148,6 +148,30 @@ def csrf_violation(request) -> str | None:
     return None
 
 
+def open_dev_host_ok(request) -> bool:
+    """Open development (no APP_PASSWORD) answers only to Hosts a DNS-rebinding page cannot produce.
+
+    Without a password the site is OPERATOR to anyone who can reach it. A web page on evil.example that
+    re-points its own name at 127.0.0.1 is, to the browser, same-origin with it: Origin and Host both say
+    evil.example, so the CSRF rule cannot tell. Its requests still carry Host: evil.example, so: only
+    IP literals, localhost names, Starlette's test host and our own public host are answered."""
+    host = (request.headers.get("host") or "").strip().lower()
+    if host.startswith("["):
+        name = host[1:host.find("]")] if "]" in host else host
+    else:
+        name = host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+    name = name.rstrip(".")
+    if not name:
+        return False
+    try:
+        ipaddress.ip_address(name)
+        return True
+    except ValueError:
+        pass
+    mine = (urlparse(settings.public_base_url).hostname or "").lower()
+    return name in ("localhost", "testserver") or name.endswith(".localhost") or (bool(mine) and name == mine)
+
+
 # ---------------------------------------------------------------- login throttle
 
 _fail_lock = threading.Lock()
@@ -233,8 +257,37 @@ def inline_script_hashes(html: str) -> list[str]:
     return sorted(set(out))
 
 
+_WEB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
+_trusted_cache: dict = {}
+
+
+def trusted_script_hashes() -> frozenset:
+    """Hashes of the inline scripts in OUR templates (web/*.html), re-read when a file changes.
+    Only these may be allowed: hashing whatever inline script a response happens to contain would
+    also allow a script injected into it (the CSP would then stop nothing)."""
+    try:
+        files = sorted(f for f in os.listdir(_WEB) if f.endswith(".html"))
+        stamp = tuple((f, os.stat(os.path.join(_WEB, f)).st_mtime) for f in files)
+    except OSError:
+        return frozenset()
+    if _trusted_cache.get("stamp") != stamp:
+        out = set()
+        for f in files:
+            with open(os.path.join(_WEB, f), encoding="utf-8", newline="") as fh:
+                raw = fh.read()
+            # as stored (FileResponse sends the bytes) and with newlines normalized (read_text templates)
+            for variant in {raw, raw.replace("\r\n", "\n"), raw.replace("\r\n", "\n").replace("\n", "\r\n")}:
+                out.update(inline_script_hashes(variant))
+        _trusted_cache.update(stamp=stamp, hashes=frozenset(out))
+    return _trusted_cache["hashes"]
+
+
 def csp(path: str, html: str) -> str:
-    hashes = " ".join(inline_script_hashes(html))
+    page = inline_script_hashes(html)
+    if path not in _DOCS_PATHS:  # FastAPI generates the /docs boot scripts itself (no user data, operator only)
+        allowed = trusted_script_hashes()
+        page = [h for h in page if h in allowed]
+    hashes = " ".join(page)
     script = f"'self' {hashes}".strip()
     style = "'self' 'unsafe-inline'"   # the UI sets style attributes; styles cannot run script
     img = "'self' data:"

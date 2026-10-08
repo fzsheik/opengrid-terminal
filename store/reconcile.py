@@ -11,6 +11,14 @@
                           running vs stopped vs unbilled seconds, the price and its basis, the stopped-billing
                           rule applied, and the billing usage record it produced
 
+Lifecycle (migration 0015_lifecycle):
+    provider_resources    temporary provider-side resources OpenGrid creates besides the instance (per-deployment
+                          SSH keys): recorded BEFORE the provider call, deleted after confirmed termination;
+                          one row per (provider, credential_ref, resource_type, name)
+    ops_alert_state       cost-exposure alerts (alerts/ops.py exposure()): one row per (kind, subject), open until
+                          resolved WITH evidence, re-escalated every settings.alert_reescalate_minutes
+    deployment_watch      + past_deadline_at / deadline_retries (deadline enforcement through provider outages)
+
 account_id / deployment_id are plain columns (no cross-domain foreign keys), like the rest of the schema.
 """
 
@@ -100,6 +108,9 @@ class DeploymentWatch(Base):
     alerts: Mapped[list | None] = mapped_column(JSONB)              # last alerts raised (kind, at)
     validation: Mapped[dict | None] = mapped_column(JSONB)          # live-cycle checks for validation deployments
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # --- 0015_lifecycle ---
+    past_deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # first seen past deadline
+    deadline_retries: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class UsageSlice(Base):
@@ -131,3 +142,62 @@ class UsageSlice(Base):
     final: Mapped[bool] = mapped_column(Boolean, default=False)
     detail: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ProviderResource(Base):
+    """A provider-side resource OpenGrid created for a deployment (ssh_key). status:
+    creating (recorded, provider call in flight or crashed) | active | deleting | deleted | delete_failed |
+    abandoned (og-* key found at the provider with no usable record, or whose deployment ended; surfaced) |
+    not_created (the registration call provably never reached the provider)."""
+    __tablename__ = "provider_resources"
+    __table_args__ = (
+        UniqueConstraint("provider", "credential_ref", "resource_type", "name", name="uq_provider_resource_name"),
+        Index("ix_provider_resources_status", "status"),
+        Index("ix_provider_resources_dep", "deployment_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    provider: Mapped[str] = mapped_column(String(64))
+    resource_type: Mapped[str] = mapped_column(String(32))               # ssh_key
+    provider_resource_id: Mapped[str | None] = mapped_column(String(128))
+    name: Mapped[str] = mapped_column(String(128))                        # og-<deployment>
+    deployment_id: Mapped[str | None] = mapped_column(String(32))
+    credential_ref: Mapped[str] = mapped_column(String(64), default="")  # '' when unknown (never NULL: unique key)
+    fingerprint: Mapped[str | None] = mapped_column(String(128))         # SHA256:... of the public key
+    recorded_by: Mapped[str | None] = mapped_column(String(32))          # register | reconcile_found
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    registered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delete_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(16))
+    delete_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_delete_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    evidence: Mapped[list | None] = mapped_column(JSONB)                  # [{at, event, ...}] (last 30)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class OpsAlertState(Base):
+    """One cost-exposure alert condition (kind, subject): never silently resolved."""
+    __tablename__ = "ops_alert_state"
+    __table_args__ = (
+        UniqueConstraint("kind", "subject", name="uq_ops_alert_kind_subject"),
+        Index("ix_ops_alert_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(48))
+    subject: Mapped[str] = mapped_column(String(160))
+    deployment_id: Mapped[str | None] = mapped_column(String(32))
+    provider: Mapped[str | None] = mapped_column(String(64))
+    account_id: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16))                       # open | resolved
+    first_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sent_count: Mapped[int] = mapped_column(Integer, default=0)
+    est_hourly_exposure_usd: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))
+    payload: Mapped[dict | None] = mapped_column(JSONB)                   # the last alert sent
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolution: Mapped[dict | None] = mapped_column(JSONB)                # the evidence it was resolved on
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

@@ -134,6 +134,16 @@ def create_key(account_id: int, name: str = "default", scopes=None, expires_at: 
         acct = s.scalar(select(Account).where(Account.id == account_id).with_for_update())
         if acct is None:
             raise KeyError(f"account {account_id} not found")
+        if parent_key_id is not None:
+            # Lock the creator, then re-check it and every ancestor: a creator revoked (or cascaded)
+            # between its request being authenticated and this insert must not leave a live child.
+            # revoke_key() locks / updates the same row, so the two serialize (see its loop).
+            parent = s.scalar(select(ApiKey).where(ApiKey.id == parent_key_id).with_for_update())
+            now0 = datetime.now(timezone.utc)
+            if parent is None or parent.revoked_at is not None or (parent.expires_at and parent.expires_at <= now0):
+                raise ValueError("the creating key is revoked or expired")
+            if s.execute(_ANCESTOR_REVOKED, {"k": parent_key_id}).first() is not None:
+                raise ValueError("a key above the creating key has been revoked")
         if active_key_count(s, account_id) >= settings.max_keys_per_account:
             raise KeyLimitError(f"account {account_id} already has {settings.max_keys_per_account} active keys "
                                 "(settings.max_keys_per_account); revoke one first")
@@ -187,25 +197,45 @@ _DESCENDANTS = text("""
 """)
 
 
+_ANCESTOR_REVOKED = text("""
+    WITH RECURSIVE a(id, depth) AS (
+        SELECT parent_key_id, 1 FROM api_key_lineage WHERE key_id = :k AND parent_key_id IS NOT NULL
+        UNION
+        SELECT l.parent_key_id, a.depth + 1 FROM api_key_lineage l JOIN a ON l.key_id = a.id
+        WHERE l.parent_key_id IS NOT NULL AND a.depth < 64
+    ) SELECT 1 FROM a JOIN api_keys k ON k.id = a.id WHERE k.revoked_at IS NOT NULL LIMIT 1
+""")
+
+
 def revoke_key(key_id: int, account_id: int | None = None, actor: str = "operator") -> dict:
     """Revoke (idempotent), and every key it created, transitively (cascade). With `account_id`,
-    only that account's key; else KeyError. `cascaded` in the result lists the child keys revoked now."""
+    only that account's key; else KeyError. `cascaded` in the result lists the child keys revoked now.
+
+    Race with a concurrent create_key(parent_key_id=<a descendant>): that insert holds a lock on its
+    parent row, so our UPDATE of the parent waits for it to commit; the descendants are therefore
+    re-read until a pass finds nothing new, so a child committed meanwhile is revoked too."""
     now = datetime.now(timezone.utc)
     with normalize.SessionLocal.begin() as s:
-        k = s.get(ApiKey, key_id)
+        k = s.scalar(select(ApiKey).where(ApiKey.id == key_id).with_for_update())
         if k is None or (account_id is not None and k.account_id != account_id):
             raise KeyError(key_id)
         if k.revoked_at is None:
             k.revoked_at = now
             audit(s, "key_revoked", actor, k.account_id, k.id)
-        kids = [r[0] for r in s.execute(_DESCENDANTS, {"root": key_id})]
-        cascaded = []
-        if kids:
-            cascaded = [r[0] for r in s.execute(
+        s.flush()
+        cascaded: list[int] = []
+        for _ in range(1000):
+            kids = [r[0] for r in s.execute(_DESCENDANTS, {"root": key_id})]
+            if not kids:
+                break
+            new = [r[0] for r in s.execute(
                 update(ApiKey).where(ApiKey.id.in_(kids), ApiKey.revoked_at.is_(None)).values(revoked_at=now)
                 .returning(ApiKey.id))]
-            for cid in cascaded:
-                audit(s, "key_revoked", actor, k.account_id, cid, cascade_from=key_id)
+            if not new:
+                break
+            cascaded += new
+        for cid in cascaded:
+            audit(s, "key_revoked", actor, k.account_id, cid, cascade_from=key_id)
         out = as_dict(k, s.get(ApiKeyLineage, key_id))
         out["cascaded"] = sorted(cascaded)
         return out

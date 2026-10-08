@@ -8,6 +8,9 @@ routing/validation.py). Every route requires the admin scope.
     POST /v1/admin/validation/start          {provider, gpu?}: creates a validation route pending approval (*)
     GET  /v1/admin/validation/{deployment_id}   the validation evidence checklist (read-only)
     POST /v1/admin/validation/{deployment_id}/mark   re-check and, when every step has evidence, mark validated (*)
+    GET  /v1/admin/resources?type=ssh_key&status=   temporary provider resources (leftovers when no status)
+    POST /v1/admin/resources/{id}/cleanup   delete one now: only provably OpenGrid's, after confirmed termination (*)
+    GET  /v1/admin/exposures?kind=           open cost-exposure alerts
 
 (*) Idempotency-Key header required: a double click must never terminate or launch twice.
 """
@@ -133,3 +136,42 @@ def validation_mark(deployment_id: str, request: Request, who: Principal = Depen
         return 200, envelope(out, methodology="provider-capabilities")
 
     return _idem(request, who, f"validation_mark:{deployment_id}", {"deployment_id": deployment_id}, run)
+
+
+# --------------------------------------------------------------------------
+# Temporary provider resources (per-deployment SSH keys) and cost-exposure alerts
+# --------------------------------------------------------------------------
+
+@router.get("/v1/admin/resources", tags=["admin"],
+            summary="Temporary provider resources OpenGrid created (per-deployment SSH keys); leftovers by default")
+def list_resources(type: str | None = Query("ssh_key", max_length=32),  # noqa: A002 - the public query name
+                   status: str | None = Query(None, max_length=16), who: Principal = Depends(ADMIN)):
+    from routing.adapters import resources
+
+    items = resources.resources(type_=type, status=status, leftover=status is None)
+    return envelope(items, methodology="reconciliation", leftover=status is None,
+                    not_provably_ours=len([r for r in items if not r["provably_ours"]]))
+
+
+@router.post("/v1/admin/resources/{resource_id}/cleanup", tags=["admin"],
+             summary="Delete one leftover provider resource now (only provably OpenGrid's, after confirmed termination)")
+def cleanup_resource(resource_id: int, request: Request, who: Principal = Depends(ADMIN)):
+    from routing.adapters import resources
+
+    def run():
+        try:
+            out = resources.cleanup(resource_id, _by(who))
+        except LookupError:
+            raise HTTPException(404, "resource not found")
+        except ValueError as e:
+            raise HTTPException(409, {"code": "cleanup_refused", "message": str(e)})
+        return 200, envelope(out, methodology="reconciliation")
+
+    return _idem(request, who, f"resource_cleanup:{resource_id}", {"resource_id": resource_id}, run)
+
+
+@router.get("/v1/admin/exposures", tags=["admin"], summary="Open cost-exposure alerts (never silently resolved)")
+def list_exposures(kind: str | None = Query(None, max_length=48), who: Principal = Depends(ADMIN)):
+    from alerts import ops
+
+    return envelope(ops.open_exposures(kind), methodology="reconciliation")

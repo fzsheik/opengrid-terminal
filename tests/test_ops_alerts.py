@@ -65,7 +65,15 @@ def test_kill_switch_alerts():
     assert seen == [("kill_switch", "Live provisioning on lambda stopped by operator: test", "lambda")]
 
 
+def test_shutdown_is_never_throttled_like_a_launch():
+    from accounts.ratelimit import request_class as cls
+    assert cls("POST", "/v1/deployments/dep-1/terminate") == "write"
+    assert cls("POST", "/v1/deployments/dep-1/stop") == "write"
+    assert cls("POST", "/v1/route") == "execute" and cls("POST", "/v1/route/rr_1/approve") == "execute"
+    assert cls("POST", "/v1/admin/validation/start") == "execute"
+
+
 if __name__ == "__main__":
     for t in (test_suspended_accounts_can_only_see_and_stop, test_ops_alert_records_and_never_raises,
-              test_kill_switch_alerts):
+              test_kill_switch_alerts, test_shutdown_is_never_throttled_like_a_launch):
         t(); print(t.__name__, "ok")

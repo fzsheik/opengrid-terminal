@@ -20,6 +20,10 @@ Cost reconciliation (reconcile_cost), after confirmed termination, records SEPAR
     effective_hourly_rate       per GPU-hour, from the transaction cost and (separately) the provider's cost
     unexpected_fees             provider_reported_cost - opengrid_transaction_cost - billing_rounding, when > 0
     billing_rounding            what the provider's billing unit adds over exact metering (per minute, ...)
+    billable_window             billable_start / billable_end and their basis (provider_running_at |
+                                opengrid_observed_running | provider_created_at; end provider-reported or an
+                                estimate), the provider lifecycle timestamps, and the OBSERVED runtime
+                                (OpenGrid's own running time) kept separate from the billed runtime
 stored in deployments.reconciliation (jsonb), provider_reported_cost and reconciled_at.
 """
 
@@ -282,16 +286,42 @@ def reconcile_cost(deployment_id: str, *, force: bool = False) -> dict | None:
         if not lagging:
             return prev
     totals = metered_totals(deployment_id)
-    start = d.provisioned_at or d.created_at
-    end = d.terminated_at
+    start = getattr(d, "billable_start", None) or d.provisioned_at or d.created_at
+    end = getattr(d, "billable_end", None) or d.terminated_at
     pc = _provider_cost(d, start, end)
     rec = compute_reconciliation(d, totals, pc, _quote(d))
+    rec["billable_window"] = billable_window(d, totals)
     with normalize.SessionLocal.begin() as s:
         row = s.get(Deployment, deployment_id, with_for_update=True)
         row.reconciliation = rec
         row.reconciled_at = _now()
         row.provider_reported_cost = None if pc.get("amount_usd") is None else Decimal(str(pc["amount_usd"]))
     return rec
+
+
+def billable_window(d: Deployment, totals: dict) -> dict:
+    """The window OpenGrid billed and where each edge came from (never more precise than the evidence)."""
+    from store.reconcile import DeploymentWatch
+
+    iso = lambda t: None if t is None else t.isoformat()  # noqa: E731
+    with normalize.SessionLocal() as s:
+        w = s.get(DeploymentWatch, d.deployment_id)
+    md = d.provider_metadata or {}
+    label, unit_s, _ = billing_unit(d.provider)
+    return {"start": iso(getattr(d, "billable_start", None)), "end": iso(getattr(d, "billable_end", None) or d.terminated_at),
+            "basis": getattr(d, "billable_basis", None),
+            "end_basis": (w.ended_basis if w else None) or ("provider_reported" if getattr(d, "provider_terminated_at", None)
+                                                           else "first_observed"),
+            "end_estimated": bool(totals.get("end_estimated")),
+            "provider_created_at": iso(getattr(d, "provider_created_at", None)),
+            "provider_running_at": iso(getattr(d, "provider_running_at", None)),
+            "provider_terminated_at": iso(getattr(d, "provider_terminated_at", None)),
+            "provider_fields": md.get("lifecycle_time_fields") or {},
+            "requested_termination_at": iso(getattr(d, "requested_termination_at", None) or d.terminate_requested_at),
+            "observed_running_seconds": d.uptime_seconds or 0,
+            "billed_seconds": totals.get("billable_seconds"),
+            "provider_billing_unit": label, "provider_billing_unit_seconds": unit_s,
+            "kind": "transaction"}
 
 
 def _supports_reported_cost(provider: str | None) -> bool:

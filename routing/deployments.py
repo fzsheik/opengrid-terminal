@@ -265,10 +265,22 @@ def _open_env(blob: str | None) -> dict:
 
 def create(*, rr_id: str, who, spec: dict, quote: dict, candidate: dict | None, purpose: str,
            approval_mode: str, limit_violations: list[dict], launch_request: dict | None,
-           max_runtime_minutes: int | None, auto_approve: bool, actor: str, actor_id: str | None) -> str:
-    """created -> quoted -> pending_approval (or -> approved for a LIVE launch without violations)."""
+           max_runtime_minutes: int | None, auto_approve: bool, actor: str, actor_id: str | None,
+           runtime: dict | None = None, ssh: dict | None = None) -> str:
+    """created -> quoted -> pending_approval (or -> approved for a LIVE launch without violations).
+
+    runtime: guards.runtime_ceiling() (computed here from max_runtime_minutes when not given); the deployment
+    always carries a finite effective_max_runtime_minutes. ssh: engine.ssh_access_for() (fingerprint of the
+    CUSTOMER key, operator access). A LIVE auto-approval re-checks the guards ATOMICALLY (guards.gate: advisory
+    lock + count in this transaction); a violation found there keeps it pending_approval."""
+    from routing import guards
+
     dep_id = new_deployment_id()
     now = _now()
+    if runtime is None:
+        runtime = guards.runtime_ceiling(who.account_id, max_runtime_minutes, purpose=purpose)
+    eff = int(runtime["effective_max_runtime_minutes"])
+    ssh = ssh or {}
     lr = dict(launch_request or {})
     env_sealed = _seal_env(lr.get("env"))
     stored_launch = redacted({"launch": lr}).get("launch") or {}
@@ -284,7 +296,11 @@ def create(*, rr_id: str, who, spec: dict, quote: dict, candidate: dict | None, 
             list_price_per_gpu_hour=_d(((candidate or {}).get("list_price_per_gpu_hour"))),
             quoted_price_per_gpu_hour=_d(quote["quote_price_per_gpu_hour"]),
             quote_basis=quote.get("price_source"), purpose=purpose, quote_id=quote["quote_id"],
-            approval_mode=approval_mode, max_runtime_minutes=max_runtime_minutes,
+            approval_mode=approval_mode, max_runtime_minutes=eff, effective_max_runtime_minutes=eff,
+            runtime_ceiling_source=runtime["runtime_ceiling_source"],
+            ssh_key_fingerprint=ssh.get("customer_key_fingerprint") if purpose != "validation" else None,
+            operator_access=ssh.get("operator_access") or (
+                "validation_operator_key" if purpose == "validation" else "none"),
             limit_violations=limit_violations or None, override_limits=False, client_name=instance_name(dep_id),
             state_changed_at=now)
         s.add(d)
@@ -295,13 +311,21 @@ def create(*, rr_id: str, who, spec: dict, quote: dict, candidate: dict | None, 
                evidence={"quote_id": quote["quote_id"], "price_per_gpu_hour": quote["quote_price_per_gpu_hour"],
                          "price_source": quote.get("price_source"), "expires_at": quote["expires_at"]})
         if auto_approve and not limit_violations:
-            _apply(s, d, "approved", reason="LIVE mode: launch without per-launch approval (validated, live-enabled "
-                                            "provider; guards passed)", actor="system", actor_id=None, now=now,
-                   evidence={"mode": "LIVE"})
+            violations, held = guards.gate(s, d, override=False)
+            if held:
+                limit_violations = violations
+                d.limit_violations = violations
+        if auto_approve and not limit_violations:
             d.approved_by, d.approved_at = "system:live", now
+            d.terminate_deadline_at = now + timedelta(minutes=eff)
+            _apply(s, d, "approved", reason="LIVE mode: launch without per-launch approval (validated, live-enabled "
+                                            "provider; guards passed under the account lock)", actor="system",
+                   actor_id=None, now=now, evidence={"mode": "LIVE", "effective_max_runtime_minutes": eff,
+                                                     "terminate_deadline_at": d.terminate_deadline_at.isoformat()})
         else:
             why = ("limit violations: " + "; ".join(v["code"] for v in limit_violations)) if limit_violations \
-                else f"{approval_mode}: waiting for admin approval"
+                else ("provider may install account-level ssh keys: admin approval with an operator-access "
+                      "override required" if ssh.get("blocked") else f"{approval_mode}: waiting for admin approval")
             _apply(s, d, "pending_approval", reason=why, actor="system", actor_id=None, now=now,
                    evidence={"limit_violations": limit_violations} if limit_violations else None)
     return dep_id
@@ -330,7 +354,9 @@ def credentials_for(d: Deployment) -> dict:
     ref = d.credential_ref
     if ref is None and d.credential_source == "opengrid":   # rows written before 0010 without a ref
         ref = f"platform:{credentials.credential_provider(d.provider)}"
-    return credentials.for_ref(ref, d.provider)
+    creds = credentials.for_ref(ref, d.provider)
+    credentials.check_pinned(creds, credentials.pinned_fingerprint(d), ref)   # the very secret used at launch
+    return creds
 
 
 def adapter_for(d: Deployment, **log_context):
@@ -496,6 +522,25 @@ def launch(dep_id: str, *, adapter, offer, availability, launch_spec, resolved, 
                    actor_id=None, now=now, evidence={"code": "launch_not_permitted"})
             return {"outcome": None, "status": "pending_approval", "launched": False, "failover_allowed": False,
                     "code": "launch_not_permitted", "reason": why}
+        # THE ATOMIC LIMITS GATE: advisory lock on the account (+ validation locks), count active / uncertain
+        # deployments, GPUs, hourly burn and monthly projection in THIS transaction; refuse, or move to
+        # provisioning and commit; only then (lock released) call the provider.
+        from routing import guards
+        violations, block = guards.gate(s, d)
+        if block:
+            d.limit_violations = violations
+            codes = ", ".join(v["code"] for v in block)
+            _apply(s, d, "pending_approval", reason=f"launch refused at the provisioning gate: limits exceeded ({codes})",
+                   actor="system", actor_id=None, now=now, evidence={"code": "limits_exceeded", "violations": block})
+            return {"outcome": None, "status": "pending_approval", "launched": False, "failover_allowed": False,
+                    "code": "limits_exceeded", "violations": block,
+                    "reason": "limits exceeded at the provisioning gate: " + "; ".join(v["message"] for v in block)}
+        key_problem = _operator_key_problem(d, launch_spec, resolved)
+        if key_problem:
+            _apply(s, d, "pending_approval", reason=f"launch refused: {key_problem}", actor="system", actor_id=None,
+                   now=now, evidence={"code": "operator_key_forbidden"})
+            return {"outcome": None, "status": "pending_approval", "launched": False, "failover_allowed": False,
+                    "code": "operator_key_forbidden", "reason": key_problem}
         if quote_id is not None:
             from routing import quotes
             if quote_id != d.quote_id or not quotes.consume(s, quote_id, dep_id):
@@ -506,12 +551,23 @@ def launch(dep_id: str, *, adapter, offer, availability, launch_spec, resolved, 
         d.client_name = d.client_name or instance_name(dep_id)
         d.credential_source, d.credential_ref = resolved.source, resolved.ref
         d.credential_account_id = resolved.credential_account_id
-        if d.max_runtime_minutes:
-            d.terminate_deadline_at = now + timedelta(minutes=int(d.max_runtime_minutes))
+        cfp = credentials.secret_fingerprint(getattr(resolved, "credentials", None))
+        if cfp:   # which SECRET was used (one-way), so a replaced key is never used on this instance
+            _meta(d, credential_fingerprint=cfp)
+        # Re-stated at launch: launch time + the effective ceiling (never null, never unlimited).
+        eff = int(d.effective_max_runtime_minutes or d.max_runtime_minutes or guards.runtime_ceiling(
+            d.account_id, None, purpose=d.purpose or "customer")["effective_max_runtime_minutes"])
+        d.effective_max_runtime_minutes = d.max_runtime_minutes = eff
+        d.terminate_deadline_at = now + timedelta(minutes=eff)
+        deadline = d.terminate_deadline_at
         summary = {"provider": offer.provider, "listing_id": offer.listing_id, "gpu": offer.gpu,
                    "gpu_count": offer.gpu_count, "region": getattr(availability, "region", None) or offer.region,
                    "name": d.client_name, "image": launch_spec.image, "disk_gb": launch_spec.disk_gb,
                    "ssh": ("public_key" if launch_spec.ssh_public_key else "key_ref" if launch_spec.ssh_key else None),
+                   "ssh_key_fingerprint": d.ssh_key_fingerprint, "operator_access": d.operator_access,
+                   "operator_defaults_applied": getattr(launch_spec, "defaults_applied", None),
+                   "operator_defaults_withheld": getattr(launch_spec, "defaults_withheld", None),
+                   "effective_max_runtime_minutes": eff, "terminate_deadline_at": deadline.isoformat(),
                    "env_names": sorted((launch_spec.env or {}).keys())}
         _apply(s, d, "provisioning", reason="provision call starting", actor=actor, actor_id=actor_id, now=now,
                evidence={"launch_token": token, "quote_id": d.quote_id, "client_name": d.client_name,
@@ -523,6 +579,12 @@ def launch(dep_id: str, *, adapter, offer, availability, launch_spec, resolved, 
         s.add(att)
         s.flush()
         attempt_id, client_name, rr_id = att.id, d.client_name, d.route_request_id
+        fp, op_access, purpose = d.ssh_key_fingerprint, d.operator_access, d.purpose
+    # Only the fingerprint is ever logged, never key material.
+    log.info("launch %s (%s): ssh key fingerprint %s, operator access %s, auto-terminate at %s", dep_id, purpose,
+             fp or "-", op_access or "none", deadline.isoformat())
+    auto_term = {"terminate_deadline_at": deadline.isoformat(), "effective_max_runtime_minutes": eff,
+                 "basis": "launch time + effective_max_runtime_minutes"}
     _set_log_context(adapter, deployment_id=dep_id, route_request_id=rr_id)
     out, ms = provider_call("provision", adapter.provision, offer, availability, launch_spec, client_name,
                             provider=offer.provider, deployment_id=dep_id, route_request_id=rr_id)
@@ -531,7 +593,8 @@ def launch(dep_id: str, *, adapter, offer, availability, launch_spec, resolved, 
         after_provider_call(res)
     for i in range(3):
         try:
-            return _record_launch(dep_id, attempt_id, res, ms, actor=actor, actor_id=actor_id)
+            return {**_record_launch(dep_id, attempt_id, res, ms, actor=actor, actor_id=actor_id),
+                    "auto_termination": auto_term}
         except IllegalTransition:
             raise
         except Exception:  # noqa: BLE001
@@ -541,8 +604,26 @@ def launch(dep_id: str, *, adapter, offer, availability, launch_spec, resolved, 
                  "stays 'provisioning'; reconciliation resolves it via find_instance(%s)",
                  dep_id, offer.provider, res.outcome, res.instance_id, client_name)
     return {"outcome": res.outcome, "status": "provisioning", "launched": True, "recorded": False,
-            "failover_allowed": False, "instance_id": res.instance_id,
+            "failover_allowed": False, "instance_id": res.instance_id, "auto_termination": auto_term,
             "reason": "the provider answered but OpenGrid could not record it; reconciliation will resolve it"}
+
+
+def _operator_key_problem(d: Deployment, launch_spec, resolved) -> str | None:
+    """Defence in depth at the last moment: a customer launch on OpenGrid-managed credentials may carry ONLY
+    the customer's own public key: no key-name reference, never the operator's default key material."""
+    if (d.purpose or "customer") == "validation" or launch_spec is None:
+        return None
+    if getattr(resolved, "source", None) == "byo":
+        return None
+    from config import settings
+
+    if launch_spec.ssh_key:
+        return "ssh key references are forbidden on OpenGrid-managed provider accounts"
+    defaults = dict((settings.routing_launch_defaults or {}).get(d.provider) or {})
+    op = {" ".join(str(v).split()[:2]) for v in (defaults.get("ssh_public_key"), defaults.get("ssh_key")) if v}
+    if launch_spec.ssh_public_key and " ".join(launch_spec.ssh_public_key.split()[:2]) in op:
+        return "the operator's default ssh key may never be installed on a customer machine"
+    return None
 
 
 def _record_launch(dep_id: str, attempt_id: int, res: ProvisionResult, ms: int, *, actor: str,
@@ -749,8 +830,10 @@ def _actor_of(who) -> tuple[str, str | None]:
 
 def terminate(dep_id: str, who, *, force: bool = False, reason: str | None = None) -> dict:
     """Request termination. Never marks terminated: moves to terminating and calls the provider; the tracker
-    / reconciler confirms. Idempotent: an already-terminating deployment is not re-called unless force."""
-    d = _load(dep_id, who)
+    / reconciler confirms. Idempotent: an already-terminating deployment is not re-called unless force.
+    force (admin force-terminate, api/routing.py, scope admin) is cross-tenant: a platform-admin API key belongs
+    to an account but may stop ANY deployment, including validation deployments (account NULL)."""
+    d = _load(dep_id, None if force else who)
     actor, actor_id = _actor_of(who)
     if force:
         actor = "admin"
@@ -762,6 +845,7 @@ def terminate(dep_id: str, who, *, force: bool = False, reason: str | None = Non
             row = s.get(Deployment, dep_id, with_for_update=True)
             if row.status in PRE_LAUNCH_STATES and row.launch_token is None:
                 row.termination_reason = "cancelled_before_launch"
+                row.requested_termination_at = row.requested_termination_at or _now()
                 _apply(s, row, "rejected", reason=f"cancelled before launch: {why}", actor=actor, actor_id=actor_id,
                        now=_now())
         return {**public(dep_id), "terminate": {"requested": False, "note": "never launched: cancelled"}}
@@ -774,6 +858,8 @@ def terminate(dep_id: str, who, *, force: bool = False, reason: str | None = Non
         first = row.terminate_requested_at is None
         if first:
             row.terminate_requested_at = now
+        # recorded whenever termination is requested, including while the launch outcome is unresolved
+        row.requested_termination_at = row.requested_termination_at or now
         if row.termination_reason is None:
             row.termination_reason = "admin_forced" if force else "user_requested"
         _meta(row, requested_action="terminate")
@@ -923,6 +1009,19 @@ def view(d: Deployment, record: ExecutionRecord | None = None) -> dict:
         "approved_at": _iso(d.approved_at), "limit_violations": d.limit_violations or [],
         "override_limits": bool(d.override_limits), "override_reason": d.override_reason,
         "max_runtime_minutes": d.max_runtime_minutes, "terminate_deadline_at": _iso(d.terminate_deadline_at),
+        "effective_max_runtime_minutes": d.effective_max_runtime_minutes,
+        "runtime_ceiling_source": d.runtime_ceiling_source,
+        "auto_termination": {"terminate_deadline_at": _iso(d.terminate_deadline_at),
+                             "effective_max_runtime_minutes": d.effective_max_runtime_minutes,
+                             "source": d.runtime_ceiling_source,
+                             "basis": ("launch time + effective_max_runtime_minutes" if d.launch_token else
+                                       "approval time + effective_max_runtime_minutes (re-stated at launch)"
+                                       if d.approved_at else "set at approval")},
+        "ssh_access": ssh_access_view(d),
+        "requested_termination_at": _iso(d.requested_termination_at),
+        "provider_created_at": _iso(d.provider_created_at), "provider_running_at": _iso(d.provider_running_at),
+        "provider_terminated_at": _iso(d.provider_terminated_at), "billable_start": _iso(d.billable_start),
+        "billable_end": _iso(d.billable_end), "billable_basis": d.billable_basis,
         "created_at": _iso(d.created_at), "provisioned_at": _iso(d.provisioned_at),
         "terminated_at": _iso(d.terminated_at), "last_checked_at": _iso(d.last_checked_at),
         "state_changed_at": _iso(d.state_changed_at), "terminate_requested_at": _iso(d.terminate_requested_at),
@@ -936,6 +1035,25 @@ def view(d: Deployment, record: ExecutionRecord | None = None) -> dict:
     }
     if record is not None:
         out["transaction"] = transactions.as_dict(record)
+    return out
+
+
+def operator_access_label(value: str | None) -> str:
+    if not value or value == "none":
+        return "NONE"
+    return value
+
+
+def ssh_access_view(d: Deployment) -> dict:
+    """{customer_key_fingerprint, operator_access}: who can log in to this machine. Never key material."""
+    if (d.purpose or "customer") == "validation":
+        return {"customer_key_fingerprint": None, "operator_access": "validation_operator_key",
+                "note": "validation deployment on OpenGrid's account: the operator key is used"}
+    out = {"customer_key_fingerprint": d.ssh_key_fingerprint,
+           "operator_access": operator_access_label(d.operator_access)}
+    if (d.operator_access or "").startswith("blocked:"):
+        out["note"] = ("the provider may install account-level ssh keys (operator access): an admin must approve "
+                       "with allow_provider_account_keys and a reason, or reject")
     return out
 
 

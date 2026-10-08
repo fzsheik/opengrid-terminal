@@ -89,6 +89,42 @@ const eq = (a, b, m) => ok(JSON.stringify(a) === JSON.stringify(b), m + " -> " +
   ok(OG.dep.tone("orphan_suspected") === "warn" && OG.dep.tone("credentials_unavailable") === "warn" && OG.dep.tone("provision_failed") === "bad" && OG.dep.tone("pending_approval") === "busy", "tones");
   ok(OG.dep.LIVE.includes("launch_unknown") && !OG.dep.LIVE.includes("pending_approval"), "live states (may bill)");
 
+  // ---------- SSH access + auto-terminate text (pure helpers in web/pages/deployments.js) ----------
+  global.OG = OG;
+  if (typeof OG.page !== "function") OG.page = () => {};
+  require("../web/pages/deployments.js");
+  const X = OG.execText;
+  const s1 = X.sshAccess({ customer_key_fingerprint: "SHA256:abc123", operator_access: "NONE" }, { purpose: "customer" });
+  eq(s1.text, "SSH access:\nCustomer supplied key: SHA256:abc123\nOpenGrid operator access: NONE", "founder's SSH format");
+  ok(!s1.missingKey && !s1.needsOverride && s1.lines.every(l => !l.tone), "a customer key and no operator access: nothing red");
+  ok(X.sshAccess({ customer_key_fingerprint: "SHA256:x", operator_access: "none" }).lines[1].value === "NONE", "lower-case none -> NONE");
+  const s2 = X.sshAccess({ customer_key_fingerprint: "SHA256:x", operator_access: "provider_forced_account_key:override_by:admin-7" });
+  ok(s2.lines[1].tone === "bad" && s2.lines[1].value.startsWith("provider_forced_account_key:override_by:admin-7") && /override by admin-7/.test(s2.lines[1].value), "operator override: red, exact value, who overrode");
+  const s3 = X.sshAccess({ customer_key_fingerprint: "SHA256:x", operator_access: "blocked:provider_forced_account_key" });
+  ok(s3.needsOverride && s3.lines[1].tone === "bad" && s3.lines[1].value.startsWith("blocked:provider_forced_account_key"), "provider may force account keys -> override needed, red");
+  const s4 = X.sshAccess({ customer_key_fingerprint: null, operator_access: "NONE" }, { purpose: "customer" });
+  ok(s4.missingKey && s4.lines[0].tone === "bad" && /MISSING/.test(s4.lines[0].value), "missing customer key is said and red");
+  ok(!X.sshAccess({ customer_key_fingerprint: null, operator_access: "NONE" }, { keyRef: "my-key" }).missingKey, "a BYO key name is not a missing key");
+  const s5 = X.sshAccess({ customer_key_fingerprint: null, operator_access: "validation_operator_key" }, { purpose: "validation" });
+  ok(!s5.missingKey && s5.lines[1].value === "OpenGrid operator key (validation only)" && s5.lines[1].tone === "bad", "validation: operator key (validation only)");
+  ok(X.sshAccess(null).lines[1].value.startsWith("UNKNOWN"), "no ssh_access in the response -> unknown, not NONE");
+
+  const iso = "2026-10-07T14:05:09Z", dt = new Date(iso), P = n => String(n).padStart(2, "0");
+  const local = `${dt.getFullYear()}-${P(dt.getMonth() + 1)}-${P(dt.getDate())} ${P(dt.getHours())}:${P(dt.getMinutes())}:${P(dt.getSeconds())}`;
+  eq(X.exactTime(iso), `${local} local (UTC 2026-10-07 14:05:09)`, "exact local + UTC time");
+  ok(X.exactTime(null) === null && X.exactTime("nope") === null, "no time -> null");
+  eq(X.autoTerminate(iso, 60, "system_default"), `Auto-terminates: ${local} local (UTC 2026-10-07 14:05:09) — max runtime 60 min, source system default`, "auto-terminate line");
+  ok(["request", "account", "system default", "hard max", "validation cap"].join() === ["request", "account", "system_default", "system_hard_max", "validation_cap"].map(X.ceilingSource).join(), "ceiling source labels");
+  ok(/not set yet/.test(X.autoTerminate(null, 30, "validation_cap")), "deadline not set yet");
+  const now = Date.parse(iso);
+  eq(X.deadline("2026-10-07T15:09:21Z", now), { past: false, seconds: 3852, text: "in 1h 04m" }, "deadline countdown");
+  eq(X.deadline("2026-10-07T14:01:59Z", now), { past: true, seconds: -190, text: "PAST DEADLINE by 3m 10s" }, "past deadline");
+  ok(X.durationWarning(2, 60) && !X.durationWarning(1, 60) && !X.durationWarning(null, 60) && X.durationWarning(0.5, 10, "server says") === "server says", "duration vs ceiling warning");
+  ok(X.billingAlarm({ status: "running", terminate_deadline_at: "2026-10-07T14:00:00Z" }, now).kind === "past_deadline", "running past the deadline -> PAST DEADLINE banner");
+  ok(X.billingAlarm({ status: "running", terminate_deadline_at: "2026-10-07T15:00:00Z" }, now) === null, "running before the deadline -> no banner");
+  ok(X.billingAlarm({ status: "terminated", terminate_deadline_at: "2026-10-07T14:00:00Z" }, now) === null, "terminated past the deadline -> no banner");
+  ok(X.billingAlarm({ status: "launch_unknown" }, now).kind === "uncertain" && X.billingAlarm({ status: "termination_failed" }, now).title === "POSSIBLY BILLING", "uncertain -> POSSIBLY BILLING");
+
   console.log(failures ? `\n${failures} FAILED` : "\nall passed");
   process.exit(failures ? 1 : 0);
 })();

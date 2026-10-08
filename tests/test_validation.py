@@ -147,6 +147,16 @@ def test_pick_listing_and_start_validation_gates():
     control.set_mode("SUPERVISED", reason="test", by="test")
     settings.routing_launch_defaults = {"syn_v": {"ssh_key": "operator-key", "image": "img"}}
     try:
+        # Without the first-launch safety preconditions (allowlist, drills, healthy workers, ops alerts)
+        # the gate refuses outright.
+        settings.validation_allowed_providers = ["lambda"]
+        try:
+            validation.start_validation("syn_v", by="ops@test")
+            raise AssertionError("preconditions missing: the gate must refuse")
+        except Exception as e:  # noqa: BLE001 - ValidationError or the core's refusal
+            assert "precondition" in str(getattr(e, "detail", e)).lower() or "allowed" in str(e).lower(), e
+        import test_execution_core as core_tests
+        core_tests.validation_ready("syn_v")
         out = validation.start_validation("syn_v", by="ops@test")
     finally:
         settings.routing_live_provisioning = False

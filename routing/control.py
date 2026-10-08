@@ -25,7 +25,7 @@ terminate keep working in every mode (they are never gated here).
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
@@ -300,3 +300,221 @@ def recent_log(limit: int = 200, target: str | None = None) -> list[dict]:
     with normalize.SessionLocal() as s:
         return [{"id": r.id, "at": _iso(r.at), "action": r.action, "target": r.target, "before": r.before,
                  "after": r.after, "reason": r.reason, "actor": r.actor} for r in s.scalars(q)]
+
+
+# --------------------------------------------------------------------------
+# Readiness evidence (the validation launch gate and the first-route checklist read these)
+# --------------------------------------------------------------------------
+# Everything here is read from Postgres, so it is correct when the API and the background jobs run in
+# different processes: job heartbeats are rows in execution_controls ('job:<name>'), drills and the ops test
+# alert are rows in execution_control_log.
+
+def _ts(v):
+    if v is None or isinstance(v, datetime):
+        return v
+    t = datetime.fromisoformat(str(v))
+    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+
+def record_job_health(name: str, *, ok: bool, error: str | None = None) -> None:
+    """Durable heartbeat of one background job run (written by the wrapper install_job_heartbeats() puts
+    around the registered job). Never raises."""
+    try:
+        now = _now()
+        with normalize.SessionLocal.begin() as s:
+            row = s.get(ExecutionControl, f"job:{name}", with_for_update=True)
+            v = dict(row.value or {}) if row is not None else {}
+            v["runs"] = int(v.get("runs") or 0) + 1
+            if ok:
+                v.update(last_ok_at=now.isoformat(), consecutive_failures=0)
+            else:
+                v.update(last_error_at=now.isoformat(), last_error=(error or "")[:500],
+                         consecutive_failures=int(v.get("consecutive_failures") or 0) + 1)
+            v["last_run_at"] = now.isoformat()
+            if row is None:
+                s.add(ExecutionControl(key=f"job:{name}", value=v, updated_by="job", updated_at=now,
+                                       reason="job heartbeat"))
+            else:
+                row.value, row.updated_at, row.updated_by = v, now, "job"
+    except Exception:  # noqa: BLE001 - a heartbeat must never break the job
+        log.exception("job heartbeat for %s not recorded", name)
+
+
+def install_job_heartbeats(names=("reconcile", "routing_tracker")) -> None:
+    """Wrap the registered jobs so every run leaves a durable heartbeat (idempotent)."""
+    import functools
+
+    import jobs
+
+    for name in names:
+        j = jobs.JOBS.get(name)
+        if j is None or getattr(j.fn, "_og_heartbeat", False):
+            continue
+        fn = j.fn
+
+        @functools.wraps(fn)
+        def wrapped(_fn=fn, _name=name):
+            try:
+                out = _fn()
+            except Exception as exc:
+                record_job_health(_name, ok=False, error=f"{type(exc).__name__}: {exc}")
+                raise
+            record_job_health(_name, ok=True)
+            return out
+
+        wrapped._og_heartbeat = True
+        j.fn = wrapped
+
+
+def job_health(name: str, interval_seconds: float) -> dict:
+    """{ok, reason, evidence}: the job ran successfully within 2x its interval and its last run(s) did not fail.
+    Reads the durable heartbeat; falls back to the in-process jobs registry."""
+    now = _now()
+    window = timedelta(seconds=2 * max(float(interval_seconds), 1.0))
+    try:
+        with normalize.SessionLocal() as s:
+            row = s.get(ExecutionControl, f"job:{name}")
+        hb = dict(row.value or {}) if row is not None else None
+    except Exception as exc:  # noqa: BLE001
+        hb = None
+        log.exception("job heartbeat unreadable")
+        return {"ok": False, "reason": f"job {name}: heartbeat unreadable ({type(exc).__name__})", "evidence": None}
+    if hb:
+        last_ok = _ts(hb.get("last_ok_at"))
+        fails = int(hb.get("consecutive_failures") or 0)
+        ev = {"source": "heartbeat", **hb}
+        if fails:
+            return {"ok": False, "reason": f"job {name}: {fails} consecutive failure(s), last error "
+                                           f"{hb.get('last_error')!r}", "evidence": ev}
+        if last_ok is None or now - last_ok > window:
+            return {"ok": False, "reason": f"job {name}: last successful run {hb.get('last_ok_at') or 'never'} is older "
+                                           f"than 2x its interval ({int(window.total_seconds())} s)", "evidence": ev}
+        return {"ok": True, "reason": f"job {name}: last successful run {hb.get('last_ok_at')}", "evidence": ev}
+    try:
+        import jobs
+        j = jobs.JOBS.get(name)
+    except Exception:  # noqa: BLE001
+        j = None
+    if j is None or j.last_finished is None:
+        return {"ok": False, "reason": f"job {name}: no heartbeat recorded and not run in this process",
+                "evidence": None}
+    ev = {"source": "process", "last_finished": _iso(j.last_finished), "last_error": j.last_error, "runs": j.runs,
+          "failures": j.failures}
+    if j.last_error:
+        return {"ok": False, "reason": f"job {name}: last run failed ({j.last_error})", "evidence": ev}
+    if now - j.last_finished > window:
+        return {"ok": False, "reason": f"job {name}: last run {_iso(j.last_finished)} is older than 2x its interval",
+                "evidence": ev}
+    return {"ok": True, "reason": f"job {name}: last run {_iso(j.last_finished)} ok", "evidence": ev}
+
+
+def reconcile_health(provider: str, *, strict: bool = True) -> dict:
+    """The latest finished reconciliation pass covering `provider`: fresh (< 2x interval), not failed, and with
+    no error for THIS provider (another provider's list failure does not count). strict: the provider must
+    also have been reconciled in that pass (listed with credentials, not skipped)."""
+    provider = (provider or "").lower()
+    window = timedelta(seconds=2 * max(float(settings.reconcile_interval_seconds), 1.0))
+    try:
+        from store.reconcile import ReconciliationRun
+        with normalize.SessionLocal() as s:
+            r = s.scalars(select(ReconciliationRun).where(
+                ReconciliationRun.finished_at.is_not(None),
+                (ReconciliationRun.provider.is_(None)) | (ReconciliationRun.provider == provider))
+                .order_by(ReconciliationRun.finished_at.desc()).limit(1)).first()
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "reason": f"reconciliation_runs unreadable ({type(exc).__name__})", "evidence": None}
+    if r is None:
+        return {"ok": False, "reason": "no finished reconciliation run recorded", "evidence": None}
+    p = (r.providers or {}).get(provider)
+    ev = {"run_id": r.id, "finished_at": _iso(r.finished_at), "status": r.status, "error": r.error, "provider": p}
+    if _now() - r.finished_at > window:
+        return {"ok": False, "reason": f"last reconciliation run {_iso(r.finished_at)} is older than 2x the interval",
+                "evidence": ev}
+    if r.status == "failed" or (r.error and r.status != "partial"):
+        return {"ok": False, "reason": f"last reconciliation run failed: {r.error!r}", "evidence": ev}
+    if isinstance(p, dict) and (p.get("error") or p.get("list_errors")):
+        return {"ok": False, "reason": f"last reconciliation run errored for {provider}: "
+                                       f"{p.get('error') or str(p.get('list_errors')) + ' list error(s)'}",
+                "evidence": ev}
+    if strict and (not isinstance(p, dict) or p.get("skipped")):
+        return {"ok": False, "reason": f"last reconciliation run did not reconcile {provider}"
+                                       + (f" ({p.get('skipped')})" if isinstance(p, dict) else ""), "evidence": ev}
+    return {"ok": True, "reason": f"reconciliation run {r.id} at {_iso(r.finished_at)} ok for {provider}",
+            "evidence": ev}
+
+
+def _drill_window() -> timedelta:
+    return timedelta(days=max(1, int(getattr(settings, "validation_drill_window_days", 7) or 7)))
+
+
+def drill_status(provider: str | None = None) -> dict:
+    """Kill-switch drills in the window: global (a kill_all / mode DISABLED followed by a mode change away from
+    DISABLED) and, for `provider`, a kill_provider followed by an unkill_provider."""
+    since = _now() - _drill_window()
+    with normalize.SessionLocal() as s:
+        rows = list(s.scalars(select(ExecutionControlLog).where(ExecutionControlLog.at >= since)
+                              .order_by(ExecutionControlLog.at, ExecutionControlLog.id)))
+    g_kill = g_unkill = p_kill = p_unkill = None
+    for r in rows:
+        after = r.after if isinstance(r.after, dict) else {}
+        before = r.before if isinstance(r.before, dict) else {}
+        if r.action == "kill_all" or (r.action == "set_mode" and after.get("mode") == DISABLED):
+            g_kill, g_unkill = r.at, None
+        elif r.action == "set_mode" and g_kill is not None and after.get("mode") not in (None, DISABLED) \
+                and (before.get("mode") in (None, DISABLED)):
+            g_unkill = g_unkill or r.at
+        if provider and r.target == provider:
+            if r.action == "kill_provider":
+                p_kill, p_unkill = r.at, None
+            elif r.action == "unkill_provider" and p_kill is not None:
+                p_unkill = p_unkill or r.at
+    out = {"window_days": _drill_window().days,
+           "global": {"ok": bool(g_kill and g_unkill), "kill_at": _iso(g_kill), "unkill_at": _iso(g_unkill)}}
+    if provider:
+        out["provider"] = {"provider": provider, "ok": bool(p_kill and p_unkill), "kill_at": _iso(p_kill),
+                           "unkill_at": _iso(p_unkill)}
+    return out
+
+
+def ops_channel_configured() -> bool:
+    try:
+        from alerts import ops
+        return bool(ops.channel_configured())
+    except Exception:  # noqa: BLE001
+        log.exception("ops alert channel check failed")
+        return False
+
+
+def send_test_alert(*, by: str, reason: str | None = None) -> dict:
+    """Send ONE ops test alert through the real channel and record the result (execution_control_log
+    'ops_test_alert'). The validation gate needs a delivered one within the drill window."""
+    configured = ops_channel_configured()
+    result = {"recorded": False, "delivered": False}
+    error = None
+    try:
+        from alerts import ops
+        result = ops.alert("test_alert", f"OpenGrid ops test alert from {by}", severity="notable",
+                           detail={"test": True}, dedupe=f"test_alert:{_now().isoformat()}") or result
+    except Exception as exc:  # noqa: BLE001
+        error = f"{type(exc).__name__}: {str(exc)[:200]}"
+    after = {"channel_configured": configured, "delivered": bool(result.get("delivered")),
+             "recorded": bool(result.get("recorded")), "error": error}
+    record("ops_test_alert", "alerts:ops", after=after, reason=(reason or "ops test alert"), actor=by)
+    return {**after, "at": _now().isoformat(), **ops_alert_health()}
+
+
+def ops_alert_health() -> dict:
+    configured = ops_channel_configured()
+    since = _now() - _drill_window()
+    with normalize.SessionLocal() as s:
+        r = s.scalars(select(ExecutionControlLog).where(ExecutionControlLog.action == "ops_test_alert",
+                                                        ExecutionControlLog.at >= since)
+                      .order_by(ExecutionControlLog.at.desc()).limit(1)).first()
+    delivered = bool(r is not None and (r.after or {}).get("delivered"))
+    ok = configured and delivered
+    reason = ("ops alert channel configured; test alert delivered at " + _iso(r.at)) if ok else (
+        "no ops alert channel configured (OPS_ALERT_WEBHOOK_URL + OPS_ALERT_WEBHOOK_SECRET)" if not configured else
+        "no successfully delivered ops test alert in the last "
+        f"{_drill_window().days} days (POST /v1/admin/ops/test-alert)")
+    return {"ok": ok, "channel_configured": configured, "last_test_alert_at": _iso(r.at) if r is not None else None,
+            "last_test_alert_delivered": delivered, "reason": reason}

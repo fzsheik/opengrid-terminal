@@ -97,3 +97,73 @@ separate; none is merged into another:
 `reconcile.run_once(provider=None)`, `reconcile.orphans(status=None)`, `reconcile.resolve_orphan(id, action, by)`,
 `reconcile.runs(limit)`, `reconcile.last_run()`, `reconcile.watch(deployment_id)`, `tracker.track()`,
 `tracker.meter(deployment_id)`, `billing.usage.slices_for(deployment_id)`, `transactions.reconcile_cost(id)`.
+
+## Billable window (lifecycle hardening, migrations 0014/0015)
+
+Real consumption is never discarded, and no edge is claimed more precisely than the evidence allows.
+
+- Every provider read (status poll, instance list, adoption, confirmation of gone) copies the earliest
+  provider-reported timestamps onto the deployment: `provider_created_at`, `provider_running_at`,
+  `provider_terminated_at` (`tracker.record_lifecycle`). Which provider field each came from is kept in
+  `provider_metadata.lifecycle_time_fields` (Lambda: `running_at <- first_healthy`; Lambda exposes no created
+  or terminated time).
+- `billable_start` = `provider_running_at` when exposed (`billable_basis = provider_running_at`), else the
+  first OpenGrid observation of running (`opengrid_observed_running`: the earliest `running` event), else, only
+  for an instance that existed but was never seen running on a provider whose billing start is `created` or
+  undocumented, `provider_created_at` (an estimate). Lambda bills from the first health check (=
+  `first_healthy`), so Lambda never uses the creation fallback.
+- `billable_end` = `provider_terminated_at` when exposed, else the first confirmed-gone observation
+  (`deployment_watch.ended_basis = first_observed`; the final slice is `end_estimated`).
+- Metering bills from `billable_start` even when OpenGrid's own state never said `running` (terminate requested
+  while the launch was in flight: provisioning -> terminating -> terminated). Time before the provider-reported
+  start is never billed. A provider running time that arrives later replaces an OpenGrid observation; slices
+  already written are never re-priced (idempotent per hour).
+- A terminate requested before the launch resolved (`terminate_requested_at` / `requested_termination_at`) is
+  issued by the tracker as soon as the instance is confirmed to exist (and by reconciliation on adoption).
+- Cost reconciliation adds `billable_window` (start, end, both bases, provider timestamps and their fields,
+  observed running seconds vs billed seconds, the provider billing unit) beside the provider-reported cost and
+  billing rounding: observed runtime, billed runtime, provider billing units and the provider-charged amount
+  stay separate.
+
+## Deadlines through provider outages
+
+The deadline pass runs first in every reconciliation run, so the first run after any restart enforces overdue
+deadlines before anything else. A live deployment past `terminate_deadline_at` is marked past deadline
+(`deployment_watch.past_deadline_at`, `deadline_retries`, a `past_deadline` event). Terminate is issued; while
+the provider's last answer was failed/unknown (API unavailable) it is re-issued EVERY run, ignoring the normal
+backoff, and the `past_deadline` alert re-escalates until termination is confirmed by two signals.
+
+## Temporary provider resources (`provider_resources`, migration 0015)
+
+Per-deployment SSH keys (`og-<deployment>`) are recorded (status `creating`, the pinned credential, the SHA256
+fingerprint of the public key) BEFORE the registration call. If that record cannot be written the key is not
+registered and the launch is a clean rejection. After the call: `active` + the provider key id. After CONFIRMED
+termination (or a definitive no-instance outcome) the key is deleted with the pinned credential; failures retry
+with backoff (`ssh_key_delete_retry_base_seconds` x 2^n, cap 1 h) and after `ssh_key_delete_retry_max` (5)
+attempts become `delete_failed` + a `resource_delete_failed` alert (retries continue). Every reconciliation lists
+the provider's keys: missing ids are filled, a `deleted` record whose key is still listed is re-opened, og-* keys
+without a record are flagged `abandoned`: provably ours (og-<deployment> of a deployment on that provider pinned
+to that credential) -> deleted once the deployment is done; otherwise `reconcile_unowned`, an
+`unowned_provider_resource` alert, never deleted. Keys not named og-* are ignored entirely. Admin:
+`GET /v1/admin/resources?type=ssh_key&status=` (leftovers by default), `POST /v1/admin/resources/{id}/cleanup`
+(Idempotency-Key; refuses anything not provably ours or whose deployment is not done),
+`GET /v1/admin/exposures`.
+
+## Cost-exposure alerts (`alerts/ops.exposure`, table `ops_alert_state`)
+
+Evaluated at the end of every reconciliation run. Each alert carries `deployment_id`, `provider`, `account_id`,
+`est_hourly_exposure_usd`, `time_in_state`, `suggested_action`; one open condition per (kind, subject);
+re-sent every `alert_reescalate_minutes` (30) while open; resolved only with evidence (`ops.resolve` refuses an
+empty evidence dict); a resolved condition that recurs re-opens.
+
+| Kind | Fires when | Resolved on |
+|---|---|---|
+| `resource_state_unknown` | provider_timeout / launch_unknown / orphan_suspected / credentials_unavailable, or failing status reads, for more than `alert_unknown_minutes` (10) | state known again, or terminal |
+| `termination_failed` | status termination_failed | terminated (or a later known state) |
+| `past_deadline` | live past `terminate_deadline_at` | terminal |
+| `suspected_orphan` | an open/terminating `orphan_resources` row | orphan gone / terminated / ignored / adopted |
+| `provider_api_unavailable` | `list_instances` failed for a credential with live deployments | a successful list on that credential |
+| `overspend` | execution price, metered cost vs quote x metered time, or metered cost vs quoted total above the quote by more than `alert_overspend_pct` (20 %) | back within tolerance |
+| `active_without_billing` | billable live state with no usage slice for more than 2 hourly intervals | slices caught up, or terminal |
+| `unowned_provider_resource` | an og-* provider key with no OpenGrid ownership record | the key is gone |
+| `resource_delete_failed` | a provider key delete failed `ssh_key_delete_retry_max` times | the delete succeeded |

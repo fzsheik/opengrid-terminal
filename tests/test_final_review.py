@@ -63,7 +63,7 @@ def test_operator_public_key_never_on_customer_launch():
                                                adapter_cls=cls)
         assert problem is None and spec.ssh_public_key is None and spec.ssh_key is None, spec
         assert cls({"api_key": "k"}).missing_launch(spec, None) == ["ssh_key"], "refused, not launched with our key"
-        mine = "ssh-ed25519 " + "B" * 68 + " customer"
+        mine = ec.pubkey(3, "customer")   # a structurally valid key (0014: public keys are validated)
         spec, _ = engine.launch_spec_for("lambda", {"ssh_public_key": mine}, purpose="customer",
                                          credential_source="opengrid", adapter_cls=cls)
         assert spec.ssh_public_key == mine
@@ -327,6 +327,7 @@ def test_lambda_validation_cycle_end_to_end():
         ec.mode("SUPERVISED")
         # an unvalidated Lambda adapter can never take customer compute
         assert not control.launch_permission("lambda", purpose="customer")[0]
+        ec.validation_ready("lambda")   # 0014: the validation gate needs drills, healthy workers, ops alerts
         v = validation.start_validation("lambda", by="operator:founder")
         rr, dep_id, qid = v["route_request_id"], v["deployment_id"], v["quote_id"]
         assert ec.dep(dep_id).status == "pending_approval" and not sim.launches, "nothing launches before approval"
@@ -441,7 +442,10 @@ def test_migrations_from_0009_with_legacy_rows():
                           dict(d=d, rr=rr, p=p, ok=iid is not None, ek=None if iid else ("timeout" if md else "capacity")))
         _alembic(url, "head")
         with e.connect() as c:
-            assert c.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0013_security"
+            from alembic.config import Config
+            from alembic.script import ScriptDirectory
+            head = ScriptDirectory.from_config(Config(str(ROOT / "alembic.ini"))).get_current_head()
+            assert c.execute(text("SELECT version_num FROM alembic_version")).scalar() == head
             got = dict(c.execute(text("SELECT deployment_id, status FROM deployments")).all())
             refs = dict(c.execute(text("SELECT deployment_id, credential_ref FROM deployments")).all())
         assert got == {"dep_l1": "running", "dep_l2": "launch_unknown", "dep_l3": "launch_unknown",

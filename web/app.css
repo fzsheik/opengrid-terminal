@@ -1260,4 +1260,20 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
   .cols-3 { grid-template-columns: minmax(0, 1fr); }
   .pg-depd .dep-costs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* hardening: SSH access block, auto-terminate line, billing alarm, preconditions (route ticket, deployment, dialogs, admin) */
+.x-ssh { padding: 7px 10px; border: 1px solid var(--line-2); border-left: 3px solid var(--up); border-radius: 3px; background: var(--bg); font-size: 12.5px; line-height: 1.55; margin: 6px 0; }
+.x-ssh > b { display: block; font: 600 12px var(--mono); letter-spacing: .06em; color: var(--text); }
+.x-ssh.x-ssh-bad { border-color: #5c2424; border-left-color: var(--down); background: #170b0b; }
+.x-ssh-k { color: var(--muted); }
+.x-ssh .x-ssh-red { font-weight: 700; }
+.x-rt { padding: 6px 10px; font-size: 12px; }
+.x-rt .x-rt-l { color: var(--text); font-weight: 600; }
+.x-rt-warn { margin-top: 3px; }
+.pg-route .tk-safety { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; padding: 4px 10px 8px; border-top: 1px solid var(--line); }
+.pg-route .tk-safety .x-rt { padding: 6px 0; }
+.pg-depd .x-billing { border-width: 2px; }
+.pg-depd .x-billing > b { font: 700 13px var(--mono); letter-spacing: .1em; color: var(--down); }
+.pg-ex .ex-pre { border: 1px solid var(--line); border-radius: 3px; background: var(--surface); padding: 6px 10px; margin-bottom: 8px; }
+.pg-ex .ex-pre .sec-h { display: flex; align-items: center; gap: 6px; }
+@media (max-width: 1100px) { .pg-route .tk-safety { grid-template-columns: minmax(0, 1fr); } }
 /* ---- end page: execution UI ---- */

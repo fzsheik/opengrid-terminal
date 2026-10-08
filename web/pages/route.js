@@ -569,7 +569,8 @@
       function renderRouted(r) {
         if (r.status === "pending_approval" && r.deployment) {
           OG.qs.set({ rr: r.route_request_id });
-          renderTicket({ rr: r.route_request_id, quote: r.quote, dep: r.deployment, reason: r.reason, request: st.routeBody || null });
+          renderTicket({ rr: r.route_request_id, quote: r.quote, dep: r.deployment, reason: r.reason, request: st.routeBody || null,
+            runtime: r.runtime || (r.approval && r.approval.runtime) || null, ssh: r.ssh_access || (r.approval && r.approval.ssh_access) || null });
           return;
         }
         const S = {
@@ -623,6 +624,11 @@
         const qStatus = q.status || "active";
         const expired = qStatus === "expired" || (q.expires_at && new Date(q.expires_at) <= new Date()) || dep.status === "quote_expired";
         const fees = q.fees || {};
+        const X = OG.execText;
+        const sa = dep.ssh_access || t.ssh || null;
+        const ssh = X.sshAccess(sa, { purpose: dep.purpose, keyRef: dep.launch && dep.launch.ssh_key });
+        const sshWhy = ssh.missingKey ? ((sa && sa.note) || "no customer SSH public key on this request (launch.ssh_public_key): the provider launch needs one, so it would be refused. Reject and request a new route with your public key.") : null;
+        const rt = ticketRuntime(t);
         const cell2 = (label, value, sub, badge) => h("div", { class: "rt-c" }, h("div", { class: "rt-cl" }, label, badge || null), h("div", { class: "rt-cv" }, value), sub ? h("div", { class: "rt-cs" }, sub) : null);
         const actions = h("div", { class: "tk-acts" });
         const msg = h("div", { class: "tk-msg" });
@@ -634,9 +640,11 @@
             h("button", { class: "btn pri", type: "button", disabled: t.request ? null : true, title: t.request ? null : "the original request is not available", onclick: () => requote(t, msg) }, "Re-quote…"));
         } else if (admin) {
           actions.append(
-            h("button", { class: "btn w4-danger", type: "button", disabled: hard.length ? true : null, title: hard.length ? "a non-overridable limit blocks this launch" : null, onclick: () => approve(t, msg) }, vs.length ? "Approve with override…" : "Approve & launch…"),
+            h("button", { class: "btn w4-danger", type: "button", disabled: hard.length || sshWhy ? true : null, title: hard.length ? "a non-overridable limit blocks this launch" : sshWhy, onclick: () => approve(t, msg) }, vs.length || ssh.needsOverride ? "Approve with override…" : "Approve & launch…"),
             h("button", { class: "btn", type: "button", onclick: () => reject(t, msg) }, "Reject…"),
-            hard.length ? h("span", { class: "down" }, "Blocked: " + hard.map(v => v.code).join(", ") + " cannot be overridden") : h("span", { class: "dim" }, "Approval re-validates the quote live; a price move beyond tolerance issues a new quote instead of launching."));
+            hard.length ? h("span", { class: "down" }, "Blocked: " + hard.map(v => v.code).join(", ") + " cannot be overridden")
+              : sshWhy ? h("span", { class: "down" }, "Blocked: " + sshWhy)
+              : h("span", { class: "dim" }, "Approval re-validates the quote live; a price move beyond tolerance issues a new quote instead of launching."));
         } else {
           actions.append(h("span", { class: "tk-wait" }, h("i", { class: "spin" }), "Waiting for OpenGrid approval. Nothing is launched or charged until an admin approves this exact quote."));
         }
@@ -664,33 +672,63 @@
             cell2("Taxes", h("span", { class: "dim" }, "not computed"), (q.taxes && q.taxes.note) || "unknown: taxes not computed"),
             cell2("Billing unit", q.billing_unit || "unknown", "from the adapter's capability matrix"),
             cell2("Min. commitment", q.minimum_commitment || "unknown", null)),
+          h("div", { class: "tk-safety" }, OG.sshAccessBlock(sa, { purpose: dep.purpose, keyRef: dep.launch && dep.launch.ssh_key }),
+            h("div", { class: "x-rt" }, h("div", { class: "x-rt-l mono" }, rt.line),
+              rt.pending ? h("div", { class: "dim" }, `If approved now. The deadline is set at approval: approval time + ${rt.minutes != null ? rt.minutes : "N"} min (re-stated at launch).`) : rt.basis ? h("div", { class: "dim" }, "basis: " + rt.basis) : null,
+              rt.warning ? h("div", { class: "down x-rt-warn" }, h("b", {}, "Duration vs ceiling: "), rt.warning) : null,
+              ssh.needsOverride ? h("div", { class: "down" }, (sa && sa.note) || "the provider may install account-level ssh keys: approval needs the explicit override + a reason") : null)),
           vs.length ? h("div", { class: "tk-vs" }, h("div", { class: "rt-res-h" }, h("b", { class: "down" }, `${vs.length} limit violation${vs.length === 1 ? "" : "s"}`), h("span", { class: "dim" }, "the launch is blocked unless an admin overrides (recorded with a reason)")), OG.violationTable(vs)) : null,
           actions, msg));
+      }
+      // the auto-terminate line of a ticket: the exact deadline once set, else "if approved now"
+      function ticketRuntime(t) {
+        const X = OG.execText, dep = t.dep, q = t.quote || {}, r = t.runtime || {};
+        const minutes = dep.effective_max_runtime_minutes ?? r.effective_max_runtime_minutes ?? dep.max_runtime_minutes ?? null;
+        const source = dep.runtime_ceiling_source || r.runtime_ceiling_source || null;
+        const set = dep.terminate_deadline_at || r.terminate_deadline_at || null;
+        const pending = !set && ["pending_approval", "quote_expired", "created", "quoted"].includes(dep.status);
+        const at = set || (pending && minutes != null ? new Date(Date.now() + minutes * 60000).toISOString() : null);
+        return { minutes, source, pending, at, line: X.autoTerminate(at, minutes, source) + (pending && at ? " (if approved now)" : ""),
+          basis: (dep.auto_termination && dep.auto_termination.basis) || r.deadline_basis || null,
+          warning: X.durationWarning(q.duration_hours, minutes, r.duration_warning) };
       }
       const D_TONE = s => ({ good: "good", bad: "bad", warn: "warn", busy: "warn" })[OG.dep.tone(s)] || "";
 
       async function approve(t, msg) {
         const q = t.quote || {}, dep = t.dep, vs = dep.limit_violations || [];
         const name = OG.providerName(dep.provider);
+        const sa = dep.ssh_access || t.ssh || null;
+        const ssh = OG.execText.sshAccess(sa, { purpose: dep.purpose, keyRef: dep.launch && dep.launch.ssh_key });
+        if (ssh.missingKey) return;
+        const rt = ticketRuntime(t);
+        const needReason = vs.length > 0 || ssh.needsOverride;
         const v = await OG.ask({
           title: `Approve launch on ${name}`, danger: true, confirm: "Approve & launch",
-          body: h("div", {}, h("p", {}, `Launches ONE instance: ${q.gpu_count || dep.gpu_count}× ${OG.shortGpu(q.gpu || dep.gpu)} at the quote ${fmt.price(q.quote_price_per_gpu_hour)}/GPU·h (${OG.money(q.est_hourly_cost)}/h${q.est_total_cost != null ? ", est. " + OG.money(q.est_total_cost) + " total" : ""}). The quote is re-validated live first.`),
+          body: h("div", {}, h("p", {}, `Provider: ${name}. Launches ONE instance: ${q.gpu_count || dep.gpu_count}× ${OG.shortGpu(q.gpu || dep.gpu)} at the quote ${fmt.price(q.quote_price_per_gpu_hour)}/GPU·h (${OG.money(q.est_hourly_cost)}/h${q.est_total_cost != null ? ", est. " + OG.money(q.est_total_cost) + " total" : ""}). The quote is re-validated live first.`),
+            OG.sshAccessBlock(sa, { purpose: dep.purpose, keyRef: dep.launch && dep.launch.ssh_key }),
+            h("p", { class: "mono" }, OG.execText.autoTerminate(rt.pending ? new Date(Date.now() + (rt.minutes || 0) * 60000).toISOString() : rt.at, rt.minutes, rt.source)),
+            rt.pending ? h("p", { class: "dim" }, `The deadline is set at approval: approval time + ${rt.minutes != null ? rt.minutes : "N"} min.`) : null,
+            rt.warning ? h("p", { class: "down" }, rt.warning) : null,
+            ssh.needsOverride ? h("p", { class: "down" }, (sa && sa.note) || "The provider may install its account-level ssh keys (OpenGrid operator access).") : null,
             vs.length ? h("p", { class: "warn-t" }, "Overriding: " + vs.map(x => `${x.code} (${x.value} vs cap ${x.limit})`).join("; ")) : null),
           fields: [
             { key: "provider", label: `Type the provider name to confirm: ${dep.provider}`, match: dep.provider, required: true, placeholder: dep.provider },
             vs.length ? { key: "override", type: "checkbox", label: "Override the limit violations above (recorded in the control log)", required: true } : null,
-            { key: "reason", type: "textarea", label: vs.length ? "Reason for the override (required)" : "Reason (optional)", required: vs.length > 0, minLength: 3, placeholder: "e.g. partner approved the price on the call" },
+            ssh.needsOverride ? { key: "allowKeys", type: "checkbox", label: "Allow the provider's account-level SSH keys on this machine (OpenGrid operator access; recorded with your name)", required: true } : null,
+            { key: "reason", type: "textarea", label: needReason ? "Reason for the override (required)" : "Reason (optional)", required: needReason, minLength: 3, placeholder: "e.g. partner approved the price on the call" },
           ].filter(Boolean),
         });
         if (!v) return;
         const b = { quote_id: q.quote_id, override_limits: !!v.override, reason: v.reason || null };
+        if (ssh.needsOverride) b.allow_provider_account_keys = !!v.allowKeys;
         I.approve = OG.intentFor(I.approve, "approve:" + t.rr, b);
         msg.replaceChildren(OG.loading("Approving: re-validating the quote, then the single provision call…"));
         try {
           const r = await OG.api.intent(I.approve, `/v1/route/${encodeURIComponent(t.rr)}/approve`, { method: "POST", body: b });
           const d2 = r.deployment;
           msg.replaceChildren(h("div", { class: r.status === "provisioned" ? "og-ok" : "og-alarm t-warn" }, h("b", {}, r.already_approved ? "Already approved" : r.status === "provisioned" ? "Provider accepted the launch" : "Approved · " + String(r.status).replace(/_/g, " ")),
-            " ", r.reason || r.note || "", " ", d2 ? h("a", { class: "btn pri", href: "/deployments/" + d2.deployment_id }, "Open live deployment →") : null));
+            " ", r.reason || r.note || "", " ", d2 ? h("a", { class: "btn pri", href: "/deployments/" + d2.deployment_id }, "Open live deployment →") : null),
+            approvedDeadline(r));
           if (d2) { t.dep = d2; }
         } catch (e) {
           const det = e.body && e.body.detail;
@@ -705,11 +743,20 @@
             I.approve.state === "unknown" ? h("p", { class: "warn-t" }, "Outcome unknown. ", h("button", { class: "btn sm", type: "button", onclick: () => retryApprove(t, b, msg) }, "Retry (same Idempotency-Key)"), " — cannot launch twice.") : null);
         }
       }
+      // the deadline the server set at approval (re-stated at launch)
+      function approvedDeadline(r) {
+        const d2 = r.deployment || {};
+        const at = (r.auto_termination && r.auto_termination.terminate_deadline_at) || (r.runtime && r.runtime.terminate_deadline_at) || d2.terminate_deadline_at;
+        const mins = d2.effective_max_runtime_minutes ?? (r.runtime && r.runtime.effective_max_runtime_minutes);
+        const src = d2.runtime_ceiling_source || (r.runtime && r.runtime.runtime_ceiling_source);
+        return h("div", { class: "x-rt" }, h("div", { class: "x-rt-l mono" }, at ? OG.execText.autoTerminate(at, mins, src) : "Auto-terminate deadline not returned: check the deployment page."),
+          r.ssh_access || d2.ssh_access ? OG.sshAccessBlock(r.ssh_access || d2.ssh_access, { purpose: d2.purpose, keyRef: d2.launch && d2.launch.ssh_key }) : null);
+      }
       async function retryApprove(t, b, msg) {
         msg.replaceChildren(OG.loading("Retrying with the same Idempotency-Key…"));
         try {
           const r = await OG.api.intent(I.approve, `/v1/route/${encodeURIComponent(t.rr)}/approve`, { method: "POST", body: b });
-          msg.replaceChildren(h("div", { class: "og-ok" }, h("b", {}, String(r.status).replace(/_/g, " ")), " ", r.deployment ? h("a", { class: "btn pri", href: "/deployments/" + r.deployment.deployment_id }, "Open deployment →") : null));
+          msg.replaceChildren(h("div", { class: "og-ok" }, h("b", {}, String(r.status).replace(/_/g, " ")), " ", r.deployment ? h("a", { class: "btn pri", href: "/deployments/" + r.deployment.deployment_id }, "Open deployment →") : null), approvedDeadline(r));
         } catch (e) { msg.replaceChildren(OG.error(e)); }
       }
       async function reject(t, msg) {

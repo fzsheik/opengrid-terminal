@@ -32,7 +32,7 @@ from fastapi import HTTPException  # noqa: E402
 from routing import (adapters, control, credentials, deployments, engine, guards, idempotency,  # noqa: E402
                      quotes, scoring)
 from routing.adapters.base import Adapter, Availability  # noqa: E402
-from routing.adapters.results import InstanceState, ProvisionResult, TerminateResult  # noqa: E402
+from routing.adapters.results import Capabilities, InstanceState, ProvisionResult, TerminateResult  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 from store.routing import Deployment, ProvisionAttempt, QuoteRow  # noqa: E402
 from tables import ComputeListingRow, ListingObservation  # noqa: E402
@@ -44,6 +44,22 @@ START = NOW - timedelta(days=10)
 SCOPES = frozenset({"data:read", "route:preview", "route:execute", "deployments:read", "deployments:write"})
 PRICES = {"syn_a": 1.00, "syn_b": 1.10, "syn_c": 1.20, "syn_d": 1.30, "syn_pricey": 5.00, "vast": 0.80}
 SYN = ("syn_a", "syn_b", "syn_c", "syn_d", "syn_pricey")
+
+
+def pubkey(n: int = 1, comment: str = "me@laptop") -> str:
+    """A structurally valid ssh-ed25519 public key (deterministic per n)."""
+    import base64
+    import hashlib
+    import struct
+    raw = hashlib.sha256(f"test-key-{n}".encode()).digest()
+    blob = struct.pack(">I", 11) + b"ssh-ed25519" + struct.pack(">I", 32) + raw
+    return "ssh-ed25519 " + base64.b64encode(blob).decode() + (f" {comment}" if comment else "")
+
+
+def fake_caps(forces="NO") -> Capabilities:
+    c = Capabilities()
+    c.forces_account_ssh_key = (forces, "test fake")   # instance attribute: works before and after the field exists
+    return c
 
 
 def key(account_id: int, key_id: int | None = None, extra=()) -> Principal:
@@ -83,9 +99,11 @@ class Fake(Adapter):
     CREDENTIALS = ()
     CHECK_NEEDS_CREDENTIALS = False
     SSH_KEY_REGISTRATION = True
+    CAPABILITIES = fake_caps("NO")
     MODE: dict = {}
     PRICE: dict = {}
     CALLS: list = []
+    LAUNCHES: list = []          # (provider, name, ssh_public_key, ssh_key) of every provision call
     INST: dict = {}
     DELAY = 0.0
     LOCK = threading.Lock()
@@ -103,6 +121,9 @@ class Fake(Adapter):
 
     def provision(self, offer, availability, launch, name):
         self._rec("provision", name, (self.credentials or {}).get("api_key"))
+        with Fake.LOCK:
+            Fake.LAUNCHES.append((self.provider, name, getattr(launch, "ssh_public_key", None),
+                                  getattr(launch, "ssh_key", None)))
         if Fake.DELAY:
             time.sleep(Fake.DELAY)
         m = Fake.MODE.get(self.provider, "ok")
@@ -153,6 +174,7 @@ def reset():
     Fake.MODE.clear()
     Fake.PRICE.clear()
     Fake.CALLS.clear()
+    Fake.LAUNCHES.clear()
     Fake.DELAY = 0.0
     settings.routing_max_attempts = 1
     settings.route_live_check_candidates = 3
@@ -185,6 +207,29 @@ def spec(*providers, **kw):
             "preferences": {"include_providers": list(providers)} if providers else {}, "launch": None}
     base.update(kw)
     return base
+
+
+def validation_ready(*providers):
+    """Make every validation precondition true for `providers` (drills, worker heartbeats, a reconciliation
+    pass, an ops channel and a delivered test alert)."""
+    from store.reconcile import ReconciliationRun
+    settings.validation_allowed_providers = list(providers)
+    mode("SUPERVISED")
+    control.kill_all("drill", "test")
+    control.set_mode("SUPERVISED", reason="drill done", by="test")
+    for p in providers:
+        control.kill_provider(p, "drill", "test")
+        control.unkill_provider(p, "drill done", "test")
+    control.record_job_health("reconcile", ok=True)
+    control.record_job_health("routing_tracker", ok=True)
+    now = datetime.now(timezone.utc)
+    with normalize.SessionLocal.begin() as s:
+        s.add(ReconciliationRun(started_at=now, finished_at=now, trigger="test", provider=None, status="ok",
+                                providers={p: {"credentials": 1, "deployments": 0, "listed": 0, "list_errors": 0}
+                                           for p in providers}, findings=[], counts={}))
+    control.ops_channel_configured = lambda: True
+    control.record("ops_test_alert", "alerts:ops", after={"delivered": True, "channel_configured": True},
+                   reason="test", actor="test")
 
 
 def count(table, where="true", **params):
@@ -600,9 +645,11 @@ def test_requote_never_exceeds_customer_max_price():
 
 
 def test_guards_each_limit_blocks_and_admin_override():
+    # monthly_spend_limit 0.5 (was 1): a launch's projection is now its maximum exposure, quote x GPUs x its
+    # runtime ceiling ($1/h x 60 min default = $1.00), no longer the (impossible) 10 h duration estimate.
     cases = [("max_price_per_gpu_hour", Decimal("0.5")), ("max_hourly_cost", Decimal("0.5")),
              ("max_total_cost", Decimal("5")), ("max_gpus", 0), ("max_active_deployments", 0),
-             ("provider_allowlist", ["syn_b"]), ("region_allowlist", ["Europe"]), ("monthly_spend_limit", Decimal("1"))]
+             ("provider_allowlist", ["syn_b"]), ("region_allowlist", ["Europe"]), ("monthly_spend_limit", Decimal("0.5"))]
     for field, value in cases:
         reset()
         mode("LIVE")
@@ -867,7 +914,7 @@ def test_ssh_key_policy():
         spec_, why = engine.launch_spec_for("syn_a", None, purpose="customer", credential_source="opengrid",
                                             adapter_cls=cls)
         assert why is None and spec_.ssh_key is None and spec_.image == "img", "operator key never on customer machines"
-        pk = "ssh-ed25519 " + "A" * 68 + " me@laptop"
+        pk = pubkey(1)
         spec_, why = engine.launch_spec_for("syn_a", {"ssh_public_key": pk}, purpose="customer",
                                             credential_source="opengrid", adapter_cls=cls)
         assert why is None and spec_.ssh_public_key == pk
@@ -899,24 +946,30 @@ def test_ssh_key_policy():
 def test_validation_launch():
     reset()
     mode("SUPERVISED")
-    # syn_c is simulated: customers cannot launch on it, validation can (admin approval, caps)
+    # syn_c is simulated: customers cannot launch on it, validation can (admin approval, caps, the gate)
     code, out = engine.route(spec("syn_c"), key(29))
     assert out["status"] == "not_provisioned" and not calls("provision")
+    # the validation gate refuses (explicitly, every failed condition with its reason) until all hold
+    settings.validation_allowed_providers = ["lambda"]
+    e = refused(lambda: engine.create_validation_route("syn_c", None, by="operator"),
+                "validation_preconditions_failed", 409)
+    codes = {f["code"] for f in e.detail["failed"]}
+    assert "provider_allowed" in codes and all(f["reason"] for f in e.detail["failed"]), e.detail
+    validation_ready("syn_c", "syn_pricey")
     rr = engine.create_validation_route("syn_c", None, by="operator")
     d = deployments.for_request(rr)
     assert d.purpose == "validation" and d.status == "pending_approval" and d.max_runtime_minutes == 30
+    assert d.effective_max_runtime_minutes == 30 and d.operator_access == "validation_operator_key"
     assert d.account_id is None and not calls("provision")
     code, res = engine.approve(rr, OPERATOR, quote_id=d.quote_id)
     assert res["status"] == "provisioned" and len(calls("provision")) == 1
     row = dep(d.deployment_id)
     assert row.terminate_deadline_at is not None and 29 <= (row.terminate_deadline_at - row.approved_at).total_seconds() / 60 <= 31
-    # one validation instance at a time; over-cap price is NOT overridable
-    rr2 = engine.create_validation_route("syn_pricey", None, by="operator")
-    d2 = deployments.for_request(rr2)
-    codes = {v["code"] for v in d2.limit_violations}
-    assert {"validation_max_price_per_hour", "validation_one_instance"} <= codes, codes
-    refused(lambda: engine.approve(rr2, OPERATOR, quote_id=d2.quote_id, override_limits=True, reason="try"),
-            "limits_exceeded", 409)
+    # one validation instance at a time, and the over-cap listing: refused AT START (not overridable)
+    e = refused(lambda: engine.create_validation_route("syn_pricey", None, by="operator"),
+                "validation_preconditions_failed", 409)
+    codes = {f["code"] for f in e.detail["failed"]}
+    assert {"price_cap", "one_active_validation"} <= codes, codes
     assert len(calls("provision")) == 1
     refused(lambda: engine.create_validation_route("syn_c", None, by="operator", max_runtime_minutes=90),
             "validation_max_runtime_minutes", 422)
@@ -1002,9 +1055,16 @@ def test_admin_api():
         assert {"set_mode", "set_provider_flags", "kill_provider", "unkill_provider", "set_account_limits"} <= {
             x["action"] for x in log}
         assert all(x["reason"] for x in log)
-        # validation route + admin views + force terminate
-        r = c.post("/v1/admin/execution/validation", json={"provider": "syn_a", "reason": "validate syn_a"})
+        # validation route (Idempotency-Key required) + admin views + force terminate
+        validation_ready("syn_a")
+        vb = {"provider": "syn_a", "reason": "validate syn_a"}
+        assert c.post("/v1/admin/execution/validation", json=vb).status_code == 428
+        r = c.post("/v1/admin/execution/validation", json=vb, headers={"Idempotency-Key": "val-1"})
         assert r.status_code == 202, r.text
+        r2 = c.post("/v1/admin/execution/validation", json=vb, headers={"Idempotency-Key": "val-1"})
+        assert r2.status_code == 202 and r2.headers.get("Idempotent-Replayed") == "true"
+        assert r2.json() == r.json() and count("deployments", "purpose = 'validation' AND status = "
+                                                             "'pending_approval'") == 1
         rr = r.json()["data"]["route_request_id"]
         qid = r.json()["data"]["quote"]["quote_id"]
         r = c.post(f"/v1/route/{rr}/approve", json={"quote_id": qid}, headers={"Idempotency-Key": "v-1"})
