@@ -175,3 +175,20 @@ def list_exposures(kind: str | None = Query(None, max_length=48), who: Principal
     from alerts import ops
 
     return envelope(ops.open_exposures(kind), methodology="reconciliation")
+
+
+@router.get("/v1/admin/channels", tags=["admin"], summary="Which chat channels (Discord/Slack webhooks) are configured")
+def channels_status(who: Principal = Depends(ADMIN)):
+    from alerts import channels, ops
+
+    return envelope({"ops": ops.channel_configured(), **channels.configured(),
+                     "news_min_relevance": channels.settings.news_post_min_relevance})
+
+
+@router.post("/v1/admin/channels/test", tags=["admin"],
+             summary="Send one example message to every configured channel (ops, deployments, market, news)")
+def channels_test(who: Principal = Depends(ADMIN)):
+    from alerts import channels
+
+    return envelope(channels.send_tests())
+

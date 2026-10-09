@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     ops_alert_webhook_secret: str | None = None
     # Public logo shown as the alert sender's avatar (Discord fetches it; must be publicly reachable).
     ops_alert_logo_url: str = "https://tryopengrid.com/brand/opengrid-logo.png"
+    # Channel feeds (alerts/channels.py): one webhook per channel, signed with OPS_ALERT_WEBHOOK_SECRET.
+    deployments_webhook_url: str | None = None   # lifecycle: awaiting approval, running, terminated, failed
+    market_webhook_url: str | None = None        # notable / major market events
+    news_webhook_url: str | None = None          # high-relevance news
+    news_post_min_relevance: int = 50
     salad_api_key: str | None = None
     salad_org: str | None = None
     hyperstack_api_key: str | None = None

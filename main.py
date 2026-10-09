@@ -277,6 +277,7 @@ app.include_router(pages_api.router)
 accounts_api.install(app)
 
 # Request ids and structured logs (outermost, so every log line of a request carries its id).
+import alerts.channels  # noqa: E402,F401  (registers the channel_feeds job: Discord/Slack feeds)
 import observability  # noqa: E402
 
 observability.install(app)
