@@ -98,13 +98,13 @@
         statsEl.replaceChildren(OG.stats([
           { label: "GPUs", value: String(c.gpus), sub: (c.architectures || []).slice(0, 3).join(", ") || "none listed now" },
           { label: "Listings", value: fmt.num(c.live_listings), sub: `${fmt.num(c.priced_listings)} priced`, kind: "observed" },
-          { label: "Regions", value: (c.region_groups || []).length ? String(c.region_groups.length) : null, reason: c.live_listings ? "no listing location maps to a region group" : "no live listings", sub: (c.region_groups || []).join(" · ") },
+          { label: "Regions", fold: true, value: (c.region_groups || []).length ? String(c.region_groups.length) : null, reason: c.live_listings ? "no listing location maps to a region group" : "no live listings", sub: (c.region_groups || []).join(" · ") },
           { label: "Cheapest now", value: ranked.length ? `${first}/${ranked.length}` : null, reason: "no GPU here has a second provider to compare with", sub: "GPUs where it is rank 1" },
           { label: "Median prem. now", value: medPrem == null ? null : prem(medPrem), reason: "no GPU with another provider priced", sub: `across ${prems.length} GPU${prems.length === 1 ? "" : "s"}`, kind: "inferred", title: "Median over its GPUs of: own lowest / median of other providers' lowest − 1, now" },
-          { label: `Avg prem. ${st.days}d`, value: rv.premium_avg == null ? null : prem(rv.premium_avg), reason: rs.premium_avg || "no rollup history", kind: "inferred" },
-          { label: "% cheapest", value: rv.cheapest_share == null ? null : share(rv.cheapest_share), reason: rs.cheapest_share || "no rollup history" },
-          { label: "Availability", value: rv.availability == null ? null : share(rv.availability), reason: rs.availability || "no rollup history", title: "Share of tracked hours with a priced listing" },
-          { label: "Volatility", value: rv.volatility_daily == null ? null : (rv.volatility_daily * 100).toFixed(1) + "%", reason: rs.volatility_daily || "no rollup history", title: "Median across its GPUs of the stdev of daily log price changes" },
+          { label: `Avg prem. ${st.days}d`, fold: true, value: rv.premium_avg == null ? null : prem(rv.premium_avg), reason: rs.premium_avg || "no rollup history", kind: "inferred" },
+          { label: "% cheapest", fold: true, value: rv.cheapest_share == null ? null : share(rv.cheapest_share), reason: rs.cheapest_share || "no rollup history" },
+          { label: "Availability", fold: true, value: rv.availability == null ? null : share(rv.availability), reason: rs.availability || "no rollup history", title: "Share of tracked hours with a priced listing" },
+          { label: "Volatility", fold: true, value: rv.volatility_daily == null ? null : (rv.volatility_daily * 100).toFixed(1) + "%", reason: rs.volatility_daily || "no rollup history", title: "Median across its GPUs of the stdev of daily log price changes" },
         ]));
       }
 
@@ -326,9 +326,8 @@
       async function loadEvents() {
         const evs = await ctx.api("/v1/events", { params: { provider: p, limit: 12 } }).catch(() => null);
         if (!evs) { evEl.replaceChildren(OG.na("events unavailable")); return; }
-        evEl.replaceChildren(evs.length ? h("div", { class: "box pd-ev" }, evs.map(e => h("div", { class: "pd-evi sev-" + e.severity, title: (e.detail && e.detail.note) || null },
-          h("span", { class: "n dim" }, fmt.dateTime(e.occurred_at)), h("span", { class: "pd-evt" }, e.type.replace(/_/g, " ")),
-          h("span", { class: "pd-evl" }, e.gpu ? [OG.gpuLink(e.gpu), " "] : null, e.title))),
+        // the same one-line rows as the overview (full title on hover)
+        evEl.replaceChildren(evs.length ? h("div", { class: "box pd-ev ov-evl" }, evs.map(e => OG.views.eventRow(e, { compact: true })),
           h("a", { class: "lnk dim pd-more", href: "/events?provider=" + encodeURIComponent(p) }, "All events →")) : OG.empty("No market events for this provider yet."));
       }
 

@@ -182,6 +182,7 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
     const SEV = { major: "#ef5350", notable: "#f5a524", info: "#7d8895" };
     function draw(W, tip) {
       el.replaceChildren();
+      let legendEl = null;
       const series = o.series || [], times = (o.times || []).map(t => +new Date(t)), n = times.length;
       const H = o.height || 260, ev = o.events || [];
       const showEnd = o.endLabels !== false && series.filter(x => !x.halo).length <= 12;
@@ -190,14 +191,28 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
       const svg = s("svg", { class: "ts", width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": o.label || "time series" });
       el.append(svg);
       if (o.legend !== false && series.filter(x => !x.halo && x.label).length >= 2) {
-        el.prepend(hd("div", "c-legend", series.filter(x => !x.halo && x.label).map(x => {
+        el.prepend(legendEl = hd("div", "c-legend", series.filter(x => !x.halo && x.label).map(x => {
           const k = hd("span", "c-key", swatch(x.color || "#94a3b8"), x.label); k.dataset.k = x.key;
           k.addEventListener("mouseenter", () => api.highlight(x.key)); k.addEventListener("mouseleave", () => api.highlight(null));
           return k;
         }), o.band ? hd("span", "c-key", hd("i", "sw band"), o.band.label || "range") : null));
       }
       if (!n) { svg.append(svgText({ x: W / 2, y: H / 2, "text-anchor": "middle", class: "c-mute" }, o.emptyText || "no data")); return; }
-      const ext = padExtent(extent(...series.map(x => x.values), o.band && o.band.lo, o.band && o.band.hi), 0.08, o.yZero);
+      // Robust scale: the lines (median, lowest…) set the range; the low–high band may add headroom up to
+      // its 75th percentile (at most one line-range above the lines). A band high beyond that is clipped and
+      // flagged at the top edge, so one outlier listing cannot flatten every line into the floor.
+      const core = extent(...series.filter(x => !x.halo).map(x => x.values));
+      let cap = null;
+      if (o.band && o.band.hi && core && o.robust !== false) {
+        const his = o.band.hi.filter(v => v != null && isFinite(v)).sort((a, b) => a - b);
+        const bandMax = his.length ? his[his.length - 1] : null;
+        const p75 = his.length ? his[Math.floor(0.75 * (his.length - 1))] : null;
+        const room = Math.max(core[1] - core[0], core[1] * 0.15);
+        const lim = Math.max(core[1], Math.min(p75 == null ? core[1] : p75, core[1] + room));
+        if (bandMax != null && bandMax > lim * 1.02) cap = lim;
+      }
+      const bandHi = o.band && o.band.hi ? (cap == null ? o.band.hi : o.band.hi.map(v => (v == null ? v : Math.min(v, cap)))) : null;
+      const ext = padExtent(extent(...series.map(x => x.values), o.band && o.band.lo, bandHi), 0.08, o.yZero);
       if (!ext) { svg.append(svgText({ x: W / 2, y: H / 2, "text-anchor": "middle", class: "c-mute" }, o.emptyText || "no data in this window")); return; }
       const t0 = times[0], t1 = times[n - 1] === t0 ? t0 + 1 : times[n - 1];
       const xs = scale(t0, t1, Lm, Lm + pw), ys = scale(ext[0], ext[1], Tm + ph, Tm);
@@ -206,9 +221,9 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
       const id = "c" + (++uid);
       svg.append(s("defs", {},
         s("clipPath", { id: id + "p" }, s("rect", { x: Lm, y: Tm - 3, width: pw + 1, height: ph + 6 })),
-        s("pattern", { id: id + "h", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, s("line", { x1: 0, y1: 0, x2: 0, y2: 6, class: "c-hatch" }))));
+        s("pattern", { id: id + "h", width: 7, height: 7, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, s("line", { x1: 0, y1: 0, x2: 0, y2: 7, class: "c-hatch" }))));
       const yTicks = [];
-      for (const t of L.niceTicks(ext[0], ext[1], Math.max(3, Math.round(ph / 48)))) {
+      for (const t of L.niceTicks(ext[0], ext[1], Math.max(3, Math.round(ph / 38)))) {
         const y = ys(t), lab = svgText({ x: Lm + pw + 6, y: y + 3.5, class: "c-ax" }, yf(t));
         svg.append(s("line", { class: "c-grid", x1: Lm, x2: Lm + pw, y1: y, y2: y }), lab);
         yTicks.push([y, lab]);
@@ -218,16 +233,34 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
       for (const t of tt) {
         const x = xs(t);
         if (x < Lm + 16 || x > Lm + pw - 16) continue;
-        svg.append(s("line", { class: "c-tick", x1: x, x2: x, y1: Tm + ph, y2: Tm + ph + 4 }), svgText({ x, y: Tm + ph + 15, "text-anchor": "middle", class: "c-ax" }, L.timeLabel(new Date(t).toISOString(), span)));
+        // date-only labels (spans > 4 days): label midnights only, so a 12-hour grid never prints a date twice
+        const dt = new Date(t), dateOnly = span > 96 && !(dt.getHours() === 0 && dt.getMinutes() === 0);
+        svg.append(s("line", { class: "c-tick", x1: x, x2: x, y1: Tm + ph, y2: Tm + ph + (dateOnly ? 2 : 4) }), dateOnly ? null : svgText({ x, y: Tm + ph + 15, "text-anchor": "middle", class: "c-ax" }, L.timeLabel(dt.toISOString(), span)));
       }
       svg.append(s("line", { class: "c-base", x1: Lm, x2: Lm + pw, y1: Tm + ph, y2: Tm + ph }));
       const plot = s("g", { "clip-path": `url(#${id}p)` });
       svg.append(plot);
       if (o.hatchBefore) {
         const hx = xs(+new Date(o.hatchBefore));
-        if (hx > Lm) plot.append(s("rect", { x: Lm, y: Tm, width: Math.min(pw, hx - Lm), height: ph, fill: `url(#${id}h)`, class: "c-hatchrect" }));
+        if (hx > Lm) {
+          const hw = Math.min(pw, hx - Lm);
+          plot.append(s("rect", { x: Lm, y: Tm, width: hw, height: ph, fill: `url(#${id}h)`, class: "c-hatchrect" }),
+            s("line", { x1: Lm + hw, x2: Lm + hw, y1: Tm, y2: Tm + ph, class: "c-hatchedge" }));
+          if (hw > 96) plot.append(svgText({ x: Lm + hw - 5, y: Tm + ph - 6, "text-anchor": "end", class: "c-hatchl" }, "partial coverage"));
+        }
       }
-      if (o.band && o.band.lo && o.band.hi) plot.append(s("path", { d: bandPath(o.band.lo, o.band.hi, xAt, ys, o.band.step !== false), fill: o.band.color || "#7d8895", "fill-opacity": ".14" }));
+      if (o.band && o.band.lo && bandHi) {
+        plot.append(s("path", { d: bandPath(o.band.lo, bandHi, xAt, ys, o.band.step !== false), fill: o.band.color || "#7d8895", "fill-opacity": ".09" }));
+        if (cap != null) {
+          // band highs off the scale: a tick on the top edge per clipped hour + one label with the true max
+          let d = "", maxV = -Infinity;
+          o.band.hi.forEach((v, i) => { if (v != null && v > cap) { const x = xAt(i); const yc = ys(cap); d += `M${x.toFixed(1)} ${yc.toFixed(1)}L${x.toFixed(1)} ${(yc - 5).toFixed(1)}`; if (v > maxV) maxV = v; } });
+          plot.append(s("path", { d, class: "c-clip" }));
+          const txt = `▲ ${o.band.label || "high"} clipped above ${yf(cap)} · max ${yf(maxV)}`;
+          if (legendEl) legendEl.append(hd("span", "c-key c-clipk", txt));
+          else svg.append(svgText({ x: Lm + pw - 4, y: Tm + ph - 6, "text-anchor": "end", class: "c-clipl" }, txt));
+        }
+      }
       refs = new Map();
       for (const x of series) {
         const d = x.step === false ? L.linePath(x.values, xAt, ys) : L.stepPath(x.values, xAt, ys);
@@ -258,9 +291,15 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
       // event markers on the time axis
       const evY = Tm + ph + 24;
       const evG = s("g", { class: "c-events" });
-      for (const e of ev) {
+      // markers closer than 7px merge into one (the most severe wins), so a busy week reads as marks, not a fence
+      const RANK = { major: 2, notable: 1 };
+      const inRange = ev.map(e => ({ e, x: xs(+new Date(e.t)) })).filter(m => { const t = +new Date(m.e.t); return t >= t0 && t <= t1; })
+        .sort((a, b) => (RANK[b.e.severity] || 0) - (RANK[a.e.severity] || 0));
+      const kept = [];
+      for (const m of inRange) if (!kept.some(k => Math.abs(k.x - m.x) < 7)) kept.push(m);
+      kept.sort((a, b) => a.x - b.x);
+      for (const { e } of kept) {
         const t = +new Date(e.t);
-        if (!(t >= t0 && t <= t1)) continue;
         const x = xs(t), color = e.color || SEV[e.severity] || SEV.info;
         const g = s("g", { class: "c-ev", tabindex: "0", "aria-label": e.label });
         g.append(s("line", { x1: x, x2: x, y1: Tm, y2: Tm + ph, class: "c-evline", stroke: color }),
@@ -473,8 +512,9 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
         svg.append(s("rect", { x: Lw + (k * lw) / 40, y: ly, width: lw / 40 + 0.5, height: 7, fill: div ? colorDiv(t * 2 - 1) : seq(t) }));
       }
       const nullTxt = o.nullText || "no data";
-      svg.append(svgText({ x: Lw, y: ly + 18, class: "c-ax" }, vf(dom[0])), svgText({ x: Lw + lw, y: ly + 18, "text-anchor": "end", class: "c-ax" }, vf(dom[dom.length - 1])),
-        s("rect", { x: Lw + lw + 14, y: ly, width: 10, height: 7, fill: `url(#${id})` }), svgText({ x: Lw + lw + 28, y: ly + 7, class: "c-ax" }, nullTxt));
+      const over = all.some(v => v > dom[dom.length - 1]), under = all.some(v => v < dom[0]);
+      svg.append(svgText({ x: Lw, y: ly + 18, class: "c-ax" }, (under ? "≤ " : "") + vf(dom[0])), svgText({ x: Lw + lw, y: ly + 18, "text-anchor": "end", class: "c-ax" }, (over ? "≥ " : "") + vf(dom[dom.length - 1])),
+        s("rect", { x: Lw + lw + 14, y: ly, width: 10, height: 7, fill: `url(#${id})`, class: "c-nullsw" }), svgText({ x: Lw + lw + 28, y: ly + 7, class: "c-ax" }, nullTxt));
       // units slot: what the colour measures, next to the legend
       if (o.units) svg.append(svgText({ x: Lw + lw + 28 + nullTxt.length * CW + 14, y: ly + 7, class: "c-ax c-units" }, o.units));
       if (div && dom.length === 3) svg.append(svgText({ x: Lw + lw / 2, y: ly + 18, "text-anchor": "middle", class: "c-ax" }, vf(dom[1])));

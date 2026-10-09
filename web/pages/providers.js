@@ -34,11 +34,13 @@
   function feedStatus(trust, fh) {
     if (trust && trust.status) {
       const tone = trust.status === "healthy" ? "good" : trust.status === "degraded" ? "warn" : "bad";
-      return OG.badge(trust.status, tone, (trust.status_reasons || []).join("; ") || `p50 ${fmt.num(trust.latency_ms_p50_24h, 0)} ms · ${trust.fetches_24h} fetches / 24h`);
+      const tip = (trust.status_reasons || []).join("; ") || `p50 ${fmt.num(trust.latency_ms_p50_24h, 0)} ms · ${trust.fetches_24h} fetches / 24h`;
+      // the normal case stays quiet (dot + word); only a problem gets a badge
+      return tone === "good" ? h("span", { class: "dotx good", title: tip }, trust.status) : OG.badge(trust.status, tone, tip);
     }
     if (!fh) return h("span", { class: "dim", title: "OpenGrid has no fetch recorded for this provider on this server" }, "no feed");
     if (fh.failure_rate_24h == null) return OG.badge("idle", "warn", fh.reason || "no fetches in the last 24h");
-    return fh.failure_rate_24h === 0 ? OG.badge("ok", "good", `${fh.fetches_24h} fetches / 24h, none failed`)
+    return fh.failure_rate_24h === 0 ? h("span", { class: "dotx good", title: `${fh.fetches_24h} fetches / 24h, none failed` }, "ok")
       : OG.badge(share(fh.failure_rate_24h) + " fail", fh.failure_rate_24h > 0.2 ? "bad" : "warn", `${fh.fetches_24h} fetches / 24h`);
   }
   OG.views = OG.views || {};
@@ -125,12 +127,12 @@
         ]));
         const cols = [
           { key: "name", label: "Provider", fmt: (v, r) => OG.providerLink(r.provider), width: "150px" },
-          { key: "cls", label: "Class", cls: "dim", fmt: v => (v || "–").replace("_", " ") },
-          { key: "source_type", label: "Source", cls: "dim", fmt: v => SRC[v] || v || "–", title: "How OpenGrid reads this provider's prices" },
+          { key: "cls", label: "Class", cls: "dim", fmt: v => (v || "–").replace("_", " "), minor: 2 },
+          { key: "source_type", label: "Source", cls: "dim", fmt: v => SRC[v] || v || "–", title: "How OpenGrid reads this provider's prices", minor: 3 },
           { key: "level", label: "Integration", value: r => r.level, fmt: (v, r) => integration(r.cap), title: "Integration level OpenGrid implements (0–3). Hover for API vs implemented vs verified. ·mock = adapter tested against mocked HTTP only", desc: true },
           { key: "gpus", label: "GPUs", num: true, desc: true, title: "Canonical GPU models listed now" },
           { key: "listings", label: "Listings", num: true, desc: true, title: "Live listings now (priced in title)", fmt: (v, r) => h("span", { title: `${r.priced} priced` }, fmt.num(v)) },
-          { key: "regions", label: "Regions", value: r => r.regions.length, desc: true, fmt: (v, r) => r.regions.length ? h("span", { class: "pv-regs", title: r.regions.join(", ") }, r.regions.join(" · ")) : r.listings ? h("span", { class: "dim", title: "listings carry no location OpenGrid can assign to a region group" }, "unassigned") : "–" },
+          { key: "regions", label: "Regions", value: r => r.regions.length, desc: true, ell: 190, fmt: (v, r) => r.regions.length ? h("span", { class: "pv-regs", title: r.regions.join(", ") }, r.regions.join(" · ")) : r.listings ? h("span", { class: "dim", title: "listings carry no location OpenGrid can assign to a region group" }, "unassigned") : "–" },
           { key: "premium", label: "Avg prem.", num: true, title: `Mean premium vs the median of other providers, same GPU, same hour (last ${st.days}d). Negative = cheaper.`,
             fmt: (v, r) => v == null ? OG.na(r.premium_r) : h("span", { class: v < 0 ? "up" : v > 0 ? "down" : "" }, fmt.pct(v)) },
           { key: "cheapest", label: "% cheapest", num: true, desc: true, title: "Share of market hours this provider was the cheapest", fmt: (v, r) => OG.value(v, share, r.cheapest_r) },
@@ -156,24 +158,33 @@
         drawFacts(all);
       }
 
+      let factsOpen = false;
       function drawFacts(all) {
-        const out = [];
-        for (const r of all) for (const f of r.facts) out.push(h("li", {}, OG.kindBadge("inferred"), " ", f));
+        const out = [], inferred = [];
+        for (const r of all) for (const f of r.facts) inferred.push(h("li", {}, f));
         // Observed counts only: no statistic that needs history
         const live = all.filter(r => r.listings > 0);
         if (live.length) {
           const byG = live.slice().sort((a, b) => b.gpus - a.gpus)[0], byL = live.slice().sort((a, b) => b.listings - a.listings)[0];
           const multi = live.filter(r => r.regions.length >= 2).sort((a, b) => b.regions.length - a.regions.length);
-          out.push(h("li", {}, OG.kindBadge("observed"), " ", OG.providerLink(byG.provider), ` lists the most GPU models right now (${byG.gpus}).`));
-          if (byL !== byG) out.push(h("li", {}, OG.kindBadge("observed"), " ", OG.providerLink(byL.provider), ` has the most live listings (${fmt.num(byL.listings)}).`));
-          if (multi.length) out.push(h("li", {}, OG.kindBadge("observed"), " ", `${multi.length} provider${multi.length === 1 ? "" : "s"} list in two or more region groups; `, OG.providerLink(multi[0].provider), ` spans ${multi[0].regions.length} (${multi[0].regions.join(", ")}).`));
+          out.push(h("li", {}, OG.providerLink(byG.provider), ` lists the most GPU models right now (${byG.gpus}).`));
+          if (byL !== byG) out.push(h("li", {}, OG.providerLink(byL.provider), ` has the most live listings (${fmt.num(byL.listings)}).`));
+          if (multi.length) out.push(h("li", {}, `${multi.length} provider${multi.length === 1 ? "" : "s"} list in two or more region groups; `, OG.providerLink(multi[0].provider), ` spans ${multi[0].regions.length} (${multi[0].regions.join(", ")}).`));
           const noLoc = live.filter(r => !r.regions.length);
-          if (noLoc.length) out.push(h("li", {}, OG.kindBadge("observed"), ` ${noLoc.length} of ${live.length} live providers publish no location OpenGrid can map to a region group.`));
+          if (noLoc.length) out.push(h("li", {}, `${noLoc.length} of ${live.length} live providers publish no location OpenGrid can map to a region group.`));
         }
         const dead = all.filter(r => !r.listings);
         if (dead.length) out.push(h("li", { class: "dim" }, `No live listings on this server from: ${dead.map(r => r.name).join(", ")} (no API key configured here, or the feed has not run).`));
         if (!all.some(r => r.facts.length)) out.push(h("li", { class: "dim" }, `Relative-value facts (cheapest share, average premium) appear once a provider has ≥ 24 compared hours in the last ${st.days} days.`));
-        factsEl.replaceChildren(h("ul", { class: "pv-list" }, out));
+        // observed counts first, then the inferred relative-value facts (8 shown, the rest on request)
+        const N = 8, list = h("ul", { class: "pv-list" }), more = h("div", { class: "pv-more" });
+        const fill = () => {
+          list.replaceChildren(out.length ? h("li", { class: "pv-lh" }, OG.kindBadge("observed"), " right now") : null, ...out,
+            inferred.length ? h("li", { class: "pv-lh" }, OG.kindBadge("inferred"), ` relative value, last ${st.days} days`) : null, ...(factsOpen ? inferred : inferred.slice(0, N)));
+          more.replaceChildren(inferred.length > N ? h("button", { class: "btn sm", onclick: () => { factsOpen = !factsOpen; fill(); } }, factsOpen ? "Show fewer" : `Show all ${inferred.length} facts`) : "");
+        };
+        fill();
+        factsEl.replaceChildren(list, more);
       }
 
       load();

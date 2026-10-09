@@ -443,7 +443,7 @@ def e_requote(new_price):
 
 def b_expire(ctx, qid):
     with normalize.SessionLocal.begin() as s:
-        s.execute(text("UPDATE quotes SET expires_at = now() - interval '1 second' WHERE id = :q"), {"q": qid})
+        s.execute(text("UPDATE quotes SET expires_at = now() - interval '1 minute' WHERE id = :q"), {"q": qid})
 
 
 def e_expired(ctx, qid):

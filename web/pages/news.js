@@ -92,7 +92,9 @@
       }
       const flink = (k, v, label, cls) => h("a", { class: "nw-ent " + (cls || ""), href: "/news" + OG.qs.stringify({ [k]: v }), title: `All news mentioning ${label}` }, label);
       function item(n) {
-        const rel = h("span", { class: "nw-rel " + relCls(n.relevance), tabindex: "0", "aria-label": "relevance " + n.relevance }, String(n.relevance));
+        // relevance reads at a glance: the score, a meter, and low-relevance stories set back (ranking is the API's)
+        const rel = h("span", { class: "nw-rel " + relCls(n.relevance), tabindex: "0", "aria-label": "relevance " + n.relevance + " of 100" },
+          h("b", {}, String(n.relevance)), h("i", { class: "nw-relm" }, h("i", { style: `width:${Math.max(4, Math.min(100, n.relevance))}%` })));
         const pop = h("div", { class: "nw-pop", hidden: true });
         let loaded = false;
         const show = async () => {
@@ -124,14 +126,14 @@
           ...(n.topics || []).map(t => h("button", { class: "nw-ent top", onclick: () => setF({ topic: t }) }, t.replace(/_/g, " "))),
         ];
         const others = (n.sources || []).filter(s => s.item_id !== n.id);
-        return h("article", { class: "nw-it" }, wrap,
+        return h("article", { class: "nw-it " + relCls(n.relevance) }, wrap,
           h("div", { class: "nw-body" },
             h("a", { class: "nw-t", href: safeHref(n.url), target: "_blank", rel: "noopener external" }, n.title),
             n.summary ? h("div", { class: "nw-s" }, n.summary) : null,
             h("div", { class: "nw-m" },
               h("span", { class: "mono", title: (n.published_at_inferred ? "publication time inferred · " : "") + fmt.dateTime(n.published_at) }, fmt.age(n.published_at) + " ago"),
               h("a", { class: "lnk", href: "/news?source=" + encodeURIComponent(n.source_id) }, n.source_name),
-              OG.badge(n.trust_tier || "–", n.trust_tier === "official" ? "good" : ""),
+              h("span", { class: "tier-t t-" + (n.trust_tier || "none"), title: "source tier" }, n.trust_tier || "–"),
               n.source_count > 1 ? h("span", { class: "nw-srcs", title: others.map(s => `${s.source_name}: ${s.title}`).join("\n") }, `+${n.source_count - 1} source${n.source_count > 2 ? "s" : ""}: `,
                 others.slice(0, 4).map((s, i) => [i ? ", " : "", h("a", { class: "lnk", href: safeHref(s.url), target: "_blank", rel: "noopener external" }, s.source_name)])) : null,
               ents.length ? h("span", { class: "nw-ents" }, ents) : null)));
@@ -194,7 +196,7 @@
             rowClass: s => (s.id === f.source ? "hl" : ""), onRow: s => setF({ source: f.source === s.id ? "" : s.id }),
             columns: [
               { key: "name", label: "Source", cls: "wrap", fmt: (v, s) => h("span", { title: `${s.kind} · ${s.category} · ${s.trust_tier}${s.last_error ? "\n" + s.last_error : ""}` }, v) },
-              { key: "health", label: "Health", fmt: v => OG.badge(v, v === "ok" ? "good" : v === "failing" || v === "error" ? "bad" : "warn") },
+              { key: "health", label: "Health", fmt: v => v === "ok" ? h("span", { class: "dotx good" }, "ok") : OG.badge(v, v === "failing" || v === "error" ? "bad" : "warn") },
               { key: "last_ok_at", label: "Ok", num: true, value: s => s.last_ok_at ? -new Date(s.last_ok_at) : null, fmt: (v, s) => s.last_ok_at ? fmt.age(s.last_ok_at) : "never" },
               { key: "new_items_24h", label: "24h", num: true, desc: true, title: "new items in the last 24h" },
             ] }));

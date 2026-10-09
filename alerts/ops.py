@@ -48,6 +48,66 @@ REQUIRED_FIELDS = ("deployment_id", "provider", "account_id", "est_hourly_exposu
                    "suggested_action")
 
 
+def _chat_message(kind: str, severity: str, title: str, provider: str | None, detail: dict | None) -> str:
+    """One human-readable message for a chat webhook (Slack / Discord), under Discord's 2000-char limit."""
+    d = detail or {}
+    lines = [f"**[OpenGrid {severity.upper()}]** {title}"]
+    facts = [("deployment", d.get("deployment_id")), ("provider", provider or d.get("provider")),
+             ("account", d.get("account_id")),
+             ("exposure", None if d.get("est_hourly_exposure_usd") is None else f"${d['est_hourly_exposure_usd']}/h"),
+             ("in state", d.get("time_in_state")), ("kind", kind)]
+    lines.append(" · ".join(f"{k}: {v}" for k, v in facts if v not in (None, "")))
+    if d.get("suggested_action"):
+        lines.append(f"→ {d['suggested_action']}")
+    return "\n".join(lines)[:1900]
+
+
+# Brand: the lime green of the OpenGrid logo (tryopengrid.com/brand/opengrid-logo.png).
+OPENGRID_GREEN = 0x91C61D
+_SEVERITY_MARK = {"major": "🔴", "notable": "🟠", "info": "🔵", "test": "🟢"}
+
+
+def is_discord(url: str | None) -> bool:
+    from urllib.parse import urlparse
+
+    host = (urlparse(url or "").hostname or "").lower()
+    return host in ("discord.com", "discordapp.com", "ptb.discord.com", "canary.discord.com")
+
+
+def discord_payload(kind: str, severity: str, title: str, provider: str | None, detail: dict | None,
+                    at: datetime) -> dict:
+    """A Discord rich embed: OpenGrid name + logo, brand-green bar, the exposure facts as fields.
+    Limits respected: title 256, description 4096, field value 1024, 25 fields."""
+    d = detail or {}
+    dep = d.get("deployment_id")
+    fields = []
+    for name, value in (("Deployment", f"`{dep}`" if dep else None),
+                        ("Provider", provider or d.get("provider")),
+                        ("Account", d.get("account_id")),
+                        ("Exposure", None if d.get("est_hourly_exposure_usd") is None
+                         else f"${d['est_hourly_exposure_usd']}/h"),
+                        ("Time in state", d.get("time_in_state")),
+                        ("Kind", f"`{kind}`")):
+        if value not in (None, ""):
+            fields.append({"name": name, "value": str(value)[:1024], "inline": True})
+    if d.get("suggested_action"):
+        fields.append({"name": "Suggested action", "value": str(d["suggested_action"])[:1024], "inline": False})
+    embed = {
+        "title": f"{_SEVERITY_MARK.get(severity, '⚪')} {title}"[:256],
+        "description": KINDS.get(kind, "")[:4096] or None,
+        "color": OPENGRID_GREEN,
+        "fields": fields[:25],
+        "timestamp": at.isoformat(),
+        "footer": {"text": f"OpenGrid ops · {severity}", "icon_url": settings.ops_alert_logo_url},
+        "author": {"name": "OpenGrid", "icon_url": settings.ops_alert_logo_url},
+    }
+    if dep and settings.public_base_url:
+        embed["url"] = settings.public_base_url.rstrip("/") + f"/deployments/{dep}"
+    embed = {k: v for k, v in embed.items() if v is not None}
+    return {"username": "OpenGrid", "avatar_url": settings.ops_alert_logo_url, "embeds": [embed],
+            "allowed_mentions": {"parse": []}}   # alert text can never @-mention anyone
+
+
 def channel_configured() -> bool:
     """True when ops alerts leave the app (a webhook is configured); the /ops incident feed always works."""
     return bool(settings.ops_alert_webhook_url and settings.ops_alert_webhook_secret)
@@ -73,9 +133,13 @@ def alert(kind: str, title: str, *, severity: str = "major", provider: str | Non
         try:
             from alerts import notifier
 
+            at = datetime.now(timezone.utc)
             payload = {"source": "opengrid", "kind": kind, "severity": severity, "title": title,
-                       "provider": provider, "detail": detail, "at": datetime.now(timezone.utc).isoformat(),
-                       "text": f"[OpenGrid {severity}] {title}"}  # "text" makes Slack webhooks render it
+                       "provider": provider, "detail": detail, "at": at.isoformat()}
+            if is_discord(settings.ops_alert_webhook_url):
+                payload.update(discord_payload(kind, severity, title, provider, detail, at))
+            else:  # Slack and generic receivers read "text"
+                payload["text"] = _chat_message(kind, severity, title, provider, detail)
             via, _status = notifier.deliver([{"type": "webhook", "url": settings.ops_alert_webhook_url}],
                                             payload, settings.ops_alert_webhook_secret)
             out["delivered"] = "webhook" in via

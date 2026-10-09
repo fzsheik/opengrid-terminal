@@ -193,7 +193,8 @@ Full docs: web/README.md.
     if (r == null || r === "") return null;
     const s = String(r).trim(), n = max || 32;
     if (s.length <= n) return s;
-    if (/does not cover|insufficient (history|coverage)|not enough (history|hours|data)|needs? ≥|fewer than/i.test(s)) return "not enough history";
+    if (/insufficient coverage|eligible provider|component weight/i.test(s)) return "too few constituents";
+    if (/does not cover|insufficient history|not enough (history|hours|data)|needs? ≥|fewer than/i.test(s)) return "not enough history";
     if (/not published|unpublished/i.test(s)) return "not published";
     if (/unavailable|not available/i.test(s)) return "unavailable";
     if (/one provider|single provider|only provider/i.test(s)) return "one provider only";
@@ -861,7 +862,20 @@ Full docs: web/README.md.
   // `sub` is a short line under the value; `title` the full text on hover. A long reason never widens the
   // cell: the line shows a short form and the full reason moves to the tooltip.
   OG.shortReason = shortReason;
-  OG.stats = items => h("div", { class: "stats" }, items.filter(Boolean).map(it => {
+  // item.fold: when its value is missing it is not drawn as its own n/a cell; every folded item is named in one
+  // trailing cell ("Not enough history: 7d · 30d · Vol 30d", reasons on hover) so a strip is never a row of n/a
+  OG.stats = items => {
+    items = items.filter(Boolean);
+    const folded = items.filter(it => it.fold && (it.value == null || it.value === ""));
+    if (folded.length) {
+      items = items.filter(it => !folded.includes(it));
+      items.push({ label: folded.every(it => /history|window|returns|cover/i.test(it.reason || "")) ? "Not enough history yet" : "Not available yet",
+        value: h("span", { class: "stat-fold" }, folded.map(it => it.label).join(" · ")),
+        title: folded.map(it => it.label + ": " + (it.reason || "unavailable")).join("\n") });
+    }
+    return statsEl(items);
+  };
+  const statsEl = items => h("div", { class: "stats" }, items.map(it => {
     const missing = it.value == null || it.value === "";
     const line = it.sub != null && it.sub !== "" ? it.sub : missing && it.reason ? shortReason(it.reason) : null;
     const full = [it.title, missing && it.reason && it.reason !== line ? it.reason : null, typeof line === "string" && line.length > 30 ? line : null].filter(Boolean);
@@ -905,10 +919,15 @@ Full docs: web/README.md.
     const bar = h("div", { class: "tbl-bar" });
     const scroll = h("div", { class: "tbl-scroll" });
     const tbl = h("table", { class: "grid-t" + (spec.compact ? " compact" : "") });
-    const thead = h("thead"), tbody = h("tbody"), more = h("div", { class: "tbl-more" });
+    const thead = h("thead"), tbody = h("tbody"), more = h("div", { class: "tbl-more" }), foot = h("div", { class: "tbl-foot" });
     tbl.append(thead, tbody); scroll.append(tbl);
     if (spec.title || spec.csv || spec.toolbar) wrap.append(bar);
-    wrap.append(scroll, more);
+    wrap.append(scroll, more, foot);
+    // Column visibility: a column whose every cell is empty ("–", "n/a", blank) is hidden and named once in the
+    // footer (its reason on hover) instead of repeating n/a down the page (spec.autoHide: false or column.keep
+    // to opt out); columns with `minor: n` are dropped highest-n first when the table is wider than its box.
+    // Anything still too wide scrolls sideways with a visible fade at the clipped edge.
+    let autoHidden = new Map(), fitHidden = new Set(), lastW = 0;
     const colOf = k => cols.find(c => c.key === k);
     const sorted = () => (sort && colOf(sort.key) ? sortRows(rows, colOf(sort.key), sort.dir) : rows.slice());
     function drawHead() {
@@ -928,11 +947,59 @@ Full docs: web/README.md.
       const v = colValue(c, r);
       let out = c.fmt ? c.fmt(c.key in r ? r[c.key] : v, r) : v == null || v === "" ? "–" : c.num && typeof v === "number" ? fmt.num(v) : String(v);
       if (c.href) { const href = c.href(r); if (href) out = h("a", { class: "lnk", href }, out); }
+      if (c.ell) { out = h("span", { class: "ell", style: `max-width:${typeof c.ell === "number" ? c.ell + "px" : c.ell}` }, out); if (!out.querySelector("[title]")) out.title = out.textContent; }
       return h("td", { class: (c.num ? "n " : "") + (c.cls ? (typeof c.cls === "function" ? c.cls(r) || "" : c.cls) : "") + stickCls(i) }, out);
     }
+    const EMPTY_TXT = new Set(["", "–", "-", "—", "n/a"]);
+    // empty = only "–" / "n/a" / blank text, and no purely visual element (a bar, a swatch, a sparkline)
+    const emptyCell = td => EMPTY_TXT.has(td.textContent.trim()) && !td.querySelector("svg,img,input,button,select,canvas") &&
+      [...td.querySelectorAll("*")].every(e => e.textContent.trim() !== "");
+    function setCol(i, hide) {
+      const th = thead.firstChild && thead.firstChild.children[i];
+      if (th) th.hidden = hide;
+      for (const tr of tbody.children) if (tr.children.length === cols.length) tr.children[i].hidden = hide;
+    }
+    // which columns carry no value at all in the rows drawn (needs >= 2 rows: one empty cell is information)
+    function findEmpty() {
+      autoHidden = new Map();
+      const trs = [...tbody.children].filter(tr => tr.children.length === cols.length);
+      if (spec.autoHide === false || trs.length < 2) return;
+      cols.forEach((c, i) => {
+        if (c.keep) return;
+        if (!trs.every(tr => emptyCell(tr.children[i]))) return;
+        const why = trs.map(tr => tr.children[i].querySelector("[title]")).find(Boolean);
+        autoHidden.set(i, why ? why.getAttribute("title") : "");
+      });
+    }
+    function layout() {
+      cols.forEach((c, i) => setCol(i, autoHidden.has(i)));
+      fitHidden = new Set();
+      if (wrap.isConnected && scroll.clientWidth > 0) {
+        const minors = cols.map((c, i) => [c.minor || 0, i]).filter(x => x[0] > 0 && !autoHidden.has(x[1])).sort((a, b) => b[0] - a[0] || b[1] - a[1]);
+        for (const [, i] of minors) { if (scroll.scrollWidth <= scroll.clientWidth + 1) break; fitHidden.add(i); setCol(i, true); }
+      }
+      edges();
+      const lab = i => cols[i].label || cols[i].key;
+      const parts = [];
+      if (autoHidden.size) {
+        const tip = [...autoHidden].map(([i, why]) => lab(i) + (why ? ": " + why : "")).join("\n");
+        parts.push(h("span", { title: tip }, h("span", { class: "dimmer" }, "No data yet: "), [...autoHidden.keys()].map(lab).join(" · ")));
+      }
+      if (fitHidden.size) parts.push(h("span", { title: "Widen the window to show them; the CSV download has every column" }, h("span", { class: "dimmer" }, "Hidden at this width: "), [...fitHidden].sort((a, b) => a - b).map(lab).join(" · ")));
+      foot.replaceChildren(...parts);
+      if (nStick) placeSticky();
+    }
+    // fade at whichever edge has more table to scroll to
+    function edges() {
+      const over = scroll.scrollWidth > scroll.clientWidth + 1;
+      scroll.classList.toggle("ovf", over);
+      scroll.classList.toggle("ovf-r", over && scroll.scrollLeft + scroll.clientWidth < scroll.scrollWidth - 2);
+      scroll.classList.toggle("ovf-l", over && scroll.scrollLeft > 2);
+    }
+    scroll.addEventListener("scroll", edges, { passive: true });
     function drawBody() {
       const list = sorted();
-      if (!list.length) { tbody.replaceChildren(h("tr", {}, h("td", { colspan: cols.length, class: "tbl-empty" }, spec.empty || "No rows."))); more.textContent = ""; return; }
+      if (!list.length) { tbody.replaceChildren(h("tr", {}, h("td", { colspan: cols.length, class: "tbl-empty" }, spec.empty || "No rows."))); more.textContent = ""; findEmpty(); layout(); return; }
       const shown = list.slice(0, limit);
       tbody.replaceChildren(...shown.map(r => {
         const href = spec.rowHref ? spec.rowHref(r) : null, act = href || spec.onRow;
@@ -945,7 +1012,8 @@ Full docs: web/README.md.
         if (spec.onHover) { tr.addEventListener("mouseenter", () => spec.onHover(r)); tr.addEventListener("mouseleave", () => spec.onHover(null)); }
         return tr;
       }));
-      more.replaceChildren(list.length > limit ? h("button", { class: "btn sm", onclick: () => { limit += spec.limit || 500; drawBody(); } }, `Show more (${list.length - limit} hidden)`) : "");
+      more.replaceChildren(list.length > limit ? h("button", { class: "btn sm", onclick: () => { limit += spec.limit || 500; drawBody(); } }, list.length - limit <= (spec.limit || 500) ? `Show ${list.length - limit} more` : `Show ${spec.limit || 500} more (${list.length - limit} hidden)`) : "");
+      findEmpty(); layout();
       if (nStick) requestAnimationFrame(placeSticky);
     }
     function drawBar() {
@@ -965,6 +1033,8 @@ Full docs: web/README.md.
       }
     }
     if (nStick && window.ResizeObserver) new ResizeObserver(() => placeSticky()).observe(tbl);
+    // re-fit when the box changes width (first paint, window resize, a drawer opening)
+    if (window.ResizeObserver) new ResizeObserver(() => { const w = scroll.clientWidth; if (Math.abs(w - lastW) < 2) return; lastW = w; layout(); }).observe(scroll);
     drawBar(); drawHead(); drawBody();
     wrap.update = r => { rows = r || []; drawBody(); return wrap; };
     wrap.rows = () => rows;

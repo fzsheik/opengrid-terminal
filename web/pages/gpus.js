@@ -11,7 +11,7 @@ in the URL so a filtered view is shareable. $/GB-VRAM-h = current low / VRAM: th
   const { h, fmt, Lib: L } = OG;
   const VRAM_BANDS = [["", "Any VRAM"], ["0-24", "≤ 24 GB"], ["24-48", "25–48 GB"], ["48-96", "49–96 GB"], ["96-160", "97–160 GB"], ["160-9999", "> 160 GB"]];
   const inBand = (v, band) => { if (!band) return true; if (v == null) return false; const [a, b] = band.split("-").map(Number); return v > a && v <= b; };
-  const small = v => (v == null || !isFinite(v) ? "–" : v >= 0.1 ? fmt.price(v) : "$" + Number(v).toPrecision(3));
+  const small = v => (v == null || !isFinite(v) ? "–" : v >= 0.1 ? fmt.price(v) : "$" + Number(v).toPrecision(2));
 
   OG.page("/gpus", {
     title: "GPU markets",
@@ -26,23 +26,23 @@ in the URL so a filtered view is shareable. $/GB-VRAM-h = current low / VRAM: th
       const sum = h("span", { class: "dim mono", style: "font-size:11px" });
       const tbl = OG.table({
         columns: [
-          { key: "short", label: "GPU", fmt: (v, r) => h("b", {}, v), href: r => "/gpu/" + r.slug },
+          { key: "short", label: "GPU", fmt: (v, r) => h("b", {}, v), href: r => "/gpu/" + r.slug, ell: 300 },
           { key: "vendor", label: "Vendor", cls: "dim", hidden: true },
-          { key: "arch", label: "Arch", cls: "dim" },
+          { key: "arch", label: "Arch", cls: "dim", minor: 3 },
           { key: "vram", label: "VRAM", num: true, fmt: v => (v ? v + " GB" : "–") },
-          { key: "ff", label: "Form", cls: "dim" },
-          { key: "wl", label: "Class", cls: "dim", title: "workload class (editorial, from vendor positioning)" },
+          { key: "ff", label: "Form", cls: "dim", minor: 2 },
+          { key: "wl", label: "Class", cls: "dim", title: "workload class (editorial, from vendor positioning)", minor: 4 },
           { key: "low", label: "Low $/GPU·h", num: true, fmt: v => (v == null ? h("span", { class: "dimmer" }, "–") : h("b", {}, fmt.price(v))), title: "lowest current on-demand price per GPU-hour" },
           { key: "median", label: "Median", num: true, fmt: v => fmt.price(v), title: "median of each provider's lowest price" },
           { key: "high", label: "High", num: true, fmt: v => fmt.price(v) },
           { key: "chg", label: "24h", num: true, fmt: (v, r) => OG.chg(v, { reason: r.chgReason }), title: "change of the lowest price over 24h, from when every current provider was recorded" },
-          { key: "spark", label: "24h trend", sort: false, csv: false, fmt: (v, r) => (v ? OG.charts.sparkline(v, { dir: fmt.dir(r.chg), width: 64, height: 16 }) : "") },
+          { key: "spark", label: "24h trend", sort: false, csv: false, minor: 1, fmt: (v, r) => (v ? OG.charts.sparkline(v, { dir: fmt.dir(r.chg), width: 64, height: 16 }) : "") },
           { key: "providers", label: "Prov", num: true, desc: true, title: "providers with a priced listing now" },
           { key: "available", label: "Avail", num: true, desc: true, title: "listings with explicit availability now" },
           { key: "spread", label: "Spread", num: true, fmt: (v, r) => (r.providers > 1 ? fmt.pct(v) : "–"), title: "high / low − 1 across providers" },
           { key: "eff", label: "Eff.", num: true, desc: true, fmt: (v, r) => (v == null ? OG.na(r.effReason) : h("span", { class: v >= 75 ? "up" : v < 50 ? "down" : "warn" }, v.toFixed(0))), title: "market efficiency score 0–100 (100 − fragmentation); needs 3+ providers" },
           { key: "perGb", label: "$/GB·h", num: true, fmt: v => small(v), title: "low price / VRAM: theoretical capability pricing" },
-          { key: "perTf", label: "$/BF16 TF·h", num: true, fmt: v => small(v), title: "low price / dense BF16 TFLOPS (vendor peak): theoretical", hidden: false },
+          { key: "perTf", label: "$/BF16 PF·h", num: true, fmt: v => small(v), title: "low price per dense BF16 petaFLOP-hour (1 PFLOP = 1,000 TFLOPS, vendor peak): theoretical" },
         ],
         rows: [], sort: { key: OG.qs.get("sort", "providers"), dir: OG.qs.get("dir", "desc") },
         onSort: s => OG.qs.set({ sort: s.key, dir: s.dir }),
@@ -85,7 +85,7 @@ in the URL so a filtered view is shareable. $/GB-VRAM-h = current low / VRAM: th
         tbl.update(shown);
         if (holder.firstChild !== tbl) holder.replaceChildren(tbl, h("p", { class: "note" }, OG.kindBadge("observed"),
           " Observed list prices, on-demand, not interruptible, in stock or stock unknown; one vote per provider (its lowest). ", OG.kindBadge("inferred"),
-          " Spread, efficiency and 24h change are derived. $/GB and $/TFLOP use vendor peak specs (dense) and are theoretical, not benchmarks. ",
+          " Spread, efficiency and 24h change are derived. $/GB and $/PFLOP (per 1,000 TFLOPS) use vendor peak specs (dense) and are theoretical, not benchmarks. ",
           h("a", { class: "lnk", href: "/methodology/dispersion" }, "Dispersion"), " · ", h("a", { class: "lnk", href: "/methodology/hardware" }, "Hardware")));
       }
 
@@ -119,7 +119,7 @@ in the URL so a filtered view is shareable. $/GB-VRAM-h = current low / VRAM: th
             available: g.available_listings, priced: g.priced_listings,
             chg: m ? m.change_pct : null, chgReason: m ? (m.change_since ? null : "not enough coherent history in 24h") : mk ? "no 24h data" : "24h board unavailable", spark: m ? m.spark : null,
             spread: s ? s.spread_pct_of_low : g.low ? g.high / g.low - 1 : null, eff: s ? s.efficiency : null, effReason: s ? s.reason : g.low == null ? "no price" : "spreads unavailable",
-            perGb: g.low != null && hw.vram_gb ? g.low / hw.vram_gb : null, perTf: g.low != null && hw.bf16_tflops_dense ? g.low / hw.bf16_tflops_dense : null };
+            perGb: g.low != null && hw.vram_gb ? g.low / hw.vram_gb : null, perTf: g.low != null && hw.bf16_tflops_dense ? g.low / (hw.bf16_tflops_dense / 1000) : null };
         });
         st.rows = rows;
         OG.status.asOf(r.meta && r.meta.as_of);

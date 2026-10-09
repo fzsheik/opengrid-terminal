@@ -587,7 +587,7 @@ def test_quote_expiry_and_price_move():
     rr, q1 = out["route_request_id"], out["quote"]["quote_id"]
     assert quotes.get(q1)["status"] == "active" and quotes.get(q1)["taxes"]["amount_usd"] is None
     with normalize.SessionLocal.begin() as s:
-        s.execute(text("UPDATE quotes SET expires_at = now() - interval '1 second' WHERE id = :q"), {"q": q1})
+        s.execute(text("UPDATE quotes SET expires_at = now() - interval '1 minute' WHERE id = :q"), {"q": q1})
     assert quotes.get(q1)["status"] == "expired"
     e = refused(lambda: engine.approve(rr, OPERATOR, quote_id=q1), "quote_expired", 409)
     q2 = e.detail["new_quote"]["quote_id"]

@@ -12,7 +12,8 @@
   const SEV = { major: "bad", notable: "warn", info: "" };
   const sevBadge = s => OG.badge(s || "–", SEV[s] || "");
   const STATUS_TONE = { healthy: "good", degraded: "warn", down: "bad", ok: "good", failing: "bad", overdue: "warn", never_run: "", never_fetched: "", disabled: "" };
-  const statusBadge = (s, title) => OG.badge((s || "–").replace("_", " "), STATUS_TONE[s] ?? "warn", title);
+  // the normal state (healthy / ok) stays quiet: dot + word; anything else is a badge that stands out
+  const statusBadge = (s, title) => STATUS_TONE[s] === "good" ? h("span", { class: "dotx good", title: title || null }, (s || "–").replace("_", " ")) : OG.badge((s || "–").replace("_", " "), STATUS_TONE[s] ?? "warn", title);
   const shortId = id => { const s = String(id || ""); return s === "*" ? "* (provider)" : s.length > 28 ? s.slice(0, 12) + "…" + s.slice(-12) : s; };
   const jsonish = v => (v == null ? "∅" : typeof v === "object" ? JSON.stringify(v) : String(v));
   function detailText(d) {
@@ -198,7 +199,7 @@
             { key: "latency_ms_p95_24h", label: "p95", num: true, desc: true, fmt: v => v == null ? OG.na("no timings") : ms(v) },
             { key: "listings_now", label: "Now", num: true, desc: true, title: "Live listings now" },
             { key: "listings_24h_ago", label: "24h ago", num: true, desc: true, fmt: (v, r) => v == null ? OG.na(r.listings_24h_ago_note) : fmt.num(v) },
-            { key: "last_failure", label: "Last failure", sort: false, csv: r => r.last_failure && r.last_failure.error, cls: "wrap ops-err",
+            { key: "last_failure", label: "Last failure", sort: false, csv: r => r.last_failure && r.last_failure.error, cls: "ops-err", ell: 200,
               fmt: v => v ? h("span", { title: v.error || "" }, h("span", { class: "dim" }, fmt.age(v.at) + " "), v.status_code ? h("b", {}, v.status_code + " ") : null, (v.error || "").slice(0, 60)) : h("span", { class: "dimmer" }, "–") },
           ],
         }));

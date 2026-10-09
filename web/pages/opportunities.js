@@ -34,6 +34,9 @@
     h("span", { class: "op-sc-b" }, h("i", { style: { width: Math.max(2, Math.min(100, s)) + "%" } })), h("b", {}, fmt.num(s, 0)));
 
   function table(items, showType, title) {
+    // one data kind for the whole block: say it once in the block title, not on every row
+    const kinds = new Set(items.map(i => i.kind)), uniform = kinds.size === 1 && items.length > 0;
+    if (uniform && title && title.nodeType) title.append(OG.kindBadge(items[0].kind));
     return OG.table({
       columns: [
         { key: "score", label: "Score", num: true, desc: true, fmt: v => scoreCell(v), width: "84px" },
@@ -42,7 +45,7 @@
         { key: "provider", label: "Provider / region", width: "128px", fmt: (v, r) => v ? OG.providerLink(v) : r.region_group ? h("span", { class: "op-rg" }, r.region_group) : h("span", { class: "dimmer" }, "market"), value: r => r.provider_name || r.region_group },
         { key: "explanation", label: "Why it is listed", cls: "wrap op-ex", sort: false },
         { key: "numbers", label: "Numbers", cls: "wrap", width: "30%", sort: false, fmt: (v, r) => numsCell(r), csv: r => JSON.stringify(r.numbers) },
-        { key: "kind", label: "Kind", width: "92px", fmt: v => OG.kindBadge(v) },
+        { key: "kind", label: "Kind", width: "92px", hidden: uniform, fmt: v => OG.kindBadge(v) },
         { key: "links", label: "", width: "92px", sort: false, csv: false, fmt: (v, r) => h("span", { class: "op-lk" },
           r.gpu_slug ? h("a", { class: "lnk", href: "/events?gpu=" + r.gpu_slug + (r.provider ? "&provider=" + encodeURIComponent(r.provider) : ""), title: "events for this market" }, "events") : null,
           r.gpu_slug ? h("a", { class: "lnk", href: "/route?gpu=" + r.gpu_slug, title: "preview routing for this GPU" }, "route") : null) },

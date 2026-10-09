@@ -28,6 +28,8 @@
   // $1.30, $12.40, $0.045: more places when the price is small, so cheap GPUs do not all read $0.02
   function fmtPrice(p) {
     if (p == null || !isFinite(p)) return "–";
+    // below a cent keep three significant digits ($0.00131), never a fake "$0.00"
+    if (p > 0 && p < 0.01) return p < 1e-6 ? "<$0.000001" : "$" + Number(p.toPrecision(3)).toFixed(Math.min(8, 2 - Math.floor(Math.log10(p))));
     const d = p >= 10 ? 2 : p >= 0.1 ? 2 : 3;
     return "$" + p.toFixed(d);
   }

@@ -51,7 +51,7 @@
           h("ol", { class: "ck-items" }, items.map(it => h("li", { class: "ck-" + it.status },
             h("i", { class: "ck-dot" }),
             h("div", { class: "ck-main" },
-              h("div", { class: "ck-l" }, h("b", {}, it.label), OG.badge(it.status, TONE[it.status]), it.required ? null : OG.badge("optional")),
+              h("div", { class: "ck-l" }, h("b", {}, it.label), it.status === "green" ? null : OG.badge(it.status, TONE[it.status]), it.required ? null : OG.badge("optional")),
               it.evidence ? h("div", { class: "ck-ev mono" }, it.evidence) : null,
               it.status !== "green" && it.fix ? h("div", { class: "ck-fix" }, h("span", { class: "eyebrow" }, "How to fix"), " ", h("code", { class: "mono" }, it.fix)) : null)))),
           h("p", { class: "note" }, d.rule || "", " · ", h("a", { class: "lnk", href: "/methodology/first-live-route" }, "First live route guide →")));

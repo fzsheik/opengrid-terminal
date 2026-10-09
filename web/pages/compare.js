@@ -90,14 +90,15 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
       if (Math.abs(va - vb) / Math.max(va, vb) < 0.005) return h("li", {}, h("span", { class: "dim" }, label + ": "), "about the same (", small(va), " vs ", small(vb), unit, ")");
       const cheaper = va < vb ? sa : sb, r = va < vb ? 1 - va / vb : 1 - vb / va;
       return h("li", {}, h("span", { class: "dim" }, label + ": "), h("b", { style: `color:${va < vb ? CA : CB}` }, cheaper), ` is ${fmt.pct(r).replace("+", "")} cheaper (`, small(va), " vs ", small(vb), unit, ")",
-        theoretical ? [" ", OG.badge("theoretical", "warn", "vendor peak spec, dense; not a benchmark")] : null);
+        theoretical ? h("span", { class: "cmp-th", title: "theoretical: vendor peak spec, dense; not a benchmark" }, " †") : null);
     };
-    const cap = (side, k) => side[k] && side[k].median;
+    // FLOP rates per petaFLOP-hour (×1,000): $3.93 instead of $0.00393
+    const cap = (side, k) => side[k] && side[k].median != null ? side[k].median * (/_tflop_hour$/.test(k) ? 1000 : 1) : null;
     const verdicts = h("ul", { class: "cmp-verdicts" },
       verdict("Lowest price now", ma.low, mb.low, "/GPU·h"),
       verdict("Median price now", ma.median, mb.median, "/GPU·h"),
-      verdict("Per dense BF16 TFLOP (median)", cap(ca, "per_bf16_tflop_hour"), cap(cb, "per_bf16_tflop_hour"), "/TFLOP·h", true),
-      verdict("Per dense FP8 TFLOP (median)", cap(ca, "per_fp8_tflop_hour"), cap(cb, "per_fp8_tflop_hour"), "/TFLOP·h", true),
+      verdict("Per dense BF16 PFLOP (median)", cap(ca, "per_bf16_tflop_hour"), cap(cb, "per_bf16_tflop_hour"), "/PFLOP·h", true),
+      verdict("Per dense FP8 PFLOP (median)", cap(ca, "per_fp8_tflop_hour"), cap(cb, "per_fp8_tflop_hour"), "/PFLOP·h", true),
       verdict("Per GB of VRAM (median)", cap(ca, "per_gb_vram_hour"), cap(cb, "per_gb_vram_hour"), "/GB·h", true),
       verdict("Per TB/s of memory bandwidth (median)", cap(ca, "per_tbps_bandwidth_hour"), cap(cb, "per_tbps_bandwidth_hour"), "/(TB/s)·h", true));
 
@@ -113,7 +114,7 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
       row("Sold-out listings", a.listings.sold_out, b.listings.sold_out, String),
       row("Efficiency score", a.score.efficiency, b.score.efficiency, v => v.toFixed(0) , null, "100 − fragmentation; needs 3+ providers"),
       row("Market label", a.score.label, b.score.label, v => v),
-      ...[["per_gb_vram_hour", "$ per GB VRAM·h"], ["per_bf16_tflop_hour", "$ per BF16 TFLOP·h"], ["per_fp16_tflop_hour", "$ per FP16 TFLOP·h"], ["per_fp8_tflop_hour", "$ per FP8 TFLOP·h"], ["per_tbps_bandwidth_hour", "$ per TB/s·h"]]
+      ...[["per_gb_vram_hour", "$ per GB VRAM·h"], ["per_bf16_tflop_hour", "$ per BF16 PFLOP·h"], ["per_fp16_tflop_hour", "$ per FP16 PFLOP·h"], ["per_fp8_tflop_hour", "$ per FP8 PFLOP·h"], ["per_tbps_bandwidth_hour", "$ per TB/s·h"]]
         .map(([k, l]) => row(l + " (median)", cap(ca, k), cap(cb, k), small, (x, y) => priceDelta(rel(x, y)), "theoretical: median price / vendor peak spec")),
     ];
     const sideTable = (rows, headA, headB) => h("table", { class: "cmp-t" },
@@ -173,7 +174,7 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
         sideHead(b.name, "/gpu/" + b.slug, CB, `${mb.providers} providers · ${b.listings.priced} priced listings`, mb.low)),
       h("p", { class: "note cmp-caveat" }, d.note, ". Shared dimensions: ", d.shared_dimensions && d.shared_dimensions.length ? d.shared_dimensions.map(x => OG.badge(x.replace(/_/g, " "))) : h("span", { class: "dim" }, "none")),
       h("div", { class: "cmp-grid" },
-        h("div", {}, OG.section("Verdicts", verdicts), h("section", { class: "sec" }, h("div", { class: "cmp-sh" }, h("h2", { class: "sec-h" }, "Price history"), h("span", { class: "spacer" }), winSeg), chartEl, chartNote),
+        h("div", {}, OG.section("Verdicts", verdicts, h("p", { class: "note" }, "† theoretical: price / vendor peak spec (dense, no sparsity); not a benchmark. PFLOP·h = 1,000 TFLOP·h.")), h("section", { class: "sec" }, h("div", { class: "cmp-sh" }, h("h2", { class: "sec-h" }, "Price history"), h("span", { class: "spacer" }), winSeg), chartEl, chartNote),
           OG.section("Same provider, both GPUs", provT)),
         h("div", {}, OG.section("Market and capability pricing", sideTable(mrows, sa, sb), h("p", { class: "note" }, "B vs A on prices: green means B is cheaper. $ per capability is theoretical (vendor peak, dense).")),
           OG.section("Spec diff", specT, h("p", { class: "note" }, "Highlighted rows differ. Vendor peak figures, dense (no sparsity); not benchmarks. ", h("a", { class: "lnk", href: "/methodology/hardware" }, "Method"))))));

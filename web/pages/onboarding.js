@@ -82,7 +82,7 @@
           h("div", { class: "ob-n" }, ok ? "✓" : n),
           h("div", { class: "ob-b" },
             h("div", { class: "ob-t" }, h("b", {}, title), opt ? OG.badge("optional") : null, ok ? OG.badge("done", "good") : next ? OG.badge("next", "warn") : null,
-              s.evidence ? h("span", { class: "dim mono ob-ev" }, s.evidence) : null),
+              s.evidence ? h("span", { class: "dim mono ob-ev", title: s.evidence }, String(s.evidence).replace(/\b(\d{4}-\d\d-\d\dT\d\d:\d\d)(:\d\d(\.\d+)?)?(\+00:00|Z)?/g, (m, a) => fmt.dateTime(a + ":00Z"))) : null),
             body));
       }
 
@@ -140,7 +140,7 @@
         const pickP = admin && partners && partners.length ? h("select", { class: "field", onchange: e => OG.go("/onboarding" + (e.target.value ? "?account=" + e.target.value : "")) },
           h("option", { value: "" }, "Signed-in account"), partners.map(p => h("option", { value: p.account_id, selected: previewing && previewing.account_id === p.account_id ? true : null }, "Preview: " + p.company))) : null;
         root.replaceChildren(
-          OG.head("Onboarding", previewing ? `Previewing ${previewing.company} (account #${previewing.account_id}) · actions on this page run as you, not as the partner` : "Six steps to a first supervised route",
+          OG.head("Onboarding", previewing ? `Previewing ${previewing.company} (account #${previewing.account_id}) · actions on this page run as you, not as the partner` : "From account to a first supervised route",
             pickP, h("span", { class: "mono dim" }, status.progress || ""), status.complete ? OG.badge("complete", "good") : null),
           h("ol", { class: "ob-steps" },
             stepBox(1, "account_created", "Account created", h("p", { class: "dim" }, "Your OpenGrid account holds keys, limits, deployments and invoices.")),

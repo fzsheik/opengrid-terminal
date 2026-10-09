@@ -117,7 +117,7 @@
       const items = list(r);
       if (!items.length) { newsBox.replaceChildren(OG.empty(`No news item mentioning the ${name} has been ingested yet.`)); return; }
       newsBox.replaceChildren(h("ul", { class: "gp-list gp-news" }, items.map(n => h("li", {},
-        h("span", { class: "mono dim" }, fmt.date(n.published_at)), OG.badge(n.trust_tier || "source", n.trust_tier === "official" ? "good" : ""),
+        h("span", { class: "mono dim" }, fmt.date(n.published_at)), h("span", { class: "tier-t t-" + (n.trust_tier || "source"), title: "source tier" }, n.trust_tier || "source"),
         h("span", {}, h("a", { class: "lnk", href: n.url, target: "_blank", rel: "external noopener" }, n.title),
           h("span", { class: "dim" }, " · " + (n.source_name || n.source_id || "") + (n.source_count > 1 ? ` +${n.source_count - 1}` : "")))))),
         h("p", { class: "note" }, "Linked by mention of the family or one of its variants (inferred by rules); not a claim about any price. ",

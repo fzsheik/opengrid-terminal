@@ -28,14 +28,14 @@
     let m;
     if (/^history does not cover/.test(r)) return "history shorter than window";
     if ((m = /insufficient history: (\d+) hourly returns, (\d+) required/.exec(r))) return `${m[1]}/${m[2]} hourly returns`;
-    if ((m = /insufficient coverage: (\d+) eligible provider\(s\), (\d+) required/.exec(r))) return `${m[1]} of ${m[2]} providers needed`;
+    if ((m = /insufficient coverage: (\d+) eligible provider\(s\), (\d+) required/.exec(r))) return `${m[1]}/${m[2]} providers`;
     if ((m = /insufficient coverage: (\d+%) of component weight published, (\d+%) required/.exec(r))) return `${m[1]} of weight (needs ${m[2]})`;
     if ((m = /insufficient coverage: (\d+) published component/.exec(r))) return `${m[1]} component published`;
     if ((m = /insufficient coverage: (\d+) component\(s\) \/ (\d+%) of component weight published; (\d+) and (\d+%) required/.exec(r))) return `${m[1]} comp. / ${m[2]} weight (needs ${m[3]} / ${m[4]})`;
     if (/rebased/.test(r)) return "chain rebased in window";
     if (/not published within/.test(r)) return "unpublished at window start";
     if (/^index not published now/.test(r)) return "not published now";
-    if ((m = /^no eligible constituents at .*\(last data (\S+ \S+)\)/.exec(r))) return "no constituents since " + m[1];
+    if ((m = /^no eligible constituents at .*\(last data (\S+ \S+)\)/.exec(r))) { const d = new Date(m[1].replace(" ", "T")); return "no constituents since " + (isNaN(d) ? m[1] : fmt.dateTime(d.toISOString())); }
     if (/^no eligible constituents at/.test(r)) return "no constituents this hour";
     if (/regions\.py/.test(r)) return "region grouping unavailable";
     return r.length > 44 ? r.slice(0, 42) + "…" : r;
@@ -60,7 +60,7 @@
 
   function statusCell(r) {
     if (r.published) return h("span", { class: "ix-pub", title: r.hour ? "published for " + fmt.dateTime(r.hour) : "" }, h("i"), "published");
-    return h("span", { class: "ix-unpub", title: r.reason || "not published" }, h("i"), "not published · ", h("span", { class: "dim" }, shortReason(r.reason)));
+    return h("span", { class: "ix-unpub", title: r.reason || "not published" }, h("i"), "not published", r.reason ? h("span", { class: "dim ix-why" }, shortReason(r.reason)) : null);
   }
   function levelCell(r) {
     if (r.published) return h("b", {}, levelFmt(r.level, r.unit));
@@ -138,7 +138,7 @@
         statsEl.replaceChildren(OG.stats([
           gc ? { label: "GPU Compute Index", value: gc.published ? fmt.num(gc.level, 2) : null, reason: gc.reason, change: gc.published ? gc.changes["24h"] : undefined, sub: gc.published ? "24h" + (gc.changes["24h"] == null ? ": " + shortReason(gc.change_reasons["24h"]) : " change") : "not published", kind: "observed", title: gc.change_reasons && gc.change_reasons["24h"] }
             : { label: "GPU Compute Index", value: null, reason: "no data for the composite yet" },
-          gc && gc.published ? { label: "7d", value: h("span", {}, OG.chg(gc.changes["7d"], { reason: gc.change_reasons["7d"] })), title: gc.change_reasons["7d"] || null, sub: gc.change_reasons["7d"] ? "insufficient history" : "GPU Compute" } : null,
+          gc && gc.published && gc.changes["7d"] != null ? { label: "7d", value: h("span", {}, OG.chg(gc.changes["7d"], { reason: gc.change_reasons["7d"] })), title: gc.change_reasons["7d"] || null, sub: gc.change_reasons["7d"] ? "insufficient history" : "GPU Compute" } : null,
           { label: "Indices", value: String(all.length), sub: `${pub} published · ${all.length - pub} not` },
           ...FAMILIES.map(([k, l]) => { const rs = all.filter(r => r.kind === k); return rs.length ? { label: l.split(" ·")[0], value: `${rs.filter(r => r.published).length}/${rs.length}`, sub: "published" } : null; }),
           { label: "Index hour", value: latest ? fmt.time(latest).slice(0, 5) : null, reason: "no index hour stored", sub: latest ? fmt.date(latest) + " · v" + ((st.meta && st.meta.methodology_version) || "?") : null },
@@ -152,17 +152,18 @@
           const sp = r._x && r._x.spark;
           return h("a", { class: "ix-card" + (r.published ? "" : " off") + (r.id === "gpu-compute" ? " main" : ""), href: "/indices/" + encodeURIComponent(r.id), title: r.published ? r.name : "not published: " + r.reason },
             h("div", { class: "ix-card-h" }, h("span", { class: "ix-card-n" }, r.name.replace(/^OpenGrid /, "")), h("span", { class: "mono dimmer" }, r.id)),
-            h("div", { class: "ix-card-v" }, r.published ? h("b", {}, fmt.num(r.level, 2)) : h("span", { class: "dimmer" }, "n/a"),
+            h("div", { class: "ix-card-v" }, r.published ? h("b", {}, fmt.num(r.level, 2)) : h("b", { class: "dimmer" }, "—"),
               r.published ? OG.chg(r.changes["24h"], { reason: r.change_reasons["24h"] }) : null, h("span", { class: "spacer" }),
               sp ? OG.charts.sparkline(sp, { width: 110, height: 26, dir: fmt.dir(r.changes["7d"]) }) : null),
-            h("div", { class: "ix-card-s", title: r.reason || null }, r.published ? `${r.constituents} component${r.constituents === 1 ? "" : "s"} · 7d ` : "not published · " + shortReason(r.reason), r.published ? OG.chg(r.changes["7d"], { reason: r.change_reasons["7d"] }) : null));
+            h("div", { class: "ix-card-s", title: r.reason || null }, r.published ? `${r.constituents} component${r.constituents === 1 ? "" : "s"}` : `not published · ${r.constituents} component${r.constituents === 1 ? "" : "s"} published`,
+              r.published && r.changes["7d"] != null ? [" · 7d ", OG.chg(r.changes["7d"])] : null));
         }));
       }
 
       function columns(fam) {
         const unit = fam === "composite" ? "points" : "usd";
         return [
-          { key: "name", label: "Index", width: "250px", fmt: (v, r) => h("span", { class: "ix-name" }, h("a", { class: "lnk", href: "/indices/" + encodeURIComponent(r.id) }, v.replace(/^OpenGrid /, "")), h("span", { class: "ix-id" }, r.id)) },
+          { key: "name", label: "Index", ell: 330, fmt: (v, r) => h("span", { class: "ix-name" }, h("a", { class: "lnk", href: "/indices/" + encodeURIComponent(r.id) }, v.replace(/^OpenGrid /, "")), h("span", { class: "ix-id" }, r.id)) },
           { key: "level", label: unit === "points" ? "Level" : "$/GPU·h", num: true, desc: true, value: r => (r.published ? r.level : null), csv: r => r.level, fmt: (v, r) => levelCell(r) },
           ...CHG.map(([w, l]) => ({ key: "c_" + w, label: l, num: true, desc: true, value: r => r.changes[w], csv: r => r.changes[w],
             fmt: (v, r) => OG.chg(r.changes[w], { reason: r.change_reasons[w] }) })),
@@ -174,7 +175,7 @@
             fmt: (v, r) => !r._x ? h("span", { class: "dimmer" }, "·") : OG.value(v, volFmt, r._x.vol30 ? r._x.vol30.reason : "unavailable") },
           { key: "constituents", label: fam === "composite" ? "Comp." : "Prov.", num: true, desc: true, title: fam === "composite" ? "Published components this hour" : "Included providers this hour (3 needed)",
             fmt: (v, r) => h("span", { class: r.published ? "" : "ix-low" }, String(v)) },
-          { key: "spark", label: "7d", sort: false, csv: false, fmt: (v, r) => r._x && r._x.spark ? OG.charts.sparkline(r._x.spark, { width: 84, height: 18, dir: fmt.dir(r.changes["7d"]) }) : h("span", { class: "dimmer" }, r._x ? "–" : "·") },
+          { key: "spark", label: "7d", sort: false, csv: false, minor: 1, fmt: (v, r) => r._x && r._x.spark ? OG.charts.sparkline(r._x.spark, { width: 84, height: 18, dir: fmt.dir(r.changes["7d"]) }) : h("span", { class: "dimmer" }, r._x ? "–" : "·") },
           { key: "published", label: "Status", value: r => (r.published ? 1 : 0), desc: true, csv: r => (r.published ? "published" : "not published: " + r.reason), cls: "ix-st", fmt: (v, r) => statusCell(r) },
         ];
       }
@@ -262,15 +263,15 @@
 
       function statsStrip() {
         const c = d.changes || {}, v = d.volatility || {}, cov = d.coverage || {};
-        const ch = (w, l) => ({ label: l, value: c[w] && c[w].pct != null ? OG.chg(c[w].pct) : null, reason: c[w] ? c[w].reason : "n/a",
+        const ch = (w, l) => ({ label: l, fold: true, value: c[w] && c[w].pct != null ? OG.chg(c[w].pct) : null, reason: c[w] ? c[w].reason : "n/a",
           sub: c[w] && c[w].pct != null ? "from " + yf(c[w].from_level) : shortReason(c[w] && c[w].reason), title: c[w] && c[w].pct != null ? "from " + fmt.dateTime(c[w].from_hour) + (c[w].note ? " · " + c[w].note : "") : c[w] && c[w].reason });
         return OG.stats([
           { label: "Level", value: d.published ? yf(d.level) : null, reason: d.reason, sub: d.hour ? (isPts ? "points · " : "$/GPU·h · ") + fmt.dateTime(d.hour) : null, kind: "observed" },
           ch("24h", "24h"), ch("7d", "7d"), ch("30d", "30d"), ch("90d", "90d"), ch("ytd", "YTD"), ch("all", "All-time"),
           { label: "High", value: d.high ? yf(d.high.level) : null, reason: "never published", sub: d.high ? fmt.dateTime(d.high.hour) : null, title: d.high ? "since chain segment start " + fmt.dateTime(d.high.since) : null },
           { label: "Low", value: d.low ? yf(d.low.level) : null, reason: "never published", sub: d.low ? fmt.dateTime(d.low.hour) : null },
-          { label: "Vol 7d", value: v["7d"] && v["7d"].annualized != null ? volFmt(v["7d"].annualized) : null, reason: v["7d"] && v["7d"].reason, sub: v["7d"] && v["7d"].annualized != null ? "annualized" : shortReason(v["7d"] && v["7d"].reason), title: v["7d"] && v["7d"].reason },
-          { label: "Vol 30d", value: v["30d"] && v["30d"].annualized != null ? volFmt(v["30d"].annualized) : null, reason: v["30d"] && v["30d"].reason, sub: v["30d"] && v["30d"].annualized != null ? "annualized" : shortReason(v["30d"] && v["30d"].reason), title: v["30d"] && v["30d"].reason },
+          { label: "Vol 7d", fold: true, value: v["7d"] && v["7d"].annualized != null ? volFmt(v["7d"].annualized) : null, reason: v["7d"] && v["7d"].reason, sub: v["7d"] && v["7d"].annualized != null ? "annualized" : shortReason(v["7d"] && v["7d"].reason), title: v["7d"] && v["7d"].reason },
+          { label: "Vol 30d", fold: true, value: v["30d"] && v["30d"].annualized != null ? volFmt(v["30d"].annualized) : null, reason: v["30d"] && v["30d"].reason, sub: v["30d"] && v["30d"].annualized != null ? "annualized" : shortReason(v["30d"] && v["30d"].reason), title: v["30d"] && v["30d"].reason },
           { label: isPts ? "Components" : "Constituents", value: String(d.constituents ?? 0), sub: d.method ? d.method.replace(/_/g, " ") : null },
           { label: "Coverage 30d", value: cov.hours_30d ? Math.round(100 * (cov.published_hours_30d || 0) / cov.hours_30d) + "%" : null, reason: "no coverage data", sub: cov.hours_30d ? `${cov.published_hours_30d}/${cov.hours_30d} h published` : null, title: cov.first_published ? "first published " + fmt.dateTime(cov.first_published) + " · chain segment " + cov.chain_segment + " since " + fmt.dateTime(cov.chain_segment_start) : null },
         ].filter(Boolean));
@@ -425,7 +426,7 @@
         const sib = all.filter(r => r.gpu === d.gpu && r.id !== d.id);
         if (sib.length) relEl.append(h("div", { class: "ix-rel-h" }, "Other indices on this GPU"), h("table", { class: "ix-kv ix-sib" }, h("tbody", {}, sib.map(r =>
           h("tr", {}, h("td", {}, h("a", { class: "lnk", href: "/indices/" + encodeURIComponent(r.id) }, r.name.replace(/^OpenGrid /, ""))),
-            h("td", { class: "n" }, r.published ? levelFmt(r.level, r.unit) : h("span", { class: "dimmer", title: r.reason }, "n/p")),
+            h("td", { class: "n" }, r.published ? levelFmt(r.level, r.unit) : h("span", { class: "dimmer", title: r.reason }, "not published")),
             h("td", { class: "n" }, r.published ? OG.chg(r.changes["24h"], { reason: r.change_reasons["24h"] }) : null))))));
       }
 

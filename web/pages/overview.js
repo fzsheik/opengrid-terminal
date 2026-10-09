@@ -6,10 +6,11 @@
   const BENCH = ["gpu-compute", "h100-80gb-sxm5", "h200-141gb-sxm5", "b200-180gb-sxm", "a100-80gb-sxm4", "l40s-48gb", "h100-class", "h200-class", "a100-class"];
 
   // ---- small building blocks ----
-  // mini table: cols [{label, num, cell(row) -> node|string, title, cls}]
+  // mini table: cols [{label, num, cell(row) -> node|string, title, cls, w}]. Fixed layout: numeric columns get
+  // their width (w, default 52px), the name column takes the rest and ellipsizes (full name on hover).
   function mini(cols, rows) {
     return h("table", { class: "grid-t compact ov-mt" },
-      h("thead", {}, h("tr", {}, cols.map(c => h("th", { class: c.num ? "n" : null, title: c.title || null }, c.label)))),
+      h("thead", {}, h("tr", {}, cols.map(c => h("th", { class: c.num ? "n" : null, title: c.title || null, style: c.w || c.num ? `width:${c.w || 52}px` : null }, c.label)))),
       h("tbody", {}, rows.map(r => h("tr", {}, cols.map(c => h("td", { class: (c.num ? "n " : "") + (c.cls || "") }, c.cell(r)))))));
   }
   // Panel: header (title, kind badge, rule tooltip, optional link) + body that renders a /v1/overview section.
@@ -38,7 +39,7 @@
     };
   }
   const unavail = reason => h("div", { class: "ov-un" }, h("b", {}, "unavailable"), " ", reason || "no reason given");
-  const gpu = r => OG.gpuLink(r.gpu || r.gpu_slug);
+  const gpu = r => OG.gpuLink(r.gpu || r.gpu_slug);   // gpuLink carries the full name as its title
   const delta = (v, title) => v == null ? OG.na(title) : h("span", { class: "chg " + (v > 0 ? "up" : v < 0 ? "down" : "flat") }, (v > 0 ? "+" : v < 0 ? L.MINUS : "") + Math.abs(v));
   const shortIndex = n => String(n || "").replace(/^OpenGrid\s+/, "").replace(/\s+Index$/, "").replace(/\s*\(interruptible\)/, "");
 
@@ -49,10 +50,11 @@
     const ch = w => ix.changes && ix.changes[w] != null ? OG.chg(ix.changes[w]) : OG.na((ix.change_reasons || {})[w] || ix.reason || "unavailable");
     return h("a", { class: "ov-ix" + (ix.level == null ? " off" : ""), href: "/indices/" + encodeURIComponent(ix.id), title: ix.name + (ix.reason ? "\n" + ix.reason : "") + (ix.constituents != null ? `\n${ix.constituents} constituent(s)` : "") },
       h("div", { class: "ov-ix-n" }, shortIndex(ix.name)),
-      h("div", { class: "ov-ix-v" }, lvl == null ? OG.na(ix.reason) : lvl, h("span", { class: "ov-ix-u" }, usd ? "/GPU·h" : "pts")),
+      h("div", { class: "ov-ix-v" }, lvl == null ? h("span", { class: "ov-ix-off" }, "—") : [lvl, h("span", { class: "ov-ix-u" }, usd ? "/GPU·h" : "pts")]),
       ix.level == null
-        ? h("div", { class: "ov-ix-r" }, ix.reason || "not published")
-        : h("div", { class: "ov-ix-c" }, h("span", { class: "dimmer" }, "24h"), ch("24h"), h("span", { class: "dimmer" }, "7d"), ch("7d")));
+        ? h("div", { class: "ov-ix-r" }, "not published")
+        : h("div", { class: "ov-ix-c" }, h("span", { class: "dimmer" }, "24h"), ch("24h"),
+          ix.changes && ix.changes["7d"] != null ? [h("span", { class: "dimmer" }, "7d"), ch("7d")] : null));
   }
   function drawIndices(box, list) {
     if (!Array.isArray(list)) { box.replaceChildren(h("div", { class: "ov-ix-un" }, unavail("index service did not answer (/v1/indices)"))); return; }
@@ -88,59 +90,59 @@
   const R = {
     movers: items => mini([
       { label: "GPU", cell: gpu },
-      { label: "Median", num: true, cell: r => fmt.price(r.median_now) },
-      { label: "24h", num: true, cell: r => OG.chg(r.median_pct) },
-      { label: "Prov", num: true, title: "providers priced at both times (one vote each)", cell: r => String(r.providers_matched) },
+      { label: "Median", num: true, w: 60, cell: r => fmt.price(r.median_now) },
+      { label: "24h", num: true, w: 64, cell: r => OG.chg(r.median_pct) },
+      { label: "Prov", num: true, w: 38, title: "providers priced at both times (one vote each)", cell: r => String(r.providers_matched) },
     ], items.slice(0, 6)),
     spreads: rows => mini([
       { label: "GPU", cell: gpu },
-      { label: "Low", num: true, cell: r => fmt.price(r.low) },
-      { label: "High", num: true, cell: r => fmt.price(r.high) },
-      { label: "Spread", num: true, title: "high / low − 1", cell: r => h("span", { title: r.label || "" }, fmt.pct(r.spread_pct_of_low).replace(/^\+/, "")) },
-      { label: "Prov", num: true, cell: r => String(r.providers) },
+      { label: "Low", num: true, w: 58, cell: r => fmt.price(r.low) },
+      { label: "High", num: true, w: 60, cell: r => fmt.price(r.high) },
+      { label: "Spread", num: true, w: 54, title: "high / low − 1", cell: r => h("span", { title: r.label || "" }, fmt.pct(r.spread_pct_of_low).replace(/^\+/, "")) },
+      { label: "Prov", num: true, w: 38, cell: r => String(r.providers) },
     ], rows.slice(0, 6)),
     volatile: items => mini([
       { label: "GPU", cell: gpu },
-      { label: "σ 1h", num: true, title: "stdev of matched hourly median change, 7 days", cell: r => fmt.pct(r.hourly_stdev).replace(/^\+/, "") },
-      { label: "7d range", num: true, cell: r => fmt.pct(r.range_7d).replace(/^\+/, "") },
+      { label: "σ 1h", num: true, w: 50, title: "stdev of matched hourly median change, 7 days", cell: r => fmt.pct(r.hourly_stdev).replace(/^\+/, "") },
+      { label: "7d range", num: true, w: 66, cell: r => fmt.pct(r.range_7d).replace(/^\+/, "") },
     ], items.slice(0, 6)),
     liquid: items => mini([
       { label: "GPU", cell: gpu },
-      { label: "Priced", num: true, title: "providers with purchasable listings", cell: r => String(r.providers_priced) },
-      { label: "Avail", num: true, title: "providers with available listings", cell: r => String(r.providers_available) },
-      { label: "Listings", num: true, title: "available / live listings", cell: r => h("span", {}, String(r.available_listings), h("span", { class: "dimmer" }, "/" + r.live_listings)) },
+      { label: "Priced", num: true, w: 48, title: "providers with purchasable listings", cell: r => String(r.providers_priced) },
+      { label: "Avail", num: true, w: 44, title: "providers with available listings", cell: r => String(r.providers_available) },
+      { label: "Listings", num: true, w: 60, title: "available / live listings", cell: r => h("span", {}, String(r.available_listings), h("span", { class: "dimmer" }, "/" + r.live_listings)) },
     ], items.slice(0, 6)),
     avail: items => mini([
       { label: "GPU", cell: gpu },
-      { label: "Prov", num: true, title: "providers with purchasable listings, 24h ago → now", cell: r => h("span", {}, h("span", { class: "dim" }, r.providers_priced_then + "→"), String(r.providers_priced_now)) },
-      { label: "Δ", num: true, cell: r => delta(r.delta_providers) },
-      { label: "Listings", num: true, cell: r => h("span", {}, h("span", { class: "dim" }, r.available_listings_then + "→"), String(r.available_listings_now)) },
-      { label: "Δ", num: true, cell: r => delta(r.delta_listings) },
+      { label: "Prov", num: true, w: 46, title: "providers with purchasable listings, 24h ago → now", cell: r => h("span", {}, h("span", { class: "dim" }, r.providers_priced_then + "→"), String(r.providers_priced_now)) },
+      { label: "Δ", num: true, w: 30, cell: r => delta(r.delta_providers) },
+      { label: "Listings", num: true, w: 62, cell: r => h("span", {}, h("span", { class: "dim" }, r.available_listings_then + "→"), String(r.available_listings_now)) },
+      { label: "Δ", num: true, w: 40, cell: r => delta(r.delta_listings) },
     ], items.slice(0, 6)),
     newly: items => mini([
       { label: "GPU", cell: gpu },
-      { label: "First at", cell: r => OG.providerLink(r.first_provider, { logo: false }) },
-      { label: "Since", num: true, cell: r => fmt.dateTime(r.first_priced) },
-      { label: "Low", num: true, cell: r => OG.value(r.lowest_now, fmt.price, "not priced now") },
+      { label: "First at", w: 76, cell: r => OG.providerLink(r.first_provider, { logo: false }) },
+      { label: "Since", num: true, w: 58, cell: r => h("span", { title: fmt.dateTime(r.first_priced) }, fmt.date(r.first_priced)) },
+      { label: "Low", num: true, w: 60, cell: r => OG.value(r.lowest_now, fmt.price, "not priced now") },
     ], items.slice(0, 6)),
     sold: items => mini([
       { label: "GPU", cell: gpu },
-      { label: "Providers", cls: "ov-wrap", cell: r => h("span", {}, (r.providers || []).map((p, i) => [i ? ", " : "", OG.providerLink(p, { logo: false })])) },
-      { label: "Last low", num: true, cell: r => r.last_lowest == null ? h("span", { class: "dimmer", title: "never priced since tracking began" }, "never") : h("span", { title: "last priced " + fmt.dateTime(r.last_priced_at) }, fmt.price(r.last_lowest)) },
+      { label: "Providers", cls: "ov-wrap", w: 120, cell: r => h("span", {}, (r.providers || []).map((p, i) => [i ? ", " : "", OG.providerLink(p, { logo: false })])) },
+      { label: "Last low", num: true, w: 58, cell: r => r.last_lowest == null ? h("span", { class: "dimmer", title: "never priced since tracking began" }, "never") : h("span", { title: "last priced " + fmt.dateTime(r.last_priced_at) }, fmt.price(r.last_lowest)) },
     ], items.slice(0, 6)),
     unusual: items => mini([
       { label: "GPU", cell: gpu },
       { label: "24h", num: true, cell: r => OG.chg(r.change_24h_median) },
-      { label: "z", num: true, title: "vs the same statistic on each of the previous 30 days", cell: r => fmt.num(r.z, 1) },
-      { label: "n", num: true, cell: r => String(r.samples) },
+      { label: "z", num: true, w: 36, title: "vs the same statistic on each of the previous 30 days", cell: r => fmt.num(r.z, 1) },
+      { label: "n", num: true, w: 32, cell: r => String(r.samples) },
     ], items.slice(0, 6)),
     changes: items => mini([
-      { label: "Time", cell: r => h("span", { class: "mono dim" }, fmt.time(r.changed_at).slice(0, 5)) },
+      { label: "Time", w: 48, cell: r => h("span", { class: "mono dim" }, fmt.time(r.changed_at).slice(0, 5)) },
       { label: "GPU", cell: gpu },
-      { label: "Provider", cell: r => OG.providerLink(r.provider, { logo: false }) },
-      { label: "Was", num: true, cell: r => h("span", { class: "dim" }, fmt.price(r.previous_price)) },
-      { label: "Now", num: true, cell: r => fmt.price(r.price) },
-      { label: "Chg", num: true, cell: r => OG.chg(r.pct) },
+      { label: "Provider", w: 110, cell: r => OG.providerLink(r.provider, { logo: false }) },
+      { label: "Was", num: true, w: 60, cell: r => h("span", { class: "dim" }, fmt.price(r.previous_price)) },
+      { label: "Now", num: true, w: 60, cell: r => fmt.price(r.price) },
+      { label: "Chg", num: true, w: 62, cell: r => OG.chg(r.pct) },
     ], items.slice(0, 10)),
   };
 
@@ -159,7 +161,7 @@
           fmt: (v, r) => OG.chg(v, { reason: r.providers_matched < 2 ? `needs >= 2 providers priced 24h ago and now (${r.providers_matched || 0} matched)` : "not enough history" }) },
         { key: "spark", label: "24h low", sort: false, csv: false, title: "lowest price over the last 24h (/market)", fmt: (v, r) => r.spark ? OG.charts.sparkline(r.spark, { dir: fmt.dir(r.spark_chg), width: 84, height: 16 }) : h("span", { class: "dimmer" }, "–") },
       ],
-      rows: [], sort: { key: "providers", dir: "desc" }, compact: true, rowKey: r => r.gpu, rowHref: r => "/gpu/" + r.gpu_slug,
+      rows: [], sort: { key: "providers", dir: "desc" }, compact: true, rowKey: r => r.gpu, rowHref: r => "/gpu/" + r.gpu_slug, limit: 24,
       title: "Market board · on-demand", csv: "opengrid-board.csv", empty: "No GPU is priced right now.",
     });
   }

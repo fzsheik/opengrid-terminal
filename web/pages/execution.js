@@ -424,7 +424,7 @@
             columns: [
               { key: "id", label: "#", num: true }, { key: "started_at", label: "Started", num: true, fmt: v => fmt.dateTime(v) },
               { key: "trigger", label: "Trigger", cls: "dim" }, { key: "provider", label: "Provider", fmt: v => v || h("span", { class: "dim" }, "all") },
-              { key: "status", label: "Status", fmt: v => OG.badge(v, v === "ok" ? "good" : v === "failed" ? "bad" : "warn") },
+              { key: "status", label: "Status", fmt: v => v === "ok" ? h("span", { class: "dotx good" }, "ok") : OG.badge(v, v === "failed" ? "bad" : "warn") },
               { key: "counts", label: "Findings", sort: false, cls: "wrap", fmt: v => v && Object.keys(v).length ? Object.entries(v).map(([k, n]) => h("span", { class: "badge " + (/orphan|fail|unresolved/.test(k) ? "warn" : "") }, k.replace(/_/g, " ") + " " + n)) : h("span", { class: "dim" }, "none") },
               { key: "error", label: "Error", cls: "wrap dim", fmt: v => v || "" },
             ], rows: runs, compact: true, csv: false, sort: { key: "id", dir: "desc" },

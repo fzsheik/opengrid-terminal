@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     # Any HTTPS webhook (Slack/PagerDuty incoming webhooks work); signed with the secret.
     ops_alert_webhook_url: str | None = None
     ops_alert_webhook_secret: str | None = None
+    # Public logo shown as the alert sender's avatar (Discord fetches it; must be publicly reachable).
+    ops_alert_logo_url: str = "https://tryopengrid.com/brand/opengrid-logo.png"
     salad_api_key: str | None = None
     salad_org: str | None = None
     hyperstack_api_key: str | None = None

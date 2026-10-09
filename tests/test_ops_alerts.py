@@ -73,7 +73,32 @@ def test_shutdown_is_never_throttled_like_a_launch():
     assert cls("POST", "/v1/admin/validation/start") == "execute"
 
 
+def test_chat_message_for_discord_and_slack():
+    msg = ops._chat_message("termination_failed", "major", "dep-1 still billing", "lambda",
+                            {"deployment_id": "dep-1", "est_hourly_exposure_usd": 2.5, "time_in_state": "12m",
+                             "suggested_action": "Terminate og-dep-1 in the Lambda console"})
+    assert "dep-1 still billing" in msg and "$2.5/h" in msg and "Lambda console" in msg
+    assert len(ops._chat_message("k", "major", "x" * 5000, None, None)) <= 2000, "Discord's 2000-char limit"
+
+
+def test_discord_embed_payload():
+    from datetime import datetime, timezone
+    assert ops.is_discord("https://discord.com/api/webhooks/1/abc") and not ops.is_discord("https://hooks.slack.com/x")
+    assert not ops.is_discord("https://discord.com.evil.example/api/webhooks/1/abc")
+    p = ops.discord_payload("termination_failed", "major", "x" * 400, "lambda",
+                            {"deployment_id": "dep-1", "est_hourly_exposure_usd": 2.5, "time_in_state": "12m",
+                             "suggested_action": "y" * 3000}, datetime.now(timezone.utc))
+    e = p["embeds"][0]
+    assert e["color"] == 0x91C61D, "OpenGrid logo green"
+    assert len(e["title"]) <= 256 and all(len(f["value"]) <= 1024 for f in e["fields"])
+    assert p["username"] == "OpenGrid" and p["avatar_url"].startswith("https://")
+    assert p["allowed_mentions"] == {"parse": []}, "alerts can never @-mention"
+    names = {f["name"] for f in e["fields"]}
+    assert {"Deployment", "Provider", "Exposure", "Time in state", "Suggested action"} <= names
+    assert e["url"].endswith("/deployments/dep-1")
+
+
 if __name__ == "__main__":
-    for t in (test_suspended_accounts_can_only_see_and_stop, test_ops_alert_records_and_never_raises,
+    for t in (test_discord_embed_payload, test_chat_message_for_discord_and_slack, test_suspended_accounts_can_only_see_and_stop, test_ops_alert_records_and_never_raises,
               test_kill_switch_alerts, test_shutdown_is_never_throttled_like_a_launch):
         t(); print(t.__name__, "ok")

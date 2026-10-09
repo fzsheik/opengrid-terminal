@@ -93,7 +93,13 @@
         // domain
         let domain = kd.dom;
         if (kd.div) { const m = Math.min(kd.cap, pctl(all.map(Math.abs), 0.95) || kd.cap) || kd.cap; domain = [-m, 0, m]; }
-        else if (!domain) { const e = all.length ? [Math.min(...all), Math.max(...all)] : [0, 1]; domain = st.kind === "gpu-region-availability" ? [0, e[1] || 1] : e; }
+        else if (!domain) {
+          // sequential: the top of the scale is the 95th percentile, so one extreme cell cannot wash every other
+          // cell into the darkest shade (cells above it take the top colour; the legend says "≥")
+          const e = all.length ? [Math.min(...all), Math.max(...all)] : [0, 1], p95 = all.length >= 10 ? pctl(all, 0.95) : null;
+          const top = p95 != null && p95 > e[0] && p95 < e[1] * 0.8 ? p95 : e[1];
+          domain = st.kind === "gpu-region-availability" ? [0, top || 1] : [e[0], top];
+        }
         legendEl.replaceChildren(...[h("span", { class: "hm-k" }, kd.div ? "diverging" : "sequential"),
           h("span", {}, h("b", {}, groupOf(st.kind)[2].find(k => k[0] === st.kind)[1] + ": "), kd.read),
           h("span", { class: "dim" }, ` Unit: ${meta.unit || "–"}${meta.definition ? " · " + meta.definition : ""}${meta.min_hours ? ` · needs ≥ ${meta.min_hours} hours` : ""}${kd.div ? ` · colour clipped at ±${fmt.pct(domain[2]).replace("+", "")}` : ""}.`),

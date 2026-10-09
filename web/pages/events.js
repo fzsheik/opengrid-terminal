@@ -21,10 +21,10 @@
 
   const sevMark = sev => h("i", { class: "ev-sev s-" + (sev || "info"), title: sev || "info" });
 
-  function numbers(e) {
+  function numbers(e, compact) {
     const out = [];
     const b = e.value_before, a = e.value_after;
-    if (b != null && a != null) out.push(h("span", { class: "ev-px" }, h("span", { class: "dim" }, fmt.price(b)), " → ", fmt.price(a)));
+    if (b != null && a != null) out.push(compact ? h("span", { class: "ev-px", title: fmt.price(b) + " → " + fmt.price(a) }, fmt.price(a)) : h("span", { class: "ev-px" }, h("span", { class: "dim" }, fmt.price(b)), " → ", fmt.price(a)));
     else if (a != null) out.push(h("span", { class: "ev-px" }, fmt.price(a)));
     else if (b != null) out.push(h("span", { class: "ev-px dim", title: "last price before" }, "was " + fmt.price(b)));
     if (e.pct != null) {
@@ -43,14 +43,17 @@
     if (e.region_group) links.push(h("span", { class: "ev-rg" }, e.region_group));
     const d = e.detail || {};
     const tip = [e.title, d.note, d.cause ? "cause: " + d.cause : null, d.reason ? "reason: " + d.reason : null, "detected " + fmt.dateTime(e.detected_at)].filter(Boolean).join("\n");
-    return h("div", { class: "ev-row s-" + (e.severity || "info") + (e.type === "coverage_started" ? " ev-cov" : ""), title: tip },
-      h("span", { class: "ev-t mono" }, opts.compact ? fmt.dateTime(e.occurred_at) : fmt.time(e.occurred_at).slice(0, 5)),
+    // compact (overview side panel): who + what only, the type tag and the arrow say how; full title on hover
+    const short = e.gpu ? (e.provider ? L.providerName(e.provider) + " · " : "") + L.shortGpu(e.gpu) + (e.provider ? "" : " · market") : null;
+    const today = new Date(e.occurred_at).toDateString() === new Date().toDateString();
+    return h("div", { class: "ev-row s-" + (e.severity || "info") + (e.type === "coverage_started" ? " ev-cov" : "") + (opts.compact ? "" : " ev-full"), title: tip },
+      h("span", { class: "ev-t mono" }, opts.compact && !today ? fmt.date(e.occurred_at) : fmt.time(e.occurred_at).slice(0, 5)),
       sevMark(e.severity),
       h("span", { class: "ev-ty" }, typeTag(e.type)),
-      h("span", { class: "ev-ti" }, opts.compact ? String(e.title || "").replace(/(NVIDIA|AMD Instinct|AMD|Intel) /g, "") : e.title),
-      h("span", { class: "ev-n mono" }, numbers(e)),
+      h("span", { class: "ev-ti" }, opts.compact ? short || String(e.title || "").replace(/(NVIDIA|AMD Instinct|AMD|Intel) /g, "") : e.title),
+      h("span", { class: "ev-n mono" }, numbers(e, opts.compact)),
       opts.compact ? null : h("span", { class: "ev-l" }, links),
-      opts.compact ? null : OG.kindBadge(e.kind || "observed"));
+      opts.compact ? null : h("span", { class: "ev-k" }, e.kind && e.kind !== "observed" ? h("a", { class: "kind-t", href: "/methodology/data-kinds", title: "data kind: " + e.kind }, e.kind) : null));
   };
 
   const SINCE = [["1", "24H"], ["7", "7D"], ["30", "30D"], ["90", "90D"], ["all", "ALL"]];
@@ -160,7 +163,7 @@
         const bars = [];
         for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
           const iso = d.toISOString(), k = dayKey(d);
-          bars.push({ label: fmt.date(iso), short: String(d.getDate()), value: counts.get(k) || 0, color: "var(--accent-2)" });
+          bars.push({ label: fmt.date(iso), short: String(d.getDate()), value: counts.get(k) || 0, color: "#22528c" });
         }
         const truncated = total > items.length;
         histNote.textContent = (truncated ? `newest ${fmt.num(items.length)} of ${fmt.num(total)} events counted · ` : "") + `${fmt.num(total)} events · ${bars.length} day${bars.length === 1 ? "" : "s"}`;

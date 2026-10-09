@@ -133,10 +133,10 @@ Nothing is computed here that the API does not state, except display arithmetic 
         const g = st.g, m = g && g.market, idx = st.idx, cx = st.ctxd;
         if (!g) return;
         const hw = g.hardware || {};
-        hdrBadges.replaceChildren(...[hw.architecture, hw.vram_gb ? hw.vram_gb + "GB " + (hw.memory_type || "") : null, hw.form_factor, hw.workload_class].filter(Boolean).map(t => OG.badge(t)));
+        hdrBadges.replaceChildren([hw.architecture, hw.vram_gb ? hw.vram_gb + " GB " + (hw.memory_type || "") : null, hw.form_factor, hw.workload_class].filter(Boolean).join(" · "));
         const ch = k => {
-          if (idx === undefined) return { label: k, value: null, reason: "loading" };
-          if (!idx) return { label: k, value: null, reason: "index unavailable" };
+          if (idx === undefined) return { label: k + " chg", value: null, reason: "loading" };
+          if (!idx) return { label: k + " chg", value: null, reason: "index unavailable" };
           const c = (idx.changes || {})[k] || {};
           return { label: k + " chg", value: c.pct == null ? null : OG.chg(c.pct), reason: c.reason || "no change data", sub: c.pct == null ? shortReason(c.reason) : "index",
             title: c.pct == null ? c.reason : `index ${fmt.price(c.from_level)} at ${when(c.from_hour)} → ${fmt.price(idx.level)}` };
@@ -151,25 +151,36 @@ Nothing is computed here that the API does not state, except display arithmetic 
           h("div", { class: "gp-big-l" }, "OpenGrid index", idx ? OG.kindBadge("observed") : null),
           h("div", { class: "gp-big-v" }, idx && idx.published && idx.level != null ? fmt.price(idx.level) : OG.na(idx === undefined ? "loading" : idx ? idx.reason : "index endpoint unavailable"),
             idx && idx.published && idx.changes && idx.changes["24h"] ? OG.chg(idx.changes["24h"].pct, { reason: idx.changes["24h"].reason }) : null),
-          h("div", { class: "gp-big-s" }, idx && idx.published ? `$/GPU·h · ${idx.constituents} providers · ${idx.method || "index"} · ${when(idx.hour)}` : idx ? (idx.reason || "not published") : idx === undefined ? "" : "index not available on this server"));
-        quote.replaceChildren(big, OG.stats([
+          h("div", { class: "gp-big-s", title: idx && idx.published ? `statistic: ${(idx.method || "index").replace(/_/g, " ")}` : null }, idx && idx.published ? `$/GPU·h · ${idx.constituents} providers · ${when(idx.hour)}` : idx ? (idx.reason || "not published") : idx === undefined ? "" : "index not available on this server"));
+        const cells = [
           { label: "Low", value: live ? fmt.price(m.low) : null, reason: "nobody is selling it in stock now", sub: live ? OG.providerName(m.by_provider[0].provider) : null, kind: "observed" },
           { label: "Median", value: live ? fmt.price(m.median) : null, reason: "no priced providers", sub: live ? "of provider lows" : null },
           { label: "High", value: live ? fmt.price(m.high) : null, reason: "no priced providers", sub: live ? OG.providerName(m.by_provider[m.by_provider.length - 1].provider) : null },
           { label: "Spread", value: spread != null ? fmt.pct(spread) : null, reason: live ? "one provider: no spread" : "no priced providers", sub: spread != null ? fmt.price(m.stats.spread_abs) + " high − low" : null },
           { label: "Providers", value: String(m ? m.providers : 0), sub: "priced now" },
-          { label: "Available", value: m ? String(m.listings.available) : null, sub: m ? `${m.listings.availability_unknown} unknown · ${m.listings.sold_out} sold out` : null, title: "listings with explicit availability now" },
+          { label: "Available", value: m ? String(m.listings.available) : null, sub: m ? `${m.listings.availability_unknown} unkn. · ${m.listings.sold_out} out` : null, title: m ? `listings with explicit availability now; ${m.listings.availability_unknown} with availability unknown, ${m.listings.sold_out} sold out` : null },
           ch("24h"), ch("7d"), ch("30d"), ch("90d"),
           { label: "Volatility", value: vol && vol[1].annualized != null ? fmt.pct(vol[1].annualized) : null, reason: vol ? vol[1].reason : idx === undefined ? "loading" : "index unavailable", sub: vol && vol[1].annualized != null ? vol[0] + " annualized" : shortReason(vol ? vol[1].reason : "index unavailable") },
           { label: "Hist. low", value: hist && hist.low ? fmt.price(hist.low.value) : null, reason: cx === undefined ? "loading" : cx ? "no history" : "context endpoint unavailable", sub: hist && hist.low ? "of lowest · " + fmt.date(hist.low.hour) : null, title: hist ? `lowest market price recorded since ${when(hist.since)} (${hist.samples} hourly samples)` : null },
           { label: "Hist. high", value: hist && hist.high ? fmt.price(hist.high.value) : null, reason: cx === undefined ? "loading" : cx ? "no history" : "context endpoint unavailable", sub: hist && hist.high ? "of lowest · " + fmt.date(hist.high.hour) : null, title: hist ? `highest market-lowest price recorded since ${when(hist.since)}` : null },
           { label: "Percentile", value: pw && pw.percentile != null ? ordinal(Math.round(pw.percentile)) : null, reason: pw ? pw.reason : cx ? cx.label_reason : "unavailable",
-            sub: pw && pw.percentile != null ? `median vs ${pw.window}${cx.label ? " · " + cx.label : ""}` : shortReason(pw ? pw.reason : cx ? cx.label_reason : "unavailable"), title: pw && pw.reason ? pw.reason : null },
-        ]));
+            sub: pw && pw.percentile != null ? `median vs ${pw.window}${cx.label ? " · " + cx.label : ""}` : shortReason(pw ? pw.reason : cx ? cx.label_reason : "unavailable"), title: pw && pw.reason ? pw.reason : null, hist: true },
+        ];
+        // history-based cells (7d…90d change, volatility, historical range, percentile) that have no value yet are
+        // folded into one line under the strip, instead of a row of n/a cells
+        const HIST = new Set(["7d chg", "30d chg", "90d chg", "Volatility", "Hist. low", "Hist. high", "Percentile"]);
+        const missing = cells.filter(c => HIST.has(c.label) && (c.value == null || c.value === ""));
+        const loading = idx === undefined || cx === undefined;
+        const shown = loading ? cells.filter(c => !HIST.has(c.label)) : cells.filter(c => !missing.includes(c));
+        quote.replaceChildren(big, OG.stats(shown));
+        st.histMissing = loading ? null : missing.map(c => ({ label: c.label.replace(" chg", " change"), reason: c.reason || "unavailable" }));
         const sum = cx && cx.summaries && cx.summaries.length ? cx.summaries : null;
-        ctxLine.replaceChildren(...(sum ? [h("span", { class: "eyebrow" }, "Context"), " ", sum.join(" "), " ", h("a", { class: "lnk dim", href: "/methodology/historical-context" }, "how")]
-          : cx === null ? [h("span", { class: "dim" }, "Historical context unavailable on this server (/v1/markets/{gpu}/context).")]
-          : cx && cx.label_reason ? [h("span", { class: "dim" }, "Historical context: " + cx.label_reason)] : []));
+        const hm = st.histMissing || [];
+        const histNote = hm.length ? h("span", { class: "gp-ctx-n", title: hm.map(x => x.label + ": " + x.reason).join("; ") },
+          h("span", { class: "eyebrow" }, "History"), " ", hm.map(x => x.label).join(" · "), ": ", h("span", { class: "dim" }, OG.shortReason(hm[0].reason, 40) || "not enough history yet")) : null;
+        ctxLine.replaceChildren(...(sum ? [h("span", { class: "gp-ctx-s", title: sum.join(" ") }, h("span", { class: "eyebrow" }, "Context"), " ", sum.join(" "), " ", h("a", { class: "lnk dim", href: "/methodology/historical-context" }, "how"))]
+          : cx === null ? [h("span", { class: "dim" }, "Historical context: not available on this server.")]
+          : cx && cx.label_reason ? [h("span", { class: "gp-ctx-s dim", title: cx.label_reason }, "Historical context: " + cx.label_reason)] : []), histNote);
       }
 
       /* ---------- market summary (+ everything that hangs off /v1/gpus/{slug}) ---------- */
@@ -216,10 +227,10 @@ Nothing is computed here that the API does not state, except display arithmetic 
           { key: "chg24", label: "24h", num: true, hidden: !rows.some(r => r.chg24k), title: "this provider's lowest price vs 24 hours earlier", fmt: (v, r) => OG.chg(v, { reason: r.chg24r || "no price 24 hours ago" }) },
           { key: "listings", label: "Lst", num: true, title: "priced eligible listings" },
           { key: "available", label: "Stock", fmt: v => v === true ? h("span", { class: "up" }, "in stock") : v === false ? h("span", { class: "down" }, "sold out") : h("span", { class: "dim", title: "provider does not publish availability" }, "unknown") },
-          { key: "region", label: "Region", cls: "dim", fmt: v => v || "–" },
+          { key: "region", label: "Region", cls: "dim", fmt: v => v || "–", minor: 2 },
           { key: "freshness", label: "Fresh", title: "from the trust endpoint: age of the observation", fmt: (v, r) => r.trust ? OG.freshBadge(r.age != null ? r.age : v, { provider: r.provider }) : trust === null ? h("span", { class: "dim" }, "…") : OG.na("trust data unavailable"), value: r => r.age },
-          { key: "confidence", label: "Trust", value: r => r.trust && r.trust.confidence, fmt: (v, r) => r.trust ? OG.badge(r.trust.confidence || "?", r.trust.confidence === "high" ? "good" : r.trust.confidence === "low" ? "bad" : "warn", (r.trust.confidence_reasons || []).join("; ") || "no issues") : "–" },
-          { key: "source_type", label: "Source", cls: "dim", fmt: v => (v || "–").replace(/_/g, " ") },
+          { key: "confidence", label: "Trust", value: r => r.trust && r.trust.confidence, fmt: (v, r) => r.trust ? h("span", { class: "gp-trust t-" + (r.trust.confidence || "unknown"), title: (r.trust.confidence_reasons || []).join("; ") || "no issues" }, r.trust.confidence || "?") : "–" },
+          { key: "source_type", label: "Source", cls: "dim", fmt: v => (v || "–").replace(/_/g, " "), minor: 3 },
           { key: "website", label: "", sort: false, csv: false, fmt: v => v ? ext(v, "site ↗") : "" },
         ];
         if (provTable && provTable.cols24 !== rows.some(r => r.chg24k)) provTable = null;   // column set changed
@@ -243,7 +254,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
       function drawDistribution() {
         const m = st.g.market;
         if (!m.by_provider.length) { distBox.replaceChildren(OG.empty("No prices now.")); return; }
-        const rows = [{ label: "Provider lows", low: m.low, median: m.median, high: m.high,
+        const rows = [{ label: "Providers", low: m.low, median: m.median, high: m.high,
           points: m.by_provider.map(p => ({ key: p.provider, label: OG.providerName(p.provider), value: p.price, color: L.providerColor(p.provider), href: "/provider/" + p.provider })) }];
         const ls = m.listings.stats;
         const lst = (trust || []).filter(t => t.market_type === "on_demand" && !t.interruptible && t.price_per_gpu_hour > 0 && t.available !== false && t.trust && t.trust.freshness !== "stale");
@@ -303,12 +314,14 @@ Nothing is computed here that the API does not state, except display arithmetic 
       /* ---------- capability pricing ---------- */
       function drawCapability() {
         const c = st.g.capability, ms = c.metrics;
-        const LBL = { per_gb_vram_hour: "per GB VRAM·h", per_bf16_tflop_hour: "per BF16 TFLOP·h", per_fp16_tflop_hour: "per FP16 TFLOP·h", per_fp8_tflop_hour: "per FP8 TFLOP·h", per_tbps_bandwidth_hour: "per TB/s·h" };
+        const LBL = { per_gb_vram_hour: "per GB VRAM·h", per_bf16_tflop_hour: "per BF16 PFLOP·h", per_fp16_tflop_hour: "per FP16 PFLOP·h", per_fp8_tflop_hour: "per FP8 PFLOP·h", per_tbps_bandwidth_hour: "per TB/s·h" };
+        // FLOP rates read per petaFLOP-hour (1,000 TFLOP·h): $1.31 instead of $0.00131
+        const k1000 = k => /_tflop_hour$/.test(k) ? 1000 : 1;
         capBox.replaceChildren(h("table", { class: "gp-kv gp-cap" },
           h("thead", {}, h("tr", {}, h("th", {}, "$"), h("th", { class: "n" }, "spec"), h("th", { class: "n" }, "at low"), h("th", { class: "n" }, "at median"))),
-          h("tbody", {}, Object.entries(ms).map(([k, v]) => h("tr", { title: v.unit }, h("th", {}, LBL[k] || k), h("td", { class: "n dim" }, v.spec_value != null ? fmt.num(v.spec_value) : "–"),
-            v.low == null ? h("td", { class: "n", colspan: 2 }, OG.na(v.reason)) : [h("td", { class: "n" }, small(v.low)), h("td", { class: "n" }, small(v.median))])))),
-          h("p", { class: "note" }, c.label, ". Price / vendor peak figure. ", h("a", { class: "lnk", href: "/methodology/hardware" }, "Method")));
+          h("tbody", {}, Object.entries(ms).map(([k, v]) => h("tr", { title: (v.unit || "") + (k1000(k) > 1 ? " · shown ×1,000: per PFLOP·h" : "") }, h("th", {}, LBL[k] || k), h("td", { class: "n dim" }, v.spec_value != null ? fmt.num(v.spec_value, v.spec_value >= 100 || Number.isInteger(v.spec_value) ? 0 : 2) : "–"),
+            v.low == null ? h("td", { class: "n", colspan: 2 }, OG.na(v.reason)) : [h("td", { class: "n" }, small(v.low * k1000(k))), h("td", { class: "n" }, small(v.median * k1000(k)))])))),
+          h("p", { class: "note" }, c.label, ". Price / vendor peak figure; spec in GB, TFLOPS or TB/s, FLOP rates priced per PFLOP·h. ", h("a", { class: "lnk", href: "/methodology/hardware" }, "Method")));
       }
 
       /* ---------- alternatives ---------- */
@@ -370,6 +383,8 @@ Nothing is computed here that the API does not state, except display arithmetic 
           reason: OG.reasonOf(r),
         }));
         const fin = rows.map(r => r.cheapest).filter(v => v != null), lo = Math.min(...fin), hi = Math.max(...fin);
+        const none = rows.filter(r => r.cheapest == null && !r.listings && !r.available);
+        const priced = rows.filter(r => !none.includes(r));
         regionBox.replaceChildren(OG.table({
           columns: [
             { key: "region", label: "Region group", fmt: v => v === "Unassigned" ? h("span", { class: "dim", title: "no location given, or a listing spanning several groups" }, "Unassigned") : h("b", {}, v) },
@@ -383,8 +398,9 @@ Nothing is computed here that the API does not state, except display arithmetic 
             { key: "available", label: "Available", num: true, hidden: !rows.some(r => r.available != null) },
             { key: "cmp", label: "", sort: false, csv: false, fmt: (v, r) => r.region === "Unassigned" ? "" : h("a", { class: "lnk dim", href: `/compare/${OG.slug(r.region)}-vs-${OG.slug(r.region === "US" ? "Europe" : "US")}?gpu=${slug}` }, "compare →") },
           ],
-          rows, sort: { key: "cheapest", dir: "asc" }, compact: true, csv: `opengrid-${slug}-regions.csv`,
-        }), h("p", { class: "note" }, OG.kindBadge("observed"), " Region groups from each listing's stated location; never guessed.", meta.as_of ? ` As of ${when(meta.as_of)}. ` : " ",
+          rows: priced, sort: { key: "cheapest", dir: "asc" }, compact: true, csv: `opengrid-${slug}-regions.csv`, empty: "No priced listing in any region group now.",
+        }), h("p", { class: "note" }, none.length ? [h("span", { class: "dim" }, "No listing now in: "), none.map(r => r.region).join(", "), ". "] : null,
+          OG.kindBadge("observed"), " Region groups from each listing's stated location; never guessed.", meta.as_of ? ` As of ${when(meta.as_of)}. ` : " ",
           h("a", { class: "lnk", href: "/heatmaps?kind=gpu-region-cheapest" }, "All regional heatmaps →")));
       }
 
@@ -584,11 +600,10 @@ Nothing is computed here that the API does not state, except display arithmetic 
         eventsBox.replaceChildren(OG.table({
           columns: [
             { key: "occurred_at", label: "When", fmt: v => fmt.dateTime(v) },
-            { key: "severity", label: "Sev", fmt: v => OG.badge(v, v === "major" ? "bad" : v === "notable" ? "warn" : "") , value: r => SEV_RANK[r.severity] },
+            { key: "severity", label: "Sev", fmt: v => h("span", { class: "sevt s-" + (v || "info") }, h("i", { class: "ev-sev s-" + (v || "info") }), v || "info"), value: r => SEV_RANK[r.severity] },
             { key: "type", label: "Type", cls: "dim", fmt: v => (v || "").replace(/_/g, " ") },
-            { key: "title", label: "Event", cls: "wrap" },
+            { key: "title", label: "Event", cls: "wrap", fmt: (v, r) => [v, r.kind && r.kind !== "observed" ? [" ", h("span", { class: "kind-t", title: "data kind" }, r.kind)] : null] },
             { key: "provider", label: "Provider", fmt: v => v ? OG.providerLink(v) : h("span", { class: "dim" }, "market") },
-            { key: "kind", label: "Kind", fmt: v => v ? OG.kindBadge(v) : "–" },
           ],
           rows, compact: true, limit: 15, empty: "No market events for this GPU at this severity.", csv: `opengrid-${slug}-events.csv`,
         }), h("p", { class: "note" }, h("a", { class: "lnk", href: "/events?gpu=" + slug }, "All events for this GPU →"), " · ", h("a", { class: "lnk", href: "/methodology/events" }, "How events are detected")));
@@ -600,7 +615,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
         const items = list(r);
         if (!items.length) { newsBox.replaceChildren(OG.empty("No news item mentioning this GPU has been ingested yet.")); return; }
         newsBox.replaceChildren(h("ul", { class: "gp-list gp-news" }, items.map(n => h("li", {},
-          h("span", { class: "mono dim" }, fmt.date(n.published_at)), OG.badge(n.trust_tier || "source", n.trust_tier === "official" ? "good" : ""),
+          h("span", { class: "mono dim" }, fmt.date(n.published_at)), h("span", { class: "tier-t t-" + (n.trust_tier || "source"), title: "source tier" }, n.trust_tier || "source"),
           h("span", {}, ext(n.url, n.title), h("span", { class: "dim" }, " · " + (n.source_name || n.source_id) + (n.source_count > 1 ? ` +${n.source_count - 1}` : "")))))),
           h("p", { class: "note" }, "Linked by mention of this GPU (inferred by rules). Appearing near a price move does not mean it caused it. ", h("a", { class: "lnk", href: "/news?gpu=" + slug }, "More →")));
       }
