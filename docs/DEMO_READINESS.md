@@ -45,3 +45,18 @@ provider until you run it.
 - **`/v1/jobs/readiness` shows platform gate status** to any key with `route:preview`.
 - **S3 artifact backend needs `boto3`,** which is not installed. Postgres storage is the default and is durable.
 - **The CPU training path can't produce a "succeeded" real job.** This is by design: success needs CUDA metrics.
+
+## Remaining work (after the demo)
+
+- **Transaction-based OpenGrid index (deferred on purpose).** Build it once real paid jobs exist: roughly a few dozen reconciled routed jobs across at least 3 providers and several customer accounts. Until then it could only say "not published", and it must never be filled with synthetic data.
+  - **No history is lost by waiting.** Every routed job is already stored as a reconciled transaction (provider-confirmed price, billed time, provider evidence), so the index can be backfilled from the first paid job.
+  - **Design notes for when it's built:**
+    - Inputs: customer launches only. Validation and sandbox runs are excluded.
+    - Price: the provider's price excluding OpenGrid's fee, weighted by GPU-hours.
+    - Publication: minimum counts of transactions, accounts and providers per window, else "not published" with the reason.
+    - Privacy: anonymised public evidence; full evidence for the administrator only.
+    - Fixings: the same hash-chained settlement ledger as the list-price fixings.
+    - Disclosure: state the selection bias (the router prefers cheaper listings).
+  - **Legal first:** ask derivatives counsel about customer consent and data rights for using anonymised transaction prices (docs/FUTURES_REGULATORY_PATH.md, action plan step 6).
+- **Futures path.** Scoping call with CFTC derivatives counsel; index oversight committee; independent IOSCO assurance (docs/FUTURES_REGULATORY_PATH.md §8).
+- **Publish the fixings ledger head externally** (e.g. a daily post), so the hash chain can prove history wasn't rewritten.
