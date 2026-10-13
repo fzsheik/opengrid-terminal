@@ -1,11 +1,14 @@
 /* /indices — the OpenGrid index board; /indices/:id — one index.
    Sources: /v1/indices (level + changes for every index with data in 90 days), /v1/indices/{id}
    (definition, level, changes with reasons, high/low, volatility, coverage, constituents),
-   /v1/indices/{id}/history (stored levels; unpublished hours carry their reason).
+   /v1/indices/{id}/history (stored levels; unpublished hours carry their reason), /v1/indices/{id}/fixings +
+   /v1/fixings/{fid}/verify (official settlement fixings of the settlement indices; methodology/settlement.md).
    Board rows lazily fetch /v1/indices/{id} (high/low/vol) and 7d history (sparkline) — the list
    endpoint does not carry them. Nothing is computed here except constituent weights in the
    statistic, which follow the stated method exactly (median / 20% trimmed mean; methodology/indices.md). */
 (() => {
+  // settlement fixings are referenced in UTC (the daily fixing is 00:00 UTC), never in local time
+  const fixUtc = t => t ? new Date(t).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "–";
   const { h, fmt } = OG;
   const FAMILIES = [
     ["composite", "Composites", "Base-100 composites: the overall GPU Compute Index and class indices. Not the price of any single SKU."],
@@ -39,6 +42,30 @@
     if (/^no eligible constituents at/.test(r)) return "no constituents this hour";
     if (/regions\.py/.test(r)) return "region grouping unavailable";
     return r.length > 44 ? r.slice(0, 42) + "…" : r;
+  }
+
+  /* ---- settlement fixings (official, immutable; analytics/settlement.py) ---- */
+  const FX_TONE = { final: "good", restated: "warn", not_published: "bad" };
+  const FX_LABEL = { final: "final", restated: "restated", not_published: "not published", provisional: "provisional" };
+  const fxStatus = f => OG.badge(FX_LABEL[f.status] || f.status, FX_TONE[f.status] || "",
+    f.status === "provisional" ? f.note : f.reason || (f.effective === false ? "superseded by a restatement" : "official fixing"));
+  function fxFlags(flags) {
+    const fl = (flags || []).filter(x => x.severity !== "info");
+    return fl.length ? h("span", {}, fl.map(x => OG.badge(x.code.replace(/_/g, " "), x.severity === "severe" ? "bad" : "warn", x.detail))) : h("span", { class: "dimmer" }, "–");
+  }
+  function verifyBtn(id) {
+    const out = h("span", {});
+    const b = h("button", { class: "chip", title: "Recompute the value from the stored inputs; check the input hash, row hash and chain links", onclick: async ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      b.disabled = true; out.replaceChildren(h("span", { class: "dim" }, " verifying…"));
+      try {
+        const v = await OG.api("/v1/fixings/" + encodeURIComponent(id) + "/verify", { nocache: true });
+        const failed = Object.entries(v.checks || {}).filter(([, ok]) => !ok).map(([k]) => k.replace(/_/g, " "));
+        out.replaceChildren(" ", OG.badge(v.ok ? "ok" : "mismatch", v.ok ? "good" : "bad", v.ok ? "recomputed value, input hash, row hash and chain links all match" : "failed: " + failed.join(", ")));
+      } catch (e) { out.replaceChildren(" ", OG.badge("error", "bad", e.message || String(e))); }
+      b.disabled = false;
+    } }, "Verify");
+    return h("span", {}, b, out);
   }
 
   /* lazy per-index extras for the board: detail (high/low/vol) + 7d hourly levels, cached 5 min */
@@ -247,6 +274,9 @@
       const consEl = h("div", {});
       const defEl = h("div", { class: "box box-p ix-def" });
       const relEl = h("div", { class: "box box-p ix-rel" });
+      const fixEl = h("div", {});
+      const fixSec = OG.section("Settlement fixings", fixEl);
+      fixSec.hidden = true;  // shown only for settlement indices
 
       root.replaceChildren(...[
         OG.head(h("span", { class: "ix-title" }, h("span", { class: "eyebrow" }, FAM_LABEL[d.kind] || d.kind), d.name, h("span", { class: "ix-id" }, d.id)),
@@ -259,7 +289,7 @@
         h("div", { class: "cols ix-cols" },
           h("div", {}, chartEl, stripEl, hoverEl, chartNote),
           h("div", {}, OG.section("Definition", defEl), OG.section("Related", relEl))),
-        OG.section(d.kind === "composite" ? "Components now" : "Constituents now", consEl)].filter(Boolean));
+        OG.section(d.kind === "composite" ? "Components now" : "Constituents now", consEl), fixSec].filter(Boolean));
 
       function statsStrip() {
         const c = d.changes || {}, v = d.volatility || {}, cov = d.coverage || {};
@@ -430,7 +460,44 @@
             h("td", { class: "n" }, r.published ? OG.chg(r.changes["24h"], { reason: r.change_reasons["24h"] }) : null))))));
       }
 
-      drawConstituents(); drawDef(); drawRelated();
+      /* ---- settlement fixings ---- */
+      async function drawFixings() {
+        const [daily, hourly] = await Promise.all([
+          OG.api.soft(`/v1/indices/${encodeURIComponent(id)}/fixings`, { params: { type: "daily", effective: "true", limit: 7 } }),
+          OG.api.soft(`/v1/indices/${encodeURIComponent(id)}/fixings`, { params: { type: "hourly", effective: "true", limit: 24 } })]);
+        if (!ctx.alive() || !daily || !daily.settlement_index) return;
+        fixSec.hidden = false;
+        const rows = [...(daily.fixings || []), ...((hourly && hourly.fixings) || [])];
+        const latestOf = t => rows.find(f => f.fixing_type === t);
+        const lv = f => (f && f.value != null ? yf(f.value) : null);
+        const ld = latestOf("daily"), lh = latestOf("hourly");
+        const strip = OG.stats([
+          { label: "Daily settlement", value: lv(ld), reason: ld ? ld.reason : "no daily fixing yet", sub: ld ? "TWAP · " + fixUtc(ld.fixing_time) : null, kind: "observed" },
+          { label: "Daily status", value: ld ? fxStatus(ld) : null, reason: "no daily fixing yet", sub: ld && ld.flags.length ? ld.flags.length + " flag" + (ld.flags.length === 1 ? "" : "s") : null },
+          { label: "Latest hourly fixing", value: lv(lh), reason: lh ? lh.reason : "no hourly fixing yet", sub: lh ? fixUtc(lh.fixing_time) : null },
+          { label: "Hourly status", value: lh ? fxStatus(lh) : null, reason: "no hourly fixing yet" },
+        ]);
+        if (!rows.length) { fixEl.replaceChildren(strip, OG.empty("No fixing taken yet: an hour is fixed only once the rollup can no longer revise it (≈5 h).")); return; }
+        fixEl.replaceChildren(strip, OG.table({
+          rows, compact: true, rowKey: r => r.fixing_id, csv: `opengrid-${id}-fixings.csv`, sort: { key: "fixing_time", dir: "desc" },
+          title: `Official fixings · ${(daily.fixings || []).length} daily, ${((hourly && hourly.fixings) || []).length} hourly (latest, effective)`,
+          rowClass: r => (r.status === "not_published" ? "out" : ""),
+          columns: [
+            { key: "fixing_time", label: "Fixing time", value: r => +new Date(r.fixing_time), csv: r => r.fixing_time, fmt: (v, r) => h("span", { class: "mono" }, fixUtc(r.fixing_time)) },
+            { key: "fixing_type", label: "Type", fmt: v => (v === "daily" ? h("b", {}, "daily") : "hourly") },
+            { key: "value", label: isPts ? "Value" : "$/GPU·h", num: true, fmt: (v, r) => (v == null ? OG.na(r.reason) : h("b", {}, yf(v))) },
+            { key: "status", label: "Status", csv: r => r.status, fmt: (v, r) => h("span", {}, fxStatus(r), r.restates ? h("span", { class: "dim", title: "restates " + r.restates }, " correction") : null) },
+            { key: "flags", label: "Flags", sort: false, csv: r => (r.flags || []).map(x => x.code).join(" "), fmt: v => fxFlags(v) },
+            { key: "methodology_version", label: "Method v.", cls: "dim", fmt: (v, r) => `${v} · ${r.settlement_version}` },
+            { key: "fixing_id", label: "Evidence", sort: false, csv: r => r.fixing_id, fmt: v => h("a", { class: "lnk mono", href: "/v1/fixings/" + encodeURIComponent(v), target: "_blank", rel: "noopener", title: "full inputs, constituent snapshot and raw-snapshot evidence (JSON)" }, v.slice(0, 11) + "…") },
+            { key: "verify", label: "", sort: false, csv: false, fmt: (v, r) => verifyBtn(r.fixing_id) },
+          ] }),
+          h("p", { class: "note" }, OG.kindBadge("observed"), " Official fixings are taken only after an hour can no longer be revised, never change, and carry every input their value is recomputed from. The daily settlement is the TWAP of the day's hourly fixings. Corrections are new 'restated' rows; ",
+            h("a", { class: "lnk", href: "/v1/fixings/restatements", target: "_blank", rel: "noopener" }, "all restatements"), " · ",
+            h("a", { class: "lnk", href: "/methodology/settlement" }, "Settlement methodology →")));
+      }
+
+      drawConstituents(); drawDef(); drawRelated(); drawFixings();
       loadHistory();
       ctx.every(300000, async () => { const nd = await OG.api.soft("/v1/indices/" + encodeURIComponent(id)); if (nd && ctx.alive()) { d = nd; drawConstituents(); } loadHistory(); });
     },

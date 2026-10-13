@@ -52,6 +52,7 @@ def deduplicate_batch(batch: int = 250) -> int:
 # Keep the complete newest successful round (Salad has many per-class responses),
 # and the newest attempt, even for providers that have been offline for months.
 # Unprocessed schema-watch rows are also protected until its cursor passes them.
+# Snapshots an official index fixing was computed from are evidence: kept forever (methodology/settlement.md).
 _CANDIDATES = """
 WITH latest AS (
     SELECT provider, endpoint, max(fetched_at) AS last_fetch,
@@ -63,6 +64,7 @@ WHERE r.fetched_at < :cutoff
   AND r.fetched_at < l.last_fetch - interval '120 seconds'
   AND (l.last_ok IS NULL OR r.fetched_at < l.last_ok - interval '120 seconds' OR r.fetched_at > l.last_ok)
   AND r.id <= coalesce((SELECT position FROM quality_cursor WHERE name = 'schema_watch'), 9223372036854775807)
+  AND NOT EXISTS (SELECT 1 FROM fixing_evidence e WHERE e.snapshot_id = r.id)
 """
 
 
@@ -90,7 +92,7 @@ def retention_batch(now: datetime, batch: int = 1000) -> dict:
             DELETE FROM raw_payloads WHERE sha256 IN (
                 SELECT p.sha256 FROM raw_payloads p WHERE NOT EXISTS (
                     SELECT 1 FROM raw_snapshots r WHERE r.payload_hash = p.sha256
-                ) LIMIT :batch
+                ) AND NOT EXISTS (SELECT 1 FROM fixing_evidence e WHERE e.payload_sha256 = p.sha256) LIMIT :batch
             )"""), {"batch": batch}).rowcount
     return result
 
