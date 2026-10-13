@@ -1,9 +1,9 @@
 """Clouds with no API of their own, read through Shadeform's public catalogue.
 
 Shadeform resells other clouds' capacity and publishes every instance type, with
-its real cloud named in `cloud`, from one anonymous endpoint. Crusoe, Latitude.sh
-and Denvr have no usable public API of their own, so each is read from here and
-labelled "via-shadeform". The prices are Shadeform's listing of them, not the
+its real cloud named in `cloud`, from one anonymous endpoint. Crusoe, Latitude.sh,
+Denvr and Boost Run have no usable public price feed of their own, so each is
+read from here and labelled "via-shadeform". The prices are Shadeform's listing of them, not the
 cloud's own page: where we can compare (Hyperstack, DigitalOcean, Voltage Park)
 they match, and where a cloud has just repriced Shadeform can lag.
 
@@ -147,3 +147,10 @@ class LatitudeProvider(ShadeformCloud):
 class DenvrProvider(ShadeformCloud):
     name = "denvr"
     cloud = "denvr"
+
+
+class BoostRunProvider(ShadeformCloud):
+    # Boost Run publishes no prices of its own; Shadeform's cloud directory names it
+    # ("Boost Run", boostrun.com, a GPU cloud selling its own NVIDIA servers).
+    name = "boostrun"
+    cloud = "boostrun"

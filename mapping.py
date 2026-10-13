@@ -607,6 +607,173 @@ def _shadeform(provider: str, display: str, extra_quirks: list[str]) -> Provider
 CRUSOE = _shadeform("crusoe", "Crusoe", ["Several sizes of one GPU share a name; prices differ by size and fabric."])
 LATITUDE = _shadeform("latitude", "Latitude.sh", ['"RTXPro6000" hides a server/workstation variant and stays unmapped.'])
 DENVR = _shadeform("denvr", "Denvr", ["Includes Intel Gaudi 2, which has no NVIDIA equivalent to compare against."])
+BOOSTRUN = _shadeform("boostrun", "Boost Run", [
+    "Every type is an 8-GPU bare-metal node; the per-GPU rate is the node price / 8.",
+    'Its RTX 6000 Ada type is tagged "sxm5" by Shadeform (a PCIe card), so "RTX6000Ada sxm5" stays unmapped.',
+])
+
+
+COREWEAVE = ProviderMapping(
+    provider="coreweave",
+    display_name="CoreWeave",
+    endpoints={"GET /pricing": "the public price page; one GPU instance table per region"},
+    fields=_fields(
+        "coreweave",
+        sku=(DERIVED, "{GPU Model}:{GPU Count}x"),
+        listing_id=(DERIVED, "{model slug}:{count}x:{region slug}[:spot]", "one on-demand and one spot listing per row"),
+        raw_gpu_name=(DERIVED, "GPU Model + VRAM column", 'e.g. "NVIDIA HGX H100 80GB"; "(High|Standard) Memory" dropped'),
+        gpu_count=(RAW, "GPU Count", '"4^1" (footnote) reads as 4'),
+        region=(RAW, "the table's REGION heading", '"North America" or "Europe": a continent'),
+        country=(ABSENT, "-", "a continent is not a country"),
+        price_per_gpu_hour=(DERIVED, "= instance price / GPU Count"),
+        price_per_instance_hour=(RAW, "On-Demand Price | Spot Price", "per whole instance, per hour"),
+        market_type=(DERIVED, "On-Demand Price -> on_demand, Spot Price -> spot"),
+        provider_tier=(ABSENT, "-"),
+        interruptible=(DERIVED, "= (market_type == spot)"),
+        available=(ABSENT, "-", "the page says nothing about stock"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, "vCPUs"),
+        ram_gb=(RAW, "System RAM (GB)"),
+        storage_gb=(DERIVED, "Local Storage (TB) x 1024", "the page defines 1 TB = 1024 GB"),
+    ),
+    quirks=[
+        "Prices are for the whole instance (8 GPUs on most rows); the per-GPU rate divides by GPU Count.",
+        "Each row is printed twice (desktop grid, labelled mobile block). Both are read; a row whose "
+        "two copies disagree on count, VRAM or a price is skipped, never guessed.",
+        '"Contact sales" cells (GB300 NVL72, and B300 / one RTX PRO 6000 row on demand) have no price.',
+        '"Inference Single GPU Price" is for CoreWeave inference-platform customers only and is not read.',
+        '"NVIDIA A100" does not say SXM4 or PCIe and stays unmapped; GB200 NVL72 has no canonical name yet.',
+        "Scraped from page HTML. A reshaped page fails the poll rather than recording nothing.",
+    ],
+)
+
+
+TOGETHER = ProviderMapping(
+    provider="together",
+    display_name="Together AI (GPU Clusters)",
+    endpoints={"GET /pricing": "the public price page; the GPU Clusters per-GPU table"},
+    fields=_fields(
+        "together",
+        sku=(RAW, "Hardware", 'e.g. "NVIDIA HGX H100"'),
+        listing_id=(DERIVED, "{hardware slug}[:preemptible]"),
+        raw_gpu_name=(RAW, "Hardware"),
+        gpu_count=(CONSTANT, "1", "the table prices one GPU-hour"),
+        region=(ABSENT, "-", "no region on the page"),
+        country=(ABSENT, "-"),
+        price_per_gpu_hour=(RAW, "ON-Demand | Preemptible Compute column", '"All prices are per GPU per hour"'),
+        price_per_instance_hour=(DERIVED, "= price_per_gpu_hour", "single GPU"),
+        market_type=(DERIVED, "ON-Demand -> on_demand, Preemptible Compute -> spot"),
+        provider_tier=(CONSTANT, '"gpu-cluster"'),
+        interruptible=(DERIVED, "= (market_type == spot)", "preemptible capacity can be reclaimed"),
+        available=(ABSENT, "-", "the page says nothing about stock"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(ABSENT, "-"),
+        ram_gb=(ABSENT, "-"),
+        storage_gb=(ABSENT, "-"),
+    ),
+    quirks=[
+        "Only the two pay-as-you-go columns are read; the four Reserved terms are commitments.",
+        "The page states no node size, so a listing is one GPU at the printed rate (the Nebius convention).",
+        "Inference, fine-tuning and sandbox prices on the same page are not GPU rental and are ignored.",
+        "Scraped from page HTML; the extractor requires the 'per GPU per hour' statement and the column layout.",
+    ],
+)
+
+
+JARVISLABS = ProviderMapping(
+    provider="jarvislabs",
+    display_name="Jarvislabs",
+    endpoints={"GET /pricing": "the public price page; the On-Demand desktop table"},
+    fields=_fields(
+        "jarvislabs",
+        sku=(DERIVED, "{GPU}:1x"),
+        listing_id=(DERIVED, "{GPU slug}:1x"),
+        raw_gpu_name=(DERIVED, "GPU + VRAM column", 'e.g. "NVIDIA H100 SXM 80GB"; a name with GB in it is kept'),
+        gpu_count=(CONSTANT, "1", "the page renders the 1x configuration (checked)"),
+        region=(ABSENT, "-", "no region on the page"),
+        country=(ABSENT, "-"),
+        price_per_gpu_hour=(RAW, "Price, labelled 'On-demand · /hr'", "section headed 'per GPU pricing'"),
+        price_per_instance_hour=(DERIVED, "= price_per_gpu_hour", "single GPU"),
+        provider_tier=(ABSENT, "-"),
+        available=(ABSENT, "-", "the page says nothing about stock"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, "vCPU column", "for the 1x configuration"),
+        ram_gb=(RAW, "RAM column", "for the 1x configuration"),
+        storage_gb=(ABSENT, "-"),
+    ),
+    quirks=[
+        "The extractor fails the poll if the rendered configuration is not 1x or the price is not on-demand.",
+        "Spot and reserved tabs are filled in by JavaScript and are not read.",
+        '"A100 80GB" (SXM4 or PCIe?) and "RTX Pro 6000 Blackwell" (which edition?) stay unmapped.',
+    ],
+)
+
+
+HOTAISLE = ProviderMapping(
+    provider="hotaisle",
+    display_name="Hot Aisle",
+    endpoints={"GET /pricing": "the public price page; one card per plan"},
+    fields=_fields(
+        "hotaisle",
+        sku=(DERIVED, "{GPU}:{n}x:vm"),
+        listing_id=(DERIVED, "{gpu}:{n}x:vm", "one listing per GPU count on a VM card"),
+        raw_gpu_name=(DERIVED, '"AMD " + card GPU, upper-cased', 'e.g. "AMD MI300X"'),
+        gpu_count=(RAW, "card counts", '"2x & 4x" gives two listings'),
+        region=(ABSENT, "-", "the page names a Michigan facility, not a region code"),
+        country=(DERIVED, '"US" while the page still names its Michigan facility'),
+        price_per_gpu_hour=(RAW, "card price", 'printed "$2.99/GPU/hr"'),
+        price_per_instance_hour=(DERIVED, "= price_per_gpu_hour x n"),
+        provider_tier=(CONSTANT, '"vm"'),
+        available=(ABSENT, "-", "the page says nothing about stock"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(ABSENT, "-", "printed as ranges ('8 or 13 CPU Cores')"),
+        ram_gb=(ABSENT, "-"),
+        storage_gb=(ABSENT, "-"),
+    ),
+    quirks=[
+        "Only VM cards are read. The 8x bare-metal card says 'billed by the minute' while the page's own "
+        "meta description calls it 'monthly terms', so whether it is on-demand is unclear and it is skipped.",
+        "AMD Instinct only (MI300X today).",
+    ],
+)
+
+
+VULTR = ProviderMapping(
+    provider="vultr",
+    display_name="Vultr",
+    endpoints={
+        "GET /v2/plans?type=vcg": "Cloud GPU VM plans; anonymous",
+        "GET /v2/plans-metal": "bare-metal plans; anonymous; GPU ones carry gpu_type",
+    },
+    fields=_fields(
+        "vultr",
+        sku=(RAW, "plans[].id", 'e.g. "vcg-l40s-16c-180g-48vram"'),
+        listing_id=(RAW, "plans[].id"),
+        raw_gpu_name=(RAW, "plans[].gpu_type", 'e.g. "NVIDIA_L40S"'),
+        gpu_count=(RAW, "plans[].gpu_count"),
+        region=(RAW, "plans[].locations joined", "None when the list is empty"),
+        country=(ABSENT, "-", "location ids are not countries"),
+        price_per_gpu_hour=(DERIVED, "= hourly_cost / gpu_count"),
+        price_per_instance_hour=(RAW, "plans[].hourly_cost", "the whole plan"),
+        provider_tier=(DERIVED, '"vm" | "bare-metal" by endpoint'),
+        available=(ABSENT, "-", "locations is where a plan is offered, not live stock"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, "vcpu_count (VM) | cpu_threads (metal)"),
+        ram_gb=(DERIVED, "ram / 1024", "ram is in MB"),
+        storage_gb=(DERIVED, "disk x disk_count"),
+    ),
+    quirks=[
+        "Only plans with deploy_ondemand true are read. Every GPU bare-metal plan seen (H100, B200, "
+        "MI300X, MI325X, MI355X, L40S, GH200) says false, so they produce no listing.",
+        "A general-purpose cloud: never part of a neocloud index.",
+        "Vultr is also in Shadeform's catalogue; it is read from its own API only (never both).",
+    ],
+)
 
 
 PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
@@ -615,7 +782,8 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         SALAD, HYPERSTACK, LAMBDA, RUNPOD,
         HYPERBOLIC, VOLTAGEPARK, LIUM, VAST, NEBIUS, MASSEDCOMPUTE,
         DIGITALOCEAN, AWS,
-        VERDA, CRUSOE, LATITUDE, DENVR,
+        VERDA, CRUSOE, LATITUDE, DENVR, BOOSTRUN,
+        COREWEAVE, TOGETHER, JARVISLABS, HOTAISLE, VULTR,
     )
 }  # fmt: skip
 

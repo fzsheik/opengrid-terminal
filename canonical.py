@@ -239,6 +239,32 @@ _add("NVIDIA H100 80GB PCIe", "H100 pcie")
 _add("NVIDIA H100 80GB PCIe NVLink", "H100 pcie nvlink")
 _add("NVIDIA GH200 96GB", "GH200 pcie")
 _add("Intel Gaudi 2 96GB", "GAUDI2 pcie")
+# Boost Run as listed by Shadeform: its H200/B200 types are named "..._sxm5x8"/"..._sxm6x8".
+_add("NVIDIA H200 141GB SXM5", "H200 sxm")
+_add("NVIDIA B200 180GB SXM", "B200 sxm")
+
+# --------------------------------------------------------------------------
+# CoreWeave, Jarvislabs, Hot Aisle (public price pages). The normalizers append
+# the page's printed per-GPU VRAM, so a name here carries its memory figure.
+# "HGX" is NVIDIA's SXM baseboard, so HGX H100/H200/B200/B300 are the SXM parts.
+# CoreWeave's B300 prints 270GB (usable) for the 288GB card, as Verda's 268GB does.
+# CoreWeave's "(High|Standard) Memory" RTX PRO 6000 rows differ in system RAM only;
+# the suffix is stripped and the card is the Server Edition the name says.
+# Left unmapped on purpose: "NVIDIA A100 80GB" (CoreWeave and Jarvislabs: SXM4 or
+# PCIe not stated), "NVIDIA A100 40GB", "NVIDIA RTX Pro 6000 Blackwell 96GB"
+# (Jarvislabs: Workstation, Max-Q or Server Edition not stated), "NVIDIA A30 24GB"
+# (no canonical A30 yet) and "NVIDIA GB200 NVL72 186GB" (no canonical GB200 yet).
+# --------------------------------------------------------------------------
+_add("NVIDIA H100 80GB SXM5", "NVIDIA HGX H100 80GB", "NVIDIA H100 SXM 80GB")
+_add("NVIDIA H200 141GB SXM5", "NVIDIA HGX H200 141GB", "NVIDIA H200 SXM 141GB")
+_add("NVIDIA B200 180GB SXM", "NVIDIA HGX B200 180GB")
+_add("NVIDIA B300 288GB SXM", "NVIDIA HGX B300 270GB")
+_add("NVIDIA L40S 48GB", "NVIDIA L40S 48GB")
+_add("NVIDIA L40 48GB", "NVIDIA L40 48GB")
+_add("NVIDIA GH200 96GB", "NVIDIA GH200 96GB")
+_add("NVIDIA RTX PRO 6000 96GB SE", "NVIDIA RTX PRO 6000 Blackwell Server Edition 96GB")
+_add("NVIDIA L4 24GB", "NVIDIA L4 24GB")
+_add("AMD Instinct MI300X 192GB", "AMD MI300X")
 
 # --------------------------------------------------------------------------
 # Seen, deliberately not mapped

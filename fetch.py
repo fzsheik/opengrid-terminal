@@ -10,6 +10,12 @@ from db import SessionLocal, init_db
 from models import RawResponse
 from providers import (
     AwsProvider,
+    BoostRunProvider,
+    CoreWeaveProvider,
+    HotAisleProvider,
+    JarvislabsProvider,
+    TogetherProvider,
+    VultrProvider,
     CrusoeProvider,
     DenvrProvider,
     DigitalOceanProvider,
@@ -70,6 +76,12 @@ def build_fetchers() -> list[Provider]:
             CrusoeProvider,
             LatitudeProvider,
             DenvrProvider,
+            BoostRunProvider,
+            CoreWeaveProvider,
+            TogetherProvider,
+            JarvislabsProvider,
+            HotAisleProvider,
+            VultrProvider,
         )
     )
     return fetchers

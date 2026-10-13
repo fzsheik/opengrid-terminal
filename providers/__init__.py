@@ -12,19 +12,24 @@ from providers.base import (
     to_decimal,
 )
 from providers.aws import AwsProvider
+from providers.coreweave import CoreWeaveProvider
 from providers.digitalocean import DigitalOceanProvider
+from providers.hotaisle import HotAisleProvider
 from providers.hyperbolic import HyperbolicProvider
 from providers.hyperstack import HyperstackProvider
+from providers.jarvislabs import JarvislabsProvider
 from providers.lambda_labs import LambdaProvider
 from providers.lium import LiumProvider
 from providers.massedcompute import MassedComputeProvider
 from providers.nebius import NebiusProvider
 from providers.runpod import RunPodProvider
 from providers.salad import SaladProvider
-from providers.shadeform import CrusoeProvider, DenvrProvider, LatitudeProvider
+from providers.shadeform import BoostRunProvider, CrusoeProvider, DenvrProvider, LatitudeProvider
+from providers.together import TogetherProvider
 from providers.vast import VastProvider
 from providers.verda import VerdaProvider
 from providers.voltagepark import VoltageParkProvider
+from providers.vultr import VultrProvider
 
 PROVIDERS: dict[str, type[Provider]] = {
     cls.name: cls
@@ -45,6 +50,12 @@ PROVIDERS: dict[str, type[Provider]] = {
         CrusoeProvider,
         LatitudeProvider,
         DenvrProvider,
+        BoostRunProvider,
+        CoreWeaveProvider,
+        TogetherProvider,
+        JarvislabsProvider,
+        HotAisleProvider,
+        VultrProvider,
     )
 }
 
@@ -68,6 +79,12 @@ __all__ = [
     "CrusoeProvider",
     "LatitudeProvider",
     "DenvrProvider",
+    "BoostRunProvider",
+    "CoreWeaveProvider",
+    "TogetherProvider",
+    "JarvislabsProvider",
+    "HotAisleProvider",
+    "VultrProvider",
     "find_endpoint",
     "gather_limited",
     "to_decimal",

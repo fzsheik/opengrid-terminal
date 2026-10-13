@@ -53,6 +53,18 @@ _ALL = [
     ProviderMeta("crusoe", "Crusoe", "neocloud", "aggregator", "api.shadeform.ai", "https://crusoe.ai", "prices as listed by Shadeform"),
     ProviderMeta("latitude", "Latitude.sh", "neocloud", "aggregator", "api.shadeform.ai", "https://www.latitude.sh", "prices as listed by Shadeform"),
     ProviderMeta("denvr", "Denvr", "neocloud", "aggregator", "api.shadeform.ai", "https://www.denvr.com", "prices as listed by Shadeform"),
+    ProviderMeta("boostrun", "Boost Run", "neocloud", "aggregator", "api.shadeform.ai", "https://boostrun.com",
+                 "prices as listed by Shadeform"),
+    ProviderMeta("coreweave", "CoreWeave", "neocloud", "public_page", "www.coreweave.com", "https://www.coreweave.com",
+                 "on-demand and spot instance prices; per-GPU rate = instance price / GPU count"),
+    ProviderMeta("together", "Together AI", "neocloud", "public_page", "www.together.ai", "https://www.together.ai",
+                 "GPU Clusters on-demand and preemptible rates, printed per GPU-hour"),
+    ProviderMeta("jarvislabs", "Jarvislabs", "neocloud", "public_page", "jarvislabs.ai", "https://jarvislabs.ai",
+                 "on-demand 1x prices, printed per GPU-hour"),
+    ProviderMeta("hotaisle", "Hot Aisle", "neocloud", "public_page", "hotaisle.xyz", "https://hotaisle.xyz",
+                 "AMD-only; MI300X VM prices per GPU-hour"),
+    ProviderMeta("vultr", "Vultr", "general_cloud", "public_api", "api.vultr.com", "https://www.vultr.com",
+                 "only plans Vultr marks deployable on demand"),
 ]
 
 PROVIDER_META: dict[str, ProviderMeta] = {m.name: m for m in _ALL}
