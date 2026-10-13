@@ -21,6 +21,7 @@ important — what it deliberately does not claim.
 4. [Market intelligence](#4-market-intelligence)
 5. [News & external signals](#5-news--external-signals)
 6. [Execution layer: routing & provisioning](#6-execution-layer-routing--provisioning)
+   - [Training jobs (OpenGrid Jobs)](#6a-training-jobs-opengrid-jobs)
 7. [Reconciliation, billing & cost accounting](#7-reconciliation-billing--cost-accounting)
 8. [Routing quality, reliability & economics](#8-routing-quality-reliability--economics)
 9. [Design partners, onboarding & product analytics](#9-design-partners-onboarding--product-analytics)
@@ -354,6 +355,31 @@ in the last 7 days, healthy reconciliation and tracker jobs, a delivered ops tes
 cycle — launch, observed running, found by name, terminated with two-signal confirmation, cost
 reconciled — must have evidence before the provider is marked validated.
 
+## 6a. Training jobs (OpenGrid Jobs)
+
+One real workload end to end: **"Train Your First AI Model — PyTorch MNIST"** (allowlisted template
+`pytorch-mnist`; no arbitrary commands, code or dataset URLs). Runbook: `docs/FIRST_TRAINING_JOB.md`.
+
+- **Workload-aware selection** (`workloads/`): the template declares requirements (NVIDIA CUDA, ≥ 8 GB VRAM,
+  sm 7.0–9.0 for the pinned torch 2.4.1 / CUDA 12.1 build, 1 GPU, on-demand only). `gpu: auto` ranks every
+  eligible GPU with the existing scorer and shows two views: **market best** (best observed listing) and
+  **execution-ready** (what OpenGrid can really run now), with alternatives, exclusions and exact blockers.
+- **Jobs** (`jobs/`, `api/jobs.py`, migration `0017_jobs`): a job is the workload and its outcome; the deployment
+  is the cloud resource. Submit (Idempotency-Key) reuses the existing route → quote → **supervised approval**
+  (`POST /v1/route/{rr}/approve`) → launch → terminate → reconcile path. An explicit job state machine
+  (created … training … reconciled, plus every failure / uncertain state) with outcome and resource
+  disposition kept separate; `job_sync` every 30 s rebuilds state after restarts.
+- **Runner** (`runner/`): a cloud-init bootstrap (≈ 197 KB) installs hash-locked torch 2.4.1+cu121, checks
+  nvidia-smi and CUDA, trains a small CNN, uploads `model.pt`, `config.json`, `metrics.json`, `env.json`,
+  `manifest.json` (sha256-verified) and calls back with a per-job HMAC-derived token (never stored).
+  OpenGrid, not the instance, terminates the GPU.
+- **Results**: website `/jobs`, `/jobs/new`, `/jobs/{id}` (lifecycle + deployment strips, live loss / accuracy,
+  logs, 12 evidence-backed verification checks, artifacts download, four cost numbers); API logs / metrics /
+  artifacts; Discord `#opengrid-deployments`. Artifacts live in Postgres (optional S3 backend).
+- **Sandbox**: `sandbox: true` runs a fully SIMULATED lifecycle (no provider, no spend), labelled everywhere.
+- **Status**: built and tested against a fake Lambda API and a real local GPU; **no real Lambda job has run
+  yet**. A real job needs the Lambda validation run, then `supervised_enabled` on Lambda.
+
 ---
 
 ## 7. Reconciliation, billing & cost accounting
@@ -595,7 +621,7 @@ automatically at startup. The app **refuses to start in production** without `AP
 - **Market intelligence**: live in production; window statistics (7d/30d/90d) fill in as history
   accumulates.
 - **Execution**: built, hardened, and independently reviewed; **all adapters are still
-  simulated**. The next step is one supervised **Lambda validation run** (≈ $1 realistic, ≤ $1.85
+  simulated**. Training jobs (§6a) are built and tested but have not run on a real GPU provider yet. The next step is one supervised **Lambda validation run** (≈ $1 realistic, ≤ $1.85
   worst case with the operator abort rule). Customer routes follow only after validation.
 - Not implemented (deliberately): real payment processing, email alerts, AWS/Nebius/Massed
   Compute provisioning (need IAM/partner access), workload-performance benchmarks.
