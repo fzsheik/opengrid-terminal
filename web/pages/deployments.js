@@ -57,6 +57,7 @@
       const raw = sa ? String(sa.operator_access || "none") : null;
       let key, keyTone = null, missingKey = false;
       if (validation) key = "none (validation launch on OpenGrid's account)";
+      else if (o.ephemeral) key = `ephemeral, private half discarded: nobody can SSH in${sa && sa.customer_key_fingerprint ? " · " + sa.customer_key_fingerprint : ""}`;
       else if (sa && sa.customer_key_fingerprint) key = sa.customer_key_fingerprint;
       else if (o.keyRef) key = `provider key name "${o.keyRef}" (your own BYO account; no fingerprint)`;
       else { key = "MISSING — no SSH public key on this request"; keyTone = "bad"; missingKey = true; }
@@ -69,7 +70,7 @@
         const m = raw.match(/^provider_forced_account_key:override_by:(.+)$/);
         op = m ? `${raw} — provider-forced account key, override by ${m[1]}` : raw;
       }
-      const lines = [{ label: "Customer supplied key", value: key, tone: keyTone }, { label: "OpenGrid operator access", value: op, tone: opTone }];
+      const lines = [{ label: o.ephemeral ? "Instance SSH key" : "Customer supplied key", value: key, tone: keyTone }, { label: "OpenGrid operator access", value: op, tone: opTone }];
       return { lines, missingKey, needsOverride, validation, text: ["SSH access:"].concat(lines.map(l => `${l.label}: ${l.value}`)).join("\n") };
     },
     // the red banner: past the deadline while an instance may exist, or an uncertain state

@@ -113,6 +113,30 @@ OG.page("/gpu/:slug", {
   (`?account=<id>` operator preview), `/admin/execution`, `/admin/checklist`, `/admin/partners`, `/admin/value`.
   Tests: `node tests/test_web_exec.js`.
 
+## Jobs (`pages/jobs.js`, `pages/job.js`; nav Execute → Jobs; commands `j`, `j new`)
+
+A JOB is the workload and its outcome; a DEPLOYMENT is the cloud resource. Both states are always shown, never merged.
+
+- `/jobs` — `GET /v1/jobs`: name, id, template, state, outcome, provider, GPU, created, runtime, est. max, actual
+  (reconciled transaction only), SIMULATED / real; the "Train Your First AI Model — PyTorch MNIST" CTA.
+- `/jobs/new` — templates from `GET /v1/jobs/templates` (config_schema bounds, limits_bounds, preset); the MNIST preset
+  (founder's defaults); client validation mirroring `workloads/spec.py`; optional SSH public key (empty = ephemeral key,
+  private half discarded: nobody can SSH in); Sandbox ("SIMULATED — no GPU, no spend"); readiness from
+  `GET /v1/jobs/readiness`. **Preview route** = `POST /v1/jobs/preview`: three separate views — MARKET RECOMMENDATION
+  (`market_best`, information only), EXECUTION-READY ROUTE (`execution_ready`), SANDBOX — plus the estimate (typical /
+  max, billed minutes, billing unit, basis), why it won (score breakdown), alternatives, exclusions, ineligible GPUs,
+  `submission` and a BLOCKERS box with links (global first, then per provider). **Submit** = `POST /v1/jobs` (one
+  Idempotency-Key per intent) after a dialog stating the max cost exposure, the runtime ceiling and that approval is
+  required. A real job cannot be submitted without an execution-ready route.
+- `/jobs/:id` — `GET /v1/jobs/{id}` polled every 4 s until `finished`: header, SIMULATED banner, job lifecycle strip
+  (sandbox: its shorter flow) + the deployment's own strip (`GET /v1/deployments/{id}`), approval block (admins approve on
+  the existing ticket `/route?rr=…`; no second approval path), progress + loss / accuracy charts from `/metrics` only,
+  cursor-paged logs (`?after=<id>`, filter, auto-scroll), the 12 checks (✓ only with evidence; sandbox shows `~
+  simulated`, never ✓), artifacts (`/artifacts/{name}`, sha256, size), termination evidence, the four cost numbers,
+  events, request, routing decision, Cancel (`POST /v1/jobs/{id}/cancel`, Idempotency-Key, confirmed).
+- Pure helpers on `OG.jobs` (state tones / strip / terminal rule, preset, validate, views, blocker actions, checks,
+  metricPoints, logPage, summary, usd): `node tests/test_web_jobs.js`.
+
 ## Charts (`OG.charts`, pure SVG; each returns `{el, update(partialOpts), destroy()}`)
 
 - `timeseries(el, {times: [iso], series: [{key, label, values, color, step = true, width, dash, opacity, halo, strong}],
