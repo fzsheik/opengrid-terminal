@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     rate_limit_execute_per_minute: int = 10
     # How long per-request API key usage rows are kept.
     api_usage_retention_days: int = 90
+    # Raw bodies are diagnostic data; normalized market/billing history is retained.
+    raw_payload_retention_days: int = Field(default=30, ge=1)
+    raw_snapshot_retention_days: int = Field(default=90, ge=1)
+    news_fetch_retention_days: int = Field(default=90, ge=1)
     # Alert webhooks to private / loopback addresses are refused unless this is set (dev only).
     alerts_webhook_allow_private: bool = False
     # ---- security (methodology/security.md) ----
@@ -134,6 +138,12 @@ class Settings(BaseSettings):
     product_events_per_minute: int = 60
     # How often the route_outcomes / product server-events jobs recompute (seconds).
     metrics_recompute_seconds: int = 300
+
+    @model_validator(mode="after")
+    def _raw_retention_order(self):
+        if self.raw_snapshot_retention_days < self.raw_payload_retention_days:
+            raise ValueError("RAW_SNAPSHOT_RETENTION_DAYS must be at least RAW_PAYLOAD_RETENTION_DAYS")
+        return self
 
     @field_validator("database_url")
     @classmethod

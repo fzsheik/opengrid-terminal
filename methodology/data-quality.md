@@ -137,12 +137,27 @@ error / status / ok columns only when such columns exist, and the rule used is r
   tens of millions of rows per year, comfortably served by B-tree indexes. Revisit when
   raw ingest or per-poll sampling makes a single table exceed a few hundred million rows,
   or when retention needs chunk-level drops.
-- **Raw payload retention.** `raw_snapshots` is the largest table (whole JSON bodies) and
-  is the one that needs a policy. Options, in order of preference: (1) keep every row's
-  metadata but move payloads older than N days to object storage (S3/R2) as compressed
-  daily NDJSON per provider, keyed by snapshot id and sha256, leaving `payload` NULL with
-  an archive pointer; (2) since `sha256` is stored, deduplicate identical bodies (many
-  polls return the same body) by keeping one payload per (provider, endpoint, sha256);
-  (3) declarative range partitioning of `raw_snapshots` by month so old months can be
-  detached and archived whole. Re-normalizing old history then reads from the archive.
-  None of these is implemented: no raw data is deleted today.
+- **Raw storage.** `raw_payloads` stores one immutable JSON body per SHA-256 content
+  hash. `raw_snapshots` keeps every fetch's timestamp, provider, endpoint, request,
+  status, error, latency and body hash; identical responses share the stored body.
+  Request bodies are kept separately, so Salad's per-class requests remain distinct.
+  Raw APIs, normalizers and schema detection resolve shared bodies transparently.
+  Migration 0016 adds the store without rewriting history during application startup;
+  the `raw_storage` job converts existing inline bodies in small committed batches.
+- **Retention.** Defaults are 30 days for raw response bodies and 90 days for fetch
+  metadata and news fetch logs. Configure `RAW_PAYLOAD_RETENTION_DAYS`,
+  `RAW_SNAPSHOT_RETENTION_DAYS` and `NEWS_FETCH_RETENTION_DAYS` (positive days;
+  snapshot retention must be at least payload retention). The job runs every minute,
+  with bounded work per run, and deletes shared bodies only when no snapshot uses them.
+  It always keeps the complete latest successful 120-second fetch round per endpoint,
+  plus the latest attempt, including for offline providers. Rows not yet read by the
+  schema watcher are protected. Expired body hashes remain in fetch metadata until
+  its retention period ends. Old raw bodies cannot be replayed after expiry; normalized
+  listings, price/supply observations, rollups, articles and billing/audit records are
+  not trimmed. News article bodies already deduplicate by source and content hash.
+- **Maintenance and visibility.** `/v1/ops/storage` (admin only) reports database and
+  table sizes, remaining inline bodies, shared references and unique bodies. The ops
+  jobs endpoint reports maintenance failures. PostgreSQL autovacuum makes freed table
+  space reusable; disk usage may not immediately shrink. Routine maintenance does not
+  run `VACUUM FULL`, which rewrites and locks tables. Keep Railway's volume usage
+  alerts enabled and maintain enough headroom for WAL and migration batches.

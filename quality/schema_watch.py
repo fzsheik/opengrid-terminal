@@ -124,7 +124,9 @@ def scan(batch: int = BATCH, max_batches: int = 50) -> dict:
             # First run: baseline each endpoint from its newest ok snapshot, then follow
             # new rows only, instead of replaying years of history through the watcher.
             rows = s.execute(text(
-                """SELECT r.id, r.provider, r.endpoint, r.fetched_at, r.ok, r.payload FROM raw_snapshots r
+                """SELECT r.id, r.provider, r.endpoint, r.fetched_at, r.ok,
+                          coalesce(r.payload, p.payload) AS payload FROM raw_snapshots r
+                   LEFT JOIN raw_payloads p ON p.sha256 = r.payload_hash
                    JOIN (SELECT DISTINCT ON (provider, endpoint) id FROM raw_snapshots WHERE ok
                          ORDER BY provider, endpoint, fetched_at DESC, id DESC) n ON n.id = r.id""")).all()
             for r in rows:
@@ -137,8 +139,10 @@ def scan(batch: int = BATCH, max_batches: int = 50) -> dict:
         with normalize.SessionLocal.begin() as s:
             cur = s.get(QualityCursor, CURSOR)
             rows = s.execute(text(
-                """SELECT id, provider, endpoint, fetched_at, ok, payload FROM raw_snapshots
-                   WHERE id > :pos ORDER BY id LIMIT :n"""), {"pos": cur.position, "n": batch}).all()
+                """SELECT r.id, r.provider, r.endpoint, r.fetched_at, r.ok,
+                          coalesce(r.payload, p.payload) AS payload FROM raw_snapshots r
+                   LEFT JOIN raw_payloads p ON p.sha256 = r.payload_hash
+                   WHERE r.id > :pos ORDER BY r.id LIMIT :n"""), {"pos": cur.position, "n": batch}).all()
             if not rows:
                 break
             for r in rows:

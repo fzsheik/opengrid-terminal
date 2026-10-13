@@ -1,9 +1,9 @@
 """Pull raw responses from every configured provider and store them."""
 
 import asyncio
-import hashlib
-import json
 import logging
+
+from sqlalchemy.dialects.postgresql import insert
 
 from config import settings
 from db import SessionLocal, init_db
@@ -27,7 +27,8 @@ from providers import (
     VastProvider,
     VoltageParkProvider,
 )
-from tables import RawSnapshot
+from tables import RawPayload, RawSnapshot
+from storage import content_hash, lock_storage
 
 log = logging.getLogger(__name__)
 
@@ -75,12 +76,15 @@ def build_fetchers() -> list[Provider]:
 
 
 def save(responses: list[RawResponse]) -> int:
+    bodies = {content_hash(r.payload): r.payload for r in responses if r.payload is not None}
     with SessionLocal.begin() as s:
+        lock_storage(s)
+        if bodies:
+            s.execute(insert(RawPayload).values([
+                {"sha256": digest, "payload": bodies[digest]} for digest in sorted(bodies)
+            ]).on_conflict_do_nothing(index_elements=["sha256"]))
         for r in responses:
-            digest = None
-            if r.payload is not None:
-                body = json.dumps(r.payload, sort_keys=True, separators=(",", ":"), default=str)
-                digest = hashlib.sha256(body.encode()).hexdigest()
+            digest = content_hash(r.payload) if r.payload is not None else None
             s.add(
                 RawSnapshot(
                     provider=r.provider,
@@ -93,7 +97,7 @@ def save(responses: list[RawResponse]) -> int:
                     error=r.error,
                     sha256=digest,
                     request=r.request,
-                    payload=r.payload,
+                    payload_hash=digest,
                 )
             )
     return len(responses)

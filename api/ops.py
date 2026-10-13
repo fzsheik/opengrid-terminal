@@ -91,6 +91,12 @@ def ops_jobs(who: Principal = Depends(admin)):
     return envelope(ops.jobs_health(), kind=OBSERVED, methodology=M_QUALITY)
 
 
+@router.get("/v1/ops/storage", summary="Ops: database sizes, deduplication and retention")
+def ops_storage(who: Principal = Depends(admin)):
+    import storage
+    return envelope(storage.status(), kind=OBSERVED, methodology=M_QUALITY)
+
+
 # --------------------------------------------------------------------------
 # Public trust reads
 # --------------------------------------------------------------------------

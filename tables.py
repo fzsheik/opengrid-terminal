@@ -13,23 +13,38 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKeyConstraint,
+    ForeignKey,
     Index,
     Numeric,
     String,
     Text,
+    func,
+    select,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
     pass
 
 
+class RawPayload(Base):
+    """One immutable JSON body per content hash, shared by fetch records."""
+
+    __tablename__ = "raw_payloads"
+
+    sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    payload: Mapped[dict | list] = mapped_column(JSONB, nullable=False)
+
+
 class RawSnapshot(Base):
     __tablename__ = "raw_snapshots"
     __table_args__ = (
         Index("ix_raw_provider_endpoint_time", "provider", "endpoint", "fetched_at"),
+        Index("ix_raw_inline_pending", "id", postgresql_where=text("payload IS NOT NULL AND payload_hash IS NULL")),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -45,7 +60,25 @@ class RawSnapshot(Base):
     # The POST body we sent. Salad's availability response carries no class id,
     # so without this a response cannot be matched back to what was asked for.
     request: Mapped[dict | list | None] = mapped_column(JSONB)
-    payload: Mapped[dict | list | None] = mapped_column(JSONB)
+    # Inline bodies remain readable during the gradual migration of existing data.
+    _inline_payload: Mapped[dict | list | None] = mapped_column("payload", JSONB(none_as_null=True))
+    payload_hash: Mapped[str | None] = mapped_column(ForeignKey("raw_payloads.sha256"), index=True)
+    _body: Mapped[RawPayload | None] = relationship(lazy="joined")
+
+    @hybrid_property
+    def payload(self):
+        if self._inline_payload is not None:
+            return self._inline_payload
+        return self._body.payload if self._body is not None else None
+
+    @payload.setter
+    def payload(self, value):
+        self._inline_payload = value
+
+    @payload.expression
+    def payload(cls):
+        shared = select(RawPayload.payload).where(RawPayload.sha256 == cls.payload_hash).scalar_subquery()
+        return func.coalesce(cls._inline_payload, shared)
 
 
 class ComputeListingRow(Base):
