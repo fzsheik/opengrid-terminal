@@ -18,10 +18,11 @@ important — what it deliberately does not claim.
 1. [At a glance](#1-at-a-glance)
 2. [Architecture](#2-architecture)
 3. [Market data layer](#3-market-data-layer)
-4. [Market intelligence](#4-market-intelligence)
+4. [Market intelligence](#4-market-intelligence) (incl. 4.2a settlement-grade fixings)
 5. [News & external signals](#5-news--external-signals)
 6. [Execution layer: routing & provisioning](#6-execution-layer-routing--provisioning)
    - [Training jobs (OpenGrid Jobs)](#6a-training-jobs-opengrid-jobs)
+   - [Reserved compute: price-lock requests](#6b-reserved-compute-price-lock-requests-reservations-methodologyreservationsmd)
 7. [Reconciliation, billing & cost accounting](#7-reconciliation-billing--cost-accounting)
 8. [Routing quality, reliability & economics](#8-routing-quality-reliability--economics)
 9. [Design partners, onboarding & product analytics](#9-design-partners-onboarding--product-analytics)
@@ -192,6 +193,37 @@ region. Everything historical reads from it, so 90-day statistics don't replay r
   joining or leaving never moves the index.
 - Each index: level, 24h / 7d / 30d / 90d / YTD / all-time change (each null with a reason when
   history doesn't cover it), historical high/low, realized volatility, constituents and coverage.
+
+### 4.2a Settlement-grade fixings (`analytics/settlement.py`, methodology/settlement.md)
+Official, immutable **fixings** for the settlement indices: the per-GPU on-demand benchmarks (H100 80GB SXM5,
+H200, B200, A100 80GB SXM4, L40S) and the OpenGrid GPU Compute Index. They are built so that an exchange or an
+OTC contract could cash-settle against them, measured against the IOSCO Principles for Financial Benchmarks.
+- **Hourly fixings.** Hour H is fixed only once the rollup can no longer revise it (finality lag 5 h). The value
+  is recomputed from the stored inputs by a frozen copy of the math (settlement version S1). If that disagrees
+  with the published level, the hour is not published and an ops alert fires.
+- **Daily fixing.** A **TWAP** of the day's 24 hourly fixings, referenced at 00:00 UTC. It is published only if
+  at least 18 clean hours qualify; it is never carried forward and never estimated.
+- **Stricter sufficiency.** At least 4 providers per GPU (the display index needs 3), and at least 3 components
+  for the composite.
+- **Surveillance flags.** Examples: single-provider concentration, price jumps, a new constituent, feed
+  outages, a jump or new listing just before the daily fix, a methodology change within the day. Severe flags
+  hold the daily fixing as `not_published`.
+- **Append-only, hash-chained ledger.** Each row has `input_hash`, `prev_hash` and `row_hash`. A Postgres
+  trigger blocks UPDATE, DELETE and TRUNCATE. Anyone can recompute a fixing with `GET /v1/fixings/{id}/verify`
+  and check the whole chain with `GET /v1/fixings/chain/verify`.
+- **Evidence retention.** Each vote is traced to the provider's raw snapshot ids and payload sha256. Referenced
+  raw payloads are exempt from the storage retention deletion.
+- **Restatements.** Admin only, with a reason. A correction is a new row that points at the original, which
+  stays untouched. Staff never type a value: they exclude or re-include constituents and the value is
+  recomputed. The correction window is 24 h for hourly fixings and 2 business days for daily ones. Every
+  restatement raises an ops alert and is listed publicly (`/v1/fixings/restatements`).
+- **Governance.** Every methodology version needs a recorded change notice; past fixings are never rewritten.
+  Conflicts of interest are handled by these controls: OpenGrid's own routed prices and fees never enter the
+  index, and inputs cannot be edited by hand.
+- **Website.** A "Settlement fixings" panel on each settlement index page, with a Verify button.
+- **Honest gaps.** The inputs are advertised list prices, not transactions. There is no independent oversight
+  committee and no external assurance yet. Fixing history starts at deployment. The plan for closing these
+  gaps, and the regulatory paths to futures, are in **docs/FUTURES_REGULATORY_PATH.md**.
 
 ### 4.3 Historical context
 Current price percentile vs its own 30-day and 90-day distribution, distance from the 30-day
@@ -379,6 +411,24 @@ One real workload end to end: **"Train Your First AI Model — PyTorch MNIST"** 
 - **Sandbox**: `sandbox: true` runs a fully SIMULATED lifecycle (no provider, no spend), labelled everywhere.
 - **Status**: built and tested against a fake Lambda API and a real local GPU; **no real Lambda job has run
   yet**. A real job needs the Lambda validation run, then `supervised_enabled` on Lambda.
+
+## 6b. Reserved compute: price-lock requests (`reservations/`, methodology/reservations.md)
+
+Customers ask for a locked price ("8× H100 SXM5, 5,376 GPU-hours, starting Oct 20–27, ≤ $2.25/GPU-h") at
+`/reserve` or `POST /v1/reservations/requests`.
+- **Indicative reference.** Each request shows the index level, the raw level, the best on-demand listings, the
+  market median and the latest settlement fixing. All of it is labelled `indicative`: it is never a quote and
+  never binding.
+- **States.** requested → under_review → offered → accepted → fulfilled, or declined, withdrawn, expired or
+  cancelled. Every transition is an event with actor and reason.
+- **Supply basis required.** An operator offer must record a supply basis, i.e. the provider capacity
+  commitment that backs it. The database rejects an offer price without one.
+- **Revised offers.** Offers can be revised (`offer_seq`). A customer can't accept an offer that changed after
+  they read it.
+- **Acceptance records intent only.** Nothing is launched and nothing is billed. The order form, invoicing and
+  delivery happen outside the API.
+- **Not a financial contract.** This is physical compute delivered by OpenGrid: not tradable, not
+  transferable, no cash settlement. The legal framing is in docs/FUTURES_REGULATORY_PATH.md, Path B.
 
 ---
 
@@ -623,6 +673,9 @@ automatically at startup. The app **refuses to start in production** without `AP
 - **Execution**: built, hardened, and independently reviewed; **all adapters are still
   simulated**. Training jobs (§6a) are built and tested but have not run on a real GPU provider yet. The next step is one supervised **Lambda validation run** (≈ $1 realistic, ≤ $1.85
   worst case with the operator abort rule). Customer routes follow only after validation.
+- **Settlement fixings** (§4.2a) and **price-lock requests** (§6b): built and tested; fixing history starts at
+  deployment. **No futures, swaps or trading of any kind**: see docs/FUTURES_REGULATORY_PATH.md for the regulated
+  paths (index licensing to an exchange is the recommended one).
 - Not implemented (deliberately): real payment processing, email alerts, AWS/Nebius/Massed
   Compute provisioning (need IAM/partner access), workload-performance benchmarks.
 - Known limits: rate limits and login throttling are per process; rotating a provider key during
@@ -640,4 +693,4 @@ Every number OpenGrid publishes traces to a document in `methodology/` (also ser
 `families` · `events` · `opportunities` · `news` · `data-quality` · `data-trust` · `routing` ·
 `best-execution` · `execution-safety` · `reconciliation` · `provider-capabilities` ·
 `first-live-route` · `routing-quality` · `reliability` · `economics` · `billing` · `alerts` ·
-`security`
+`security` · `jobs` · `workloads` · `runner` · `settlement` · `reservations`
