@@ -194,4 +194,6 @@ All are computed from stored `index_levels` rows; "now" is the newest hour in th
   (the pipeline keeps no record of the gap). The feed-down rule covers the common cause
   (a failing feed); it cannot detect a provider silently delisting and relisting.
 - The outlier band is fixed (3×) and does not adapt to dispersion.
-- Indices describe advertised list prices, not what buyers paid.
+- Indices describe advertised list prices, not what buyers paid. They are a different quantity from survey-based
+  neocloud indices and transaction-based indices; see methodology/settlement.md §2.1 for how the
+  levels differ and why.

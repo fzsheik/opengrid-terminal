@@ -37,6 +37,52 @@ right for a chart and wrong for settlement, where a price must be:
 Spot, regional, provider-class and family indices are not settlement indices (thinner, and spot
 capacity is interruptible). `GET /v1/indices/{id}/fixings` says `settlement_index: false` for them.
 
+### 2.1 What these fixings measure, and how they differ from other GPU rental indices
+
+An OpenGrid per-GPU fixing is the **advertised on-demand list price across all sellers OpenGrid
+observes**:
+- hyperscalers, neoclouds, general clouds and marketplaces;
+- one vote per provider, its lowest eligible listing;
+- chain-linked (methodology/indices.md).
+
+It is **not** a measure of negotiated, reserved or actually transacted rental prices.
+
+Other published GPU rental indices measure different quantities:
+- The Silicon Data H100 and B200 Rental Indices, referenced by the CME Compute futures announced on
+  2026-08-11, are described by CME as "neocloud indices measuring hourly on-demand rental GPU costs".
+- The Ornn Compute Price Index (OCPI), referenced by the ICE futures announced on 2026-05-19, is described
+  by ICE and Ornn as built "only from printed transactions".
+
+The levels therefore differ, and a difference is **not** an error in either index. On 2026-10-13 the
+OpenGrid H100 80GB SXM5 hourly fixing for 12:00 UTC was **$3.44 / GPU-hour**. The Silicon Data and
+Ornn H100 figures shown on their public sites in the same days were about **$2.53** and **$2.65**
+(as reported on those sites; OpenGrid does not reproduce or verify them).
+
+What OpenGrid's own data says about the gap, as of 2026-10-13:
+- **It is not driven by hyperscalers.** Restricted to neoclouds, the H100 SXM index was *higher*:
+  $3.82 from 4 neocloud constituents (Lambda $4.19, Verda $4.09, RunPod $3.99, Massed Compute $3.14).
+  The cheapest H100 supply OpenGrid sees sits on marketplaces: Vast $1.79 included, and Lium $1.30
+  excluded as an outlier at that hour.
+- **Coverage is the main limit.** OpenGrid currently observes only a handful of neocloud H100 sellers
+  with public on-demand prices. A survey with wider neocloud coverage, or one that includes non-public
+  rates, can sit well below list.
+- **Coverage was widened on 2026-10-13.** Six public sources were added: CoreWeave, Together AI,
+  Jarvislabs, Hot Aisle, Boost Run (via Shadeform) and Vultr. That takes the H100 SXM neocloud
+  constituents from 4 to 7. The new list prices (CoreWeave $6.155, Together $3.99, Jarvislabs $3.49
+  per GPU-hour) do **not** pull the list-price level down. Wider list-price coverage makes the index
+  more representative of advertised prices; it does not turn it into a transaction index.
+  Chain-linking means a provider joining never moves the level by itself (methodology/indices.md §4).
+  Providers are added only where they publish on-demand prices readable without an account and their
+  terms allow it (CAPABILITIES.md §3.1 lists the candidates that were declined).
+- **List vs transacted.** Advertised list prices are an upper reference. Real rentals, especially
+  multi-node and committed ones, are often agreed below list. A transaction-based OpenGrid index,
+  built from reconciled routed executions, is planned once there is enough paid volume. It will
+  be published *alongside* this one, never merged into it.
+
+Anyone settling against an OpenGrid fixing should do so knowing it is a list-price benchmark.
+Contract terms that reference it should say "OpenGrid advertised on-demand list price index", not
+"GPU rental price".
+
 ## 3. Schedule and finality
 
 **Hourly fixing for hour H** (fixing_time = H, the top of a UTC hour). Taken only when
@@ -301,7 +347,8 @@ are on; otherwise any key with `data:read`).
 
 ## 15. Known limits
 
-- List prices, not transactions (§12, principles 6 and 8).
+- List prices, not transactions (§12, principles 6 and 8); how this differs from other GPU rental
+  indices is in §2.1.
 - Evidence links a vote to the provider's raw snapshots by provider, time and price; the raw
   body is the provider's whole response, not a pre-extracted listing.
 - A restatement does not cascade into later hourly fixings (§9).

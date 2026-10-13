@@ -1,7 +1,7 @@
 # OpenGrid Terminal — Capabilities & Features
 
 **OpenGrid Terminal is a market-intelligence and execution terminal for GPU compute.**
-It watches 16 GPU clouds, turns their prices into one trustworthy market, explains what is moving
+It watches 22 GPU clouds, turns their prices into one trustworthy market, explains what is moving
 and why, and routes a workload to the best provider through one OpenGrid API key — with every
 decision audited and every dollar reconciled.
 
@@ -43,7 +43,7 @@ important — what it deliberately does not claim.
 
 | | |
 |---|---|
-| GPU clouds monitored | **16** (AWS, Lambda, RunPod, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Lium, Massed Compute, Verda, Voltage Park, Crusoe, Denvr, Latitude.sh) |
+| GPU clouds monitored | **22** (AWS, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run) |
 | Canonical GPU models | **91**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL) |
 | OpenGrid indices defined | **251** (per-GPU, family composites, overall compute index, regional, spot, provider-class) |
 | News & signal sources | **44** verified feeds (hyperscalers, neoclouds, NVIDIA/AMD, US Federal Register, trade press) |
@@ -62,7 +62,7 @@ important — what it deliberately does not claim.
 ## 2. Architecture
 
 ```
-                    ┌──────────────────────── 16 GPU clouds ───────────────────────┐
+                    ┌──────────────────────── 22 GPU clouds ───────────────────────┐
                     │ APIs · public price pages · pricing files · aggregator feeds │
                     └──────────────────────────────┬────────────────────────────────┘
                                                    │ independent poll loop per provider
@@ -132,7 +132,17 @@ provider never holds up the others.
 | Voltage Park | neocloud | public API |
 | Nebius | neocloud | public page |
 | Massed Compute | neocloud | public page |
-| Crusoe · Denvr · Latitude.sh | neocloud | aggregator (via Shadeform) |
+| CoreWeave | neocloud | public page (on-demand and spot kept separate) |
+| Together AI (GPU Clusters) | neocloud | public page (per GPU-hour; preemptible = spot) |
+| Jarvislabs | neocloud | public page |
+| Hot Aisle (AMD MI300X) | neocloud | public page |
+| Vultr | general cloud | public API |
+| Crusoe · Denvr · Latitude.sh · Boost Run | neocloud | aggregator (via Shadeform) |
+
+Candidates checked and **not** added (2026-10-13): Paperspace (its own page contradicts the aggregator),
+Thunder Compute (terms forbid automated access), TensorWave ("starting at" floors only), Fluidstack,
+Nscale and Sesterce (no public prices), Genesis Cloud (unreachable). A provider is added only when it
+publishes on-demand prices that can be read without an account and its terms allow it.
 
 ### 3.2 Normalization
 - Every listing becomes a standard `ComputeListing`: provider, SKU, GPU, count, region, country,
