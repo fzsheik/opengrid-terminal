@@ -55,7 +55,7 @@ important — what it deliberately does not claim.
 | Discord channels | **4** (ops, deployments, market, news) with OpenGrid-branded embeds |
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
-| Automated tests | **48** Python test files + **6** JavaScript test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team |
+| Automated tests | **49** Python test files + **6** JavaScript test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team |
 
 ---
 
@@ -670,7 +670,7 @@ automatically at startup. A push to GitHub does not trigger a Railway build on i
 
 ## 16. Testing
 
-48 Python test files and 6 JavaScript test files (plain scripts, scratch Postgres databases, no real
+49 Python test files and 6 JavaScript test files (plain scripts, scratch Postgres databases, no real
 provider calls):
 - unit and integration tests for every analytics module, API and page;
 - **routing benchmark**: 50 deterministic decision scenarios;
@@ -687,6 +687,8 @@ provider calls):
 - **settlement fixings**: finality, TWAP, hash-chain tamper detection, the immutability trigger,
   restatements, evidence retention;
 - **reservations**: state machine, supply-basis enforcement, tenant isolation, nothing launched or billed;
+- **provider page parsers**: the newer scraped price pages parsed from saved real copies (CoreWeave, Together AI,
+  Jarvislabs, Hot Aisle, Boost Run, Vultr);
 - JavaScript tests for the terminal's core, charts and execution UI.
 
 ---
