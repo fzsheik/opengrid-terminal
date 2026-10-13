@@ -1481,3 +1481,12 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 @media (max-width: 1280px) { .pg-jobs .jb-views { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .pg-jobs .jb-v-sandbox { grid-column: 1 / -1; } }
 @media (max-width: 1180px) { .pg-jobs .jb-grid { grid-template-columns: minmax(0, 1fr); } .pg-jobs .jb-est { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 /* ---- end page: jobs ---- */
+/* ---- page: reserve (price-lock requests; reuses the jobs / ticket / deployment styles) ---- */
+.pg-rsv .rs-ban { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding: 7px 12px; margin-bottom: 10px; border: 1px solid #1f3a5c; border-left: 3px solid var(--accent); border-radius: 3px; background: #0b1420; font-size: 12px; color: var(--text-2); }
+.pg-rsv .rs-ban b { font: 700 10.5px var(--mono); letter-spacing: .12em; color: #8fc3ff; white-space: nowrap; }
+.pg-rsv .rs-ban span { flex: 1 1 520px; }
+.pg-rsv .rs-acts { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }
+.pg-rsv .rs-best { margin-top: 6px; }
+.pg-rsv .rs-notes { white-space: pre-wrap; word-break: break-word; }
+.pg-rsv .sec { margin-top: 10px; }
+/* ---- end page: reserve ---- */

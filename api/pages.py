@@ -56,6 +56,8 @@ PAGES: list[tuple[str, str, str, bool]] = [
     ("/jobs", "Jobs", "Your training jobs: state, outcome, cost and results.", False),
     ("/jobs/new", "New job", "Start a training job: preview the route, submit for approval.", False),
     ("/jobs/{id}", "Job", "One training job: lifecycle, progress, logs, artifacts and cost.", False),
+    ("/reserve", "Reserve", "Reserved-compute price-lock requests: request, indicative reference, offer, accept.", False),
+    ("/reserve/{id}", "Price-lock request", "One price-lock request: status, indicative reference, offer and history.", False),
     ("/route", "Route", "Best-execution routing for GPU workloads.", False),
     ("/deployments", "Deployments", "Your deployments.", False),
     ("/deployments/{id}", "Deployment", "One deployment: state, costs, events and evidence.", False),
@@ -84,9 +86,10 @@ def is_page_path(path: str) -> bool:
 # /v1 areas readable without a key when PUBLIC_PAGES is on (GET/HEAD only).
 PUBLIC_V1 = ("gpus", "markets", "indices", "history", "spreads", "events", "news", "providers", "heatmaps",
              "overview", "tape", "methodology", "timeline", "best", "capabilities", "opportunities", "trust",
-             "families", "scopes")
+             "families", "scopes", "fixings")
 # Never public, whatever else matches: money, private data, operator functions.
-PRIVATE_V1 = ("route", "deployments", "keys", "admin", "ops", "me", "usage", "billing", "watchlists", "alerts", "credentials", "jobs", "quotes")
+PRIVATE_V1 = ("route", "deployments", "keys", "admin", "ops", "me", "usage", "billing", "watchlists", "alerts", "credentials", "jobs", "quotes",
+              "reservations")
 # The first UI's JSON reads, which the interim pages still call. Read-only current market data.
 PUBLIC_LEGACY = ("/market", "/market/detail", "/listings", "/polling", "/changes")
 

@@ -547,6 +547,7 @@ def test_admin_routes_require_platform_admin():
     bad = []
     for m, p in admin_routes:
         for k in (plain, mgr):
+            ratelimit.reset()   # this probes authorization on every admin route; budgets are tested elsewhere
             r = client.request(m, fill(p), headers={**bearer(k["secret"]), "Content-Type": "application/json"},
                                content=b"{}")
             if r.status_code != 403:

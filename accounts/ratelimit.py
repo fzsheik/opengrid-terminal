@@ -33,7 +33,8 @@ from config import settings
 # Everything that can launch or act on paid compute. The admin validation launch is on this list
 # too: a platform_admin key must not get a write-class (30/min) budget for real launches.
 _EXECUTE_PREFIXES = ("/v1/route", "/v1/deployments", "/v1/jobs", "/v1/admin/execution/validation",
-                     "/v1/admin/validation/start")
+                     "/v1/admin/validation/start",
+                     "/v1/reservations")   # price-lock requests: same budget as POST /v1/route/preview
 
 
 def request_class(method: str, path: str) -> str:

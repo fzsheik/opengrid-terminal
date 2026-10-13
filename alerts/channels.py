@@ -32,6 +32,7 @@ CHANNELS = {
     "market": "market_webhook_url",
     "news": "news_webhook_url",
     "jobs": "deployments_webhook_url",   # OpenGrid Jobs lifecycle -> the same #opengrid-deployments channel
+    "reservations": "deployments_webhook_url",   # price-lock requests: new request / offer / acceptance
 }
 
 # Deployment transitions worth a message (others are internal steps).
@@ -143,6 +144,28 @@ def job_message(row: dict) -> dict:
                                          footer="OpenGrid jobs")]}
 
 
+# Price-lock request transitions worth a message (reservations/states.py). Customer notes are never posted.
+_RSV_STATES = {
+    "requested": ("📝", "New price-lock request"),
+    "offered": ("💬", "Price-lock offer made"),
+    "accepted": ("🤝", "Price-lock offer accepted: send the order form (nothing billed)"),
+}
+
+
+def reservation_message(row: dict) -> dict:
+    mark, label = _RSV_STATES.get(row["to_status"], ("•", row["to_status"]))
+    gpu = f"{row.get('gpu_count') or 1}× {row.get('gpu') or 'GPU'}"
+    lim, off = row.get("max_price_per_gpu_hour"), row.get("offer_price_per_gpu_hour")
+    fields = [("Request", f"`{row['request_id']}`", True), ("GPU", gpu, True),
+              ("GPU-hours", None if row.get("total_gpu_hours") is None else f"{float(row['total_gpu_hours']):,.0f}", True),
+              ("Customer limit", None if lim is None else f"${float(lim):.2f}/GPU-h", True),
+              ("Offer", None if off is None or row["to_status"] == "requested" else f"${float(off):.2f}/GPU-h", True),
+              ("Region", row.get("region_group"), True), ("By", row.get("actor"), True)]
+    return {**_base(), "embeds": [_embed(f"{mark} {label} · {gpu}", None, fields,
+                                         url=_link(f"/reserve/{row['request_id']}"), at=row.get("at"),
+                                         footer="OpenGrid price-lock requests · not a financial contract")]}
+
+
 def market_message(row: dict) -> dict:
     pct = row.get("pct")
     before, after = row.get("value_before"), row.get("value_after")
@@ -246,6 +269,14 @@ _QUERIES = {
                               'out_of_memory', 'training_timed_out', 'artifact_upload_failed', 'cancel_requested',
                               'termination_failed', 'orphan_suspected', 'provisioning_uncertain')
         ORDER BY e.at, e.id LIMIT :n""", job_message),
+    "reservations": ("""
+        SELECT e.id AS key, e.at AS ts, e.request_id, e.to_status, e.actor, e.at,
+               r.gpu, r.gpu_count, r.total_gpu_hours, r.max_price_per_gpu_hour,
+               COALESCE((e.evidence->>'price_per_gpu_hour')::numeric, r.offer_price_per_gpu_hour) AS offer_price_per_gpu_hour,
+               r.region_group
+        FROM reservation_events e JOIN reservation_requests r USING (request_id)
+        WHERE e.at > :since AND e.to_status IN ('requested', 'offered', 'accepted')
+        ORDER BY e.at, e.id LIMIT :n""", reservation_message),
     "market": ("""
         SELECT id AS key, detected_at AS ts, type, severity, title, gpu, provider, region_group, pct,
                value_before, value_after, occurred_at

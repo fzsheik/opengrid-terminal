@@ -274,6 +274,14 @@ from api import jobs as jobs_api  # noqa: E402  (OpenGrid Jobs; registers the jo
 
 app.include_router(jobs_api.router)
 
+from api import settlement as settlement_api  # noqa: E402  (official index fixings; registers index_fixings)
+
+app.include_router(settlement_api.router)
+
+from api import reservations as reservations_api  # noqa: E402  (price-lock requests; registers reservation_expiry)
+
+app.include_router(reservations_api.router)
+
 # Last: the page router owns "/" and the catch-all page paths.
 app.include_router(pages_api.router)
 
