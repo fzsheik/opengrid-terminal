@@ -261,7 +261,8 @@ def _touch(key_id: int, ip: str | None, now: datetime) -> None:
 
 # A suspended account may still see and shut down what it is running: suspension must never
 # strand live, billing compute. Everything else (new routes, keys, data) is refused.
-_SUSPENDED_OK = re.compile(r"^/v1/deployments(?:/[A-Za-z0-9_-]+(?:/(?:terminate|stop))?)?$")
+_SUSPENDED_OK = re.compile(r"^/v1/deployments(?:/[A-Za-z0-9_-]+(?:/(?:terminate|stop))?)?$"
+                           r"|^/v1/jobs(?:/[A-Za-z0-9_-]+(?:/(?:cancel|logs|metrics|artifacts(?:/[a-z0-9._-]+)?))?)?$")
 
 
 def _allowed_while_suspended(request) -> bool:
@@ -270,7 +271,7 @@ def _allowed_while_suspended(request) -> bool:
     path, method = request.url.path, request.method
     if not _SUSPENDED_OK.match(path):
         return False
-    return method in ("GET", "HEAD") or path.endswith(("/terminate", "/stop"))
+    return method in ("GET", "HEAD") or path.endswith(("/terminate", "/stop", "/cancel"))
 
 
 def verify(token: str, request) -> Principal:

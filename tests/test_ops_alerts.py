@@ -29,6 +29,10 @@ def test_suspended_accounts_can_only_see_and_stop():
     assert not ok(_req("GET", "/v1/keys"))
     assert not ok(_req("POST", "/v1/deployments"))
     assert not ok(None)
+    assert ok(_req("GET", "/v1/jobs/job-abc")) and ok(_req("GET", "/v1/jobs/job-abc/logs"))
+    assert ok(_req("POST", "/v1/jobs/job-abc/cancel")), "a suspended account can still stop its GPU job"
+    assert not ok(_req("POST", "/v1/jobs")), "no new jobs while suspended"
+    assert not ok(_req("GET", "/v1/jobs/job-abc/artifacts/../../etc"))
 
 
 def test_ops_alert_records_and_never_raises():
@@ -71,6 +75,8 @@ def test_shutdown_is_never_throttled_like_a_launch():
     assert cls("POST", "/v1/deployments/dep-1/stop") == "write"
     assert cls("POST", "/v1/route") == "execute" and cls("POST", "/v1/route/rr_1/approve") == "execute"
     assert cls("POST", "/v1/admin/validation/start") == "execute"
+    assert cls("POST", "/v1/jobs") == "execute" and cls("POST", "/v1/jobs/preview") == "execute"
+    assert cls("POST", "/v1/jobs/job-1/cancel") == "write"
 
 
 def test_chat_message_for_discord_and_slack():

@@ -138,6 +138,19 @@ class Settings(BaseSettings):
     product_events_per_minute: int = 60
     # How often the route_outcomes / product server-events jobs recompute (seconds).
     metrics_recompute_seconds: int = 300
+    # --- OpenGrid Jobs (jobs/, api/jobs.py; methodology/jobs.md) ---
+    job_artifact_max_mb: int = 64                # one runner artifact upload at most this many MB
+    job_artifact_store: str = "postgres"         # 'postgres' (bytea in job_artifacts) | 's3' (needs job_artifact_s3_*)
+    job_artifact_s3_endpoint: str | None = None  # S3-compatible endpoint URL (server-side upload only)
+    job_artifact_s3_bucket: str | None = None
+    job_artifact_s3_region: str | None = None
+    job_artifact_s3_access_key_id: str | None = None
+    job_artifact_s3_secret_access_key: str | None = None
+    job_artifact_s3_prefix: str = "opengrid-jobs/"
+    job_callback_base_url: str | None = None     # where the GPU's runner calls back; None = public_base_url
+    job_sync_interval_seconds: int = 30          # job_sync: deployment state + runner callbacks -> job state
+    job_bootstrap_timeout_minutes: int = 20      # running with no runner callback this long -> bootstrap_failed
+    job_token_grace_minutes: int = 15            # runner token expires at the deployment deadline + this
 
     @model_validator(mode="after")
     def _raw_retention_order(self):

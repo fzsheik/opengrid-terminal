@@ -32,7 +32,7 @@ from config import settings
 
 # Everything that can launch or act on paid compute. The admin validation launch is on this list
 # too: a platform_admin key must not get a write-class (30/min) budget for real launches.
-_EXECUTE_PREFIXES = ("/v1/route", "/v1/deployments", "/v1/admin/execution/validation",
+_EXECUTE_PREFIXES = ("/v1/route", "/v1/deployments", "/v1/jobs", "/v1/admin/execution/validation",
                      "/v1/admin/validation/start")
 
 
@@ -41,7 +41,8 @@ def request_class(method: str, path: str) -> str:
         return "read"
     # Stopping or terminating only ever reduces spend: never throttle an emergency shutdown as
     # tightly as a launch. They stay rate-limited (write class), and idempotency makes repeats free.
-    if path.startswith("/v1/deployments/") and path.rstrip("/").endswith(("/terminate", "/stop")):
+    if (path.startswith(("/v1/deployments/", "/v1/jobs/"))
+            and path.rstrip("/").endswith(("/terminate", "/stop", "/cancel"))):
         return "write"
     if path.startswith(_EXECUTE_PREFIXES):
         return "execute"

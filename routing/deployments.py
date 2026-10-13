@@ -541,6 +541,23 @@ def launch(dep_id: str, *, adapter, offer, availability, launch_spec, resolved, 
                    now=now, evidence={"code": "operator_key_forbidden"})
             return {"outcome": None, "status": "pending_approval", "launched": False, "failover_allowed": False,
                     "code": "operator_key_forbidden", "reason": key_problem}
+        # OpenGrid Jobs (jobs/orchestrator.render_startup): the placeholder startup_script "opengrid-job:<job_id>"
+        # becomes the rendered runner bootstrap HERE, under the row lock, right before the provider call, with a
+        # DERIVED job token. Only the provider receives it (provider_spec); it is never stored or logged (the job
+        # keeps its sha256 + template version). A placeholder that cannot be rendered never reaches a provider.
+        provider_spec = launch_spec
+        if launch_spec is not None and str(getattr(launch_spec, "startup_script", None) or "").strip().startswith(
+                "opengrid-job:"):
+            try:
+                from jobs import orchestrator as _job_orchestrator
+                provider_spec, job_problem = _job_orchestrator.render_startup(d, launch_spec, now=now)
+            except Exception as exc:  # noqa: BLE001
+                provider_spec, job_problem = None, f"job_bootstrap_unavailable ({type(exc).__name__})"
+            if job_problem:
+                _apply(s, d, "pending_approval", reason=f"launch refused: {job_problem}", actor="system",
+                       actor_id=None, now=now, evidence={"code": "job_bootstrap_unavailable"})
+                return {"outcome": None, "status": "pending_approval", "launched": False, "failover_allowed": False,
+                        "code": "job_bootstrap_unavailable", "reason": job_problem}
         if quote_id is not None:
             from routing import quotes
             if quote_id != d.quote_id or not quotes.consume(s, quote_id, dep_id):
@@ -586,7 +603,7 @@ def launch(dep_id: str, *, adapter, offer, availability, launch_spec, resolved, 
     auto_term = {"terminate_deadline_at": deadline.isoformat(), "effective_max_runtime_minutes": eff,
                  "basis": "launch time + effective_max_runtime_minutes"}
     _set_log_context(adapter, deployment_id=dep_id, route_request_id=rr_id)
-    out, ms = provider_call("provision", adapter.provision, offer, availability, launch_spec, client_name,
+    out, ms = provider_call("provision", adapter.provision, offer, availability, provider_spec, client_name,
                             provider=offer.provider, deployment_id=dep_id, route_request_id=rr_id)
     res = as_provision_result(out)
     if after_provider_call is not None:  # test hook: simulate a crash between provider accept and DB write

@@ -11,6 +11,17 @@ A module registers its job at import time:
 The runner (started in main.py's lifespan) gives each job its own loop, so a
 slow or failing job never holds up another, the same contract as the poller.
 Every run is recorded in memory for the ops page: last start, duration, error.
+
+Package layout (OpenGrid Jobs; methodology/jobs.md). The scheduler above is this package's __init__ (it was
+the module jobs.py; a package named `jobs` shadows a sibling jobs.py, so it lives here now, unchanged).
+The job workload code lives in submodules imported explicitly, never from here:
+    jobs.states        the job state machine (ALLOWED transitions, transition() -> job_events)
+    jobs.orchestrator  preview / submit / cancel: workloads.select -> the EXISTING engine route
+    jobs.sync          job_sync: deployment state + runner callbacks -> job state; enforcement
+    jobs.tokens        derived per-job runner tokens (HMAC), replay protection
+    jobs.artifacts     ArtifactStore (postgres default, s3 optional)
+    jobs.ephemeral_ssh one-way ephemeral SSH keys (private half discarded)
+    jobs.models        the public job shape and the 12 verification checks
 """
 
 import asyncio

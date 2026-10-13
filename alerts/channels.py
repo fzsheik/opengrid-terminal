@@ -31,6 +31,7 @@ CHANNELS = {
     "deployments": "deployments_webhook_url",
     "market": "market_webhook_url",
     "news": "news_webhook_url",
+    "jobs": "deployments_webhook_url",   # OpenGrid Jobs lifecycle -> the same #opengrid-deployments channel
 }
 
 # Deployment transitions worth a message (others are internal steps).
@@ -106,6 +107,40 @@ def deployment_message(row: dict) -> dict:
     return {**_base(), "embeds": [_embed(f"{mark} {label} · {row.get('provider') or ''} {gpu}".strip(), None, fields,
                                          url=_link(f"/deployments/{row['deployment_id']}"), at=row.get("at"),
                                          footer="OpenGrid deployments")]}
+
+
+# Job transitions worth a message (jobs/states.py); posted to #opengrid-deployments next to the deployment's own.
+_JOB_STATES = {
+    "pending_approval": ("🟡", "Job awaiting approval"),
+    "initializing": ("🚀", "Job bootstrapping on the GPU"),
+    "training": ("🟢", "Job training"),
+    "training_completed": ("✅", "Job training completed"),
+    "reconciled": ("⚫", "Job finished and reconciled"),
+    "approval_rejected": ("✖️", "Job rejected / cancelled before launch"),
+    "no_eligible_provider": ("❌", "Job could not launch"),
+    "bootstrap_failed": ("❌", "Job bootstrap failed"),
+    "training_failed": ("❌", "Job training failed"),
+    "out_of_memory": ("❌", "Job out of GPU memory"),
+    "training_timed_out": ("⏱️", "Job hit its runtime ceiling"),
+    "artifact_upload_failed": ("❌", "Job artifacts not persisted"),
+    "cancel_requested": ("🛑", "Job cancel requested"),
+    "termination_failed": ("🔴", "Job GPU termination NOT confirmed"),
+    "orphan_suspected": ("🔴", "Job GPU possible orphan"),
+    "provisioning_uncertain": ("⚠️", "Job launch outcome unknown"),
+}
+
+
+def job_message(row: dict) -> dict:
+    mark, label = _JOB_STATES.get(row["to_status"], ("•", row["to_status"]))
+    fields = [("Job", f"`{row['job_id']}` {row.get('name') or ''}".strip(), True), ("Template", row.get("template"), True),
+              ("Outcome", row.get("outcome"), True), ("Deployment", row.get("deployment_id") and
+                                                      f"`{row['deployment_id']}`", True),
+              ("Provider", row.get("provider"), True), ("By", row.get("actor"), True)]
+    if row.get("reason"):
+        fields.append(("Reason", row["reason"], False))
+    return {**_base(), "embeds": [_embed(f"{mark} {label} · {row.get('template') or ''}".strip(), None, fields,
+                                         url=_link(f"/jobs/{row['job_id']}"), at=row.get("at"),
+                                         footer="OpenGrid jobs")]}
 
 
 def market_message(row: dict) -> dict:
@@ -200,6 +235,17 @@ _QUERIES = {
         FROM deployment_events e JOIN deployments d USING (deployment_id)
         LEFT JOIN quotes q ON q.id = d.quote_id
         WHERE e.at > :since AND e.to_status = ANY(:states) ORDER BY e.at, e.id LIMIT :n""", deployment_message),
+    "jobs": ("""
+        SELECT e.id AS key, e.at AS ts, e.job_id, e.to_status, e.actor, e.reason, e.at,
+               j.name, j.template, j.outcome, j.deployment_id, d.provider
+        FROM job_events e JOIN jobs j USING (job_id)
+        LEFT JOIN deployments d ON d.deployment_id = j.deployment_id
+        WHERE e.at > :since AND NOT j.sandbox AND e.from_status IS DISTINCT FROM e.to_status
+          AND e.to_status IN ('pending_approval', 'initializing', 'training', 'training_completed', 'reconciled',
+                              'approval_rejected', 'no_eligible_provider', 'bootstrap_failed', 'training_failed',
+                              'out_of_memory', 'training_timed_out', 'artifact_upload_failed', 'cancel_requested',
+                              'termination_failed', 'orphan_suspected', 'provisioning_uncertain')
+        ORDER BY e.at, e.id LIMIT :n""", job_message),
     "market": ("""
         SELECT id AS key, detected_at AS ts, type, severity, title, gpu, provider, region_group, pct,
                value_before, value_after, occurred_at

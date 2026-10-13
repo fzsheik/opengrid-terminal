@@ -270,6 +270,10 @@ from api import reconcile as reconcile_api  # noqa: E402
 for _module in (execution_api, partners_api, product_api, reconcile_api):
     app.include_router(_module.router)
 
+from api import jobs as jobs_api  # noqa: E402  (OpenGrid Jobs; registers the job_sync background job)
+
+app.include_router(jobs_api.router)
+
 # Last: the page router owns "/" and the catch-all page paths.
 app.include_router(pages_api.router)
 

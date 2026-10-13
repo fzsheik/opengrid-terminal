@@ -6,3 +6,4 @@ imports this package at the bottom so Alembic and create_all see everything.
 
 from store import analytics, structure, events, quality, news, accounts, routing, frontend  # noqa: F401
 from store import reconcile, metrics, security  # noqa: F401
+from store import jobs  # noqa: F401  (0017_jobs: OpenGrid Jobs)
