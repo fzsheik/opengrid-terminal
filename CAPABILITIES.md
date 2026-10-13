@@ -47,13 +47,15 @@ important — what it deliberately does not claim.
 | Canonical GPU models | **91**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL) |
 | OpenGrid indices defined | **251** (per-GPU, family composites, overall compute index, regional, spot, provider-class) |
 | News & signal sources | **44** verified feeds (hyperscalers, neoclouds, NVIDIA/AMD, US Federal Register, trade press) |
-| API operations | **167** (152 under `/v1`, 52 of them admin-only) |
-| Web pages | **28** routes, dense dark terminal UI, keyboard command bar |
-| Database tables | **59** (Postgres, migrated by Alembic, 16 migrations) |
-| Background jobs | **14** (polling, rollups, indices, events, news, reconciliation, tracking, alerts, feeds…) |
+| API operations | **200** (185 under `/v1`, 61 of them admin-only), plus 3 runner-callback routes outside the public schema |
+| Web pages | **33** routes, dense dark terminal UI, keyboard command bar |
+| Database tables | **71** (Postgres, migrated by Alembic, 19 migrations) |
+| Background jobs | **17** (polling, rollups, indices, settlement fixings, events, news, reconciliation, tracking, training-job sync, reservation expiry, alerts, feeds…) |
 | Provisioning adapters | **9 providers** (Lambda, RunPod, Hyperstack, DigitalOcean, Crusoe/Denvr/Latitude via Shadeform, Vast, Verda) |
 | Discord channels | **4** (ops, deployments, market, news) with OpenGrid-branded embeds |
-| Automated tests | **43** test files: unit, integration, concurrency, chaos, money-loss invariants, red team |
+| Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination |
+| Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
+| Automated tests | **48** Python test files + **6** JavaScript test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team |
 
 ---
 
@@ -85,6 +87,12 @@ important — what it deliberately does not claim.
         └── audit log ◄── deployments state machine ◄── tracker + reconciliation ◄──────┘
                                    │
                           usage slices ─► billing ─► cost reconciliation ─► transactions
+
+   Training job ─► workload-aware selection ─► the route path above (quote · approval · launch)
+        │            cloud-init runner on the GPU ─► callbacks (logs · metrics · artifacts) ─► job_sync
+        └── job state machine ◄── automatic termination + reconciliation ◄──────────────────────┘
+
+   index_levels ─► index_fixings (final hours only) ─► hash-chained ledger ─► /v1/fixings + verify
 ```
 
 **Stack:** Python 3.13 · FastAPI · SQLAlchemy 2 · Alembic · PostgreSQL · httpx · Textual (TUI) ·
@@ -544,7 +552,7 @@ A dense, dark, data-first market terminal — no hero sections, no decorative da
 |---|---|
 | Market | Overview · Indices · Index detail · GPUs · GPU detail · GPU family · Providers · Provider detail · Compare · Explorer · Heatmaps |
 | Signals | Opportunities · Events · News (feed + timeline) |
-| Execute | Route (order ticket, approval ticket) · Deployments · Deployment detail · Onboarding · Watchlists · API keys |
+| Execute | Jobs · New training job · Job detail · Reserve (price-lock requests) · Request detail · Route (order ticket, approval ticket) · Deployments · Deployment detail · Onboarding · Watchlists · API keys |
 | Reference | API docs (with try-it) · Methodology · Ops (data quality) |
 | Admin | Execution control (modes, kill switches, flags, orphans, resources, validation) · First-route checklist · Partners · Value (economics, quality, reliability, funnel) |
 
@@ -553,8 +561,10 @@ A dense, dark, data-first market terminal — no hero sections, no decorative da
   availability history, provider ranking, regional pricing, best available now, dispersion,
   price distribution, price per capability, hardware specs, alternatives, events, news, listings.
 - **Keyboard command bar**: `/` to search, `g h100` open a market, `p lambda` provider,
-  `c h100 h200` compare, `r h100 8 us` route preview, `w h100` watch, `e` events, `n` news, `o`
-  opportunities, `x` explorer, `?` help.
+  `c h100 h200` compare, `r h100 8 us` route preview, `w h100` watch, `j` jobs, `j new` new training
+  job, `e` events, `n` news, `o` opportunities, `x` explorer, `?` help.
+- **Index detail pages** for the settlement indices carry a **Settlement fixings** panel (latest daily TWAP
+  and hourly fixings in UTC, status, surveillance flags, evidence, a Verify button).
 - Shareable URLs for every view, CSV export on every table, honest "insufficient data" states,
   data-kind badges (observed / inferred / estimated / transaction) and freshness badges.
 - **SEO** renderers for GPU, family, provider and compare pages with real numbers, structured data
@@ -579,16 +589,19 @@ Authentication: `Authorization: Bearer opg_…` (or the operator session). Highl
 | Domain | Endpoints |
 |---|---|
 | GPUs & markets | `/v1/gpus`, `/v1/gpus/{gpu}`, `/v1/markets/{gpu}`, `/v1/markets/{gpu}/regions`, `/v1/markets/{gpu}/context`, `/v1/families`, `/v1/hardware`, `/v1/regions`, `/v1/compare` |
-| History & indices | `/v1/history/{gpu}`, `/v1/indices`, `/v1/indices/{id}`, `/v1/indices/{id}/history` |
+| History & indices | `/v1/history/{gpu}`, `/v1/indices`, `/v1/indices/{id}`, `/v1/indices/{id}/history`, `/v1/indices/{id}/fixings` |
+| Settlement fixings | `/v1/fixings`, `/v1/fixings/{id}`, `…/verify`, `/v1/fixings/chain/verify`, `/v1/fixings/restatements`, `/v1/fixings/methodology` |
 | Structure | `/v1/spreads`, `/v1/heatmaps/{kind}`, `/v1/providers`, `/v1/providers/{p}` |
 | Signals | `/v1/overview`, `/v1/events`, `/v1/opportunities`, `/v1/tape`, `/v1/news`, `/v1/timeline` |
 | Trust | `/v1/trust/listings`, `/v1/trust/providers`, `/v1/capabilities` |
 | Routing | `/v1/best/{gpu}`, `/v1/route/preview`, `/v1/route`, `/v1/route/{id}`, `/v1/quotes/{id}` |
 | Deployments | `/v1/deployments`, `/v1/deployments/{id}`, `…/terminate`, `…/stop`, `…/feedback` |
+| Training jobs | `/v1/jobs/templates`, `/v1/jobs/readiness`, `/v1/jobs/preview`, `/v1/jobs`, `/v1/jobs/{id}`, `…/logs`, `…/metrics`, `…/artifacts`, `…/artifacts/{name}`, `…/cancel`; runner callbacks (job token only) |
+| Reservations | `/v1/reservations/reference`, `/v1/reservations/requests`, `/v1/reservations`, `/v1/reservations/{id}`, `…/accept`, `…/withdraw` |
 | Accounts & billing | `/v1/me`, `/v1/keys`, `/v1/scopes`, `/v1/usage`, `/v1/credentials`, `/v1/billing/*` |
 | Watchlists | `/v1/watchlists`, `/v1/alerts`, `/v1/alerts/firings` |
 | Analytics | `/v1/quality`, `/v1/reliability`, `/v1/economics`, `/v1/onboarding`, `/v1/partners/me` |
-| Admin (52) | execution control, kill switches, validation, reconciliation, orphans, resources, channels, ops, metrics, traces, checklist, partners, funnel, accounts, fee policies |
+| Admin (61) | execution control, kill switches, validation, reconciliation, orphans, resources, channels, ops, metrics, traces, checklist, partners, funnel, accounts, fee policies, reservation offers, fixing restatements, methodology change notices |
 
 Full interactive reference: `/api` in the terminal, or `/docs` (OpenAPI).
 
@@ -599,7 +612,8 @@ Full interactive reference: `/api` in the terminal, or `/docs` (OpenAPI).
 ### 15.1 Deployment
 Railway, one service + Postgres, built from `pyproject.toml` / `uv.lock`, started by
 `railway.toml` with **exactly one worker** (the poller lives in the web process). Migrations run
-automatically at startup. The app **refuses to start in production** without `APP_PASSWORD` and
+automatically at startup. A push to GitHub does not trigger a Railway build on its own: deploy with
+`railway up --service opengrid-terminal --detach`. The app **refuses to start in production** without `APP_PASSWORD` and
 `API_KEY_PEPPER`.
 
 ### 15.2 Background jobs
@@ -607,10 +621,13 @@ automatically at startup. The app **refuses to start in production** without `AP
 |---|---|---|
 | provider pollers | 15 min (AWS 1h) | fetch, store raw, normalize, quality-screen |
 | `market_hourly` | 10 min | hourly rollup → indices, provider value, events hooks |
+| `index_fixings` | 10 min | settlement fixings for hours that can no longer be revised; daily TWAP |
 | `market_events` | 15 min | event detection |
 | `news` | 1 min | poll due news sources |
 | `reconcile` | 2 min | provider vs OpenGrid state, orphans, deadlines |
 | `routing_tracker` | 1 min | deployment status, uptime, usage metering |
+| `job_sync` | 30 s | training jobs: deployment state + runner callbacks → job state; terminate on completion, failure, timeout |
+| `reservation_expiry` | 5 min | expire stale price-lock offers and requests |
 | `channel_feeds` | 1 min | Discord deployments / market / news posts |
 | `alerts` | 3 min | watchlist alert evaluation |
 | `quality_schema_watch` | 2 min | provider response schema changes |
@@ -632,7 +649,10 @@ automatically at startup. The app **refuses to start in production** without `AP
 | `OPS_ALERT_WEBHOOK_URL`, `OPS_ALERT_WEBHOOK_SECRET` | ops alerts (+ signing secret used by all channels) |
 | `DEPLOYMENTS_WEBHOOK_URL`, `MARKET_WEBHOOK_URL`, `NEWS_WEBHOOK_URL` | channel feeds |
 | `PUBLIC_PAGES` | open read-only market pages to anonymous visitors |
-| `RAW_PAYLOAD_RETENTION_DAYS`, `RAW_SNAPSHOT_RETENTION_DAYS` | raw storage retention |
+| `RAW_PAYLOAD_RETENTION_DAYS`, `RAW_SNAPSHOT_RETENTION_DAYS` | raw storage retention (payloads referenced by settlement fixings are always kept) |
+| `JOB_CALLBACK_BASE_URL` | where GPU runners call back (default `PUBLIC_BASE_URL`; https required) |
+| `JOB_ARTIFACT_STORE`, `JOB_ARTIFACT_MAX_MB`, `JOB_ARTIFACT_S3_*` | training artifacts: Postgres (default) or S3-compatible |
+| `JOB_SYNC_INTERVAL_SECONDS`, `JOB_BOOTSTRAP_TIMEOUT_MINUTES`, `JOB_TOKEN_GRACE_MINUTES` | training-job timing |
 
 `deploy/make_env.py` builds the Railway variables file and generates the secrets.
 
@@ -640,7 +660,8 @@ automatically at startup. The app **refuses to start in production** without `AP
 
 ## 16. Testing
 
-43 test files (plain scripts, scratch Postgres databases, no real provider calls):
+48 Python test files and 6 JavaScript test files (plain scripts, scratch Postgres databases, no real
+provider calls):
 - unit and integration tests for every analytics module, API and page;
 - **routing benchmark**: 50 deterministic decision scenarios;
 - **chaos suite**: 22 failure scenarios (timeouts, 5xx, crashes mid-launch, restarts, expired
@@ -650,6 +671,12 @@ automatically at startup. The app **refuses to start in production** without `AP
   billing with escalating alerts;
 - **concurrency proofs**: simultaneous approvals across threads and separate processes;
 - **security re-audit** and **red-team** regression suites;
+- **training jobs**: GPU selection, the job state machine, API, security (token, quotas, injection), the
+  runner and bootstrap, and an **end-to-end simulation** (real reporter + real CPU training over HTTP
+  against a fake Lambda);
+- **settlement fixings**: finality, TWAP, hash-chain tamper detection, the immutability trigger,
+  restatements, evidence retention;
+- **reservations**: state machine, supply-basis enforcement, tenant isolation, nothing launched or billed;
 - JavaScript tests for the terminal's core, charts and execution UI.
 
 ---
