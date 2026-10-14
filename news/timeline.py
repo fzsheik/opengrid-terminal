@@ -28,7 +28,7 @@ from news import store
 
 MOVE_PCT = 3.0
 NOT_CAUSAL = "Related news and events around this move (not necessarily causal)"
-OVERLAY_NOTE = ("Observed prices, inferred moves and availability changes, detected market events and related news "
+OVERLAY_NOTE = ("Observed prices, price moves and availability changes, detected market events and related news "
                 "shown on one time axis. Appearing together in time does not mean one explains the other.")
 _SEVERITY = {"major": 1.0, "notable": 0.7, "info": 0.4}
 

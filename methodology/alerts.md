@@ -26,7 +26,7 @@ A rule is `params` (a metric, its subject and a condition `op` / `value`), chann
 not Vast's "cheapest" row, not "from" prices), a listing counts only until it was last seen plus a
 few polls, sold-out listings are excluded from prices. Price-change windows up to 48 h replay
 `listing_observations` for one provider and GPU; longer windows read `market_hourly`.
-Availability is `inferred` where the provider reports capacity rather than a flag (see data-kinds).
+Availability is derived where the provider reports capacity rather than a flag (see data-kinds).
 
 ## Unknown never fires
 

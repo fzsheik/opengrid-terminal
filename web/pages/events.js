@@ -53,7 +53,7 @@
       h("span", { class: "ev-ti" }, opts.compact ? short || String(e.title || "").replace(/(NVIDIA|AMD Instinct|AMD|Intel) /g, "") : e.title),
       h("span", { class: "ev-n mono" }, numbers(e, opts.compact)),
       opts.compact ? null : h("span", { class: "ev-l" }, links),
-      opts.compact ? null : h("span", { class: "ev-k" }, e.kind && e.kind !== "observed" ? h("a", { class: "kind-t", href: "/methodology/data-kinds", title: "data kind: " + e.kind }, e.kind) : null));
+      opts.compact ? null : h("span", { class: "ev-k" }, e.kind && e.kind !== "observed" && e.kind !== "inferred" ? h("a", { class: "kind-t", href: "/methodology/data-kinds", title: "data kind: " + e.kind }, e.kind) : null));
   };
 
   const SINCE = [["1", "24H"], ["7", "7D"], ["30", "30D"], ["90", "90D"], ["all", "ALL"]];

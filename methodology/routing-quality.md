@@ -14,12 +14,12 @@ One row per route request, derived from `route_requests`, `routing_decisions`, `
 
 | field | definition | kind |
 |---|---|---|
-| winner / runner-up | rank 1 and rank 2 candidates of the routing decision | inferred |
-| candidates | the top 10 (provider, listing, observed price, score) of all candidates | inferred |
+| winner / runner-up | rank 1 and rank 2 candidates of the routing decision | derived |
+| candidates | the top 10 (provider, listing, observed price, score) of all candidates | derived |
 | market median | from the decision's market snapshot: the median of each provider's lowest current eligible price (canonical GPU, on-demand, not interruptible, not stale, not sold out) at decision time | observed |
 | cheapest valid option | the lowest-priced candidate that passed every eligibility rule | observed |
 | strategy | the routing mode (CHEAPEST, BALANCED, ...) | |
-| expected savings | (median − winner observed price) / median, at decision time | inferred |
+| expected savings | (median − winner observed price) / median, at decision time | derived |
 | launched | at least one provision call was made | transaction |
 | provisioned | the provider reported the instance **running** (a `deployment_events` row to `running`). An accepted launch alone is not provisioned | transaction |
 | provisioning latency | first provision call → first `running` event | transaction |

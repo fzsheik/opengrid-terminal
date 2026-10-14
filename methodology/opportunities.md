@@ -13,7 +13,7 @@ claims to know why a price moved.
 
 `type`, `score` (0-100; higher = larger or more unusual; capped), `explanation` (one sentence), `numbers`
 (everything the explanation uses), `gpu`, `gpu_slug`, `provider`, `region_group`, `kind`
-(`observed` = a direct comparison of observed prices / counts; `inferred` = a statistic against a
+(`observed` = a direct comparison of observed prices / counts; `derived` = a statistic against a
 baseline or rule), `links` (the events feed for the GPU and provider). Items are sorted by score.
 `unavailable` lists types that could not be evaluated, with the reason (usually not enough history).
 
@@ -28,11 +28,11 @@ times; market-level figures (median, spread, cheapest) use only providers *estab
 
 | Type | Rule | Score | Kind |
 |---|---|---|---|
-| `wide_spread` | Spread (highest / lowest - 1, >= 3 established providers) more than 10% above the GPU's own 30-day p90 (needs >= 168 hourly values); without that baseline only spreads >= 100%, labelled "no baseline" | 50 x spread / p90 (or 25 x spread) | inferred |
+| `wide_spread` | Spread (highest / lowest - 1, >= 3 established providers) more than 10% above the GPU's own 30-day p90 (needs >= 168 hourly values); without that baseline only spreads >= 100%, labelled "no baseline" | 50 x spread / p90 (or 25 x spread) | derived |
 | `price_cut` | A provider's lowest price is >= 5% (and >= $0.001) below its price 24h ago, recorded at both times | 200 x cut | observed |
 | `new_cheap_inventory` | A listing first seen in the last 24h, still live, purchasable, priced below the GPU's current market median (>= 2 established providers); providers in their first day of coverage are excluded | 150 x discount | observed |
-| `regional_dislocation` | A region group's median provider price >= 20% away from the global median (>= 2 providers inside and outside); groups from `regions.region_group`, never guessed | 150 x gap | inferred |
-| `below_usual_premium` | Provider's premium now (price / market median - 1) is >= 10 points below its 30-day average premium (hours with >= 2 priced providers; needs >= 168 samples) | 200 x points | inferred |
-| `scarcity` | Available listings now <= 50% of the GPU's 30-day hourly average (average >= 2; needs >= 168 samples) | 100 x (1 - ratio) | inferred |
+| `regional_dislocation` | A region group's median provider price >= 20% away from the global median (>= 2 providers inside and outside); groups from `regions.region_group`, never guessed | 150 x gap | derived |
+| `below_usual_premium` | Provider's premium now (price / market median - 1) is >= 10 points below its 30-day average premium (hours with >= 2 priced providers; needs >= 168 samples) | 200 x points | derived |
+| `scarcity` | Available listings now <= 50% of the GPU's 30-day hourly average (average >= 2; needs >= 168 samples) | 100 x (1 - ratio) | derived |
 | `new_cheapest_provider` | A `new_cheapest_provider` event in the last 24h whose provider is still the cheapest | 40 + 200 x drop | observed |
 | `supply_change` | Providers with purchasable listings changed by >= 2, or available listings by >= 50% (from >= 4), vs 24h ago, over providers recorded at both times | 20 x providers + 50 x relative change | observed |

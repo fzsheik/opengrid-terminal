@@ -99,7 +99,7 @@ def _topic(value: str | None) -> str | None:
     return value
 
 
-_CLASSIFICATION = "entities, topics and relevance are inferred by deterministic rules (methodology/news)"
+_CLASSIFICATION = "entities, topics and relevance are assigned by deterministic rules (methodology/news)"
 
 
 @router.get("/v1/news")

@@ -122,7 +122,7 @@
           { label: "Live listings", value: fmt.num(all.reduce((a, r) => a + r.listings, 0)), sub: fmt.num(all.reduce((a, r) => a + r.priced, 0)) + " priced", kind: "observed" },
           { label: "GPU models", value: String(gpuSet.size), sub: "canonical, across providers" },
           { label: "Feeds healthy", value: `${healthy}/${all.filter(r => r.fh || r.tr).length}`, sub: "last 24h of fetches" },
-          { label: "Rel. value", value: withPremium ? `${withPremium} rated` : null, reason: `needs ≥ 24 compared hours in the last ${st.days}d; no provider has them yet`, sub: withPremium ? `of ${all.length}, last ${st.days}d` : null, kind: "inferred" },
+          { label: "Rel. value", value: withPremium ? `${withPremium} rated` : null, reason: `needs ≥ 24 compared hours in the last ${st.days}d; no provider has them yet`, sub: withPremium ? `of ${all.length}, last ${st.days}d` : null },
           { label: "Routable (impl.)", value: String(all.filter(r => r.level >= 2).length), sub: "L≥2 implemented · 0 verified live" },
         ]));
         const cols = [
@@ -152,8 +152,8 @@
           life: r => r.lifetime && r.lifetime.median_hours };
         for (const c of cols) if (csvOf[c.key]) c.csv = csvOf[c.key];
         tblBox.replaceChildren(t);
-        capsNote.replaceChildren(OG.kindBadge("observed"), " coverage and feed health ", OG.kindBadge("inferred"),
-          ` relative value: each provider vs the median of the other providers' lowest price for the same GPU in the same hour, from the hourly rollup. Figures stay n/a (hover for the reason) until there are ≥ 24 compared hours. Greyed rows: no live listings on this server. `,
+        capsNote.replaceChildren(OG.kindBadge("observed"), " coverage and feed health. ",
+          `Relative value: each provider vs the median of the other providers' lowest price for the same GPU in the same hour, from the hourly rollup. Figures stay n/a (hover for the reason) until there are ≥ 24 compared hours. Greyed rows: no live listings on this server. `,
           h("a", { class: "lnk", href: "/methodology/provider-value" }, "Methodology →"));
         drawFacts(all);
       }
@@ -180,7 +180,7 @@
         const N = 8, list = h("ul", { class: "pv-list" }), more = h("div", { class: "pv-more" });
         const fill = () => {
           list.replaceChildren(out.length ? h("li", { class: "pv-lh" }, OG.kindBadge("observed"), " right now") : null, ...out,
-            inferred.length ? h("li", { class: "pv-lh" }, OG.kindBadge("inferred"), ` relative value, last ${st.days} days`) : null, ...(factsOpen ? inferred : inferred.slice(0, N)));
+            inferred.length ? h("li", { class: "pv-lh" }, `Relative value, last ${st.days} days`) : null, ...(factsOpen ? inferred : inferred.slice(0, N)));
           more.replaceChildren(inferred.length > N ? h("button", { class: "btn sm", onclick: () => { factsOpen = !factsOpen; fill(); } }, factsOpen ? "Show fewer" : `Show all ${inferred.length} facts`) : "");
         };
         fill();

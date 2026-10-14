@@ -87,7 +87,7 @@
           isTime ? null : { label: "No comparison", value: String(single), sub: `GPUs with ≤ 1 ${isProv ? "provider" : "region"} cell`, title: "A GPU sold by one provider (or in one region) cannot be compared: its premium is undefined, not zero" },
           isTime ? null : { label: isProv ? "Median coverage" : "Median regions", value: perRow.length ? String(pctl(perRow, 0.5)) : null, reason: "no rows", sub: `${isProv ? "providers" : "regions"} per GPU` },
           widest ? { label: "Widest spread", value: h("span", {}, OG.gpuLink(rows[widest.i])), sub: `${kd.f(widest.lo)} → ${kd.f(widest.hi)}`, title: "GPU with the largest gap between its lowest and highest cell" } : null,
-          { label: "Basis", value: meta.basis || (isTime ? `last ${st.days || 30} days` : "current"), kind: "inferred" },
+          { label: "Basis", value: meta.basis || (isTime ? `last ${st.days || 30} days` : "current") },
         ]));
 
         // domain

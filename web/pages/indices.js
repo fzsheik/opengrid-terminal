@@ -428,7 +428,7 @@
               csv: r => (r._w ? r._w.w : null), fmt: (v, r) => (r._w ? h("span", { class: r._w.w ? "" : "dimmer", title: r._w.note || "" }, r._w.w ? (r._w.w * 100).toFixed(r._w.w === 1 ? 0 : 1) + "%" : r._w.note === "trimmed (20% each end)" ? "trimmed" : "0%") : h("span", { class: "dimmer" }, "–")) },
             { key: "recorded_since", label: "Recorded since", num: true, value: r => (r.recorded_since ? +new Date(r.recorded_since) : null), csv: r => r.recorded_since, fmt: v => (v ? fmt.dateTime(v) : "–"), title: "First hour OpenGrid recorded this provider for this GPU" },
           ] }),
-        h("p", { class: "note" }, "One vote per provider: its lowest eligible listing (on-demand, canonical, not sold out). Excluded when its feed was failing that hour or the vote is more than 3× above / below the median. Weight column is inferred from the method; the level is chained on the providers common to consecutive hours."));
+        h("p", { class: "note" }, "One vote per provider: its lowest eligible listing (on-demand, canonical, not sold out). Excluded when its feed was failing that hour or the vote is more than 3× above / below the median. Weight column is derived from the method; the level is chained on the providers common to consecutive hours."));
       }
 
       function drawDef() {

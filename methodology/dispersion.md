@@ -2,7 +2,7 @@
 
 Used by `/v1/markets/{gpu}`, `/v1/spreads`, `/v1/gpus`, `/v1/gpus/{gpu}`, region heatmaps and
 `/v1/heatmaps/gpu-time-*`. Code: `analytics/dispersion.py`, `analytics/providers.py` (daily sums),
-`analytics/heatmaps.py`. Data kind: **inferred** (derived by stated rules from observed market prices).
+`analytics/heatmaps.py`. Data kind: **derived** (by stated rules from observed market prices).
 Price concept: **observed market price** (normalized list prices), never quotes or execution prices.
 
 ## Which listings count

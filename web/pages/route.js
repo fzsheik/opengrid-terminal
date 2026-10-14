@@ -80,7 +80,7 @@
   function availText(c) {
     const f = c.factors && c.factors.availability_now;
     const basis = f && f.raw ? f.raw.basis : null;
-    if (c.available === true) return h("span", { class: "up", title: "basis: " + (basis || "explicit") }, "available" + (basis === "inferred" ? " (inferred)" : ""));
+    if (c.available === true) return h("span", { class: "up", title: "basis: " + (basis === "inferred" ? "derived" : basis || "explicit") }, "available");
     if (c.available === false) return h("span", { class: "down" }, "sold out");
     return h("span", { class: "dim", title: "The provider does not report stock" }, "unknown");
   }
@@ -382,7 +382,7 @@
         return OG.table({
           columns: [
             { key: "factor", label: "Factor", value: r => r.f.label, fmt: (v, r) => h("span", { class: "rt-fl" }, h("i", { class: "sw", style: { background: r.f.nodata ? "transparent" : r.f.color, border: r.f.nodata ? "1px dashed #4f5a66" : null } }), r.f.label), sort: false },
-            { key: "kind", label: "Kind", sort: false, fmt: (v, r) => r.x.kind === "observed" || r.x.kind === "inferred" ? OG.kindBadge(r.x.kind) : r.x.kind ? OG.badge(r.x.kind) : h("span", { class: "dim" }, "–") },
+            { key: "kind", label: "Kind", sort: false, fmt: (v, r) => r.x.kind === "observed" ? OG.kindBadge(r.x.kind) : r.x.kind && r.x.kind !== "inferred" ? OG.badge(r.x.kind) : h("span", { class: "dim" }, "–") },
             { key: "weight", label: "Weight", num: true, sort: false, value: r => r.x.weight, fmt: (v, r) => r.f.nodata ? h("span", { class: "dim" }, "0 · locked") : r.x.weight ? (r.x.weight * 100).toFixed(1) + "%" : h("span", { class: "dim" }, "0") },
             { key: "value", label: "Value 0–1", num: true, sort: false, value: r => r.x.value, fmt: (v, r) => r.x.value != null ? r.x.value.toFixed(3) : OG.na(r.f.nodata ? "no data — not used" : "insufficient data") },
             { key: "contribution", label: "Contribution", num: true, sort: false, value: r => r.x.contribution, fmt: (v, r) => r.x.contribution ? h("span", {}, "+" + r.x.contribution.toFixed(3), r.x.imputed ? h("span", { class: "rt-imp", title: "No data for this listing: scored a neutral 0.5" }, "*") : null) : h("span", { class: "dim" }, "–") },

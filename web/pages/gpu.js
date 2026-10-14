@@ -95,7 +95,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
         onclick: e => { st.overlays.has(k) ? st.overlays.delete(k) : st.overlays.add(k); e.currentTarget.setAttribute("aria-pressed", String(st.overlays.has(k)));
           OG.qs.set({ ov: [...st.overlays].join(",") === "events,news,moves" ? null : [...st.overlays].join(",") || "none" }); drawChart(); } }, label);
       const chartCtl = h("div", { class: "gp-ctl" }, viewSeg, winSeg,
-        h("span", { class: "flt" }, h("span", {}, "overlay"), ovChip("events", "Events", "notable and major market events"), ovChip("news", "News", "news mentioning this GPU"), ovChip("moves", "Moves", "inferred hour-over-hour moves of the lowest price ≥ 3%")));
+        h("span", { class: "flt" }, h("span", {}, "overlay"), ovChip("events", "Events", "notable and major market events"), ovChip("news", "News", "news mentioning this GPU"), ovChip("moves", "Moves", "hour-over-hour moves of the lowest price ≥ 3%")));
       const evSevSeg = OG.seg([["info", "All"], ["notable", "Notable+"], ["major", "Major"]], OG.qs.get("sev", "notable"), v => { OG.qs.set({ sev: v === "notable" ? null : v }); loadEvents(v); });
       const countSeg = OG.seg([[1, "1×"], [2, "2×"], [4, "4×"], [8, "8×"]], st.count, v => { st.count = Number(v); OG.qs.set({ count: v == 1 ? null : v }); loadBest(); });
 
@@ -104,7 +104,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
         section("availability", "Availability history", null, availEl, availNote),
         section("providers", "Provider ranking", null, provBox),
         section("regions", "Region pricing", null, regionBox),
-        section("moves", "Price moves and related news", null, h("div", { class: "cols-2 gp-two" }, h("div", {}, h("div", { class: "lbl" }, "Inferred moves of the lowest price"), movesBox, aroundBox0), h("div", {}, h("div", { class: "lbl" }, "News mentioning this GPU"), newsBox))),
+        section("moves", "Price moves and related news", null, h("div", { class: "cols-2 gp-two" }, h("div", {}, h("div", { class: "lbl" }, "Moves of the lowest price"), movesBox, aroundBox0), h("div", {}, h("div", { class: "lbl" }, "News mentioning this GPU"), newsBox))),
         section("events", "Market events", evSevSeg, eventsBox),
         section("alternatives", "Related and alternative GPUs", null, altBox),
         section("listings", "All current listings", null, listingsBox));
@@ -282,7 +282,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
         dispBox.replaceChildren(
           h("div", { class: "gp-score" }, h("div", {}, h("div", { class: "gp-score-v" }, sc.efficiency.toFixed(0)), h("div", { class: "dim" }, "efficiency / 100")),
             h("div", {}, h("div", { class: "gp-score-l " + (sc.fragmentation >= 50 ? "down" : sc.fragmentation >= 25 ? "warn" : "up") }, sc.label),
-              h("div", { class: "dim" }, `fragmentation ${sc.fragmentation} · confidence ${sc.confidence}`), OG.kindBadge("inferred"))),
+              h("div", { class: "dim" }, `fragmentation ${sc.fragmentation} · confidence ${sc.confidence}`))),
           h("table", { class: "gp-kv gp-comp" }, h("thead", {}, h("tr", {}, h("th", {}, "component"), h("th", { class: "n" }, "raw"), h("th", {}, "saturation"), h("th", { class: "n" }, "w"), h("th", { class: "n" }, "pts"))),
             h("tbody", {}, bar("CV (adj.)", comp.cv_adj, comp.c_cv, w.cv, v => v.toFixed(3)), bar("IQR / median", comp.iqr_rel, comp.c_iqr, w.iqr, v => v.toFixed(3)), bar("High / low − 1", comp.range, comp.c_range, w.range, v => fmt.pct(v)))),
           h("table", { class: "gp-kv" }, h("tbody", {}, kv("Spread", `${fmt.price(s.spread_abs)} (${fmt.pct(s.spread_pct_of_low)} of low)`), kv("IQR", fmt.price(s.iqr)), kv("Std dev", fmt.price(s.stdev)))),
@@ -469,7 +469,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
         }
         if (st.overlays.has("moves") && t.price_moves && t.price_moves.moves) {
           for (const mv of t.price_moves.moves.slice(-60)) out.push({ t: mv.at, label: `Lowest ${mv.direction} ${mv.change_pct > 0 ? "+" : ""}${mv.change_pct}% (${fmt.price(mv.from)} → ${fmt.price(mv.to)})`,
-            kind: "move · inferred", color: mv.direction === "up" ? "#2fbf71" : "#ef5350", detail: mv.provider_set_changed ? "provider set changed this hour: " + describeSet(mv.provider_set_changed) : "same providers before and after",
+            kind: "move", color: mv.direction === "up" ? "#2fbf71" : "#ef5350", detail: mv.provider_set_changed ? "provider set changed this hour: " + describeSet(mv.provider_set_changed) : "same providers before and after",
             onClick: () => around(mv, chartAround), hint: "click: related news and events around this move" });
         }
         return out;
@@ -552,7 +552,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
           ctx.onCleanup(() => availChart && availChart.destroy());
         }
         availNote.replaceChildren(OG.kindBadge("observed"), " Hourly samples from the market rollup. Available = explicit availability; many providers publish none (counted as unknown, not available). ",
-          (t.availability_changes && t.availability_changes.changes || []).length ? `${t.availability_changes.changes.length} inferred provider availability transitions in this window.` : "");
+          (t.availability_changes && t.availability_changes.changes || []).length ? `${t.availability_changes.changes.length} provider availability transitions in this window.` : "");
         drawMoves(t);
       }
       function drawMoves(t) {
@@ -602,7 +602,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
             { key: "occurred_at", label: "When", fmt: v => fmt.dateTime(v) },
             { key: "severity", label: "Sev", fmt: v => h("span", { class: "sevt s-" + (v || "info") }, h("i", { class: "ev-sev s-" + (v || "info") }), v || "info"), value: r => SEV_RANK[r.severity] },
             { key: "type", label: "Type", cls: "dim", fmt: v => (v || "").replace(/_/g, " ") },
-            { key: "title", label: "Event", cls: "wrap", fmt: (v, r) => [v, r.kind && r.kind !== "observed" ? [" ", h("span", { class: "kind-t", title: "data kind" }, r.kind)] : null] },
+            { key: "title", label: "Event", cls: "wrap", fmt: (v, r) => [v, r.kind && r.kind !== "observed" && r.kind !== "inferred" ? [" ", h("span", { class: "kind-t", title: "data kind" }, r.kind)] : null] },
             { key: "provider", label: "Provider", fmt: v => v ? OG.providerLink(v) : h("span", { class: "dim" }, "market") },
           ],
           rows, compact: true, limit: 15, empty: "No market events for this GPU at this severity.", csv: `opengrid-${slug}-events.csv`,
@@ -617,7 +617,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
         newsBox.replaceChildren(h("ul", { class: "gp-list gp-news" }, items.map(n => h("li", {},
           h("span", { class: "mono dim" }, fmt.date(n.published_at)), h("span", { class: "tier-t t-" + (n.trust_tier || "source"), title: "source tier" }, n.trust_tier || "source"),
           h("span", {}, ext(n.url, n.title), h("span", { class: "dim" }, " · " + (n.source_name || n.source_id) + (n.source_count > 1 ? ` +${n.source_count - 1}` : "")))))),
-          h("p", { class: "note" }, "Linked by mention of this GPU (inferred by rules). Appearing near a price move does not mean it caused it. ", h("a", { class: "lnk", href: "/news?gpu=" + slug }, "More →")));
+          h("p", { class: "note" }, "Linked by mention of this GPU (matched by rules). Appearing near a price move does not mean it caused it. ", h("a", { class: "lnk", href: "/news?gpu=" + slug }, "More →")));
       }
       async function loadListings() {
         try {

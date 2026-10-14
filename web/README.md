@@ -57,7 +57,7 @@ OG.page("/gpu/:slug", {
 - `OG.insufficient(reason, title)` — block shown when the API returns `null` + a reason.
 - `OG.na(reason)` — inline `n/a` carrying the reason; `OG.value(v, fmtFn, reason)` picks value or `na`.
 - `OG.reasonOf(obj)` reads `reason | unavailable_reason | insufficient_reason | coverage_reason`.
-- `OG.kindBadge("observed" | "inferred" | "estimated" | "transaction")` (links to /methodology/data-kinds),
+- `OG.kindBadge("observed" | "estimated" | "transaction"; "inferred" renders nothing)` (links to /methodology/data-kinds),
   `OG.freshBadge(isoOrSeconds | "fresh" | "aging" | "stale", {intervalSeconds, provider, now})` — relative to the
   provider's poll interval when known (fresh ≤ 2×, aging ≤ 6×; `{provider}` looks it up from /polling via
   `OG.data.intervals()`), else fresh ≤ 30 min, aging ≤ 3 h. `OG.badge(text, tone)`.

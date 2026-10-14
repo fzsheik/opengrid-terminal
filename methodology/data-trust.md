@@ -4,7 +4,7 @@ Every listing can carry a **trust block** (`GET /v1/trust/listings`, and
 `quality.trust.listing_trust(row)` for other modules). It is built from observable facts
 only. OpenGrid does not invent a reliability score: the confidence label is a fixed rule
 over the facts below, and the reasons are returned with it. The listing's own fields are
-**observed**; the trust block is **inferred** by the stated rules on this page.
+**observed**; the trust block is **derived** by the stated rules on this page.
 
 ## Fields
 
@@ -17,7 +17,7 @@ over the facts below, and the reasons are returned with it. The listing's own fi
 | `last_changed` | The listing's last recorded change in price or supply (newest `listing_observations` row). Observations are change-only, so this can be much older than `last_seen`. |
 | `age_seconds` | now − `last_seen`. |
 | `freshness` | `fresh`: age ≤ 1.5 × the provider's polling interval (one poll plus jitter). `aging`: older, but within `market.stale_after()` = max(2.5 × interval, 10 min). `stale`: beyond it — the market view already treats the listing as gone. |
-| `availability_basis` | From `mapping.py`'s field map for `available`: `explicit` when it is copied from a provider field (RAW); `inferred` when it follows from a stated rule (DERIVED, CONSTANT — e.g. Salad's `capacity > 0`, Vast's "a listed offer is rentable"); `unknown` when the provider does not expose it (ABSENT) or this listing's `available` is null. |
+| `availability_basis` | From `mapping.py`'s field map for `available`: `explicit` when it is copied from a provider field (RAW); derived when it follows from a stated rule (DERIVED, CONSTANT — e.g. Salad's `capacity > 0`, Vast's "a listed offer is rentable"); `unknown` when the provider does not expose it (ABSENT) or this listing's `available` is null. |
 | `held` | Pending quarantine holds on this listing (field, rule, since). See data-quality. |
 | `flags` | Open listing-level quality incidents (e.g. `instance_price_mismatch`). |
 | `provider_status` | The provider's health status (below). |
@@ -28,7 +28,7 @@ over the facts below, and the reasons are returned with it. The listing's own fi
 - **low** if any of: freshness is `stale`; a pending quarantine hold on the listing; an
   open listing-level quality flag; the provider's status is `down`.
 - **high** if all of: freshness `fresh`; `source_type` is `direct_api`; availability basis
-  `explicit` or `inferred`; provider status `healthy`; no holds and no flags.
+  explicit or derived; provider status `healthy`; no holds and no flags.
 - **medium** otherwise (for example a public page, aggregator or pricing-file source; an
   aging listing; unknown availability; a degraded provider).
 

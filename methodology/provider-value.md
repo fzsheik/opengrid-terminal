@@ -2,7 +2,7 @@
 
 Used by `/v1/providers`, `/v1/providers/{provider}`, `/v1/compare` (providers) and
 `/v1/heatmaps/gpu-provider-*`. Code: `analytics/providers.py`; tables `structure_provider_daily`,
-`structure_gpu_daily`. Data kind: **inferred**, from observed market prices in the hourly rollup.
+`structure_gpu_daily`. Data kind: **derived**, from observed market prices in the hourly rollup.
 
 ## The comparison is always within the same hour
 

@@ -48,8 +48,8 @@ the rest. Documents that declare XML entities are refused.
 - RFC 822, ISO 8601 and plain dates are converted to UTC. A plain date (as in the Federal
   Register) is read as 00:00 UTC on that date. A time with no timezone is read as UTC.
 - If the publish time is missing, unreadable, or more than 24 hours in the future, OpenGrid
-  uses the time it first saw the item (`first_seen_at`) and sets
-  `published_at_inferred = true`.
+  uses the time it first saw the item (`first_seen_at`) and flags that the
+  source gave no usable publish time.
 
 ## Deduplication and stories
 
@@ -84,7 +84,7 @@ once, with every source that carried it. The thresholds are strict on purpose. M
 different stories would hide one of them. Missing a syndication only shows the same story
 twice.
 
-## Classification (inferred, deterministic)
+## Classification (rule-based, deterministic)
 
 All classification comes from hand-maintained tables matched against the title and summary
 (`news/classify.py`). The same text always gives the same result, and each entity keeps the
@@ -155,10 +155,10 @@ all. Pass `min_relevance=0` to see everything.
 
 - **Observed prices** from the hourly rollup (`market_hourly`): the market's lowest and median
   provider price for a GPU, or one provider's lowest.
-- **Inferred price moves**: hour-over-hour changes of at least 3% (configurable). A move is
+- **Price moves**: hour-over-hour changes of at least 3% (configurable). A move is
   flagged with `provider_set_changed` when providers entered or left that hour. A provider
   OpenGrid has only just started recording moves the lowest price without the market moving.
-- **Inferred availability changes** for each provider: priced, sold out or absent.
+- **Availability changes** for each provider: priced, sold out or absent.
 - **Market events** from the events engine (`market_events`), when that table exists.
   Otherwise the response says it is unavailable.
 - **Related news**: items with the same GPU (or family) or provider in the same window.
@@ -182,8 +182,8 @@ these responses says one thing caused another.
 ## Data kinds
 
 - News items are **observed** text from public sources.
-- Their entities, topics, relevance and story clusters are **inferred** by the rules above.
+- Their entities, topics, relevance and story clusters are **derived** by the rules above.
 - Prices in the timeline are **observed market prices**. Moves and availability changes drawn
-  from them are **inferred**.
+  from them are **derived**.
 
 No figure here is estimated.

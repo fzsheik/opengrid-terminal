@@ -111,7 +111,7 @@ def best(gpu: str, count: int = Query(1, ge=1, le=64), region: str | None = None
     group = _region(region)
     if strict_region and not group:
         raise HTTPException(422, "strict_region needs a region")
-    note = "ranking is inferred from observed market prices; candidate prices are observed market prices, not quotes"
+    note = "ranking is computed from observed market prices; candidate prices are observed market prices, not quotes"
     try:
         if kind == "family":
             import families

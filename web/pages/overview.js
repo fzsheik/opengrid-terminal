@@ -248,7 +248,7 @@
         const rows = await ctx.api("/v1/spreads", { params: { min_providers: 2 }, nocache: true }).catch(e => ({ error: e }));
         if (!Array.isArray(rows)) { P.spreads.fail("spreads request failed: " + (rows.error && rows.error.message)); return; }
         const list = rows.filter(r => r.spread_pct_of_low != null).sort((a, b) => b.spread_pct_of_low - a.spread_pct_of_low);
-        P.spreads.set({ available: true, kind: "inferred", items: list }, R.spreads, "no GPU has 2+ priced providers");
+        P.spreads.set({ available: true, items: list }, R.spreads, "no GPU has 2+ priced providers");
       }
       async function loadEvents() {
         try {

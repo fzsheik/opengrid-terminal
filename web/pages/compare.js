@@ -257,7 +257,7 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
         { label: "Common GPUs", value: String(common.length), sub: `${onlyA.length} only ${na} · ${onlyB.length} only ${nb}` },
         { label: `${na} cheaper on`, value: common.length ? `${aWins} of ${common.length}` : null, reason: "no common GPU" },
         { label: `${nb} cheaper on`, value: common.length ? `${bWins} of ${common.length}` : null, reason: "no common GPU" },
-        { label: "Median B vs A", value: mdiff != null ? fmt.pct(mdiff) : null, reason: "no common GPU", sub: mdiff == null ? null : mdiff < 0 ? nb + " cheaper" : mdiff > 0 ? na + " cheaper" : "same", kind: "inferred" },
+        { label: "Median B vs A", value: mdiff != null ? fmt.pct(mdiff) : null, reason: "no common GPU", sub: mdiff == null ? null : mdiff < 0 ? nb + " cheaper" : mdiff > 0 ? na + " cheaper" : "same" },
       ]),
       h("div", { class: "cmp-grid" },
         h("div", {}, OG.section(null, commonT), h("section", { class: "sec" }, h("div", { class: "cmp-sh" }, chartHead, h("span", { class: "spacer" }), winSeg), chartEl, chartNote)),

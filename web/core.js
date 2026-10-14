@@ -35,7 +35,7 @@ DOM          OG.h(tag, props, ...kids)  (props: class, style, on<event>, any att
 Formatting   OG.fmt.price/pct/num/compact/age/time/date/dateTime/dir/cls, OG.chg(fraction) (▲/▼ span)
 States       OG.loading(text) · OG.empty(text) · OG.error(err, retry) · OG.insufficient(reason, title)
              OG.na(reason) (inline "n/a" with the reason) · OG.value(v, fmtFn, reason) · OG.reasonOf(obj)
-Badges       OG.kindBadge("observed"|"inferred"|"estimated"|"transaction") · OG.freshBadge(isoOrSeconds|label)
+Badges       OG.kindBadge("observed"|"estimated"|"transaction"; "inferred" renders nothing) · OG.freshBadge(isoOrSeconds|label)
              OG.badge(text, tone)
 Components   OG.head(title, sub, ...right) · OG.section(title, ...kids) · OG.stats(items) · OG.seg(options, value, onChange)
              OG.tabs(options, value, onChange) · OG.table(spec) · OG.csv(rows, columns, filename) · OG.logo(p, size)
@@ -643,12 +643,12 @@ Full docs: web/README.md.
 
   const KIND_HELP = {
     observed: "Read directly from a provider and normalized",
-    inferred: "Derived from observed data by a stated rule",
     estimated: "A model or assumption fills a gap",
     transaction: "What an OpenGrid execution actually quoted or paid",
   };
   OG.badge = (text, tone, title) => h("span", { class: "badge " + (tone || ""), title: title || null }, text);
-  OG.kindBadge = kind => h("a", { class: "badge kind k-" + kind, href: "/methodology/data-kinds", title: KIND_HELP[kind] || kind }, kind);
+  // "inferred" is a data kind in the API but is not shown as a badge in the UI
+  OG.kindBadge = kind => kind === "inferred" ? null : h("a", { class: "badge kind k-" + kind, href: "/methodology/data-kinds", title: KIND_HELP[kind] || kind }, kind);
   // Poll interval per provider (seconds), from /polling, loaded at start: freshBadge(..., {provider}) uses it.
   const INTERVALS = new Map();
   OG.data_intervals = INTERVALS;

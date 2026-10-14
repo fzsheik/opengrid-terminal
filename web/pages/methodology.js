@@ -71,7 +71,7 @@
         })));
     });
     body.replaceChildren(h("div", { class: "md-grid" }, sections),
-      h("p", { class: "note" }, `${docs.length} documents. Data kinds (observed / inferred / estimated / transaction) and the four price concepts are defined in `,
+      h("p", { class: "note" }, `${docs.length} documents. Data kinds (observed / derived / estimated / transaction) and the four price concepts are defined in `,
         h("a", { class: "lnk", href: "/methodology/data-kinds" }, "data-kinds"), "; every figure on the site carries one of those labels."));
     await Promise.all(docs.filter(d => !d.summary).map(async d => {
       const t = await describe(d.name);

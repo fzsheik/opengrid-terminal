@@ -84,7 +84,7 @@ in the URL so a filtered view is shareable. $/GB-VRAM-h = current low / VRAM: th
         sum.textContent = `${shown.length} of ${rows.length} GPUs`;
         tbl.update(shown);
         if (holder.firstChild !== tbl) holder.replaceChildren(tbl, h("p", { class: "note" }, OG.kindBadge("observed"),
-          " Observed list prices, on-demand, not interruptible, in stock or stock unknown; one vote per provider (its lowest). ", OG.kindBadge("inferred"),
+          " Observed list prices, on-demand, not interruptible, in stock or stock unknown; one vote per provider (its lowest).",
           " Spread, efficiency and 24h change are derived. $/GB and $/PFLOP (per 1,000 TFLOPS) use vendor peak specs (dense) and are theoretical, not benchmarks. ",
           h("a", { class: "lnk", href: "/methodology/dispersion" }, "Dispersion"), " · ", h("a", { class: "lnk", href: "/methodology/hardware" }, "Hardware")));
       }

@@ -120,7 +120,7 @@
         h("span", { class: "mono dim" }, fmt.date(n.published_at)), h("span", { class: "tier-t t-" + (n.trust_tier || "source"), title: "source tier" }, n.trust_tier || "source"),
         h("span", {}, h("a", { class: "lnk", href: n.url, target: "_blank", rel: "external noopener" }, n.title),
           h("span", { class: "dim" }, " · " + (n.source_name || n.source_id || "") + (n.source_count > 1 ? ` +${n.source_count - 1}` : "")))))),
-        h("p", { class: "note" }, "Linked by mention of the family or one of its variants (inferred by rules); not a claim about any price. ",
+        h("p", { class: "note" }, "Linked by mention of the family or one of its variants (matched by rules); not a claim about any price. ",
           h("a", { class: "lnk", href: "/news?gpu=" + encodeURIComponent(fam.slug || fam.id) }, "More →")));
     }
 

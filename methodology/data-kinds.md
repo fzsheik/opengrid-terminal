@@ -5,7 +5,7 @@ OpenGrid labels every number by how it was obtained, and never mixes kinds in on
 | Kind | Meaning |
 |---|---|
 | **observed** | Read directly from a provider (API, public price page, or aggregator) and normalized. |
-| **inferred** | Derived from observed data by a stated rule, e.g. `available = capacity > 0`. |
+| **derived** | Computed from observed data by a stated rule, e.g. `available = capacity > 0`. |
 | **estimated** | A model or assumption fills a gap. Always labelled; never silent. |
 | **transaction** | What an OpenGrid execution actually quoted or paid. |
 

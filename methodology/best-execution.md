@@ -46,11 +46,11 @@ Each factor is normalized to 0..1.
 | Factor | Kind | Definition |
 |---|---|---|
 | `price` | observed | `clamp(0.5 − (price − median) / median)`: 0.5 at the market median, 0.6 at 10% below, 1.0 at ≥50% below, 0 at ≥50% above. |
-| `availability_now` | observed | Provider says available: 1.0 (labelled *explicit*, or *inferred* where the quality module marks the provider's flag as derived). Unknown: 0.5. Sold out is excluded, never scored. |
+| `availability_now` | observed | Provider says available: 1.0 (labelled *explicit*, or *derived* where the quality module marks the provider's flag as derived). Unknown: 0.5. Sold out is excluded, never scored. |
 | `region_match` | observed | Only when a region group is requested: listing located in the group 1.0; location unknown 0.5 ("not confirmed"); known to be elsewhere → excluded. Region groups come from `regions.py`, never guessed. |
 | `freshness` | observed | 1.0 while the listing's last sighting is within one polling interval, falling linearly to 0 at `stale_after`. |
-| `availability_persistence` | inferred | Share of hourly samples in the last 30 days (from `market_hourly`) in which this provider had at least one priced, not-sold-out listing for this GPU. Denominator: hours from when OpenGrid first recorded the provider for this GPU (or 30 days ago, if later) to the newest rollup hour; an hour with no rollup row means no live listing and counts as unavailable. 7-day share is reported alongside. Per provider, collapsed over regions. Unknown-stock listings count as "priced availability". |
-| `price_stability` | inferred | `clamp(1 − CV / 0.25)` where CV is the coefficient of variation (population stdev / mean) of the provider's hourly lowest price over 30 days. |
+| `availability_persistence` | derived | Share of hourly samples in the last 30 days (from `market_hourly`) in which this provider had at least one priced, not-sold-out listing for this GPU. Denominator: hours from when OpenGrid first recorded the provider for this GPU (or 30 days ago, if later) to the newest rollup hour; an hour with no rollup row means no live listing and counts as unavailable. 7-day share is reported alongside. Per provider, collapsed over regions. Unknown-stock listings count as "priced availability". |
+| `price_stability` | derived | `clamp(1 − CV / 0.25)` where CV is the coefficient of variation (population stdev / mean) of the provider's hourly lowest price over 30 days. |
 | `integration_level` | registry | OpenGrid adapter level / 3 (`routing/capabilities.py`): can OpenGrid actually provision there? |
 | `reliability` | — | **No data — not used.** Weight 0, value null. |
 | `performance` | — | **No data — not used.** Weight 0, value null. |

@@ -100,8 +100,8 @@
           { label: "Listings", value: fmt.num(c.live_listings), sub: `${fmt.num(c.priced_listings)} priced`, kind: "observed" },
           { label: "Regions", fold: true, value: (c.region_groups || []).length ? String(c.region_groups.length) : null, reason: c.live_listings ? "no listing location maps to a region group" : "no live listings", sub: (c.region_groups || []).join(" · ") },
           { label: "Cheapest now", value: ranked.length ? `${first}/${ranked.length}` : null, reason: "no GPU here has a second provider to compare with", sub: "GPUs where it is rank 1" },
-          { label: "Median prem. now", value: medPrem == null ? null : prem(medPrem), reason: "no GPU with another provider priced", sub: `across ${prems.length} GPU${prems.length === 1 ? "" : "s"}`, kind: "inferred", title: "Median over its GPUs of: own lowest / median of other providers' lowest − 1, now" },
-          { label: `Avg prem. ${st.days}d`, fold: true, value: rv.premium_avg == null ? null : prem(rv.premium_avg), reason: rs.premium_avg || "no rollup history", kind: "inferred" },
+          { label: "Median prem. now", value: medPrem == null ? null : prem(medPrem), reason: "no GPU with another provider priced", sub: `across ${prems.length} GPU${prems.length === 1 ? "" : "s"}`, title: "Median over its GPUs of: own lowest / median of other providers' lowest − 1, now" },
+          { label: `Avg prem. ${st.days}d`, fold: true, value: rv.premium_avg == null ? null : prem(rv.premium_avg), reason: rs.premium_avg || "no rollup history" },
           { label: "% cheapest", fold: true, value: rv.cheapest_share == null ? null : share(rv.cheapest_share), reason: rs.cheapest_share || "no rollup history" },
           { label: "Availability", fold: true, value: rv.availability == null ? null : share(rv.availability), reason: rs.availability || "no rollup history", title: "Share of tracked hours with a priced listing" },
           { label: "Volatility", fold: true, value: rv.volatility_daily == null ? null : (rv.volatility_daily * 100).toFixed(1) + "%", reason: rs.volatility_daily || "no rollup history", title: "Median across its GPUs of the stdev of daily log price changes" },
@@ -110,7 +110,7 @@
 
       function drawFacts() {
         const d = st.d, out = [];
-        for (const f of d.facts || []) out.push(h("li", {}, OG.kindBadge("inferred"), " ", f));
+        for (const f of d.facts || []) out.push(h("li", {}, f));
         const priced = d.catalog.filter(c => c.best_price != null).sort((a, b) => a.best_price - b.best_price);
         if (priced.length) {
           const top = priced.filter(c => c.market_providers >= 2).sort((a, b) => b.market_providers - a.market_providers)[0] || priced[0];
@@ -176,7 +176,7 @@
         }[st.hist];
         histEl.textContent = "";
         histChart = OG.charts.timeseries(histEl, { times, height: 180, legend: true, ...S, label: `${name} relative value history` });
-        histNote.replaceChildren(OG.kindBadge("inferred"), ` One point per day over that day's compared hours (hours where at least one other provider priced the same GPU), all GPUs pooled. Last ${st.days} days. `, h("a", { class: "lnk", href: "/methodology/provider-value" }, "Methodology →"));
+        histNote.replaceChildren(`One point per day over that day's compared hours (hours where at least one other provider priced the same GPU), all GPUs pooled. Last ${st.days} days. `, h("a", { class: "lnk", href: "/methodology/provider-value" }, "Methodology →"));
       }
 
       // ------------------------------------------------------------ price history for one GPU
@@ -211,7 +211,7 @@
             (one ? ` (${fmt.price(one.lowest)} at ${fmt.dateTime(one.hour)})` : "") + ". A line needs at least two hours of the rollup.", "History building"));
         } else {
           const evs = [...(mine.market_events.events || []).map(e => ({ t: e.occurred_at, label: e.title, kind: e.type, severity: e.severity, href: "/events?provider=" + encodeURIComponent(p) })),
-            ...(mine.price_moves.moves || []).map(mv => ({ t: mv.at, label: `${name} lowest ${fmt.price(mv.from)} → ${fmt.price(mv.to)} (${fmt.pct(mv.change_pct / 100)})`, kind: "price move · inferred", severity: "notable" })),
+            ...(mine.price_moves.moves || []).map(mv => ({ t: mv.at, label: `${name} lowest ${fmt.price(mv.from)} → ${fmt.price(mv.to)} (${fmt.pct(mv.change_pct / 100)})`, kind: "price move", severity: "notable" })),
             ...(((mkt && mkt.news.items) || mine.news.items || []).map(n => ({ t: n.published_at, label: n.title, kind: "news · " + n.source_name, color: "#8fc3ff", detail: "related by entity, not necessarily causal", href: "/news?gpu=" + st.gpu })))];
           priceEl.textContent = "";
           priceChart = OG.charts.timeseries(priceEl, {
@@ -225,7 +225,7 @@
         const sums = (cx && cx.summaries) || [];
         ctxEl.replaceChildren(...sums.map(s => h("li", {}, OG.kindBadge("observed"), " ", s)),
           ...(cx ? Object.values(cx.windows || {}).filter(w => w.reason).slice(0, 1).map(w => h("li", { class: "dim" }, `Percentile vs its own history: ${w.reason}.`)) : []));
-        priceNote.replaceChildren(OG.kindBadge("observed"), ` Hourly lowest eligible on-demand price per GPU-hour from the rollup; market lines are every provider's lowest. Markers: market events, inferred moves (≥ ${mine.price_moves.threshold_pct}%) and news mentioning this GPU — related in time, not necessarily causal.`);
+        priceNote.replaceChildren(OG.kindBadge("observed"), ` Hourly lowest eligible on-demand price per GPU-hour from the rollup; market lines are every provider's lowest. Markers: market events, price moves (≥ ${mine.price_moves.threshold_pct}%) and news mentioning this GPU — related in time, not necessarily causal.`);
       }
 
       // ------------------------------------------------------------ right column

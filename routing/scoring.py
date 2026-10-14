@@ -258,7 +258,7 @@ def factors(row: dict, *, median: float, hist: dict, want_group: str | None, now
 
     basis = _availability_basis(row)
     if row["available"] is True:
-        word = "inferred" if basis == "inferred" else "explicit"
+        word = "derived" if basis == "inferred" else "explicit"
         out["availability_now"] = _factor(1.0, {"available": True, "basis": basis or word}, "observed",
                                           f"available now ({word})")
     else:

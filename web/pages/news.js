@@ -107,7 +107,7 @@
           const c = d && d.relevance_components;
           if (!c) { pop.replaceChildren(h("div", { class: "dim" }, "components unavailable")); return; }
           const tb = (d.entities && d.entities.topic_basis) || {};
-          pop.replaceChildren(h("div", { class: "ct-t" }, "Relevance ", h("b", {}, String(d.relevance)), " / 100 · inferred"),
+          pop.replaceChildren(h("div", { class: "ct-t" }, "Relevance ", h("b", {}, String(d.relevance)), " / 100"),
             h("div", { class: "ct-r" }, h("span", {}, "entity points"), h("span", {}, fmt.num(c.entity_points, 1))),
             h("div", { class: "ct-r" }, h("span", {}, "topic points"), h("span", {}, fmt.num(c.topic_points, 1))),
             h("div", { class: "ct-r" }, h("span", {}, "source tier ×"), h("span", {}, fmt.num(c.tier_mult, 2) + " (" + d.trust_tier + ")")),
@@ -131,7 +131,7 @@
             h("a", { class: "nw-t", href: safeHref(n.url), target: "_blank", rel: "noopener external" }, n.title),
             n.summary ? h("div", { class: "nw-s" }, n.summary) : null,
             h("div", { class: "nw-m" },
-              h("span", { class: "mono", title: (n.published_at_inferred ? "publication time inferred · " : "") + fmt.dateTime(n.published_at) }, fmt.age(n.published_at) + " ago"),
+              h("span", { class: "mono", title: (n.published_at_inferred ? "no publish time from the source; first seen · " : "") + fmt.dateTime(n.published_at) }, fmt.age(n.published_at) + " ago"),
               h("a", { class: "lnk", href: "/news?source=" + encodeURIComponent(n.source_id) }, n.source_name),
               h("span", { class: "tier-t t-" + (n.trust_tier || "none"), title: "source tier" }, n.trust_tier || "–"),
               n.source_count > 1 ? h("span", { class: "nw-srcs", title: others.map(s => `${s.source_name}: ${s.title}`).join("\n") }, `+${n.source_count - 1} source${n.source_count > 2 ? "s" : ""}: `,
@@ -159,9 +159,9 @@
         const times = pts.map(p => p.hour);
         const evs = [
           ...((d.market_events && d.market_events.events) || []).map(e => ({ t: e.occurred_at, label: e.title, kind: "event · " + e.type.replace(/_/g, " "), severity: e.severity, href: "/events" })),
-          ...((d.price_moves && d.price_moves.moves) || []).map(m => ({ t: m.at, label: `lowest ${fmt.price(m.from)} → ${fmt.price(m.to)} (${fmt.pct(m.change_pct / 100)})`, kind: "move · inferred", severity: "notable",
+          ...((d.price_moves && d.price_moves.moves) || []).map(m => ({ t: m.at, label: `lowest ${fmt.price(m.from)} → ${fmt.price(m.to)} (${fmt.pct(m.change_pct / 100)})`, kind: "move", severity: "notable",
             detail: m.provider_set_changed ? "the set of priced providers changed this hour — may be coverage, not a market move" : null })),
-          ...((d.availability_changes && d.availability_changes.changes) || []).map(c => ({ t: c.at || c.hour, label: `${OG.providerName(c.provider)}: ${c.from || "?"} → ${c.to || "?"}`, kind: "availability · inferred", color: "#c9b5ff" })),
+          ...((d.availability_changes && d.availability_changes.changes) || []).map(c => ({ t: c.at || c.hour, label: `${OG.providerName(c.provider)}: ${c.from || "?"} → ${c.to || "?"}`, kind: "availability", color: "#c9b5ff" })),
           ...((d.news && d.news.items) || []).map(n => ({ t: n.published_at, label: n.title, kind: "news · " + n.source_name + " · rel " + n.relevance, color: "#8fc3ff", detail: "related by entity and time, not necessarily causal" })),
         ].filter(e => e.t);
         const priceBox = h("div", { class: "box box-p" }), availBox = h("div", { class: "box box-p nw-avail" });
@@ -184,7 +184,7 @@
         const rows = evs.slice().sort((a, b) => new Date(b.t) - new Date(a.t)).slice(0, 30);
         return OG.section(`Markers in this window (${evs.length})`, rows.length ? h("div", { class: "box nw-mk" }, rows.map(e => h("div", { class: "nw-mki" },
           h("i", { class: "sw", style: { background: e.color || ({ major: "#ef5350", notable: "#f5a524" })[e.severity] || "#7d8895" } }),
-          h("span", { class: "mono dim" }, fmt.dateTime(e.t)), h("span", { class: "nw-mkk" }, e.kind), h("span", {}, e.label)))) : OG.empty("No events, inferred moves or related news in this window."));
+          h("span", { class: "mono dim" }, fmt.dateTime(e.t)), h("span", { class: "nw-mkk" }, e.kind), h("span", {}, e.label)))) : OG.empty("No events, price moves or related news in this window."));
       }
 
       // ------------------------------------------------------------ side panels
@@ -206,7 +206,7 @@
         const max = Math.max(1, ...t.map(x => x.items_30d));
         topicEl.replaceChildren(h("div", { class: "box nw-tp" }, t.map(x => h("button", { class: "nw-tpi", "aria-pressed": String(f.topic === x.id), title: x.description, onclick: () => setF({ topic: f.topic === x.id ? "" : x.id }) },
           h("span", {}, x.id.replace(/_/g, " ")), h("span", { class: "nw-tpb" }, h("i", { style: { width: (x.items_30d / max) * 100 + "%" } })), h("span", { class: "n" }, String(x.items_30d))))),
-          h("p", { class: "note" }, OG.kindBadge("inferred"), " topics and relevance by deterministic rules. ", h("a", { class: "lnk", href: "/methodology/news" }, "Methodology →")));
+          h("p", { class: "note" }, "Topics and relevance by deterministic rules. ", h("a", { class: "lnk", href: "/methodology/news" }, "Methodology →")));
       }
 
       function drawView() {
