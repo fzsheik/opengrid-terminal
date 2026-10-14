@@ -30,7 +30,13 @@ def test_matrix():
             assert client.get(path).status_code in (401, 403), path
         assert client.post("/v1/route/preview", json={"gpu": "h100-80gb-sxm5", "count": 1}).status_code == 401
         assert client.post("/v1/route", json={"gpu": "h100-80gb-sxm5", "count": 1}).status_code == 401
+        # the workload estimate is a pure computation: public (the recommendation also reads the market DB,
+        # covered with a scratch database in tests/test_recommend.py)
+        r = client.post("/v1/recommend/estimate", json={"workload_type": "no_gpu"})
+        assert r.status_code == 200 and r.json()["data"]["needs_gpu"] is False, r.text
+        assert client.post("/v1/recommend/other", json={}).status_code == 401
         settings.public_pages = False
+        assert client.post("/v1/recommend/estimate", json={"workload_type": "no_gpu"}).status_code == 401
         assert client.get("/v1/methodology").status_code == 401, "closed when public_pages is off"
     finally:
         settings.app_password, settings.public_pages = saved

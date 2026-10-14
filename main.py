@@ -282,6 +282,10 @@ from api import reservations as reservations_api  # noqa: E402  (price-lock requ
 
 app.include_router(reservations_api.router)
 
+from api import recommend as recommend_api  # noqa: E402  (workload intelligence: estimate + recommendations)
+
+app.include_router(recommend_api.router)
+
 # Last: the page router owns "/" and the catch-all page paths.
 app.include_router(pages_api.router)
 
