@@ -60,7 +60,7 @@ ok(/id="nav-toggle"[^>]*aria-controls="main-nav"/.test(html) && html.includes('i
 // every page module has its script tag
 for (const f of fs.readdirSync(path.join(WEB, "pages")).filter(f => f.endsWith(".js")))
   ok(html.includes(`/static/pages/${f}"`), `index.html loads pages/${f}`);
-ok(!/<script src="\/static\/pages\/find\.js">/.test(html), "/find is built separately (placeholder comment only)");
+ok(/<script src="\/static\/pages\/find\.js">/.test(html), "/find (Find Compute) is loaded");
 
 // ---------- every client page highlights a link that exists ----------
 const navSet = new Set(keys);

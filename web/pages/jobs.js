@@ -474,10 +474,143 @@
     };
   }
 
+  /* ---- plain-language progress: the 14-state machine as 8 stages (or 4 for the sandbox) ---- */
+  // Derived ONLY from the real job state (jobs/states.py) and its event history; nothing is assumed.
+  const STAGES = [["preparing", "Preparing"], ["selecting", "Selecting GPU"], ["approval", "Awaiting approval"], ["starting", "Starting GPU"],
+    ["running", "Running"], ["saving", "Saving results"], ["shutting_down", "Shutting down"], ["complete", "Complete"]];
+  // The sandbox never selects, waits for approval, starts or shuts down a GPU (jobs/states.py SANDBOX path).
+  const SANDBOX_STAGES = ["preparing", "running", "saving", "complete"];
+  const STAGE_OF = {
+    created: "preparing", validating: "preparing", validation_failed: "preparing",
+    quoted: "selecting", no_eligible_provider: "selecting",
+    pending_approval: "approval", quote_expired: "approval", approval_rejected: "approval",
+    approved: "starting", provisioning: "starting", provider_timeout: "starting", provisioning_uncertain: "starting", initializing: "starting", bootstrap_failed: "starting",
+    training: "running", training_failed: "running", out_of_memory: "running", training_timed_out: "running",
+    saving_artifacts: "saving", artifact_upload_failed: "saving",
+    training_completed: "shutting_down", terminating: "shutting_down", termination_confirmed: "shutting_down", termination_failed: "shutting_down",
+    orphan_suspected: "shutting_down", reconciliation_pending: "shutting_down", cancelling: "shutting_down",
+    reconciled: "complete",
+  };
+  // sandbox: setup is simulated (no GPU to start); the simulation ends at training_completed
+  const SANDBOX_STAGE_OF = Object.assign({}, STAGE_OF, { initializing: "preparing", bootstrap_failed: "preparing", training_completed: "complete" });
+  // states that end (or fail) the stage they sit in
+  const STAGE_FAILS = ["validation_failed", "no_eligible_provider", "approval_rejected", "bootstrap_failed", "training_failed", "out_of_memory", "training_timed_out", "artifact_upload_failed"];
+  // states whose stage depends on where the job was when they happened
+  const STAGE_FROM_HISTORY = ["credentials_unavailable", "cancel_requested"];
+  // job -> {mode, steps: [{key, label, mark: done|current|failed|todo|skipped, tone, state}], current, failed_stage, ended, outcome, attention}
+  function stages(job) {
+    const sb = isSandbox(job), s = stateOf(job), o = outcomeOf(job);
+    const keys = sb ? SANDBOX_STAGES : STAGES.map(x => x[0]);
+    const map = sb ? SANDBOX_STAGE_OF : STAGE_OF;
+    const hist = ((job && job.events) || []).map(e => e && (e.to || e.to_status || e.state)).filter(Boolean);
+    const known = hist.length > 0;
+    const all = hist.concat(s ? [s] : []);
+    const stageOf = st => map[st] || null;
+    const furthest = list => { let best = -1; for (const st of list) { const i = keys.indexOf(stageOf(st)); if (i > best) best = i; } return best; };
+    let cur = stageOf(s);
+    if (!cur && STAGE_FROM_HISTORY.includes(s)) {
+      // cancel after a launch is the shut-down path; before a launch (or credentials lost mid-run) stay where the job was
+      const launched = all.some(st => MAY_BILL.includes(st) && !STAGE_FROM_HISTORY.includes(st));
+      const i = furthest(hist);
+      cur = s === "cancel_requested" && launched ? "shutting_down" : i >= 0 ? keys[i] : keys[0];
+    }
+    if (!cur || !keys.includes(cur)) cur = keys[Math.max(0, furthest(all))];
+    const idx = keys.indexOf(cur);
+    const ended = isTerminal(job);
+    const failSt = all.find(st => STAGE_FAILS.includes(st)) || null;
+    let failedStage = failSt ? stageOf(failSt) : null;
+    if (failedStage && !keys.includes(failedStage)) failedStage = null;
+    const fi = failedStage ? keys.indexOf(failedStage) : -1;
+    const visited = new Set(all.map(stageOf).filter(Boolean));
+    if (all.includes("approved")) visited.add("approval");   // approved sits in Starting GPU but proves approval happened
+    const warn = UNCERTAIN.includes(s) || s === "termination_failed" || s === "quote_expired";
+    const steps = keys.map((k, i) => {
+      const label = STAGES.find(x => x[0] === k)[1];
+      let mark;
+      if (i < idx) mark = i === fi ? "failed" : known && !visited.has(k) ? "skipped" : "done";
+      else if (i === idx) {
+        if (i === fi && (STAGE_FAILS.includes(s) || ended)) mark = "failed";
+        else if (k === "complete" && ended) mark = "done";
+        else mark = ended ? (STAGE_FAILS.includes(s) ? "failed" : "done") : "current";
+      } else mark = !ended ? "todo" : k === "complete" ? "done" : "skipped";   // an ended job always shows how it ended
+      let tone = "";
+      if (mark === "failed") tone = o === "cancelled" ? "warn" : "bad";
+      else if (mark === "current") tone = warn ? "warn" : "busy";
+      else if (k === "complete" && mark === "done") tone = o === "failed" ? "bad" : o === "cancelled" ? "warn" : "good";
+      return { key: k, label: k === "complete" ? completeLabel(ended, o, sb) : label, mark, tone, state: i === idx ? s : null };
+    });
+    return { mode: sb ? "sandbox" : "real", steps, current: cur, failed_stage: failedStage, ended, outcome: o,
+      attention: warn || s === "pending_approval" || (!sb && summary(job).possibly_billing && ended === false && FAILED.includes(s)) };
+  }
+  function completeLabel(ended, o, sb) {
+    if (!ended) return "Complete";
+    if (o === "failed") return "Ended — failed";
+    if (o === "cancelled") return "Ended — cancelled";
+    if (sb || o === "simulated") return "Complete (simulated)";
+    return "Complete";
+  }
+
+  // The questions a beginner asks, answered from the real job / deployment / artifacts only.
+  // -> [{key, q, a, tone, detail}]   tone: good | warn | bad | "" ; detail is a short supporting line
+  function plainStatus(job, dep, artifacts, opts) {
+    opts = opts || {};
+    const j = job || {}, s = stateOf(j), o = outcomeOf(j), sb = isSandbox(j), sm = summary(j, dep), ended = isTerminal(j);
+    const out = [];
+    const add = (key, q, a, tone, detail) => out.push({ key, q, a, tone: tone || "", detail: detail || null });
+    const cap = sm.est_max != null ? usd(sm.est_max) : (j.request && j.request.limits && j.request.limits.max_total_cost_usd != null ? usd(j.request.limits.max_total_cost_usd) : null);
+    const uncertain = UNCERTAIN.includes(s) || s === "termination_failed" || sm.possibly_billing;
+    // 1. money
+    if (sb) add("money", "Can real money be spent?", "No", "good", "This is a free simulation: no provider is called and nothing is charged.");
+    else if (ENDED_BEFORE_LAUNCH.includes(s)) add("money", "Can real money be spent?", "No", "good", "The job ended before anything was launched.");
+    else if (s === "reconciled") add("money", "Can real money be spent?", "Not any more", "good", "The GPU was terminated and the provider confirmed it.");
+    else if (uncertain) add("money", "Can real money be spent?", "Yes — possibly right now", "bad", "OpenGrid cannot yet confirm the GPU is gone; treat it as billing.");
+    else if (MAY_BILL.includes(s)) add("money", "Can real money be spent?", "Yes", "warn", "A rented GPU exists for this job" + (cap ? ` (cost ceiling ${cap})` : "") + ".");
+    else add("money", "Can real money be spent?", "Not yet", "", "Nothing is charged until an OpenGrid admin approves the quote" + (cap ? ` (max ${cap})` : "") + ".");
+    // 2. simulation
+    add("sim", "Is this a simulation?", sb ? "Yes" : "No", sb ? "warn" : "", sb ? "Every log line, metric and file is synthetic and labelled SIMULATED." : "A real provider run on a rented GPU.");
+    // 3. running
+    if (ended) add("running", "Is it running?", "No — finished", "");
+    else if (RUNNING.includes(s)) add("running", "Is it running?", "Yes", "good", s === "training" ? (sb ? "Simulated training in progress." : "Training on the GPU.") : String(s).replace(/_/g, " ") + ".");
+    else if (s === "pending_approval") add("running", "Is it running?", "Not yet — waiting for approval", "warn");
+    else if (PRE_LAUNCH.includes(s)) add("running", "Is it running?", "Not yet", "", String(s).replace(/_/g, " ") + ".");
+    else add("running", "Is it running?", "No — wrapping up", "", String(s).replace(/_/g, " ") + ".");
+    // 4. GPU
+    if (sb) add("gpu", "Is a GPU still active?", "No — no GPU was ever used", "good");
+    else if (uncertain) add("gpu", "Is a GPU still active?", "Possibly", "bad", "Termination is not confirmed by the provider yet.");
+    else if (sm.disposition === "terminated_confirmed" || s === "reconciled" || s === "termination_confirmed" || s === "reconciliation_pending") add("gpu", "Is a GPU still active?", "No — terminated (provider confirmed)", "good");
+    else if (MAY_BILL.includes(s)) add("gpu", "Is a GPU still active?", "Yes", "warn", "OpenGrid terminates it when the run ends, fails or hits its runtime ceiling.");
+    else add("gpu", "Is a GPU still active?", "No", "good", "Nothing has been launched.");
+    // 5. action
+    if (uncertain) add("action", "Is action needed?", "Yes — check the deployment", "bad", "OpenGrid keeps retrying termination and the operator is alerted.");
+    else if (s === "pending_approval") add("action", "Is action needed?", opts.admin ? "Yes — approve or reject the quote" : "Not from you — waiting for OpenGrid approval", "warn");
+    else if (s === "quote_expired") add("action", "Is action needed?", "Yes — the quote expired and must be re-quoted", "warn");
+    else add("action", "Is action needed?", "No", "");
+    // 6. success
+    const reason = j.failure && (j.failure.reason || j.failure.code);
+    if (o === "succeeded") add("success", "Did it succeed?", "Yes", "good");
+    else if (o === "failed") add("success", "Did it succeed?", "No", "bad", reason ? String(reason).slice(0, 200) : null);
+    else if (o === "cancelled") add("success", "Did it succeed?", "Cancelled", "warn");
+    else if (sb && ended && STAGE_FAILS.includes(s)) add("success", "Did it succeed?", "No — the simulation failed", "bad", reason ? String(reason).slice(0, 200) : null);
+    else if (sb && ended) add("success", "Did it succeed?", "The simulation completed", "good", "Synthetic numbers: this is not a real training result.");
+    else add("success", "Did it succeed?", "Not known yet", "");
+    // 7. outputs
+    const arts = Array.isArray(artifacts) ? artifacts : [];
+    add("outputs", "What outputs exist?", arts.length ? arts.map(a => a && a.name).filter(Boolean).join(", ") : "None yet", arts.length ? "good" : "",
+      arts.length ? (sb ? "Simulated files." : "sha256-verified on receipt.") : ended ? "No files were stored." : "Files are saved when training ends.");
+    // 8. cost
+    if (sb) add("cost", "What did it cost?", "$0.00 — simulated", "good");
+    else if (sm.actual != null) add("cost", "What did it cost?", usd(sm.actual), "", sm.actual_basis === "transaction" ? "Reconciled from provider usage." : null);
+    else if (ENDED_BEFORE_LAUNCH.includes(s)) add("cost", "What did it cost?", "$0.00 — nothing launched", "good");
+    else add("cost", "What did it cost?", "Not known yet", "", "Known after termination is confirmed and reconciled" + (cap ? ` · ceiling ${cap}` : "") + ".");
+    return out;
+  }
+  const RUNNING = ["provisioning", "initializing", "training", "saving_artifacts"];
+
   OG.jobs = { FLOW, SANDBOX_FLOW, FAILED, UNCERTAIN, CANCEL, PRE_LAUNCH, MAY_BILL, ENDED_BEFORE_LAUNCH, FINISHED, SANDBOX_FINISHED, REGIONS, STRATEGIES,
-    DEFAULT_CONFIG, LIMIT_BOUNDS, CHECKS, CODE_ACTION, FOUNDER,
+    DEFAULT_CONFIG, LIMIT_BOUNDS, CHECKS, CODE_ACTION, FOUNDER, STAGES, SANDBOX_STAGES, STAGE_OF,
     tone, strip, stateOf, isTerminal, outcomeOf, OUTCOME_TONE, isSandbox, usd, perGpuH, duration, bytes, configSpec, limitBounds, templateId, preset,
-    validate, views, candExecutable, normBlockers, groupBlockers, blockerAction, estimateLine, checks, metricPoints, progress, logPage, candKey, summary };
+    validate, views, candExecutable, normBlockers, groupBlockers, blockerAction, estimateLine, checks, metricPoints, progress, logPage, candKey, summary,
+    stages, plainStatus };
 
   /* =============================== commands =============================== */
   OG.command(/^j\s+new$/i, () => OG.go("/jobs/new"), "j new            new training job (PyTorch MNIST)");
@@ -533,6 +666,7 @@
         OG.head("Jobs", "Training workloads OpenGrid routes, runs and verifies · job state and deployment state shown separately",
           h("button", { class: "btn", type: "button", onclick: () => load() }, "Reload"),
           h("a", { class: "btn pri", href: "/jobs/new" }, "New job →")),
+        OG.views && OG.views.startHere ? OG.views.startHere(null) : null,
         h("a", { class: "jb-cta", href: "/jobs/new?preset=mnist" },
           h("span", { class: "jb-cta-k" }, "TEMPLATE · pytorch-mnist"),
           h("b", {}, "Train Your First AI Model — PyTorch MNIST"),
@@ -587,12 +721,24 @@
     async mount(el, params, query, ctx) {
       const root = h("div", { class: "pg-jobs pg-jobnew pg-route" });   // pg-route: reuse the order-ticket field styles
       el.append(root);
-      root.append(OG.head("New training job", "Allowlisted templates only · preview is free and never calls a provider · a real run waits for OpenGrid approval",
-        h("a", { class: "btn", href: "/jobs" }, "← Jobs"), h("a", { class: "btn", href: "/methodology/execution-safety" }, "Execution safety")));
+      // Journey B: /jobs/new?preset=mnist&sandbox=1 is the beginner's guided path (free simulation). The full form
+      // stays on the page, folded under "Advanced details" (?advanced=1 opens the classic view directly).
+      const beginner = query.sandbox === "1" && query.preset === "mnist" && query.advanced !== "1";
+      const fullHead = OG.head("New training job", "Allowlisted templates only · preview is free and never calls a provider · a real run waits for OpenGrid approval",
+        h("a", { class: "btn", href: "/jobs" }, "← Jobs"), h("a", { class: "btn", href: "/methodology/execution-safety" }, "Execution safety"));
       const formBox = h("form", { class: "box jb-form", onsubmit: e => { e.preventDefault(); preview(); } });
       const out = h("div", { class: "jb-out" });
       const readiness = h("div", { class: "jb-ready" });
-      root.append(h("div", { class: "jb-grid" }, formBox, h("div", { class: "jb-main" }, readiness, out)));
+      const fullGrid = h("div", { class: "jb-grid" }, formBox, h("div", { class: "jb-main" }, readiness, out));
+      const easyBox = h("div", { class: "jb-easy-w" }, OG.loading("Loading the example…"));
+      if (beginner) {
+        root.append(OG.head("Train an example model", "Free simulation · PyTorch MNIST · no GPU, no spend, no card",
+            h("a", { class: "btn", href: "/jobs" }, "← Jobs"), h("a", { class: "btn", href: "/jobs/new?preset=mnist&sandbox=1&advanced=1" }, "Full job form")),
+          OG.views && OG.views.startHere ? OG.views.startHere("demo") : null,
+          easyBox,
+          h("details", { class: "jb-advd" }, h("summary", {}, h("b", {}, "Advanced details"), h("span", { class: "dim" }, " — the full job form: route preview, execution readiness, limits, SSH access, real-GPU submission")),
+            fullHead, fullGrid));
+      } else root.append(fullHead, fullGrid);
 
       const me = await OG.me();
       if (!ctx.alive()) return;
@@ -720,6 +866,43 @@
         h("p", { class: "rt-h" }, "Preview writes an audit record but never calls a provider. Submit creates the job and a quote; under SUPERVISED execution an OpenGrid admin approves that exact quote before anything launches. Training failure also terminates the instance."));
       paint();
 
+      /* ----- Journey B: the guided free simulation (same job body as the full form, sandbox forced on) ----- */
+      if (beginner) {
+        const eb = spec.epochs || DEFAULT_CONFIG.epochs;
+        const epochsIn = h("input", { class: "field num", type: "number", min: eb.min, max: eb.max, step: 1, value: f.config.epochs ?? eb.default, inputmode: "numeric", "aria-label": "Epochs",
+          oninput: e => { f.config.epochs = e.target.value === "" ? null : +e.target.value; drawConfig(); changed(); } });
+        const easyMsg = h("div", { class: "jb-easy-msg", "aria-live": "polite" });
+        const startBtn = h("button", { class: "btn pri jb-easy-go", type: "button", onclick: () => startEasy() }, "Start free simulation");
+        async function startEasy() {
+          const v = validate(Object.assign({}, f, { sandbox: true }), spec, lb);
+          showErrors(v);
+          if (!v.ok) { easyMsg.replaceChildren(h("div", { class: "jb-ferr-b" }, Object.values(v.errors).join(" · "))); return; }
+          startBtn.disabled = true;
+          easyMsg.replaceChildren();
+          await doSubmit(v.body, easyMsg);
+          if (ctx.alive()) startBtn.disabled = false;
+        }
+        easyBox.replaceChildren(h("section", { class: "jb-easy box", "aria-label": "Train an example model" },
+          h("div", { class: "jb-easy-ban", role: "note" }, h("b", {}, "FREE SIMULATION"), h("span", { class: "jb-sim" }, "SIMULATED — no GPU, no spend"),
+            h("span", { class: "dim" }, "Nothing is rented and nothing is charged. No card, no approval.")),
+          h("div", { class: "jb-easy-g" },
+            h("div", {},
+              h("h2", {}, "Teach a small network to read handwritten digits"),
+              h("p", {}, "This is OpenGrid's PyTorch MNIST example: a small convolutional network learns from 60,000 images of handwritten digits and is tested on 10,000 more. You'll see exactly what a real training job looks like — without renting a GPU."),
+              h("ol", { class: "jb-easy-steps" },
+                h("li", {}, h("b", {}, "Preparing"), " — OpenGrid creates and checks the job, exactly as for a real run."),
+                h("li", {}, h("b", {}, "Running"), " — a simulator plays the training epochs. Loss and accuracy are synthetic."),
+                h("li", {}, h("b", {}, "Saving results"), " — you get logs, metrics and output files, all labelled SIMULATED."),
+                h("li", {}, h("b", {}, "Complete"), " — usually within a minute. Cost: $0.00."))),
+            h("div", { class: "jb-easy-side" },
+              h("label", { class: "rt-f" }, h("span", { class: "rt-l" }, "Epochs (passes over the data)"), epochsIn, h("span", { class: "rt-h" }, `${eb.min}–${eb.max} · more epochs = a longer simulated run`)),
+              startBtn,
+              h("p", { class: "rt-h" }, "Starts at once and opens the job page."),
+              easyMsg)),
+          h("p", { class: "note jb-easy-real" }, "Ready for a real GPU? Real runs use the same job with a hard cost cap and an OpenGrid approval before anything launches. Open ",
+            h("b", {}, "Advanced details"), " below, untick Sandbox and preview the route. Want to size a GPU for your own model? ", h("a", { class: "lnk", href: "/find" }, "Find Compute →"))));
+      }
+
       /* ----- readiness (what blocks a real run now) ----- */
       ctx.api("/v1/jobs/readiness", { nocache: true }).then(r => { if (ctx.alive()) readiness.replaceChildren(readinessBlock(r, admin)); },
         e => { if (ctx.alive()) readiness.replaceChildren(e.status === 404 || e.status === 405 ? h("div", { class: "og-mode m-unknown" }, h("b", {}, "READINESS"), h("span", {}, "GET /v1/jobs/readiness is not available on this server yet. Preview lists the blockers.")) : null); });
@@ -781,10 +964,10 @@
         if (!ok) return;
         await doSubmit(v.body);
       }
-      async function doSubmit(body) {
+      async function doSubmit(body, where) {
         I.submit = OG.intentFor(I.submit, "job:create", body);
         const msg = h("div", {}, OG.loading(body.sandbox ? "Creating the sandbox job…" : "Creating the job: validation, selection, quote…"));
-        out.prepend(msg);
+        (where || out).prepend(msg);
         try {
           const r = await OG.api.intent(I.submit, "/v1/jobs", { method: "POST", body });
           const job = r && (r.job || r);
@@ -792,7 +975,7 @@
           msg.replaceChildren(h("div", { class: "og-ok" }, h("b", {}, "Submitted"), " ", JSON.stringify(r).slice(0, 200)));
         } catch (e) {
           msg.replaceChildren(apiErr(e, "POST /v1/jobs"), I.submit.state === "unknown" ? h("p", { class: "warn-t" }, "Outcome unknown. ",
-            h("button", { class: "btn sm", type: "button", onclick: () => { msg.remove(); doSubmit(body); } }, "Retry (same Idempotency-Key)"), " — the server replays the first answer instead of creating a second job.") : null);
+            h("button", { class: "btn sm", type: "button", onclick: () => { msg.remove(); doSubmit(body, where); } }, "Retry (same Idempotency-Key)"), " — the server replays the first answer instead of creating a second job.") : null);
         }
       }
       if (query.preset === "mnist" || !query.template) { /* defaults already applied */ }

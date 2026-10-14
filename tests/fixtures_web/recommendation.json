@@ -1,0 +1,144 @@
+{
+  "estimate": {
+    "needs_gpu": true,
+    "needs_gpu_reason": "fine-tuning an 8B transformer model needs a GPU",
+    "workload_type": "fine_tuning",
+    "memory": {
+      "method": "training_lora",
+      "components_gb": { "weights": 16.06, "gradients": 0.08, "optimizer": 0.5, "activations": 6.2, "kv_cache": 0, "framework_overhead": 1.5 },
+      "min_total_gb": 24.3,
+      "recommended_gb": 29.2,
+      "range_gb": [21.0, 34.0],
+      "per_gpu_gb": 29.2,
+      "confidence": "medium",
+      "assumptions": [
+        "bf16 weights (precision not given)",
+        "micro batch 4 assumed (not found in project)",
+        "sequence length 2048 assumed",
+        "LoRA rank 16 on attention projections",
+        "20% headroom over the theoretical minimum"
+      ],
+      "kind": "estimated"
+    },
+    "gpu_count": { "min": 1, "suggested": 1, "reason": "29.2 GB fits on one 40 GB+ GPU" },
+    "interconnect": { "needed": false, "reason": "single GPU: no NVLink / InfiniBand needed" },
+    "runtime": { "known": false, "reason": "no benchmark for this workload; runtime not estimated" },
+    "questions": [
+      { "field": "training.micro_batch_size", "question": "What micro batch size will you train with?", "why": "activations grow linearly with the batch" },
+      { "field": "training.seq_len", "question": "What sequence length?", "why": "activations grow with the sequence length" }
+    ],
+    "methodology": "/methodology/recommendations"
+  },
+  "picks": {
+    "cheapest_market": { "option_id": "l40s-48gb:runpod:us-ks-2:1", "reason": "cheapest fresh listing that fits 29.2 GB" },
+    "best_for_workload": { "option_id": "a100-80gb-sxm4:lambda:us-east-1:1", "reason": "fits with 63% headroom at a balanced price; fresh and available" },
+    "best_executable": null
+  },
+  "options": [
+    {
+      "option_id": "l40s-48gb:runpod:us-ks-2:1",
+      "tier": "lower_cost",
+      "gpu": "NVIDIA L40S 48GB", "gpu_slug": "l40s-48gb", "vram_gb": 48, "form_factor": "PCIe",
+      "gpu_count": 1, "provider": "runpod", "provider_display": "RunPod", "region": "US-KS-2",
+      "price_per_gpu_hour": 0.86, "price_per_instance_hour": 0.86, "price_kind": "observed",
+      "available": true, "observed_at": "2026-10-13T11:52:00Z", "age_seconds": 480, "fresh": true,
+      "memory_fit": { "needed_per_gpu_gb": 29.2, "vram_gb": 48, "headroom_pct": 39.2, "fits": true },
+      "cost": { "billing_unit": "per_second", "scenarios": [
+          { "hours": 1, "total_usd": 0.86, "assumption": "1 hour of runtime" },
+          { "hours": 10, "total_usd": 8.6, "assumption": "10 hours of runtime" } ],
+        "budget_hours": 58.1, "unknown_costs": ["storage", "egress", "startup time"], "kind": "estimated" },
+      "why": ["fits the 29.2 GB estimate with 39% headroom", "cheapest fresh listing that fits"],
+      "limitations": ["runtime not benchmarked", "PCIe: no NVLink"],
+      "execution": { "executable": false, "workload_supported": false,
+        "reasons": [ { "code": "workload_not_supported", "reason": "OpenGrid can only launch the PyTorch MNIST training template today" },
+                     { "code": "not_provisionable", "reason": "OpenGrid has no launch adapter for RunPod" } ],
+        "route_preview_url": "/route?gpu=l40s-48gb&count=1" }
+    },
+    {
+      "option_id": "rtx-a6000-48gb:vastai:us:1",
+      "tier": "lower_cost",
+      "gpu": "NVIDIA RTX A6000 48GB", "gpu_slug": "rtx-a6000-48gb", "vram_gb": 48, "form_factor": "PCIe",
+      "gpu_count": 1, "provider": "vastai", "provider_display": "Vast.ai", "region": "US",
+      "price_per_gpu_hour": 0.47, "price_per_instance_hour": 0.47, "price_kind": "observed",
+      "available": true, "observed_at": "2026-10-13T08:00:00Z", "age_seconds": 14400, "fresh": false,
+      "memory_fit": { "needed_per_gpu_gb": 29.2, "vram_gb": 48, "headroom_pct": 39.2, "fits": true },
+      "cost": { "billing_unit": "per_second", "scenarios": [
+          { "hours": 1, "total_usd": 0.47, "assumption": "1 hour of runtime" },
+          { "hours": 10, "total_usd": 4.7, "assumption": "10 hours of runtime" } ],
+        "budget_hours": 106.4, "unknown_costs": ["storage", "egress", "startup time", "host reliability (marketplace)"], "kind": "estimated" },
+      "why": ["lowest observed price that fits"],
+      "limitations": ["price observed 4 h ago: stale", "marketplace host: reliability varies"],
+      "execution": { "executable": false, "workload_supported": false,
+        "reasons": [ { "code": "workload_not_supported", "reason": "OpenGrid can only launch the PyTorch MNIST training template today" },
+                     { "code": "stale_listing", "reason": "listing not observed in the last 3 hours" } ],
+        "route_preview_url": "/route?gpu=rtx-a6000-48gb&count=1" }
+    },
+    {
+      "option_id": "a100-80gb-sxm4:lambda:us-east-1:1",
+      "tier": "balanced",
+      "gpu": "NVIDIA A100 80GB SXM4", "gpu_slug": "a100-80gb-sxm4", "vram_gb": 80, "form_factor": "SXM",
+      "gpu_count": 1, "provider": "lambda", "provider_display": "Lambda", "region": "us-east-1",
+      "price_per_gpu_hour": 1.29, "price_per_instance_hour": 1.29, "price_kind": "observed",
+      "available": true, "observed_at": "2026-10-13T11:53:00Z", "age_seconds": 420, "fresh": true,
+      "memory_fit": { "needed_per_gpu_gb": 29.2, "vram_gb": 80, "headroom_pct": 63.5, "fits": true },
+      "cost": { "billing_unit": "per_minute", "scenarios": [
+          { "hours": 1, "total_usd": 1.29, "assumption": "1 hour of runtime" },
+          { "hours": 10, "total_usd": 12.9, "assumption": "10 hours of runtime" } ],
+        "budget_hours": 38.8, "unknown_costs": ["storage", "egress", "startup time"], "kind": "estimated" },
+      "why": ["fits the 29.2 GB estimate with 64% headroom", "room for a larger batch or longer sequences", "fresh price, available now"],
+      "limitations": ["runtime not benchmarked"],
+      "execution": { "executable": false, "workload_supported": false,
+        "reasons": [ { "code": "workload_not_supported", "reason": "OpenGrid can only launch the PyTorch MNIST training template today" } ],
+        "route_preview_url": "/route?gpu=a100-80gb-sxm4&count=1" }
+    },
+    {
+      "option_id": "h100-80gb-sxm5:lambda:us-east-1:1",
+      "tier": "higher_performance",
+      "gpu": "NVIDIA H100 80GB SXM5", "gpu_slug": "h100-80gb-sxm5", "vram_gb": 80, "form_factor": "SXM",
+      "gpu_count": 1, "provider": "lambda", "provider_display": "Lambda", "region": "us-east-1",
+      "price_per_gpu_hour": 2.99, "price_per_instance_hour": 2.99, "price_kind": "observed",
+      "available": false, "observed_at": "2026-10-13T11:54:00Z", "age_seconds": 360, "fresh": true,
+      "memory_fit": { "needed_per_gpu_gb": 29.2, "vram_gb": 80, "headroom_pct": 63.5, "fits": true },
+      "cost": { "billing_unit": "per_minute", "scenarios": [
+          { "hours": 1, "total_usd": 2.99, "assumption": "1 hour of runtime" },
+          { "hours": 10, "total_usd": 29.9, "assumption": "10 hours of runtime" } ],
+        "budget_hours": 16.7, "unknown_costs": ["storage", "egress", "startup time"], "kind": "estimated" },
+      "why": ["fastest GPU in this list for transformer training", "fits with 64% headroom"],
+      "limitations": ["sold out at the last observation", "runtime not benchmarked"],
+      "execution": { "executable": false, "workload_supported": false,
+        "reasons": [ { "code": "workload_not_supported", "reason": "OpenGrid can only launch the PyTorch MNIST training template today" },
+                     { "code": "sold_out", "reason": "the provider reports no capacity" } ],
+        "route_preview_url": "/route?gpu=h100-80gb-sxm5&count=1" }
+    },
+    {
+      "option_id": "h200-141gb-sxm5:nebius:eu-north1:1",
+      "tier": "higher_performance",
+      "gpu": "NVIDIA H200 141GB SXM5", "gpu_slug": "h200-141gb-sxm5", "vram_gb": 141, "form_factor": "SXM",
+      "gpu_count": 1, "provider": "nebius", "provider_display": "Nebius", "region": "eu-north1",
+      "price_per_gpu_hour": 3.5, "price_per_instance_hour": 3.5, "price_kind": "observed",
+      "available": null, "observed_at": "2026-10-13T11:40:00Z", "age_seconds": 1200, "fresh": true,
+      "memory_fit": { "needed_per_gpu_gb": 29.2, "vram_gb": 141, "headroom_pct": 79.3, "fits": true },
+      "cost": { "billing_unit": "per_hour", "scenarios": [
+          { "hours": 1, "total_usd": 3.5, "assumption": "1 hour of runtime" },
+          { "hours": 10, "total_usd": 35.0, "assumption": "10 hours of runtime" } ],
+        "budget_hours": 14.3, "unknown_costs": ["storage", "egress", "startup time"], "kind": "estimated" },
+      "why": ["most memory: room for full fine-tuning later"],
+      "limitations": ["availability not reported by provider", "billed per started hour"],
+      "execution": { "executable": false, "workload_supported": false,
+        "reasons": [ { "code": "workload_not_supported", "reason": "OpenGrid can only launch the PyTorch MNIST training template today" } ],
+        "route_preview_url": "/route?gpu=h200-141gb-sxm5&count=1" }
+    }
+  ],
+  "excluded": [
+    { "gpu": "NVIDIA L4 24GB", "code": "insufficient_vram", "reason": "24 GB < 29.2 GB needed" },
+    { "gpu": "NVIDIA RTX 4090 24GB", "code": "insufficient_vram", "reason": "24 GB < 29.2 GB needed" },
+    { "gpu": "NVIDIA A100 40GB", "code": "over_max_price", "reason": "no listing under your $2.00/GPU·h cap" }
+  ],
+  "questions": [
+    { "field": "training.micro_batch_size", "question": "What micro batch size will you train with?", "why": "activations grow linearly with the batch" },
+    { "field": "training.seq_len", "question": "What sequence length?", "why": "activations grow with the sequence length" }
+  ],
+  "notes": ["Prices are observed list prices, not quotes.", "Runtime is not estimated: cost is shown per hour of runtime."],
+  "as_of": "2026-10-13T12:00:00Z",
+  "methodology": "/methodology/recommendations"
+}

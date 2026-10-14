@@ -35,7 +35,12 @@
 
       // fixed regions: the log panel keeps its lines (and its scroll position) across polls
       const flash = h("div", { class: "dep-flash" });
-      const top = h("div"), mid = h("div"), logBox = logPanel(), bottom = h("div");
+      const top = h("div"), mid = h("div"), logBox = logPanel(), bottom = h("div"), advTop = h("div");
+      // Everything technical (state machines, logs, checks, reconciliation, fingerprints) lives under one fold.
+      const adv = h("details", { class: "jb-adv", open: query.adv === "1" ? true : null },
+        h("summary", {}, h("b", {}, "Advanced details"), h("span", { class: "dim" }, " — job and deployment state machines, logs, verification checks, cost reconciliation, events, request, routing decision")),
+        advTop, logBox.el, bottom);
+      adv.addEventListener("toggle", () => { if (ctx.alive()) OG.qs.set({ adv: adv.open ? "1" : null }); });
 
       async function load() {
         let j;
@@ -86,7 +91,6 @@
           h("button", { class: "btn", type: "button", onclick: () => load() }, "Refresh"),
           OG.copy(id, { title: "Copy the job id" }),
         ];
-        const d = DISPO[sm.disposition] || [sm.disposition ? String(sm.disposition).replace(/_/g, " ") : null, ""];
         return [
           OG.head(h("span", { class: "dep-title" }, job.name || "Job", " ", h("span", { class: "mono dim jb-id" }, job.job_id || id)),
             h("span", {}, job.template || "", job.template_version ? h("span", { class: "dimmer" }, " v" + job.template_version) : null, " · ",
@@ -99,7 +103,12 @@
           flash,
           billingAlarm(),
           errorBlock(),
-          OG.stats([
+        ];
+      }
+      function statsStrip() {
+        const s = st(), sm = S();
+        const d = DISPO[sm.disposition] || [sm.disposition ? String(sm.disposition).replace(/_/g, " ") : null, ""];
+        return OG.stats([
             { label: "State since", value: job.state_changed_at ? fmt.age(job.state_changed_at) : null, sub: job.state_changed_at ? fmt.dateTime(job.state_changed_at) : null, reason: "not reported" },
             { label: "Created", value: fmt.dateTime(job.created_at) },
             { label: "Started", value: job.started_at ? fmt.dateTime(job.started_at) : null, reason: J.PRE_LAUNCH.includes(s) ? "not started" : "not reported", title: job.started_at ? exact(job.started_at) : null },
@@ -107,8 +116,24 @@
             { label: "Est. max", value: sm.est_max != null ? J.usd(sm.est_max) : null, reason: "no estimate", kind: "estimated", sub: sm.est_typical != null ? "typical " + J.usd(sm.est_typical) : null },
             { label: "Actual cost", value: sm.actual != null ? J.usd(sm.actual) : null, reason: sandbox() ? "simulated: no spend" : "reconciled after confirmed termination", kind: sandbox() ? null : "transaction" },
             { label: "Resource", value: d[0] ? h("span", { class: d[1] }, d[0]) : null, reason: "unknown", sub: sm.deployment_status ? "deployment " + String(sm.deployment_status).replace(/_/g, " ") : null, title: sm.disposition_note },
-          ]),
-        ];
+          ]);
+      }
+
+      // Plain progress: 8 stages (4 for the sandbox) derived from the real job state, and the questions a
+      // beginner asks, answered from the job / deployment / artifacts (OG.jobs.stages / plainStatus).
+      function stageBlock() {
+        const sg = J.stages(job);
+        const ps = J.plainStatus(job, dep, arts, { admin });
+        return h("section", { class: "jb-stage box", "aria-label": "Progress" },
+          h("div", { class: "jb-stage-h" }, h("span", { class: "eyebrow" }, "Progress"),
+            sg.mode === "sandbox" ? OG.badge("free simulation", "warn") : OG.badge("real GPU run"),
+            h("span", { class: "dim" }, sg.mode === "sandbox" ? "Simulated: no GPU is selected, approved, started or shut down." : "Each stage follows the job's recorded state.")),
+          h("ol", { class: "jb-stages", "aria-label": "Stages" }, sg.steps.map((x, i) => h("li", { class: "m-" + x.mark + (x.tone ? " t-" + x.tone : ""), "aria-current": x.mark === "current" ? "step" : null,
+            title: x.state ? "job state: " + String(x.state).replace(/_/g, " ") : x.mark === "skipped" ? "not passed through" : null },
+            h("span", { class: "jb-sn", "aria-hidden": "true" }, x.mark === "done" ? "✓" : x.mark === "failed" ? "✗" : String(i + 1)),
+            h("span", { class: "jb-sl" }, x.label),
+            x.mark === "current" ? h("span", { class: "jb-sx" }, x.state ? String(x.state).replace(/_/g, " ") : "now") : x.mark === "skipped" ? h("span", { class: "jb-sx" }, "skipped") : x.mark === "failed" ? h("span", { class: "jb-sx" }, "failed") : null))),
+          h("dl", { class: "jb-plain" }, ps.map(p => h("div", { class: "jb-pq t-" + (p.tone || "plain") }, h("dt", {}, p.q), h("dd", {}, h("b", {}, p.a), p.detail ? h("span", { class: "dim" }, p.detail) : null)))));
       }
       function billingAlarm() {
         if (sandbox()) return null;
@@ -287,16 +312,17 @@
 
       function draw() {
         if (!job) return;
-        top.replaceChildren(...header().filter(Boolean), strips(), approvalBlock());
-        mid.replaceChildren(progressBlock());
+        top.replaceChildren(...header().filter(Boolean), stageBlock(), approvalBlock());
+        mid.replaceChildren(progressBlock(), artifactsBlock());
+        advTop.replaceChildren(statsStrip(), strips());
         bottom.replaceChildren(
-          h("div", { class: "cols-2" }, checksBlock(), h("div", {}, artifactsBlock(), terminationBlock())),
+          h("div", { class: "cols-2" }, checksBlock(), terminationBlock()),
           costBlock(),
           h("div", { class: "cols-2" }, eventsBlock(), configBlock()),
           decisionBlock(),
           h("p", { class: "note" }, stopped || J.isTerminal(job) ? "Finished: polling stopped. " : `Live: refreshed every ${POLL_MS / 1000} s while the job is active. `,
             "Job state and deployment state are separate machines. ", h("a", { class: "lnk", href: "/methodology/execution-safety" }, "Execution safety →")));
-        if (root.firstChild !== top) root.replaceChildren(top, mid, logBox.el, bottom);
+        if (root.firstChild !== top) root.replaceChildren(top, mid, adv);
       }
 
       /* ---------------- cancel ---------------- */
