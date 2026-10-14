@@ -1,7 +1,7 @@
 /* Shared market views (interim, ported from the first web UI's market grid).
    OG.views.windowSeg(hours, onChange)       time-range control, remembers the choice
    OG.views.marketBoard(el, ctx, opts)       dense board of every canonical GPU from /market
-   Used by / (until the Overview page lands) and /gpus. */
+   Used by /gpus (the market dashboard is /markets, pages/overview.js). */
 (() => {
   const { h, fmt, Lib: L } = OG;
   const WINDOWS = [[1, "1H"], [6, "6H"], [24, "24H"], [168, "1W"], [0, "ALL"]];

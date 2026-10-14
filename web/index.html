@@ -12,6 +12,7 @@
 <body>
 <a class="skip" href="#page">Skip to content</a>
 <header class="top">
+  <button type="button" class="nav-btn" id="nav-toggle" aria-controls="main-nav" aria-expanded="false" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
   <a class="brand" href="/" aria-label="OpenGrid home">
     <svg viewBox="0 0 24 24" fill="none" stroke="#4d94ff" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 4h16M4 12h16M4 20h16M4 4v16M12 4v16M20 4v16"/></svg>
     OPENGRID
@@ -32,36 +33,58 @@
   </button>
 </header>
 <div class="app">
-  <nav class="nav" aria-label="Main">
-    <div class="nav-g">Market</div>
-    <a href="/" data-nav="overview">Overview</a>
-    <a href="/indices" data-nav="indices">Indices</a>
-    <a href="/gpus" data-nav="gpus">GPUs</a>
-    <a href="/providers" data-nav="providers">Providers</a>
-    <a href="/compare" data-nav="compare">Compare</a>
-    <a href="/explorer" data-nav="explorer">Explorer</a>
-    <a href="/heatmaps" data-nav="heatmaps">Heatmaps</a>
-    <div class="nav-g">Signals</div>
-    <a href="/opportunities" data-nav="opportunities">Opportunities</a>
-    <a href="/events" data-nav="events">Events</a>
-    <a href="/news" data-nav="news">News</a>
-    <div class="nav-g">Execute</div>
-    <a href="/jobs" data-nav="jobs">Jobs</a>
-    <a href="/reserve" data-nav="reserve">Reserve</a>
-    <a href="/route" data-nav="route">Route</a>
-    <a href="/deployments" data-nav="deployments">Deployments</a>
-    <a href="/onboarding" data-nav="onboarding">Onboarding</a>
-    <a href="/watchlists" data-nav="watchlists">Watchlists</a>
-    <a href="/keys" data-nav="keys">API keys</a>
-    <div class="nav-g">Reference</div>
-    <a href="/api" data-nav="api">API docs</a>
-    <a href="/methodology" data-nav="methodology">Methodology</a>
-    <a href="/ops" data-nav="ops">Ops</a>
-    <div class="nav-g nav-admin" hidden>Admin</div>
-    <a href="/admin/execution" data-nav="admin-execution" class="nav-admin" hidden>Execution</a>
-    <a href="/admin/checklist" data-nav="admin-checklist" class="nav-admin" hidden>Checklist</a>
-    <a href="/admin/partners" data-nav="admin-partners" class="nav-admin" hidden>Partners</a>
-    <a href="/admin/value" data-nav="admin-value" class="nav-admin" hidden>Value</a>
+  <nav class="nav" id="main-nav" aria-label="Main">
+    <!-- Five primary destinations; each group's secondary links stay in the DOM (the command bar's page
+         suggestions scrape every .nav a[data-nav]); a group opens when one of its pages is current. -->
+    <div class="nav-sec" data-group="gpus">
+      <div class="nav-row"><a href="/gpus" data-nav="gpus" class="nav-p" data-alias="GPU markets prices">GPUs</a><button type="button" class="nav-tg" aria-expanded="false" aria-label="Show GPU tools"></button></div>
+      <div class="nav-sub">
+        <a href="/compare" data-nav="compare">Compare</a>
+        <a href="/explorer" data-nav="explorer" data-alias="Listings">Explorer</a>
+        <a href="/heatmaps" data-nav="heatmaps">Heatmaps</a>
+        <a href="/providers" data-nav="providers">Providers</a>
+      </div>
+    </div>
+    <div class="nav-sec" data-group="find">
+      <div class="nav-row"><a href="/find" data-nav="find" class="nav-p" data-alias="Recommend compute for my workload">Find Compute</a></div>
+    </div>
+    <div class="nav-sec" data-group="jobs">
+      <div class="nav-row"><a href="/jobs" data-nav="jobs" class="nav-p" data-alias="Jobs training">My Jobs</a><button type="button" class="nav-tg" aria-expanded="false" aria-label="Show execution pages"></button></div>
+      <div class="nav-sub">
+        <a href="/deployments" data-nav="deployments">Deployments</a>
+        <a href="/reserve" data-nav="reserve" data-alias="Reservations price lock">Reserve</a>
+        <a href="/watchlists" data-nav="watchlists" data-alias="Alerts">Watchlists</a>
+        <a href="/route" data-nav="route" data-alias="Route preview best execution">Route</a>
+      </div>
+    </div>
+    <div class="nav-sec" data-group="markets">
+      <div class="nav-row"><a href="/markets" data-nav="markets" class="nav-p" data-alias="Market overview dashboard">Markets</a><button type="button" class="nav-tg" aria-expanded="false" aria-label="Show market pages"></button></div>
+      <div class="nav-sub">
+        <a href="/indices" data-nav="indices">Indices</a>
+        <a href="/opportunities" data-nav="opportunities">Opportunities</a>
+        <a href="/events" data-nav="events">Events</a>
+        <a href="/news" data-nav="news">News</a>
+      </div>
+    </div>
+    <div class="nav-sec" data-group="developers">
+      <div class="nav-row"><a href="/developers" data-nav="developers" class="nav-p" data-alias="CLI MCP integrate">Developers</a><button type="button" class="nav-tg" aria-expanded="false" aria-label="Show developer pages"></button></div>
+      <div class="nav-sub">
+        <a href="/api" data-nav="api">API docs</a>
+        <a href="/keys" data-nav="keys">API keys</a>
+        <a href="/onboarding" data-nav="onboarding">Onboarding</a>
+      </div>
+    </div>
+    <div class="nav-util">
+      <a href="/methodology" data-nav="methodology">Methodology</a>
+      <a href="/ops" data-nav="ops" data-alias="Feed health status">Ops</a>
+    </div>
+    <div class="nav-sec nav-admin" data-group="admin" hidden>
+      <div class="nav-g">Admin</div>
+      <a href="/admin/execution" data-nav="admin-execution">Execution</a>
+      <a href="/admin/checklist" data-nav="admin-checklist">Checklist</a>
+      <a href="/admin/partners" data-nav="admin-partners">Partners</a>
+      <a href="/admin/value" data-nav="admin-value">Value</a>
+    </div>
     <div class="nav-foot"><kbd>/</kbd> search<br><kbd>?</kbd> commands</div>
   </nav>
   <main class="main" id="main"><div class="page" id="page"><div id="ssr" data-path=""><!--OG:SSR--></div></div></main>
@@ -72,6 +95,9 @@
 <script src="/static/charts.js"></script>
 <script src="/static/pages/market.js"></script>
 <script src="/static/pages/overview.js"></script>
+<script src="/static/pages/home.js"></script>
+<script src="/static/pages/developers.js"></script>
+<!-- PLACEHOLDER /find (Find Compute) is built separately: load /static/pages/find.js here when it lands. -->
 <script src="/static/pages/indices.js"></script>
 <script src="/static/pages/gpus.js"></script>
 <script src="/static/pages/gpu.js"></script>

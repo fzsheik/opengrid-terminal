@@ -289,6 +289,28 @@ def test_execution_pages_are_private_and_noindex():
         settings.app_password, settings.public_pages = saved
 
 
+def test_homepage_markets_and_developers_pages():
+    """/ is the homepage, the market dashboard moved to /markets, /developers is new: all served, indexable, in the sitemap."""
+    home = client.get("/")
+    assert home.status_code == 200 and title_of(home.text) == "Find and run GPU compute | OpenGrid", title_of(home.text)
+    assert 'name="robots" content="noindex"' not in home.text and "/static/pages/home.js" in home.text
+    desc = re.search(r'<meta name="description" content="([^"]+)"', home.text).group(1)
+    assert "supervised" in desc and "Compare live GPU cloud prices" in desc, desc
+    for path, title, script in (("/markets", "GPU compute market", "overview.js"), ("/developers", "Developers", "developers.js")):
+        r = client.get(path)
+        assert r.status_code == 200, path
+        assert title in title_of(r.text) and 'name="robots" content="noindex"' not in r.text, path
+        assert f"/static/pages/{script}" in r.text, path
+        assert pages.is_page_path(path) and any(p[0] == path and p[3] for p in pages.PAGES), f"{path}: indexable PAGES entry"
+    locs = re.findall(r"<loc>([^<]+)</loc>", client.get("/sitemap.xml").text)
+    assert {f"{BASE}/", f"{BASE}/markets", f"{BASE}/developers"} <= set(locs)
+    robots = client.get("/robots.txt").text
+    assert "Disallow: /markets" not in robots and "Disallow: /developers" not in robots
+    web = Path(__file__).resolve().parent.parent / "web"
+    assert 'OG.page("/markets"' in (web / "pages" / "overview.js").read_text(encoding="utf-8"), "the dashboard is the /markets page"
+    assert 'OG.page("/"' in (web / "pages" / "home.js").read_text(encoding="utf-8")
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

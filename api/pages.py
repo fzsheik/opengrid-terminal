@@ -39,7 +39,9 @@ esc = markdown.esc
 # (pattern, nav title, description, indexable). Patterns use FastAPI {param} syntax; the client
 # registers the same paths with ":param" in web/pages/*.js.
 PAGES: list[tuple[str, str, str, bool]] = [
-    ("/", "GPU compute market", "Live GPU cloud prices, availability, indices and market events across providers.", True),
+    ("/", "Find and run GPU compute", "Compare live GPU cloud prices across providers, find compute suited to your workload, and run it with supervised, approval-gated execution.", True),
+    ("/markets", "GPU compute market", "Live GPU cloud prices, availability, indices and market events across providers.", True),
+    ("/developers", "Developers", "Use OpenGrid from your terminal (CLI), your AI coding assistant (MCP) or your application (REST API).", True),
     ("/indices", "GPU price indices", "Transparent GPU compute price indices with published methodology and coverage.", True),
     ("/indices/{id}", "Index", "A GPU compute price index: level, history and constituents.", True),
     ("/gpus", "GPU markets", "Every GPU market: lowest on-demand price per GPU-hour, change and provider count.", True),
