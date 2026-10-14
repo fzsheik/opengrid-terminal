@@ -386,7 +386,7 @@
     const xt = [...new Set(pts.map(p => p[0]))]; const step = Math.ceil(xt.length / 8);
     const lastP = pts[pts.length - 1];
     el.replaceChildren(h("div", { class: "chart jb-line" }, S("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", height: H, role: "img", "aria-label": o.label },
-      ticks.map(t => [S("line", { x1: L, x2: W - R, y1: sy(t), y2: sy(t), stroke: "#1a2129" }), S("text", { x: L - 6, y: sy(t) + 3, "text-anchor": "end", class: "c-ax" }, o.yFmt(t))]),
+      ticks.map(t => [S("line", { x1: L, x2: W - R, y1: sy(t), y2: sy(t), stroke: "var(--chart-grid)" }), S("text", { x: L - 6, y: sy(t) + 3, "text-anchor": "end", class: "c-ax" }, o.yFmt(t))]),
       xt.filter((x, i) => i % step === 0).map(x => S("text", { x: sx(x), y: H - 6, "text-anchor": "middle", class: "c-ax" }, String(x))),
       S("text", { x: W - R, y: H - 6, "text-anchor": "end", class: "c-ax" }, "epoch"),
       S("polyline", { points: pts.map(p => sx(p[0]).toFixed(1) + "," + sy(p[1]).toFixed(1)).join(" "), fill: "none", stroke: o.color, "stroke-width": 1.6 }),

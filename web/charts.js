@@ -80,18 +80,19 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
     const x = hex(a), y = hex(b), k = Math.max(0, Math.min(1, t));
     return "#" + x.map((v, i) => Math.round(v + (y[i] - v) * k).toString(16).padStart(2, "0")).join("");
   }
-  // Sequential (one hue, dark -> light on the dark surface: near-zero recedes into the background)
+  // Sequential (one hue, near-zero recedes into the background: dark -> light on the dark theme, the reverse on light)
   const SEQ = ["#122a4a", "#184f95", "#2a78d6", "#6da7ec", "#cde2fb"];
+  const SEQ_LIGHT = ["#e8f1fc", "#b5d2f5", "#6da7ec", "#2a78d6", "#123f80"];
   // Diverging: blue (below) <- neutral grey -> red-orange (above)
-  const DIV_LO = ["#6da7ec", "#2a78d6", "#1c5cab"], DIV_MID = "#3a3f46", DIV_HI = ["#f0a07a", "#e0603a", "#b5401f"];
+  const DIV_LO = ["#6da7ec", "#2a78d6", "#1c5cab"], DIV_MID = "#3a3f46", DIV_MID_LIGHT = "#e4e7eb", DIV_HI = ["#f0a07a", "#e0603a", "#b5401f"];
   function ramp(stops, t) {
     t = Math.max(0, Math.min(1, t));
     const f = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(f));
     return lerpColor(stops[i], stops[i + 1], f - i);
   }
-  const colorSeq = t => ramp(SEQ, t);
+  const colorSeq = (t, light) => ramp(light ? SEQ_LIGHT : SEQ, t);
   // t in [-1, 1]; 0 is the neutral midpoint
-  const colorDiv = t => (t == null || !isFinite(t) ? null : t < 0 ? ramp([DIV_MID, ...DIV_LO], -t) : ramp([DIV_MID, ...DIV_HI], t));
+  const colorDiv = (t, light) => { const mid = light ? DIV_MID_LIGHT : DIV_MID; return t == null || !isFinite(t) ? null : t < 0 ? ramp([mid, ...DIV_LO], -t) : ramp([mid, ...DIV_HI], t); };
   // Closed polygons between lo[] and hi[] over each run where both exist
   function bandPath(lo, hi, xAt, yAt, step) {
     let d = "", run = [];
@@ -159,10 +160,13 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
     let raf = 0, ro = null, lastW = 0;
     const redraw = () => { const w = el.clientWidth || 600; lastW = w; draw(w, tip); el.append(tip); };
     if (window.ResizeObserver) { ro = new ResizeObserver(() => { if (Math.abs((el.clientWidth || 0) - lastW) < 2) return; cancelAnimationFrame(raf); raf = requestAnimationFrame(redraw); }); ro.observe(el); }
+    // colours computed in JS (heatmap ramps) follow the theme; a chart left off the page drops its listener
+    const onTheme = () => { if (el.isConnected) redraw(); else window.removeEventListener("og-theme", onTheme); };
+    window.addEventListener("og-theme", onTheme);
     redraw();
     return {
       redraw,
-      destroy() { if (ro) ro.disconnect(); el.textContent = ""; },
+      destroy() { if (ro) ro.disconnect(); window.removeEventListener("og-theme", onTheme); el.textContent = ""; },
       tip(x, y, nodes) {
         tip.replaceChildren(...nodes); tip.hidden = false;
         const w = el.clientWidth, tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -465,10 +469,11 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
       let dom = o.domain;
       if (!dom) { const e = extent(all) || [0, 1]; dom = div ? [-Math.max(Math.abs(e[0]), Math.abs(e[1])) || 1, 0, Math.max(Math.abs(e[0]), Math.abs(e[1])) || 1] : e; }
       // invert (sequential only): low values get the strong colour, e.g. a price scale where cheap stands out
-      const seq = t => colorSeq(o.invert ? 1 - t : t);
+      const light = document.documentElement.dataset.theme === "light";
+      const seq = t => colorSeq(o.invert ? 1 - t : t, light);
       const color = v => {
         if (v == null || !isFinite(v)) return null;
-        if (div) { const [a, m, b] = dom.length === 3 ? dom : [dom[0], (dom[0] + dom[1]) / 2, dom[1]]; return colorDiv(v < m ? -(m - v) / ((m - a) || 1) : (v - m) / ((b - m) || 1)); }
+        if (div) { const [a, m, b] = dom.length === 3 ? dom : [dom[0], (dom[0] + dom[1]) / 2, dom[1]]; return colorDiv(v < m ? -(m - v) / ((m - a) || 1) : (v - m) / ((b - m) || 1), light); }
         return seq((v - dom[0]) / ((dom[dom.length - 1] - dom[0]) || 1));
       };
       // row label column: fixed (labelWidth) or fitted to the longest label, up to labelMax (260) and 40% of the width
@@ -478,7 +483,7 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
       const w = Lw + cw * cols.length + 2, H = Th + ch * rows.length + 30;
       const id = "hm" + (++uid);
       const svg = s("svg", { class: "heat", width: w, height: H, viewBox: `0 0 ${w} ${H}`, role: "img", "aria-label": o.label || "heatmap" });
-      svg.append(s("defs", {}, s("pattern", { id, width: 5, height: 5, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, s("rect", { width: 5, height: 5, fill: "#11161c" }), s("line", { x1: 0, y1: 0, x2: 0, y2: 5, class: "c-hatch" }))));
+      svg.append(s("defs", {}, s("pattern", { id, width: 5, height: 5, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, s("rect", { width: 5, height: 5, fill: "var(--n-stripe)" }), s("line", { x1: 0, y1: 0, x2: 0, y2: 5, class: "c-hatch" }))));
       cols.forEach((c, j) => {
         const t = svgText({ x: 0, y: 0, class: "c-ax", transform: `translate(${Lw + j * cw + cw / 2 + 3},${Th - 4}) rotate(-50)` }, String(c).length > 14 ? String(c).slice(0, 13) + "…" : c);
         if (o.colHref) { t.style.cursor = "pointer"; t.addEventListener("click", () => OG.go(o.colHref(j))); }
@@ -509,7 +514,7 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
       const ly = Th + ch * rows.length + 12, lw = Math.min(200, w - Lw - 10);
       for (let k = 0; k < 40; k++) {
         const t = k / 39;
-        svg.append(s("rect", { x: Lw + (k * lw) / 40, y: ly, width: lw / 40 + 0.5, height: 7, fill: div ? colorDiv(t * 2 - 1) : seq(t) }));
+        svg.append(s("rect", { x: Lw + (k * lw) / 40, y: ly, width: lw / 40 + 0.5, height: 7, fill: div ? colorDiv(t * 2 - 1, light) : seq(t) }));
       }
       const nullTxt = o.nullText || "no data";
       const over = all.some(v => v > dom[dom.length - 1]), under = all.some(v => v < dom[0]);

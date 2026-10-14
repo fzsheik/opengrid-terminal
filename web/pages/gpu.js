@@ -485,7 +485,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
           const times = s.map(p => p.t);
           const fin = L.finite(s.map(p => p.median)), dir = fin.length >= 2 ? L.direction((fin[fin.length - 1] - fin[0]) / fin[0]) : "none";
           const series = [
-            { key: "median", label: "Median", values: s.map(p => p.median), color: "#d7dde4", width: 1.75, strong: true },
+            { key: "median", label: "Median", values: s.map(p => p.median), color: "var(--chart-strong)", width: 1.75, strong: true },
             { key: "lowest", label: "Lowest", values: s.map(p => p.lowest), color: dir === "down" ? "#ef5350" : "#2fbf71", width: 1.5 },
           ];
           if (idxPts.size) series.push({ key: "index", label: "OG index", values: times.map(t => idxPts.get(t) ?? null), color: "#f5a524", width: 1.25, dash: "4 3" });
@@ -500,10 +500,10 @@ Nothing is computed here that the API does not state, except display arithmetic 
           const i0 = isFinite(first) && d.times.length - first >= 3 ? first : 0;
           const sl = a => a.slice(i0);
           if (st.view === "market") {
-            opts = { series: [{ key: "median", label: "Median", values: sl(d.median), color: "#d7dde4", width: 1.75, strong: true }, { key: "lowest", label: "Lowest", values: sl(d.lowest), color: "#2fbf71", width: 1.5 }],
+            opts = { series: [{ key: "median", label: "Median", values: sl(d.median), color: "var(--chart-strong)", width: 1.75, strong: true }, { key: "lowest", label: "Lowest", values: sl(d.lowest), color: "#2fbf71", width: 1.5 }],
               band: { lo: sl(d.lowest), hi: sl(d.highest), label: "low–high" } };
           } else {
-            opts = { series: [{ key: "__low", label: "Best price", values: sl(d.lowest), color: "#ffffff", halo: true },
+            opts = { series: [{ key: "__low", label: "Best price", values: sl(d.lowest), color: "var(--chart-halo)", halo: true },
               ...d.providers.filter(p => p.series.some(v => v != null)).map(p => ({ key: p.provider, label: OG.providerName(p.provider), values: sl(p.series), color: L.providerColor(p.provider) }))] };
           }
           Object.assign(opts, { times: sl(d.times), hatchBefore: d.market_from });

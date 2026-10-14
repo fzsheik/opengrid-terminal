@@ -17,7 +17,7 @@
   const PROVIDER_COLORS = {
     massedcompute: "#ef4444", crusoe: "#f97316", aws: "#f59e0b", nebius: "#facc15", vast: "#84cc16",
     hyperstack: "#22c55e", verda: "#14b8a6", lium: "#22d3ee", latitude: "#38bdf8", digitalocean: "#3b82f6",
-    voltagepark: "#6366f1", runpod: "#a855f7", denvr: "#d946ef", hyperbolic: "#ec4899", salad: "#fb7185", lambda: "#e5e7eb",
+    voltagepark: "#6366f1", runpod: "#a855f7", denvr: "#d946ef", hyperbolic: "#ec4899", salad: "#fb7185", lambda: "var(--lambda)",
   };
   const providerColor = p => PROVIDER_COLORS[p] || "#94a3b8";
 

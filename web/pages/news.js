@@ -173,7 +173,7 @@
           availBox.previousSibling.remove(); availBox.remove();
         } else {
           charts.push(OG.charts.timeseries(priceBox, { times, height: 260, events: evs, label: "price overlay", series: [
-            { key: "low", label: "Lowest", values: pts.map(p => p.lowest), color: "#e7ebef", width: 2, strong: true },
+            { key: "low", label: "Lowest", values: pts.map(p => p.lowest), color: "var(--chart-hi)", width: 2, strong: true },
             { key: "med", label: "Median provider", values: pts.map(p => p.median), color: "#7d8895", dash: "4 3" }] }));
           charts.push(OG.charts.timeseries(availBox, { times, height: 110, yFmt: v => fmt.num(v, 0), yZero: true, legend: true, label: "availability", series: [
             { key: "av", label: "In stock", values: pts.map(p => p.available_listings), color: "#2fbf71" },

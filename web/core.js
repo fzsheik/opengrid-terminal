@@ -1239,6 +1239,7 @@ Full docs: web/README.md.
     command(/^r\s+(\S+)(?:\s+(\d+))?(?:\s+(\S+))?$/i, async m => { const g = await OG.resolveGpu(m[1]); go("/route" + qsStringify({ gpu: g ? g.slug : m[1], count: m[2], region: m[3] })); }, "r <gpu> [n] [region]  route preview (r h100 8 us)");
     const single = { e: ["/events", "events"], n: ["/news", "news"], o: ["/opportunities", "opportunities"], x: ["/explorer", "explorer"], i: ["/indices", "indices"], h: ["/heatmaps", "heatmaps"], m: ["/methodology", "methodology"], d: ["/deployments", "deployments"] };
     for (const [k, [href, label]] of Object.entries(single)) command(new RegExp("^" + k + "$", "i"), () => go(href), `${k.padEnd(16)} ${label}`);
+    command(/^theme(?:\s+(light|dark))?$/i, m => OG.setTheme(m[1] ? m[1].toLowerCase() : OG.theme() === "light" ? "dark" : "light"), "theme [light|dark]  switch colour theme");
     command(/^\?$|^help$/i, () => showHelp(), "?                this help");
   }
 
@@ -1305,6 +1306,22 @@ Full docs: web/README.md.
     hp.hidden = false;
   }
 
+  /* ================= theme ================= */
+  // index.html sets <html data-theme> before first paint (saved choice, else the OS preference); this switches it
+  OG.theme = () => (document.documentElement.dataset.theme === "light" ? "light" : "dark");
+  OG.setTheme = t => {
+    document.documentElement.dataset.theme = t;
+    try { localStorage.setItem("og-theme", t); } catch (e) { /* private mode: the choice lasts this page only */ }
+    drawThemeToggle();
+    root.dispatchEvent(new Event("og-theme"));
+  };
+  function drawThemeToggle() {
+    const b = $("#theme-toggle");
+    if (!b) return;
+    const label = OG.theme() === "light" ? "Switch to dark mode" : "Switch to light mode";
+    b.setAttribute("aria-label", label); b.title = label;
+  }
+
   /* ================= boot ================= */
   OG.start = () => {
     // old hash URLs (#/market, #/market/<gpu>) -> new paths
@@ -1324,6 +1341,9 @@ Full docs: web/README.md.
     window.addEventListener("popstate", render);
     builtinCommands();
     setupCommandBar();
+    const tt = $("#theme-toggle");
+    if (tt) tt.addEventListener("click", () => OG.setTheme(OG.theme() === "light" ? "dark" : "light"));
+    drawThemeToggle();
     OG.data.intervals();
     render();
     loadPolling(); loadTape();

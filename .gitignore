@@ -5,3 +5,5 @@ deploy/opengrid.dump
 deploy/railway.env
 .DS_Store
 .claude/
+deploy/prod.dump
+deploy/local-backup.dump

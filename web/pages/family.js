@@ -18,7 +18,7 @@
   // change_24h is {pct, reason, basis} (or a bare fraction from older servers)
   const chgPct = r => (r.change_24h && typeof r.change_24h === "object" ? r.change_24h.pct : r.change_24h);
   // Fixed per-variant colours by position in the family (never by price rank)
-  const COLORS = ["#4d94ff", "#f5a524", "#2fbf71", "#e0729e", "#b39cff", "#4fc3d0", "#d7dde4", "#ef5350"];
+  const COLORS = ["#4d94ff", "#f5a524", "#2fbf71", "#e0729e", "#b39cff", "#4fc3d0", "var(--chart-strong)", "#ef5350"];
 
   // A family object from /v1/families/{slug}, or from /v1/markets/{slug} when it resolves as a family
   OG.data.family = async (slug, api) => {
