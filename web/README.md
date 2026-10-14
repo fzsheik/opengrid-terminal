@@ -137,6 +137,22 @@ A JOB is the workload and its outcome; a DEPLOYMENT is the cloud resource. Both 
 - Pure helpers on `OG.jobs` (state tones / strip / terminal rule, preset, validate, views, blocker actions, checks,
   metricPoints, logPage, summary, usd): `node tests/test_web_jobs.js`.
 
+Beginner layer: `/jobs/new?preset=mnist&sandbox=1` is the guided free-simulation path (the full form sits under
+"Advanced details"; `&advanced=1` opens the classic view). `/jobs/:id` leads with a stage strip + plain status box from
+`OG.jobs.stages(job)` (8 stages, 4 for the sandbox, derived from the real state + event history) and
+`OG.jobs.plainStatus(job, dep, artifacts, {admin})`; everything technical is under "Advanced details" (`?adv=1`).
+
+## Find Compute (`pages/find.js`, `/find`)
+
+Builds a WorkloadRequirements body (docs/OPENGRID2_CONTRACTS.md §1) from a guided form or pasted `opengrid analyze . --json`
+output, POSTs `/v1/recommend` (fallback `/v1/recommend/estimate`) and renders the Recommendation; it never estimates memory or
+ranks GPUs itself. State is in the query string (`task model method prec quant ctx conc seq mbs budget region maxp`,
+`a.<field>` answers, `mode=paste&req=<json>`, `view=table`, `ask=1`). Pure helpers on `OG.find` (requirementsFromForm,
+validatePaste, checkRequirements, pickCards, readiness, memoryFit, runtimeInfo, …); views `OG.views.startHere(active)` and
+`OG.views.recommendation(rec, opts)`. Optional assistant hook: `OG.views.assistantPanel(el, {ctx, requirements(),
+onRequirements(req), onRecommendation(rec)})` renders in a toggleable panel when defined. Tests: `node tests/test_web_find.js`
+(fixtures in `tests/fixtures_web/`).
+
 ## Charts (`OG.charts`, pure SVG; each returns `{el, update(partialOpts), destroy()}`)
 
 - `timeseries(el, {times: [iso], series: [{key, label, values, color, step = true, width, dash, opacity, halo, strong}],

@@ -1,0 +1,24 @@
+{
+  "root": "/Users/someone/projects/llama-lora",
+  "requirements": {
+    "workload_type": "fine_tuning",
+    "frameworks": ["pytorch", "transformers", "peft"],
+    "model": { "name": "meta-llama/Llama-3.1-8B", "architecture": "llama", "parameters_b": 8.03, "num_layers": 32, "hidden_size": 4096,
+      "num_attention_heads": 32, "num_kv_heads": 8, "head_dim": 128, "vocab_size": 128256, "max_context": 131072 },
+    "precision": "bf16",
+    "quantization": "none",
+    "training": { "method": "lora", "optimizer": "adamw", "micro_batch_size": null, "seq_len": 2048, "gradient_checkpointing": true, "lora_rank": 16 },
+    "constraints": { "budget_usd": 50, "region": null, "allow_spot": false },
+    "evidence": [
+      { "field": "model.parameters_b", "value": 8.03, "source": "config.json:12", "confidence": "high" },
+      { "field": "training.method", "value": "lora", "source": "train.py:41", "confidence": "high" }
+    ],
+    "source": "analyzer"
+  },
+  "files_inspected": [ { "path": "train.py", "bytes": 4210, "reason": "training script" }, { "path": "requirements.txt", "bytes": 120, "reason": "dependencies" } ],
+  "files_skipped": [ { "path": ".env", "reason": "secret file" } ],
+  "signals": [ { "kind": "framework", "value": "peft", "source": "requirements.txt:4" } ],
+  "questions": [ { "field": "training.micro_batch_size", "question": "What micro batch size?", "why": "activations grow with the batch" } ],
+  "warnings": [],
+  "analyzer_version": "1"
+}

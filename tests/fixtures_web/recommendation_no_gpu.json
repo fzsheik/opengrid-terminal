@@ -1,0 +1,21 @@
+{
+  "estimate": {
+    "needs_gpu": false,
+    "needs_gpu_reason": "no ML framework and no model found: pandas and scikit-learn only, which run on a CPU",
+    "workload_type": "no_gpu",
+    "memory": { "method": "unavailable", "components_gb": {}, "min_total_gb": null, "recommended_gb": null, "range_gb": null,
+      "per_gpu_gb": null, "confidence": "none", "assumptions": [], "kind": "estimated" },
+    "gpu_count": { "min": 0, "suggested": 0, "reason": "no GPU needed" },
+    "interconnect": { "needed": false, "reason": "no GPU needed" },
+    "runtime": { "known": false, "reason": "no benchmark for this workload; runtime not estimated" },
+    "questions": [],
+    "methodology": "/methodology/recommendations"
+  },
+  "picks": { "cheapest_market": null, "best_for_workload": null, "best_executable": null },
+  "options": [],
+  "excluded": [],
+  "questions": [],
+  "notes": ["No GPU options are returned when no GPU is needed."],
+  "as_of": "2026-10-13T12:00:00Z",
+  "methodology": "/methodology/recommendations"
+}
