@@ -7,8 +7,8 @@ history (`listing_observations`). Raw snapshots are never modified by any of thi
 
 ## What the screen compares
 
-Each new listing is compared with its **applied** state — the row currently in
-`compute_listings` — not with the provider's last raw reading. So while a value is held,
+Each new listing is compared with its **applied** state (the row currently in
+`compute_listings`), not with the provider's last raw reading. So while a value is held,
 every new reading keeps being compared with the last good one. Price rules only run when
 the price differs from the applied one (or the listing is new): an unchanged value has
 nothing new to hold.
@@ -26,19 +26,19 @@ nothing new to hold.
 | `region_disappeared` | listing had a region, now has none | hold region + country | yes |
 | `capacity_spike` | capacity ≥ 10× previous and ≥ +50 units (previous ≥ 1) | hold capacity | yes |
 | `vram_conflict` | VRAM in the raw name differs from the canonical name's VRAM by > 10% (one unambiguous figure required) | hold the mapping: canonical name withheld (None), never guessed | never |
-| `instance_price_mismatch` | instance price vs per-GPU price × gpu_count differ by > 10% | flag (incident, lowers trust) | — |
+| `instance_price_mismatch` | instance price vs per-GPU price × gpu_count differ by > 10% | flag (incident, lowers trust) | n/a |
 | `duplicate_explosion` | listings this poll > 3× the median of the last 10 polls and ≥ +20 | hold back NEW listing ids; existing ones update | yes |
-| `listing_collapse` | listings < 20% of the norm (norm ≥ 10) | flag | — |
-| `empty_response` | normalizer returned 0 listings when the norm or previous poll had ≥ 5 | incident; nothing saved; previous state kept | — |
-| `normalizer_error` | the provider's normalizer raised | incident; nothing saved for that provider; other providers continue | — |
-| `schema_change` | a new JSON shape for a (provider, endpoint) | incident (see below) | — |
-| `quality_layer_error` | the quality layer itself failed | incident; listings pass through unscreened (fail open) | — |
+| `listing_collapse` | listings < 20% of the norm (norm ≥ 10) | flag | n/a |
+| `empty_response` | normalizer returned 0 listings when the norm or previous poll had ≥ 5 | incident; nothing saved; previous state kept | n/a |
+| `normalizer_error` | the provider's normalizer raised | incident; nothing saved for that provider; other providers continue | n/a |
+| `schema_change` | a new JSON shape for a (provider, endpoint) | incident (see below) | n/a |
+| `quality_layer_error` | the quality layer itself failed | incident; listings pass through unscreened (fail open) | n/a |
 
 The floors and ceiling are deliberately far outside any real listing (the cheapest real
 H100 seen is ~$1.30/GPU-h, the dearest listing ~$18/GPU-h). A provider-level norm needs
 at least 3 recorded polls; until then the count rules do not fire.
 
-Why some rules only flag: `instance_price_mismatch` has no "last good value" — the
+Why some rules only flag: `instance_price_mismatch` has no "last good value": the
 inconsistency is between two fields of the same reading, so holding would only blank the
 price. It is recorded as an open incident and the listing's trust confidence becomes low
 until the inconsistency goes away (the incident then resolves itself).
@@ -65,11 +65,11 @@ data never counts as another sighting.
 Accepted and auto-accepted values are remembered too: a value an operator accepted below
 the floor does not re-open on the next poll.
 
-### Freshness while a value is held — not lying about "seen" or "gone"
+### Freshness while a value is held: not lying about "seen" or "gone"
 
 - A listing whose **price** is held is still marked seen (its `observed_at` moves) for at
   most **grace = max(1 h, 5 × polling interval)** after the suspicious value first
-  appeared — long enough for a persistent plausible move to auto-accept.
+  appeared, long enough for a persistent plausible move to auto-accept.
 - After the grace window, or once the value is rejected, the listing is **withheld from the
   save**: its `observed_at` stops moving, so it ages out through `market.stale_after()`
   exactly like any listing we cannot confirm, and drops out of the market view. We never
@@ -119,7 +119,7 @@ error / status / ok columns only when such columns exist, and the rule used is r
 ## Scale notes
 
 - `normalize._latest_raw` used to stream every ok snapshot (with payload) a provider ever
-  produced on each poll — a full per-provider scan that grows forever. It now finds the
+  produced on each poll, a full per-provider scan that grows forever. It now finds the
   provider's endpoints with a recursive skip-scan over `ix_raw_provider_endpoint_time`,
   each endpoint's newest ok fetch with a `LIMIT 1`, and loads only rows within 120 s of
   it. Same rows, same order (tested for equivalence). On 200k synthetic rows: ~6 s → ~9 ms.

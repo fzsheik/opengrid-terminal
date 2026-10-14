@@ -9,7 +9,7 @@ closes (the ids refer to the security audit). Tests: `tests/test_security.py`.
 |---|---|---|---|
 | API key | `Authorization: Bearer opg_live_…` | no | verified by `accounts/keys.py`; scopes from the key |
 | Operator | the site's HTTP basic auth (APP_PASSWORD), or nothing on a developer machine | **yes** | holds every scope |
-| Public | nobody, when `PUBLIC_PAGES` is on | — | GET/HEAD of the public pages and market-data reads only |
+| Public | nobody, when `PUBLIC_PAGES` is on | n/a | GET/HEAD of the public pages and market-data reads only |
 
 "Ambient" means the browser attaches the credential on its own, including to requests a different
 web site makes it send. That is what CSRF exploits.

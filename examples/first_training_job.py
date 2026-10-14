@@ -1,4 +1,4 @@
-"""Run the OpenGrid "Train Your First AI Model — PyTorch MNIST" job through the public API.
+"""Run the OpenGrid "Train Your First AI Model: PyTorch MNIST" job through the public API.
 
     pip install httpx
     export OPENGRID_URL=https://opengrid-terminal-production.up.railway.app

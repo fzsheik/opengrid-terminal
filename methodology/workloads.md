@@ -9,7 +9,7 @@ OpenGrid's observed listings, the adapter capability matrix and the execution co
 ## 1. Allowlisted templates
 
 Only allowlisted templates run in this release. Nobody can send code, a command, a container image or a
-dataset URL. The only template is **`pytorch-mnist`** ("Train Your First AI Model — PyTorch MNIST"):
+dataset URL. The only template is **`pytorch-mnist`** ("Train Your First AI Model: PyTorch MNIST"):
 
 | | |
 |---|---|
@@ -23,9 +23,9 @@ dataset URL. The only template is **`pytorch-mnist`** ("Train Your First AI Mode
 **Founder preset** (`template.preset`): name `opengrid-first-training-test`, gpu `auto`, 1 GPU, region US
 (non-strict), strategy BALANCED, no spot, $3/GPU-h max, $2 total max, 30 min max runtime.
 
-**Expected runtime** (kind **estimated**, not a benchmark): setup 3–8 min (boot, venv, downloading and
-installing the pinned wheels) + overhead 1.5–2.5 min (dataset, artifact upload, reporting) + 0.5–1.5 min per
-epoch. With the default 3 epochs that is **6–15 min**. Environment setup dominates and depends on the
+**Expected runtime** (kind **estimated**, not a benchmark): setup 3-8 min (boot, venv, downloading and
+installing the pinned wheels) + overhead 1.5-2.5 min (dataset, artifact upload, reporting) + 0.5-1.5 min per
+epoch. With the default 3 epochs that is **6-15 min**. Environment setup dominates and depends on the
 provider's image and network. If the top of the band is longer than `max_runtime_minutes`, validation adds a
 note: the job may be stopped at the ceiling.
 
@@ -79,7 +79,7 @@ and an incompatible choice is refused with the reason. Every variant is checked 
 never treated as identical. A GPU with no hardware entry, an architecture missing from the table below, or
 unknown VRAM is **excluded** with "hardware spec unknown". It is never assumed compatible.
 
-Compute capability by architecture (sources: NVIDIA, *CUDA GPUs – Compute Capability*,
+Compute capability by architecture (sources: NVIDIA, *CUDA GPUs: Compute Capability*,
 https://developer.nvidia.com/cuda-gpus; *CUDA C++ Programming Guide*, "Compute Capabilities"):
 
 | architecture (hardware.py) | rule | CC | pytorch-mnist |
@@ -92,7 +92,7 @@ https://developer.nvidia.com/cuda-gpus; *CUDA C++ Programming Guide*, "Compute C
 | Hopper | GH100 (H100, H200; GH200 also needs an x86 host) | 9.0 | eligible (GH200 excluded: ARM host) |
 | Blackwell | B200/GB200 10.0; RTX 50 / RTX PRO Blackwell 12.0 | 10.0 / 12.0 | excluded (> 9.0 for the cu121 build) |
 | Blackwell Ultra | B300 / GB300 | 10.3 | excluded (> 9.0) |
-| AMD (CDNA / RDNA), Intel Gaudi | not CUDA | — | excluded (wrong vendor) |
+| AMD (CDNA / RDNA), Intel Gaudi | not CUDA | n/a | excluded (wrong vendor) |
 
 ## 4. Selection (`workloads.select.select(spec, who, *, now=None)`)
 
@@ -153,7 +153,7 @@ per-hour provider. The second is over a $2 budget and is excluded.
 | effective mode SUPERVISED or LIVE (`control.effective_mode`) | `mode_preview_only`, `mode_disabled` |
 | env ceiling `ROUTING_LIVE_PROVISIONING` on | `env_ceiling` |
 | an adapter exists, integration level ≥ 2 | `not_provisionable` |
-| `adapter_status == validated` (only a recorded validation cycle sets it) | `adapter_not_validated` ("\<p\>: adapter simulated — run the supervised validation first") |
+| `adapter_status == validated` (only a recorded validation cycle sets it) | `adapter_not_validated` ("\<p\>: adapter simulated; run the supervised validation first") |
 | `supervised_enabled` (or `live_enabled` / `supervised_enabled` in LIVE) | `supervised_not_enabled`, `provider_not_enabled` |
 | provider not killed (global kill = mode DISABLED) | `provider_killed` |
 | `CAPABILITIES.startup_script == YES` (the job bootstraps through it) | `no_startup_script` |

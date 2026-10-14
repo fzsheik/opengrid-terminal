@@ -48,8 +48,8 @@ At launch the quote is **re-validated** with a fresh live check through the adap
 listing unavailable → refused; price moved more than `QUOTE_PRICE_TOLERANCE` (default 2%, either way) →
 refused with a **new quote** for re-approval (the old one is superseded). A quote is consumed by exactly one
 deployment (conditional update inside the launch transaction). Because a move inside the tolerance may be UP,
-every price cap — the request's `max_price_per_gpu_hour` (approval and `POST /v1/route` with `quote_id`), the
-account cost guards (`guards.gate`, at approval and again at → provisioning) and the validation $3.00/h cap —
+every price cap (the request's `max_price_per_gpu_hour` (approval and `POST /v1/route` with `quote_id`), the
+account cost guards (`guards.gate`, at approval and again at → provisioning) and the validation $3.00/h cap)
 is checked against the higher of the quote and the re-validated live price
 (`provider_metadata.revalidated_price_per_gpu_hour`), never the stale quote alone.
 
@@ -64,10 +64,10 @@ is checked against the higher of the quote and the re-validated live price
 | same key, same body, first finished | the stored response (same HTTP code), header `Idempotent-Replayed: true` |
 | same key, different body | 422 `idempotency_key_reused` |
 | same key while the first is running | 409 `idempotency_in_progress`, `Retry-After` |
-| same key after a crash (or `in_progress` older than 10 min) | re-run (safe: see the launch token) — except `POST /v1/route` when a deployment was created for the principal since the key was claimed: 409 `idempotency_outcome_unknown` naming those deployments (re-running would create a second instance); use a new key |
+| same key after a crash (or `in_progress` older than 10 min) | re-run (safe: see the launch token), except `POST /v1/route` when a deployment was created for the principal since the key was claimed: 409 `idempotency_outcome_unknown` naming those deployments (re-running would create a second instance); use a new key |
 
 Independently of keys, each deployment has a **launch token**: the provision call happens only after a row
-lock, a check that the deployment is `approved` with no token, a fresh `launch_permission()` check (a kill switch pressed during approval wins: back to `pending_approval`), setting the token and committing — so at most
+lock, a check that the deployment is `approved` with no token, a fresh `launch_permission()` check (a kill switch pressed during approval wins: back to `pending_approval`), setting the token and committing, so at most
 one provision call per deployment ever, including double approvals from a refreshed browser tab.
 
 ## 4. Deployment state machine
@@ -94,19 +94,19 @@ one provision call per deployment ever, including double approvals from a refres
 | orphan_suspected | running, degraded, stopped, terminating, terminated, credentials_unavailable |
 | credentials_unavailable | provisioning, running, degraded, stopping, stopped, terminating, terminated, termination_failed, launch_unknown, orphan_suspected |
 | provision_failed, provider_rejected | orphan_suspected (contrary evidence only) |
-| quote_failed, rejected, **terminated** | — (absorbing) |
+| quote_failed, rejected, **terminated** | none (absorbing) |
 
 Meaning of the outcome states:
 
-- `provision_failed` — the provider definitively created nothing (capacity / validation error, no instance).
-- `provider_rejected` — refused for an account reason (auth, quota, rate limit).
-- `provider_timeout` / `launch_unknown` — no usable answer (timeout, 5xx, connection reset after send,
+- `provision_failed`: the provider definitively created nothing (capacity / validation error, no instance).
+- `provider_rejected`: refused for an account reason (auth, quota, rate limit).
+- `provider_timeout` / `launch_unknown`: no usable answer (timeout, 5xx, connection reset after send,
   unparseable 2xx). The instance may exist. **No failover, no retry** until reconciliation resolves it by the
   instance name `og-<deployment_id>` (`adapter.find_instance`).
-- `degraded` — the provider reports an error on an instance that may still exist (still tracked and billed).
-- `credentials_unavailable` — the credential pinned at launch can no longer be used; state kept, operator alerted.
+- `degraded`: the provider reports an error on an instance that may still exist (still tracked and billed).
+- `credentials_unavailable`: the credential pinned at launch can no longer be used; state kept, operator alerted.
 
-Rules: `running` only after the provider reports running. `terminated` only with provider evidence — a status
+Rules: `running` only after the provider reports running. `terminated` only with provider evidence: a status
 read saying terminated, or two consecutive `not_found` reads ≥ 60 s apart (reconciliation adds the instance
 list). Stale or out-of-order reads (older than the last recorded check, or taken before terminate was requested)
 are recorded and ignored.
@@ -122,7 +122,7 @@ over: the admin approved one provider at one price.
 
 ## 5. Cost guards, concurrency and runtime ceilings
 
-`account_limits` (NULL = the settings default): max price per GPU-hour (default off), max hourly cost ($50 —
+`account_limits` (NULL = the settings default): max price per GPU-hour (default off), max hourly cost ($50,
 the account's concurrent burn: quote × GPUs of every active deployment + this one), max total cost (off), max
 concurrent GPUs (8), max active deployments (2), provider and region allowlists, monthly spend ($2000; finished
 actual cost + every active deployment's cost projected to its auto-terminate deadline + this launch's maximum
@@ -135,12 +135,12 @@ and then enforced INSIDE the transaction that makes the state change, twice:
 1. `pending_approval → approved` (admin approval, or a LIVE auto-approval in `deployments.create`), and
 2. `approved → provisioning` (`deployments.launch`, the moment the provision call is committed to).
 
-Each takes `pg_advisory_xact_lock(account)` — plus a global lock (one active validation deployment) and a
-per-provider lock for validation launches, always in that order — counts active/uncertain deployments, GPUs,
+Each takes `pg_advisory_xact_lock(account)`, plus a global lock (one active validation deployment) and a
+per-provider lock for validation launches, always in that order, counts active/uncertain deployments, GPUs,
 hourly burn and the monthly projection in the same transaction, then refuses (`limits_exceeded`; the
 deployment goes back to / stays `pending_approval` with `limit_violations`) or commits the state change. The
 lock is released at commit, and only then is the provider called: no DB transaction is ever open across a
-provider call. Postgres locks only — no Python lock is relied on for correctness. Proven by tests/test_limits.py:
+provider call. Postgres locks only; no Python lock is relied on for correctness. Proven by tests/test_limits.py:
 8 threads approving 8 routes of one account with `max_active_deployments = 1` → exactly 1 provisioning and 7
 `limits_exceeded` (same for `max_gpus`, hourly and monthly spend, one-active-validation, LIVE routes, and two
 separate OS processes).
@@ -149,7 +149,7 @@ A violation never launches; an admin may approve with `override_limits: true` **
 the deployment and in the control log). The override covers exactly the violation codes recorded at approval:
 a new violation found at the provisioning gate still refuses.
 
-**Runtime ceilings — never unlimited.** `effective = min(RUNTIME_HARD_MAX_MINUTES (1440), account
+**Runtime ceilings: never unlimited.** `effective = min(RUNTIME_HARD_MAX_MINUTES (1440), account
 max_runtime_minutes, request max_runtime_minutes | account default_runtime_minutes | RUNTIME_DEFAULT_MINUTES
 (60))`; validation ≤ `VALIDATION_MAX_RUNTIME_MINUTES` (30). A request above the effective maximum is clamped
 with a note, never exceeded. Persisted on the deployment: `effective_max_runtime_minutes` (NOT NULL, CHECK > 0,
@@ -160,7 +160,7 @@ approval sets `terminate_deadline_at = approval time + ceiling` and returns it; 
 time + ceiling. Reconciliation terminates at the deadline.
 
 Validation launches are additionally capped and **not overridable**: one 1-GPU instance at a time, ≤
-`VALIDATION_MAX_PRICE_PER_HOUR` ($3.00/h total), runtime ≤ 30 min — and gated (section 7).
+`VALIDATION_MAX_PRICE_PER_HOUR` ($3.00/h total), runtime ≤ 30 min, and gated (section 7).
 
 ## 6. Credentials and SSH keys
 
@@ -172,7 +172,7 @@ stop, terminate and reconciliation use exactly it. Adding, replacing or revoking
 provider account OpenGrid asks about an existing instance; a revoked pinned credential → `credentials_unavailable`
 (never "terminated").
 
-SSH — operator access is impossible by default on customer machines:
+SSH: operator access is impossible by default on customer machines:
 
 - Only the customer's explicitly supplied **public** key is installed (`launch.ssh_public_key`). It is
   validated (`ssh-ed25519`, `ecdsa-sha2-nistp256/384/521`, `ssh-rsa` ≥ 2048 bits; one line; no
@@ -201,14 +201,14 @@ billing).
 
 ## 7. Flows
 
-- **SUPERVISED** — `POST /v1/route` → live checks (top `ROUTE_LIVE_CHECK_CANDIDATES`, per-call timeout
+- **SUPERVISED**: `POST /v1/route` → live checks (top `ROUTE_LIVE_CHECK_CANDIDATES`, per-call timeout
   `PROVIDER_CALL_TIMEOUT_SECONDS`), quote, guards → deployment `pending_approval`, HTTP 202 with the exact
   provider, region, GPU, price, estimated cost, fees and quote expiry. `POST /v1/route/{id}/approve`
   (admin; `quote_id`; optional `override_limits` + `reason`; Idempotency-Key) → re-validate → guards →
   `approved` → the one provision call. `POST /v1/route/{id}/reject` (admin, reason).
-- **LIVE** — the same, but a validated, live-enabled provider launches without per-launch approval. A
+- **LIVE**: the same, but a validated, live-enabled provider launches without per-launch approval. A
   `quote_id` from preview may be passed to launch exactly that quote after re-validation.
-- **Validation** — `POST /v1/admin/execution/validation {provider, listing_id?, reason}` (Idempotency-Key
+- **Validation**: `POST /v1/admin/execution/validation {provider, listing_id?, reason}` (Idempotency-Key
   required) → a `purpose = validation` route, always pending approval, validation caps, operator default key
   allowed. **The validation launch gate** (`routing/validation.preconditions`, also
   `GET /v1/admin/execution/validation/preconditions?provider=`) is checked at start AND again at approval;
@@ -221,7 +221,7 @@ billing).
   heartbeats in `execution_controls`: a success within 2× the interval, no consecutive failures) and the last
   reconciliation pass reconciled that provider without error; ops alerts healthy (`alerts.ops.channel_configured()`
   and a delivered test alert in the window: `POST /v1/admin/ops/test-alert`).
-- **Terminate / stop** — idempotent, allowed for suspended accounts and in every mode. Terminate moves to
+- **Terminate / stop**: idempotent, allowed for suspended accounts and in every mode. Terminate moves to
   `terminating` and calls the provider; the tracker/reconciler confirms `terminated`. A provider refusal →
   `termination_failed` (+ alert). Before launch, terminate cancels (→ `rejected`, no provider call).
   Admin: `GET /v1/admin/deployments?state=live`, `POST /v1/admin/deployments/{id}/terminate`.

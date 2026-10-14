@@ -10,7 +10,7 @@ What it is not, stated plainly because OpenGrid also publishes price indices:
 - **Not a quote and not a binding price.** OpenGrid has no provider capacity commitments of its own. Nothing a
   request returns is a price anyone has committed to.
 - **Not a guaranteed reservation.** Submitting reserves nothing.
-- **Not a financial contract.** A price-lock request is a commercial order for compute delivered by OpenGrid —
+- **Not a financial contract.** A price-lock request is a commercial order for compute delivered by OpenGrid,
   not a derivative, not tradable, no cash settlement. It does not reference or settle against an index, even
   though the indicative reference shows one.
 - **No money moves.** No endpoint here launches compute, charges a card, issues an invoice or takes a payment.
@@ -26,8 +26,8 @@ Code: `reservations/` (states, service), `api/reservations.py`, `store/reservati
 | field | rule |
 |---|---|
 | `gpu` | one GPU variant: slug or canonical name (`/v1/gpus`). Families and `auto` are refused: a price lock is for one hardware variant |
-| `gpu_count` | integer 1 – 1,024: GPUs used at the same time |
-| `total_gpu_hours` | 1 – 10,000,000, at most 2 decimals, at least one hour on each GPU (`≥ gpu_count`) |
+| `gpu_count` | integer 1 to 1,024: GPUs used at the same time |
+| `total_gpu_hours` | 1 to 10,000,000, at most 2 decimals, at least one hour on each GPU (`≥ gpu_count`) |
 | `start_after`, `start_before` | ISO 8601 with a timezone. The start window: `start_after` not in the past (5-minute clock allowance), window ≥ 1 hour, `start_before` ≤ 731 days ahead |
 | `region_group` (alias `region`) | optional: US, Canada, Europe, UK, APAC, Middle East, LATAM, Africa |
 | `max_price_per_gpu_hour` | required, > $0 and ≤ $1,000: the customer's **limit**, not a price |
@@ -87,9 +87,9 @@ lock. Expiry is applied on every read and by the `reservation_expiry` job (every
 ## 4. Offers require a supply basis
 
 `POST /v1/admin/reservations/{id}/offer` (scope `admin`) takes `price_per_gpu_hour` (> 0, ≤ 1,000, ≤ 6
-decimals), `valid_until` (15 minutes to 30 days ahead), `terms` (≥ 10 characters) and **`supply_basis`** —
+decimals), `valid_until` (15 minutes to 30 days ahead), `terms` (≥ 10 characters) and **`supply_basis`**:
 the provider capacity commitment that backs the offer (e.g. "Provider X written capacity commitment ref
-PX-2026-114, 64× H100 Nov 1–30"), at least 10 characters. Without it the offer is refused
+PX-2026-114, 64× H100 Nov 1-30"), at least 10 characters. Without it the offer is refused
 (`supply_basis_required`). The database enforces the same rule (`ck_rsv_offer_has_supply_basis`): no row can hold
 an offer price without a supply basis, whichever code path writes it.
 
@@ -103,7 +103,7 @@ Only the requesting account can accept (the operator cannot accept for a custome
 `offer_seq` is refused (`offer_changed`, 409, with `current_offer_seq`), so a customer never accepts terms the
 operator has since revised. An expired offer is refused (`offer_expired`).
 
-The response says: **"Accepted — OpenGrid will contact you to sign the order form; nothing is billed by this
+The response says: **"Accepted. OpenGrid will contact you to sign the order form; nothing is billed by this
 action."** and carries `launched: false`, `billed: false`, `deployment_id: null`, `charge: null`. Acceptance
 creates no route request, quote, deployment, usage record or job (tests/test_reservations.py checks those
 tables).

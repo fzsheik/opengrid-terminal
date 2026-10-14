@@ -16,8 +16,8 @@ over the facts below, and the reasons are returned with it. The listing's own fi
 | `last_seen` | When this listing was last present in a fetch (`compute_listings.observed_at`, the provider fetch time). |
 | `last_changed` | The listing's last recorded change in price or supply (newest `listing_observations` row). Observations are change-only, so this can be much older than `last_seen`. |
 | `age_seconds` | now − `last_seen`. |
-| `freshness` | `fresh`: age ≤ 1.5 × the provider's polling interval (one poll plus jitter). `aging`: older, but within `market.stale_after()` = max(2.5 × interval, 10 min). `stale`: beyond it — the market view already treats the listing as gone. |
-| `availability_basis` | From `mapping.py`'s field map for `available`: `explicit` when it is copied from a provider field (RAW); derived when it follows from a stated rule (DERIVED, CONSTANT — e.g. Salad's `capacity > 0`, Vast's "a listed offer is rentable"); `unknown` when the provider does not expose it (ABSENT) or this listing's `available` is null. |
+| `freshness` | `fresh`: age ≤ 1.5 × the provider's polling interval (one poll plus jitter). `aging`: older, but within `market.stale_after()` = max(2.5 × interval, 10 min). `stale`: beyond it; the market view already treats the listing as gone. |
+| `availability_basis` | From `mapping.py`'s field map for `available`: `explicit` when it is copied from a provider field (RAW); derived when it follows from a stated rule (DERIVED, CONSTANT, e.g. Salad's `capacity > 0`, Vast's "a listed offer is rentable"); `unknown` when the provider does not expose it (ABSENT) or this listing's `available` is null. |
 | `held` | Pending quarantine holds on this listing (field, rule, since). See data-quality. |
 | `flags` | Open listing-level quality incidents (e.g. `instance_price_mismatch`). |
 | `provider_status` | The provider's health status (below). |
@@ -41,7 +41,7 @@ not a claim about the provider's uptime, capacity or service quality.
 (data:read; no error text or endpoint paths). Per provider, from `raw_snapshots`,
 `compute_listings` and the quality tables:
 
-- last successful fetch; last failure (time, endpoint, status, error — admin only);
+- last successful fetch; last failure (time, endpoint, status, error; admin only);
 - 24 h: fetches, failures, failure rate, latency p50 / p95 (`duration_ms` of every
   response in the window, ok or not);
 - consecutive failures = failed responses recorded after the last ok one;

@@ -12,7 +12,7 @@ Delivery: every event gets a monotonically increasing seq (persisted counter, sh
 instance via a lock dir) and is written to an on-disk spool BEFORE any network attempt; a batch is deleted from
 the spool only after a 2xx. The server ignores duplicate seqs, so retrying a batch whose response was lost is
 safe. Transient failures (network, 408/429/5xx) retry with exponential backoff + full jitter; 401/403 (token
-expired/revoked) and 409 (job already terminal) stop network delivery — the spool is kept for diagnosis.
+expired/revoked) and 409 (job already terminal) stop network delivery; the spool is kept for diagnosis.
 The token is never printed: it is read from a root-only file, kept out of argv/env/log lines, and scrubbed
 from any forwarded child output.
 

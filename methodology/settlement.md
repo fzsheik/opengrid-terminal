@@ -1,4 +1,4 @@
-# OpenGrid settlement fixings — methodology
+# OpenGrid settlement fixings: methodology
 
 Settlement version **S1.0** (index methodology [1.0](/methodology/indices)). Code:
 `analytics/settlement.py` (schedule, frozen recompute math, flags, ledger, verification),
@@ -100,7 +100,7 @@ half-built hour. A methodology rebuild of `index_levels` can still change *displ
 never touches a fixing (§11).
 
 **Daily fixing for UTC day D** ("daily settlement", fixing_time = D+1 00:00 UTC). Taken once the
-hourly fixing of D 23:00 exists, i.e. about 05:00–05:10 UTC on D+1 with the job running every
+hourly fixing of D 23:00 exists, i.e. about 05:00-05:10 UTC on D+1 with the job running every
 10 minutes.
 
 The job `index_fixings` (every 600 s, durable heartbeat `execution_controls 'job:index_fixings'`)
@@ -114,7 +114,7 @@ not back-fill fixings for earlier history.
 
 ## 4. The values
 
-**Hourly, per-GPU index.** The published chain-linked index level at H (methodology/indices §2–4):
+**Hourly, per-GPU index.** The published chain-linked index level at H (methodology/indices §2-4):
 one vote per provider, feed-down and outlier exclusions, median below 5 constituents else 20%
 trimmed mean, chained on the constituents common with the previous published hour. The fixing
 stores the inputs that determine it:
@@ -160,7 +160,7 @@ Stricter than the display index:
 |---|---|---|
 | per-GPU constituents | 3 | **4** (`SETTLEMENT_MIN_CONSTITUENTS`) |
 | composite components | 2 and 50% of weight | **3** and 50% of weight |
-| daily eligible hours | — | **18 of 24** |
+| daily eligible hours | n/a | **18 of 24** |
 
 An hour below the settlement minimum is fixed as `not_published` with the reason
 ("settlement data sufficiency: 3 constituent(s) included, 4 required").
@@ -241,7 +241,7 @@ returns the latest correction for each slot.
   fixed). The value is then recomputed from the corrected inputs by the same frozen math. A daily
   fixing is restated only by re-deriving it from the effective hourly fixings of that day.
 - **Window:** hourly fixings within **24 hours** of publication; daily fixings within **2
-  business days** (Mon–Fri, UTC) of publication. After that a fixing is final for good; a
+  business days** (Mon-Fri, UTC) of publication. After that a fixing is final for good; a
   later-discovered error is documented in a notice, not by restating.
 - **Scope of a correction:** a restatement corrects that one fixing. Later hourly fixings are not
   recomputed; a daily fixing that used a corrected hour is restated separately (re-derive).
@@ -298,12 +298,12 @@ deleted. So every fixing stays traceable to the provider bytes it was computed f
 | 6 | Benchmark design | chain-linked, one vote per provider, outlier screening, TWAP daily (§4) | measures **advertised list prices**, not the price compute actually clears at |
 | 7 | Data sufficiency | settlement minima 4 constituents / 3 components / 18 of 24 hours; otherwise not published (§5, §7) | few constituents for some GPUs; B200 often below the minimum |
 | 8 | Hierarchy of data inputs | one input type: observed public list prices | IOSCO prefers **transaction data**; OpenGrid has none from the market (its own routed transactions are deliberately excluded) |
-| 9 | Transparency of determinations | every fixing publishes its constituents, statuses, flags, reason and evidence | — |
+| 9 | Transparency of determinations | every fixing publishes its constituents, statuses, flags, reason and evidence | n/a |
 | 10 | Periodic review | thresholds and constants are published (`/v1/fixings/methodology`) | no scheduled periodic review process yet |
-| 11 | Content of the methodology | this document and methodology/indices.md, with code and tests | — |
+| 11 | Content of the methodology | this document and methodology/indices.md, with code and tests | n/a |
 | 12 | Changes to the methodology | versioned; recorded notice with notice period; enforced at fixing time (§11) | no public consultation process before a change |
 | 13 | Transition | `not_published` days are explicit; contracts should define their fallback (§7) | no published cessation / transition policy |
-| 14 | Submitter code of conduct | not applicable: no submissions, prices are observed | — |
+| 14 | Submitter code of conduct | not applicable: no submissions, prices are observed | n/a |
 | 15 | Internal controls over data collection | feeds fetched by OpenGrid; schema watch, quarantine, data-quality rules (methodology/data-quality.md); feed-down exclusion | list prices can be changed by a provider at will; no attestation from providers |
 | 16 | Complaints procedures | see §13 | no formal complaints register yet (handled by email) |
 | 17 | Audits | the ledger is independently verifiable (§14) | **no external audit** has been performed |

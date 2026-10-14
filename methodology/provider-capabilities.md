@@ -3,7 +3,7 @@
 **Every execution adapter is SIMULATED.** Each was built from the provider's published API reference and
 tested only against mocked HTTP (`tests/test_routing_adapters.py`, httpx.MockTransport with the documented
 request/response shapes). None has made a real authenticated call. A provider becomes `validated` only through
-the recorded validation cycle below, stored in `provider_execution_flags` — never by editing code.
+the recorded validation cycle below, stored in `provider_execution_flags`, never by editing code.
 
 The full matrix (the founder's rows, each with its evidence URL) lives on each adapter as `CAPABILITIES`
 (`routing/adapters/<provider>.py`) and is served by `routing/capabilities.py` (`capability(p)["matrix"]`),
@@ -29,7 +29,7 @@ reconciliation exist.
 - request never sent (connect error, pre-create step such as token fetch or SSH key registration) -> `rejected`
 - 2xx with an instance id -> `accepted`; 2xx without one or unparseable -> `unknown`
 - 4xx 400/401/402/403/404/405/410/413/415/422/429 -> `rejected` (definitively nothing created); 408/409/other -> `unknown`
-- any 5xx, read timeout, reset after send -> `unknown` — except a provider-DOCUMENTED capacity code
+- any 5xx, read timeout, reset after send -> `unknown`, except a provider-DOCUMENTED capacity code
   (Verda 503 with `{"code":"service_unavailable"}`)
 - `error_kind = capacity` only from documented codes (Lambda error.code, Vast 410/no_such_ask, Verda 503 code);
   never from a substring of a body
@@ -53,7 +53,7 @@ methodology/first-live-route.md ("The supervised Lambda validation run"); the Py
    operator SSH key (`ssh_public_key`, registered per deployment; Lambda needs no image) (and Hyperstack
    environments / DigitalOcean images).
 2. Set the execution mode to SUPERVISED (and `ROUTING_LIVE_PROVISIONING=true` in that one environment).
-3. `POST /v1/admin/validation/start {"provider": "lambda"}` (`validation.start_validation`) — picks the cheapest 1-GPU on-demand listing within
+3. `POST /v1/admin/validation/start {"provider": "lambda"}` (`validation.start_validation`): picks the cheapest 1-GPU on-demand listing within
    the cap and creates a validation route through `engine.create_validation_route`. It does NOT launch.
 4. Approve the route through the normal admin approval, `POST /v1/route/{id}/approve {"quote_id": ...}` (quote
    re-validation applies; the $3.00/h cap is checked against the re-validated live price). Keep the provider console

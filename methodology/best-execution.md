@@ -36,7 +36,7 @@ appear for any GPU (see `/unmapped`); OpenGrid does not guess mappings.
 ## Market reference
 
 `market.median` / `market.low`: for each provider, its lowest current eligible, fresh, priced,
-not-sold-out per-GPU-hour price (any instance shape); then the median / minimum across providers —
+not-sold-out per-GPU-hour price (any instance shape); then the median / minimum across providers,
 the same rule as the market view. These are **observed market prices**.
 
 ## Factors
@@ -52,12 +52,12 @@ Each factor is normalized to 0..1.
 | `availability_persistence` | derived | Share of hourly samples in the last 30 days (from `market_hourly`) in which this provider had at least one priced, not-sold-out listing for this GPU. Denominator: hours from when OpenGrid first recorded the provider for this GPU (or 30 days ago, if later) to the newest rollup hour; an hour with no rollup row means no live listing and counts as unavailable. 7-day share is reported alongside. Per provider, collapsed over regions. Unknown-stock listings count as "priced availability". |
 | `price_stability` | derived | `clamp(1 − CV / 0.25)` where CV is the coefficient of variation (population stdev / mean) of the provider's hourly lowest price over 30 days. |
 | `integration_level` | registry | OpenGrid adapter level / 3 (`routing/capabilities.py`): can OpenGrid actually provision there? |
-| `reliability` | — | **No data — not used.** Weight 0, value null. |
-| `performance` | — | **No data — not used.** Weight 0, value null. |
+| `reliability` | n/a | **No data, not used.** Weight 0, value null. |
+| `performance` | n/a | **No data, not used.** Weight 0, value null. |
 
 **Thin history.** Persistence and stability need at least 24 hourly samples. With less, the value is
 null and the note says "insufficient". If a mode gives that factor weight, it scores a **neutral 0.5**
-and is flagged `imputed: true` — never an invented number. Locally, history is hours deep, so expect
+and is flagged `imputed: true`, never an invented number. Locally, history is hours deep, so expect
 these factors to be imputed; production has weeks.
 
 **Reliability and performance** will be computed only from OpenGrid's own transaction records

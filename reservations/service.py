@@ -53,9 +53,9 @@ FIELDS = {"gpu", "gpu_count", "total_gpu_hours", "start_after", "start_before", 
 
 INDICATIVE_NOTE = ("INDICATIVE only: observed public list prices and OpenGrid index levels at the time shown. "
                    "Not a quote, not an offer, not a binding price.")
-ACCEPTED_MESSAGE = ("Accepted — OpenGrid will contact you to sign the order form; nothing is billed by this "
+ACCEPTED_MESSAGE = ("Accepted. OpenGrid will contact you to sign the order form; nothing is billed by this "
                     "action.")
-NOT_A_CONTRACT = ("A price-lock request is a commercial request for compute delivered by OpenGrid — not a "
+NOT_A_CONTRACT = ("A price-lock request is a commercial request for compute delivered by OpenGrid, not a "
                   "financial contract, not tradable, no cash settlement. An offer is made only when provider "
                   "capacity backs it, and binds only in a signed order form.")
 

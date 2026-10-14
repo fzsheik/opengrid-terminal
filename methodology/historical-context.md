@@ -1,4 +1,4 @@
-# Historical context and percentiles — methodology
+# Historical context and percentiles: methodology
 
 Code: `analytics/stats.py`. API: `/v1/markets/{gpu}/context`,
 `/v1/providers/{provider}/gpus/{gpu}/context`, `/v1/providers/{provider}/listings/context`,
@@ -83,8 +83,8 @@ nothing passes the coverage gate the summary says so rather than characterising 
 
 ## History series (`/v1/history/{gpu}`)
 
-Hourly (or daily) lowest / median / highest provider price and provider count — the plain
-cross-section, one vote per provider — together with the chain-linked index for the same GPU.
+Hourly (or daily) lowest / median / highest provider price and provider count (the plain
+cross-section, one vote per provider), together with the chain-linked index for the same GPU.
 The cross-section can move when a provider starts being recorded, so the response lists
 `providers_joined` (first recorded hour of each provider in the window) and `coherent_from`
 (the first hour from which every provider selling now was already recorded, as in the market

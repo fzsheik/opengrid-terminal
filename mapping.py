@@ -1,7 +1,7 @@
 """How each provider's API fills in ComputeListing.
 
 One entry per provider, declared here rather than buried in the normalizer, so
-that adding a provider starts with writing down what maps to what — and so the
+that adding a provider starts with writing down what maps to what, and so the
 differences between providers stay visible.
 
 Render it with `mapping` in the terminal or GET /mapping.

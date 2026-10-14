@@ -2,7 +2,7 @@
 
 APP-SIDE ONLY (stdlib, no torch). routing/deployments.launch swaps the placeholder startup_script
 "opengrid-job:<job_id>" for render(job_id, token, ...) at provision time. The rendered script contains the job's
-callback token, so callers must never log or store it — record TEMPLATE_VERSION, BUNDLE_SHA256 and
+callback token, so callers must never log or store it. Record TEMPLATE_VERSION, BUNDLE_SHA256 and
 script_sha256(script) instead.
 
 What the script does (methodology/runner.md has the full list and the evidence each step produces):

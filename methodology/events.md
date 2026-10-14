@@ -28,7 +28,7 @@ what changed; they never say why. No event is a quote or an execution price.
 - A (GPU, provider) pair whose first hour is within **2 hours** of the provider's coverage start was
   already on sale when we started looking. That is `coverage_started`, never `provider_added_gpu`.
 - A pair is **established** at hour *h* once it has been recorded for **24 hours**, or immediately if it
-  is a genuine addition (first hour > coverage start + 2h, and its listings were first seen at that time —
+  is a genuine addition (first hour > coverage start + 2h, and its listings were first seen at that time,
   not long before, which would mean a mapping fix or a rebuilt rollup).
 - Market-level comparisons between two hours (cheapest provider, spread, market sold out, regional gaps)
   use **one provider set**: the providers established at the later hour, evaluated at both hours.
@@ -84,7 +84,7 @@ swings hour to hour as hosts come and go without anyone "changing a price". For 
 provider-level `price_move`:
 
 - **hour basis** fires at hour H only when the price at both H-1 and H differs from the price at H-2 by
-  >= 10% (and >= $0.001) **in the same direction** — the move held for 2 consecutive hourly samples. The
+  >= 10% (and >= $0.001) **in the same direction**: the move held for 2 consecutive hourly samples. The
   event reports H-2 -> H (`since` = H-2) and `detail.persistence = {held_hours: 2, samples: [H-1, H]}`.
   The H-2 level must not itself be a fresh >= 10% jump from H-3, so the reversion of a one-hour spike
   is not reported as a held move either;

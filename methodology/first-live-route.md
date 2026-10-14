@@ -28,11 +28,11 @@ item is green. Unknown is not green: if the system cannot prove an item, it is n
 
 ## Order of operations for the first route
 
-1. Make items 1–3 green (deploy configuration).
-2. Configure the provider (items 4–6) and limits (7).
+1. Make items 1-3 green (deploy configuration).
+2. Configure the provider (items 4-6) and limits (7).
 3. Set mode SUPERVISED. A validation launch needs NO provider flag (`supervised_enabled` is for customer
-   launches): only the validation gate below. Run one validation deployment end to end — launch, observe
-   running, terminate, cost reconciliation — with the exact procedure in the next section. This turns 9 and 12
+   launches): only the validation gate below. Run one validation deployment end to end (launch, observe
+   running, terminate, cost reconciliation) with the exact procedure in the next section. This turns 9 and 12
    green.
 4. Drill the kill switch (10). Confirm the reconciler is healthy (11), logs are JSON (13), and alerts
    reach a human (14).
@@ -59,7 +59,7 @@ redeploy during the run. Keep the Lambda console open.
 **Authentication.** Use the operator login (HTTP Basic `APP_USER:APP_PASSWORD`). Every POST must carry
 `X-OpenGrid-Request: 1` (CSRF guard) and, with a body, `Content-Type: application/json`. Every money-moving
 POST below carries an `Idempotency-Key` (a fresh UUID per intent; reuse it ONLY to retry the same request after
-a network error — it then replays instead of acting twice; a different body with the same key is a 422).
+a network error; it then replays instead of acting twice; a different body with the same key is a 422).
 (A platform-admin API key `Authorization: Bearer opg_…` can approve and force-terminate, but `GET
 /v1/deployments/{id}` 404s for it on the operator's validation deployment: use the operator login.)
 
@@ -78,7 +78,7 @@ B=https://<host>; A=(-u "opengrid:$APP_PASSWORD" -H 'X-OpenGrid-Request: 1' -H '
 | 7 | Approve (within 5 min: the quote TTL) | `curl "${A[@]}" -X POST $B/v1/route/<rr>/approve -H "Idempotency-Key: $(uuidgen)" -d '{"quote_id":"<q>","reason":"supervised lambda validation"}'` → 200 `data.status == "provisioned"`, `data.launch.outcome == "accepted"`, `data.launch.instance_id`, `data.auto_termination.terminate_deadline_at`. 409 `quote_expired` / `quote_invalid` → nothing launched; approve `detail.new_quote.quote_id` with a NEW Idempotency-Key. 409 `validation_preconditions_failed` / 422 `over_max_price` → nothing launched. 202 (outcome unknown) → do NOT approve again; reconciliation resolves it by name | Approve on ticket → (on `/route?rr=…`) Approve & launch… → type `lambda` → Approve & launch |
 | 8 | Watch it run | `curl "${A[@]}" "$B/v1/deployments/<dep>?refresh=true"` until `data.status == "running"`; then `curl "${A[@]}" $B/v1/admin/validation/<dep>` until `data.steps.find_instance.ok` and `data.steps.list_instances.ok` are true (the tracker checks within ~60 s of running). Cross-check the Lambda console: exactly one `og-<dep>` instance, key `og-<dep>` | `/deployments/<dep>`: state, auto-terminate countdown, Validation evidence |
 | 9 | Terminate (or let the deadline do it) | `curl "${A[@]}" -X POST $B/v1/deployments/<dep>/terminate -H "Idempotency-Key: $(uuidgen)"` → 202 `data.terminate.outcome == "accepted"`. Admin alternative: `POST /v1/admin/deployments/<dep>/terminate -d '{"reason":"…"}'` | `/deployments/<dep>` → Terminate… → tick the acknowledgement → Terminate |
-| 10 | Confirmation + cost | optional `curl "${A[@]}" -X POST "$B/v1/admin/reconcile/run?provider=lambda"`; repeat until `GET /v1/deployments/<dep>` shows `status == "terminated"` and `reconciled_at` is set | – |
+| 10 | Confirmation + cost | optional `curl "${A[@]}" -X POST "$B/v1/admin/reconcile/run?provider=lambda"`; repeat until `GET /v1/deployments/<dep>` shows `status == "terminated"` and `reconciled_at` is set | n/a |
 | 11 | Mark validated | `curl "${A[@]}" $B/v1/admin/validation/<dep>` → `data.missing == []`, then `curl "${A[@]}" -X POST $B/v1/admin/validation/<dep>/mark -H "Idempotency-Key: $(uuidgen)"` → `data.validated == true` | Validation → click the deployment → Re-check & mark validated |
 | 12 | Leftovers | `GET /v1/admin/resources?type=ssh_key` (no leftover), `GET /v1/admin/orphans?status=open` (empty), `GET /v1/admin/exposures` (nothing for `<dep>`); Lambda console: no `og-*` instance, no `og-*` key; compare the Lambda invoice line with `data.reconciliation` | Execution: orphans / resources panels |
 

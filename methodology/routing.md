@@ -27,7 +27,7 @@ enough; the default keeps unknown-location listings visible, ranked below confir
 
 `gpu` is normally one canonical GPU (`h100-80gb-sxm5`). A family name (`h100`, `blackwell`; see
 [families](/methodology/families)) is rejected with 422, `detail.code = "family_needs_variant"`, and
-the list of variants to choose from — because the variants are different products. With
+the list of variants to choose from, because the variants are different products. With
 `allow_variants: true` the request is routed across the family's listed variants: each variant is
 ranked on its **own** market (its price factor is relative to its own variant median), the candidates
 are merged (CHEAPEST: by price; other modes: by score) and each carries `variant` / `variant_slug`.
@@ -46,10 +46,10 @@ actually chosen, never the family.
 
 `GET /v1/capabilities` reports, per provider, three separate claims:
 
-- `level_supported_by_provider_api` — what the provider's public API documents;
-- `level_implemented` — what OpenGrid's adapter does, read from the adapter code itself
+- `level_supported_by_provider_api`: what the provider's public API documents;
+- `level_implemented`: what OpenGrid's adapter does, read from the adapter code itself
   (`routing.adapters.level()`), so the registry cannot claim more than is implemented;
-- `verified_live` — **false for every provider**: no adapter has yet been run against a real provider
+- `verified_live`: **false for every provider**, since no adapter has yet been run against a real provider
   account. Adapters are tested against mocked HTTP built from each provider's documented
   request/response shapes (`tests/test_routing_adapters.py`). `docs_checked` says how the API facts
   were established (docs fetched, found by search, or recalled).
@@ -60,19 +60,19 @@ hold OpenGrid-managed credentials and whether they are configured, docs URL and 
 Crusoe, Denvr and Latitude.sh are reached **through Shadeform** (`via: "shadeform"`): one Shadeform key,
 Shadeform is the counterparty and bills, and the price is Shadeform's listing of that cloud.
 
-## Preview — `POST /v1/route/preview` (scope `route:preview`)
+## Preview: `POST /v1/route/preview` (scope `route:preview`)
 
 Validates the request, resolves the GPU, ranks, and returns the selected candidate, alternatives,
 multi-instance alternatives, exclusions, the market median, a **quote** and savings vs the median, and
 whether OpenGrid can provision the selected candidate (if not, the best provisionable alternative).
-Preview never calls a provider: its quote has `basis: "observed_listing"` — the observed listing price
+Preview never calls a provider: its quote has `basis: "observed_listing"`: the observed listing price
 × GPUs × hours (`duration_hours`, else `deadline_hours` read as "cost if it runs the full window"; with
 neither, hourly cost only). For the best provisionable candidate it also persists a quote record
 (`quote_record`: `quote_id`, `expires_at`, `price_source: "observed"`) that `POST /v1/route` can launch after a
 live re-validation. `deadline_hours` is not otherwise used: there is no performance data to estimate
 completion time.
 
-## Route — `POST /v1/route` (scope `route:execute`, `Idempotency-Key` required)
+## Route: `POST /v1/route` (scope `route:execute`, `Idempotency-Key` required)
 
 The full safety model (modes, quotes, idempotency, state machine, cost guards, credentials, SSH keys) is in
 [execution-safety](/methodology/execution-safety). In order:
@@ -108,7 +108,7 @@ auto-terminate deadline. Approval: `POST /v1/route/{id}/approve` (admin, `quote_
 `GET /v1/deployments` (`?status=live|uncertain|<state>`, paginated), `GET /v1/deployments/{id}`
 (`refresh=true` asks the provider; default false), `POST /v1/deployments/{id}/terminate` and `/stop`
 (Idempotency-Key required; allowed for suspended accounts and in every execution mode), `POST
-/v1/deployments/{id}/outcome` (the caller's report of workload completion — OpenGrid cannot observe it).
+/v1/deployments/{id}/outcome` (the caller's report of workload completion; OpenGrid cannot observe it).
 A key only ever sees its own account's deployments. Admin: `GET /v1/admin/deployments?state=live`,
 `POST /v1/admin/deployments/{id}/terminate`.
 
@@ -120,7 +120,7 @@ launch**. The `routing_tracker` job polls live deployments. **Uptime** is OpenGr
 status checks that saw it running). An **interruption** is a running deployment leaving `running` without
 OpenGrid having requested it.
 
-## Prices — four concepts, four fields
+## Prices: four concepts, four fields
 
 | Field | Concept | Source |
 |---|---|---|

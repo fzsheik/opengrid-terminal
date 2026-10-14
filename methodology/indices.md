@@ -1,4 +1,4 @@
-# OpenGrid market indices — methodology
+# OpenGrid market indices: methodology
 
 Methodology version **1.0**. Code: `analytics/indices.py` (registry, math, storage). Stored in the
 `index_levels` table, one row per index per hour. API: `/v1/indices`, `/v1/indices/{id}`,
@@ -38,7 +38,7 @@ eligible listings sampled at the top of each hour with exactly the market view's
 (canonical GPU, on-demand and not interruptible for the on-demand segment, not Vast's
 "cheapest" row, not a "from $x" floor, not a GPU-only attachment price (Google Cloud T4/V100, host VM
 extra), not sold out, and only while the listing was still being
-seen — a listing that vanished stops counting after its provider's stale window).
+seen; a listing that vanished stops counting after its provider's stale window).
 
 1. **One vote per provider.** A provider's vote is its *lowest* priced eligible listing for the
    GPU that hour, across all its regions (for a regional index, across its regions in that
@@ -53,7 +53,7 @@ seen — a listing that vanished stops counting after its provider's stale windo
    A provider with no snapshot at all in that hour is not treated as failing.
 3. **Outliers are excluded.** With at least 3 candidate votes, a vote above 3× or below 1/3 of
    the candidates' median is excluded (`excluded_outlier`). The band is deliberately wide:
-   prices for the same GPU legitimately differ by 2–3× between a marketplace and a hyperscaler,
+   prices for the same GPU legitimately differ by 2-3× between a marketplace and a hyperscaler,
    and the index should reflect that market. The band only removes values that are almost
    certainly data errors (a mis-normalized per-instance price, a placeholder price).
    Below 3 votes there is no meaningful median to screen against, and nothing is screened.
@@ -71,10 +71,10 @@ Each stored row keeps every candidate in `detail` with its price and status
 ## 3. The statistic
 
 - Fewer than 5 constituents: the **median**.
-- 5 or more: the **20% trimmed mean** — sort, drop `floor(0.2 × N)` from each end, average the
+- 5 or more: the **20% trimmed mean**. Sort, drop `floor(0.2 × N)` from each end, average the
   rest (N = 5 drops one from each end; N = 10 drops two).
 
-Why: with 3–4 providers a mean is dominated by any single provider, and the median is the only
+Why: with 3-4 providers a mean is dominated by any single provider, and the median is the only
 robust choice. From 5 providers the trimmed mean uses more of the information (it moves when
 the middle of the market moves, not only when the single middle provider moves) while still
 ignoring the extremes. The method used each hour is stored in `method`.
@@ -119,7 +119,7 @@ price fell). The index answers "how have prices changed, like for like"; `raw_le
 ## 5. Composite indices (base 100)
 
 Composites combine child indices, never raw prices, and are published in **points, base 100**,
-never as a price — a composite is not the price of any single SKU.
+never as a price, because a composite is not the price of any single SKU.
 
 ```
 level_t = level_p × Σ w_i (child_i,t / child_i,p) / Σ w_i      over linkable children
@@ -190,7 +190,7 @@ All are computed from stored `index_levels` rows; "now" is the newest hour in th
 ## 8. Known limits
 
 - History is only as long as OpenGrid's recording. Early on, most windows report
-  "history does not cover the window" — by design.
+  "history does not cover the window". This is by design.
 - A listing that disappears and later returns is treated as live across the gap by the rollup
   (the pipeline keeps no record of the gap). The feed-down rule covers the common cause
   (a failing feed); it cannot detect a provider silently delisting and relisting.

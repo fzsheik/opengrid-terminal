@@ -427,7 +427,7 @@ def test_state_machine_offer_accept():
     assert r.status_code == 200, r.text
     d = r.json()["data"]
     assert d["status"] == "accepted" and d["message"] == R.ACCEPTED_MESSAGE
-    assert d["message"] == "Accepted — OpenGrid will contact you to sign the order form; nothing is billed by this action."
+    assert d["message"] == "Accepted. OpenGrid will contact you to sign the order form; nothing is billed by this action."
     assert d["launched"] is False and d["billed"] is False and d["deployment_id"] is None and d["charge"] is None
     assert spend_rows() == before, "acceptance must not create a deployment, quote, route, usage or job row"
     ev = d["events"][-1]

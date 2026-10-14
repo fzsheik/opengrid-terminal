@@ -58,9 +58,9 @@ state machine (`deployments.observe` -> `transition`). Usage is metered incremen
 (`usage_slices`, one per deployment per UTC hour, unique on (deployment, period_start)):
 
 - billed at the GPU rate: `running`, `degraded`, `stopping`, `terminating`, `termination_failed`,
-  `orphan_suspected`, `credentials_unavailable` — but only after the instance was first observed running;
+  `orphan_suspected`, `credentials_unavailable`, but only after the instance was first observed running;
 - `degraded` (a provider error state) is not billed where the provider documents no charge (Hyperstack);
-- `stopped`: per the adapter's `CAPABILITIES.stopped_billing` — `full` bills at the GPU rate (DigitalOcean,
+- `stopped`: depends on the adapter's `CAPABILITIES.stopped_billing`. `full` bills at the GPU rate (DigitalOcean,
   Hyperstack, Verda), `storage_only` records the seconds at $0 GPU time (RunPod, Vast; storage itself is not
   metered by OpenGrid and appears in cost reconciliation); unknown is treated as `full`. Each slice records
   the rule and its evidence;

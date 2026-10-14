@@ -67,7 +67,7 @@ methodology/runner.md.
 | terminating | terminate requested, awaiting provider confirmation | termination_confirmed, termination_failed, orphan_suspected, credentials_unavailable |
 | termination_failed, orphan_suspected, credentials_unavailable | possibly still billing; the operator is alerted by the existing reconciliation | terminating, termination_confirmed, … |
 | termination_confirmed → reconciliation_pending → reconciled | provider-confirmed gone; cost reconciled | (reconciled is final) |
-| validation_failed, no_eligible_provider, approval_rejected | final; nothing was ever created | — |
+| validation_failed, no_eligible_provider, approval_rejected | final; nothing was ever created | n/a |
 
 Sandbox jobs finish at `training_completed` (or the failure state) with outcome `simulated`.
 **Outcome** (`succeeded | failed | cancelled | simulated`) is separate from the state and set once.

@@ -1,11 +1,11 @@
 """Runner (runs ON the GPU): reporter wire protocol, retries, offline spool, artifact hashing, supervisor, and
 (if a separate CPU torch venv exists) a real MNIST smoke test. Runs in the app's .venv WITHOUT torch.
 
-Everything here is LOCAL verification against a fake callback server (stdlib http.server) — no GPU, no provider.
+Everything here is LOCAL verification against a fake callback server (stdlib http.server): no GPU, no provider.
 
 Run:  .venv/Scripts/python tests/test_runner.py
-Optional CPU smoke test: set OG_TORCHENV to a python with torch==2.4.1/torchvision==0.19.1 (CPU wheels) — default
-looks for the session scratch venv — and OG_MNIST_DATA to a directory with (or for) the MNIST download.
+Optional CPU smoke test: set OG_TORCHENV to a python with torch==2.4.1/torchvision==0.19.1 (CPU wheels) (default:
+the session scratch venv) and OG_MNIST_DATA to a directory with (or for) the MNIST download.
 """
 import hashlib
 import io
