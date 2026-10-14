@@ -607,7 +607,9 @@ def test_migration_roundtrip():
         command.upgrade(cfg, "head")
         eng = create_engine(url)
         with eng.connect() as c:
-            assert c.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0019_reservations"
+            from alembic.script import ScriptDirectory
+            head = ScriptDirectory.from_config(cfg).get_current_head()
+            assert c.execute(text("SELECT version_num FROM alembic_version")).scalar() == head
             for t in ("reservation_requests", "reservation_events"):
                 assert c.execute(text("SELECT to_regclass(:t)"), {"t": t}).scalar() is not None, t
             assert c.execute(text("SELECT count(*) FROM pg_constraint WHERE conname = 'ck_rsv_offer_has_supply_basis'")).scalar() == 1

@@ -72,6 +72,15 @@ def _public_path(request: Request) -> bool:
     return pages.is_public(request)
 
 
+def _public_read(request: Request) -> bool:
+    """GET/HEAD, or a POST to one of the read-only computations in api/pages.PUBLIC_POST."""
+    if request.method in ("GET", "HEAD"):
+        return True
+    from api import pages
+
+    return request.method == "POST" and request.url.path in pages.PUBLIC_POST
+
+
 def principal(request: Request) -> Principal:
     cached = getattr(request.state, "principal", None)
     if cached is not None:
@@ -83,7 +92,7 @@ def principal(request: Request) -> Principal:
         who = keys.verify(header[7:].strip(), request)  # raises 401/429 itself
     elif _site_auth_ok(header):
         who = OPERATOR
-    elif settings.public_pages and request.method in ("GET", "HEAD") and _public_path(request):
+    elif settings.public_pages and _public_read(request) and _public_path(request):
         who = PUBLIC
     else:
         raise HTTPException(401, "OpenGrid API key required", headers={"WWW-Authenticate": "Bearer"})

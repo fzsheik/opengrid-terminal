@@ -238,8 +238,14 @@ def test_is_public_matrix():
         assert pages.is_public(_req("HEAD", p)), f"HEAD {p} should be public"
     for p in deny:
         assert not pages.is_public(_req("GET", p)), f"GET {p} must not be public"
-    for p in ["/", "/v1/gpus", "/v1/methodology", "/listings", "/fetch", "/normalize"]:
+    for p in ["/", "/v1/gpus", "/v1/methodology", "/listings", "/fetch", "/normalize", "/v1/recommend/other",
+              "/v1/recommend/", "/v1/route/preview"]:
         for m in ("POST", "PUT", "DELETE", "PATCH"):
+            assert not pages.is_public(_req(m, p)), f"{m} {p} must never be public"
+    # exactly two read-only computations accept an anonymous POST (api/pages.PUBLIC_POST)
+    for p in ("/v1/recommend/estimate", "/v1/recommend"):
+        assert pages.is_public(_req("POST", p)), f"POST {p} should be public"
+        for m in ("PUT", "DELETE", "PATCH"):
             assert not pages.is_public(_req(m, p)), f"{m} {p} must never be public"
 
 
