@@ -41,7 +41,7 @@ eq(A.optionLinks({ gpu: "NVIDIA H100 80GB SXM5", gpu_count: 2, execution: { rout
   ["/gpu/h100-80gb-sxm5", "/route?gpu=h100-80gb-sxm5&count=2"], "a non-relative preview URL is replaced by our own route link");
 ok(A.findHref(null) === "/find" && A.findHref({}) === "/find", "find link without requirements");
 const fh = A.findHref({ workload_type: "fine_tuning", model: { parameters_b: 8 } });
-ok(fh.startsWith("/find?requirements=") && JSON.parse(decodeURIComponent(fh.split("=")[1])).model.parameters_b === 8, "find link carries the requirements");
+ok(fh.startsWith("/find?mode=paste&req=") && JSON.parse(decodeURIComponent(fh.split("req=")[1])).model.parameters_b === 8, "find link carries the requirements");
 ok(A.findHref({ model: { name: "x".repeat(3000) } }) === "/find", "oversized requirements are not put in a URL");
 eq(["/gpu/h100", "//evil.com/x", "https://evil.com", "javascript:alert(1)", "/a b", null, 5].map(A.safeHref), ["/gpu/h100", null, null, null, null, null, null], "only same-site relative links");
 

@@ -36,7 +36,7 @@
   const findHref = req => {
     if (!req || typeof req !== "object" || !Object.keys(req).length) return "/find";
     const s = JSON.stringify(req);
-    return s.length > 1800 ? "/find" : "/find?requirements=" + encodeURIComponent(s);
+    return s.length > 1800 ? "/find" : "/find?mode=paste&req=" + encodeURIComponent(s);  // find.js reads ?req= (paste mode)
   };
   function optionLinks(o) {
     if (!o) return [];
