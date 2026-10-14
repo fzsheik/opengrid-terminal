@@ -157,9 +157,10 @@ class Settings(BaseSettings):
     # The LLM only classifies unclear questions and phrases replies; every number is post-checked against the
     # tool results and an ungrounded reply is replaced by the deterministic one.
     assistant_llm_provider: str | None = None    # None (off) | "anthropic"
-    assistant_llm_model: str = "claude-haiku-5-5"   # inexpensive current model; any Messages API model id
+    # Claude Opus 5.5 by default; claude-haiku-5-5 is a much cheaper option for this short routing/phrasing work
+    assistant_llm_model: str = "claude-opus-5-5"
     anthropic_api_key: str | None = None
-    assistant_llm_timeout_seconds: float = 15.0
+    assistant_llm_timeout_seconds: float = 30.0
     assistant_llm_max_calls_per_minute: int = 30    # process-wide ceiling on model calls (cost guard)
     # POST /v1/assistant budget per anonymous client IP (on top of PUBLIC_RATE_LIMIT_PER_MINUTE).
     assistant_public_rate_limit_per_minute: int = 20

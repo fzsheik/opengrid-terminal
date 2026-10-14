@@ -7,8 +7,8 @@
 Enabled only when BOTH are set (config.py):
     ASSISTANT_LLM_PROVIDER=anthropic
     ANTHROPIC_API_KEY=...
-    ASSISTANT_LLM_MODEL=claude-haiku-5-5        (default; any Messages API model id)
-    ASSISTANT_LLM_TIMEOUT_SECONDS=15, ASSISTANT_LLM_MAX_CALLS_PER_MINUTE=30 (process-wide cost ceiling)
+    ASSISTANT_LLM_MODEL=claude-opus-5-5         (default; claude-haiku-5-5 is far cheaper; any Messages API model id)
+    ASSISTANT_LLM_TIMEOUT_SECONDS=30, ASSISTANT_LLM_MAX_CALLS_PER_MINUTE=30 (process-wide cost ceiling)
 
 What the model may do (engine.py enforces it, whatever the model returns):
     (a) classify / extract slots when the deterministic parser is unsure -- via the `route_question` tool;
@@ -55,6 +55,12 @@ class ModelProvider:
         raise NotImplementedError
 
 
+MIN_MAX_TOKENS = 4096
+# models that accept the server-side refusal fallback (fallbacks: "default", Claude API)
+SERVER_FALLBACK_MODELS = {"claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"}
+SERVER_FALLBACK_BETA = "server-side-fallback-2026-07-01"
+
+
 class AnthropicProvider(ModelProvider):
     name = "anthropic"
 
@@ -69,13 +75,21 @@ class AnthropicProvider(ModelProvider):
 
     def complete(self, system, messages, tools, *, tool_choice="auto", max_tokens=1024) -> Completion:
         a = self._sdk
-        kw = {"model": self.model, "max_tokens": max_tokens, "system": system, "messages": messages,
+        # Current models think on every request and thinking counts toward max_tokens, so the caller's figure (a
+        # cap on the visible answer) gets a floor; the prompts themselves keep the answer short.
+        kw = {"model": self.model, "max_tokens": max(max_tokens, MIN_MAX_TOKENS), "system": system,
+              "messages": messages,
               "output_config": {"effort": "low"}}   # routing / phrasing: low effort is enough and cheapest
         if tools:
             kw["tools"] = tools
-            kw["tool_choice"] = {"type": tool_choice}   # "auto" | "none" (forced choice is not used)
+            kw["tool_choice"] = {"type": tool_choice}   # "auto" | "none" (forced choice is not supported)
         try:
-            resp = self._client.messages.create(**kw)
+            if self.model in SERVER_FALLBACK_MODELS:
+                # On a policy decline the API re-runs the request on a fallback model inside the same call. If the
+                # whole chain declines, stop_reason is "refusal" and the assistant uses its deterministic reply.
+                resp = self._client.beta.messages.create(betas=[SERVER_FALLBACK_BETA], fallbacks="default", **kw)
+            else:
+                resp = self._client.messages.create(**kw)
         except a.RateLimitError as e:
             raise LLMError("model rate-limited") from e
         except a.APIStatusError as e:
@@ -86,6 +100,8 @@ class AnthropicProvider(ModelProvider):
             raise LLMError("model API error") from e
         if resp.stop_reason == "refusal":
             raise LLMError("model declined")
+        if resp.stop_reason == "max_tokens":
+            raise LLMError("model answer cut off at max_tokens")
         text = "".join(b.text for b in resp.content if b.type == "text")
         calls = [{"name": b.name, "input": b.input if isinstance(b.input, dict) else {}}
                  for b in resp.content if b.type == "tool_use"]

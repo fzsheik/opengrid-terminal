@@ -490,6 +490,103 @@ def test_llm_failure_and_classification_validated():
     assert r["intent"] == "unknown"
 
 
+class _MessagesAPI:
+    """A local stand-in for POST /v1/messages, so the REAL anthropic SDK path runs end to end (no network)."""
+
+    def __init__(self):
+        import http.server
+        import threading
+        api = self
+        self.requests, self.mode = [], "ok"
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                body = json.loads(self.rfile.read(int(self.headers.get("content-length") or 0)) or b"{}")
+                api.requests.append({"path": self.path, "headers": {k.lower(): v for k, v in self.headers.items()},
+                                     "body": body})
+                if api.mode == "500":
+                    return self._send(500, {"type": "error", "error": {"type": "api_error", "message": "boom"}})
+                tools = [t["name"] for t in body.get("tools") or []]
+                if "route_question" in tools:
+                    content = [{"type": "tool_use", "id": "toolu_1", "name": "route_question",
+                                "input": {"intent": "cheapest", "gpus": ["H100 SXM"]}}]
+                    stop = "tool_use"
+                else:
+                    draft = json.loads(body["messages"][2]["content"][0]["content"])["draft_reply"]
+                    text = {"invent": "H100 SXM is only $123.45 per hour everywhere!"}.get(api.mode,
+                                                                                         "In short: " + draft)
+                    content = [{"type": "thinking", "thinking": "", "signature": "sig"},
+                               {"type": "text", "text": text}]
+                    stop = {"refusal": "refusal", "max_tokens": "max_tokens"}.get(api.mode, "end_turn")
+                self._send(200, {"id": "msg_1", "type": "message", "role": "assistant", "model": body["model"],
+                                 "content": content, "stop_reason": stop, "stop_sequence": None,
+                                 "usage": {"input_tokens": 10, "output_tokens": 5}})
+
+            def _send(self, code, obj):
+                raw = json.dumps(obj).encode()
+                self.send_response(code)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
+
+    def close(self):
+        self.server.shutdown()
+
+
+def test_real_anthropic_sdk_against_local_messages_api():
+    try:
+        import anthropic  # noqa: F401
+    except ImportError:
+        print("     (skipped: anthropic SDK not installed; uv sync --extra llm)")
+        return
+    api = _MessagesAPI()
+    saved = os.environ.get("ANTHROPIC_BASE_URL")
+    os.environ["ANTHROPIC_BASE_URL"] = api.url
+    try:
+        prov = llm.AnthropicProvider("sk-ant-test-not-a-real-key", "claude-opus-5-5", timeout=5)
+        r = ask("cheapest available H100 SXM", provider=prov)
+        assert r["engine"] == "llm:claude-opus-5-5" and r["reply"].startswith("In short: "), r
+        req = api.requests[-1]
+        b, hdr = req["body"], req["headers"]
+        assert req["path"].startswith("/v1/messages"), req["path"]
+        assert hdr["x-api-key"] == "sk-ant-test-not-a-real-key"
+        assert "server-side-fallback-2026-07-01" in hdr.get("anthropic-beta", "") and b["fallbacks"] == "default", \
+            "Opus 5.5: server-side refusal fallback on"
+        assert b["max_tokens"] >= llm.MIN_MAX_TOKENS and b["output_config"] == {"effort": "low"}
+        assert b["tool_choice"] == {"type": "none"} and "thinking" not in b and "temperature" not in b
+        assert "UNTRUSTED DATA" in b["system"]
+        # the classifier path: an unclear question routed through the real SDK's tool_use parsing
+        r = ask("hmm, what's good right now for the h100 sxm", provider=prov)
+        assert any("route_question" in [t["name"] for t in q["body"].get("tools") or []] for q in api.requests)
+        # failures all fall back to the deterministic reply, never an error
+        base = ask("cheapest available H100 SXM")
+        for mode in ("invent", "refusal", "max_tokens", "500"):
+            api.mode, before = mode, len(api.requests)
+            r = ask("cheapest available H100 SXM", provider=prov)
+            assert r["engine"] == "deterministic" and r["reply"] == base["reply"] and r["grounded"], (mode, r["llm"])
+            if mode == "500":
+                assert len(api.requests) - before == 2, "one retry (max_retries=1), then the deterministic reply"
+        # a model without the server-side fallback uses the plain endpoint
+        api.mode = "ok"
+        ask("cheapest available H100 SXM", provider=llm.AnthropicProvider("k", "claude-haiku-5-5", timeout=5))
+        last = api.requests[-1]
+        assert "fallbacks" not in last["body"] and "server-side-fallback" not in last["headers"].get("anthropic-beta", "")
+    finally:
+        if saved is None:
+            os.environ.pop("ANTHROPIC_BASE_URL", None)
+        else:
+            os.environ["ANTHROPIC_BASE_URL"] = saved
+        api.close()
+
+
 def test_llm_disabled_by_default():
     saved = (settings.assistant_llm_provider, settings.anthropic_api_key)
     try:
