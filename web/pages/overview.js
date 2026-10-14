@@ -1,4 +1,4 @@
-/* /markets — Market overview (the dashboard that was "/" before the homepage). One /v1/overview request for the market sections, plus /v1/indices (soft),
+/* /markets: Market overview (the dashboard that was "/" before the homepage). One /v1/overview request for the market sections, plus /v1/indices (soft),
    /v1/spreads, /v1/events?min_severity=notable, /v1/news (soft) and /market (sparklines only).
    Every section the API marks unavailable shows its reason in place, never zeros. Refreshes every 60 s. */
 (() => {
@@ -50,7 +50,7 @@
     const ch = w => ix.changes && ix.changes[w] != null ? OG.chg(ix.changes[w]) : OG.na((ix.change_reasons || {})[w] || ix.reason || "unavailable");
     return h("a", { class: "ov-ix" + (ix.level == null ? " off" : ""), href: "/indices/" + encodeURIComponent(ix.id), title: ix.name + (ix.reason ? "\n" + ix.reason : "") + (ix.constituents != null ? `\n${ix.constituents} constituent(s)` : "") },
       h("div", { class: "ov-ix-n" }, shortIndex(ix.name)),
-      h("div", { class: "ov-ix-v" }, lvl == null ? h("span", { class: "ov-ix-off" }, "—") : [lvl, h("span", { class: "ov-ix-u" }, usd ? "/GPU·h" : "pts")]),
+      h("div", { class: "ov-ix-v" }, lvl == null ? h("span", { class: "ov-ix-off" }, "-") : [lvl, h("span", { class: "ov-ix-u" }, usd ? "/GPU·h" : "pts")]),
       ix.level == null
         ? h("div", { class: "ov-ix-r" }, "not published")
         : h("div", { class: "ov-ix-c" }, h("span", { class: "dimmer" }, "24h"), ch("24h"),
@@ -156,10 +156,10 @@
         { key: "lowest_provider", label: "Cheapest at", fmt: v => OG.providerLink(v) },
         { key: "median", label: "Median", num: true, fmt: v => fmt.price(v), title: "median of provider prices (one vote each)" },
         { key: "highest", label: "High", num: true, fmt: v => fmt.price(v) },
-        { key: "spread", label: "Spread", num: true, desc: true, value: r => (r.providers > 1 && r.lowest ? r.highest / r.lowest - 1 : null), fmt: v => v == null ? "–" : fmt.pct(v).replace(/^\+/, ""), title: "high / low − 1" },
+        { key: "spread", label: "Spread", num: true, desc: true, value: r => (r.providers > 1 && r.lowest ? r.highest / r.lowest - 1 : null), fmt: v => v == null ? "-" : fmt.pct(v).replace(/^\+/, ""), title: "high / low − 1" },
         { key: "change_24h_median", label: "24h", num: true, desc: true, title: "matched 24h change of the median: providers priced at both times only",
           fmt: (v, r) => OG.chg(v, { reason: r.providers_matched < 2 ? `needs >= 2 providers priced 24h ago and now (${r.providers_matched || 0} matched)` : "not enough history" }) },
-        { key: "spark", label: "24h low", sort: false, csv: false, title: "lowest price over the last 24h (/market)", fmt: (v, r) => r.spark ? OG.charts.sparkline(r.spark, { dir: fmt.dir(r.spark_chg), width: 84, height: 16 }) : h("span", { class: "dimmer" }, "–") },
+        { key: "spark", label: "24h low", sort: false, csv: false, title: "lowest price over the last 24h (/market)", fmt: (v, r) => r.spark ? OG.charts.sparkline(r.spark, { dir: fmt.dir(r.spark_chg), width: 84, height: 16 }) : h("span", { class: "dimmer" }, "-") },
       ],
       rows: [], sort: { key: "providers", dir: "desc" }, compact: true, rowKey: r => r.gpu, rowHref: r => "/gpu/" + r.gpu_slug, limit: 24,
       title: "Market board · on-demand", csv: "opengrid-board.csv", empty: "No GPU is priced right now.",

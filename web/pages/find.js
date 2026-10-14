@@ -1,6 +1,6 @@
-/* /find — Find Compute. The beginner's way into the market: describe a workload (a short guided form, or the JSON
+/* /find: Find Compute. The beginner's way into the market: describe a workload (a short guided form, or the JSON
    from `opengrid analyze . --json`), get the server's memory estimate and GPUs that fit, priced from observed data.
-   Contract: docs/OPENGRID2_CONTRACTS.md §1–3. The browser NEVER estimates memory or ranks GPUs: it builds a
+   Contract: docs/OPENGRID2_CONTRACTS.md §1-3. The browser NEVER estimates memory or ranks GPUs: it builds a
    WorkloadRequirements body, POSTs /v1/recommend (falls back to /v1/recommend/estimate) and renders the answer.
 
    Pure helpers on OG.find (tests/test_web_find.js):
@@ -80,7 +80,7 @@
         if (!isPlain(v)) { errs.push(`${at}: expected an object`); return; }
         for (const k of Object.keys(v)) {
           const p = path ? path + "." + k : k;
-          if (!Object.prototype.hasOwnProperty.call(spec.props, k)) { errs.push(`${p}: unknown key — not part of the WorkloadRequirements contract`); continue; }
+          if (!Object.prototype.hasOwnProperty.call(spec.props, k)) { errs.push(`${p}: unknown key, not part of the WorkloadRequirements contract`); continue; }
           checkValue(spec.props[k], v[k], p, errs);
         }
         return;
@@ -118,7 +118,7 @@
     const errors = [];
     if (Object.prototype.hasOwnProperty.call(obj, "requirements")) {
       const extra = Object.keys(obj).filter(k => !ANALYZER_KEYS.includes(k));
-      extra.slice(0, MAX_ERRORS).forEach(k => errors.push(`${k}: unknown key — not part of the analyzer output`));
+      extra.slice(0, MAX_ERRORS).forEach(k => errors.push(`${k}: unknown key, not part of the analyzer output`));
       if (!isPlain(obj.requirements)) return fail("requirements: expected an object");
       req = obj.requirements;
       const list = k => (Array.isArray(obj[k]) ? obj[k] : []);
@@ -302,7 +302,7 @@
 
   /* =============================== pure: reading a Recommendation =============================== */
   const PICKS = [
-    ["cheapest_market", "Cheapest advertised option", "The lowest observed price that fits the memory estimate. The market's answer — OpenGrid may not be able to run it for you."],
+    ["cheapest_market", "Cheapest advertised option", "The lowest observed price that fits the memory estimate. The market's answer. OpenGrid may not be able to run it for you."],
     ["best_for_workload", "Best for your workload", "Fits with headroom at a balanced price, fresh data. What we'd rent for this job."],
     ["best_executable", "Best OpenGrid can run", "The best option OpenGrid can actually launch for you today, after approval."],
   ];
@@ -349,14 +349,14 @@
     const ex = (o && o.execution) || {};
     const reasons = arr(ex.reasons);
     const pname = o ? o.provider_display || (OG.providerName ? OG.providerName(o.provider) : o.provider) : "the provider";
-    if (o && o.available === false) return { code: "sold_out", label: "Sold out — not deployable", tone: "bad", deployable: false, detail: "The provider reported no capacity at the last observation.", reasons };
-    if (o && o.fresh === false) return { code: "stale", label: "Price is stale — not deployable", tone: "warn", deployable: false, detail: "Not observed recently; the price and availability may have changed.", reasons };
+    if (o && o.available === false) return { code: "sold_out", label: "Sold out, not deployable", tone: "bad", deployable: false, detail: "The provider reported no capacity at the last observation.", reasons };
+    if (o && o.fresh === false) return { code: "stale", label: "Price is stale, not deployable", tone: "warn", deployable: false, detail: "Not observed recently; the price and availability may have changed.", reasons };
     if (ex.executable === true) return { code: "executable", label: "OpenGrid can run this", tone: "good", deployable: true,
       detail: "Launch goes through a quote and an OpenGrid approval." + (o.available == null ? " Availability is not reported by the provider." : ""), reasons };
-    if (ex.workload_supported === false) return { code: "recommendation_only", label: "Recommendation only — OpenGrid can't run this workload yet", tone: "", deployable: false,
+    if (ex.workload_supported === false) return { code: "recommendation_only", label: "Recommendation only: OpenGrid can't run this workload yet", tone: "", deployable: false,
       detail: `Rent it from ${pname} directly. OpenGrid only launches its PyTorch MNIST training demo today.`, reasons };
     const r0 = reasons[0];
-    return { code: "blocked", label: "Recommendation only — OpenGrid can't launch this for you yet", tone: "", deployable: false, detail: r0 ? r0.reason || r0.code : "Not marked executable by the server.", reasons };
+    return { code: "blocked", label: "Recommendation only: OpenGrid can't launch this for you yet", tone: "", deployable: false, detail: r0 ? r0.reason || r0.code : "Not marked executable by the server.", reasons };
   }
   function availability(o) {
     if (!o || o.available == null) return { label: "Availability not reported", tone: "" };
@@ -375,7 +375,7 @@
     return { known: true, needed, vram, fill: Math.max(0, Math.min(1, needed / vram)), headroom_pct: headroom, fits, over: !fits };
   }
   function fmtGb(v) {
-    if (!finite(v)) return "–";
+    if (!finite(v)) return "-";
     const s = v >= 100 || Number.isInteger(v) ? String(Math.round(v)) : v.toFixed(1);
     return s + " GB";
   }
@@ -385,7 +385,7 @@
     const reason = r.reason || "no measured benchmark for this workload";
     if (r.known !== true) return { known: false, text: "Unknown", reason };
     const lo = Array.isArray(r.range_hours) ? r.range_hours[0] : null, hi = Array.isArray(r.range_hours) ? r.range_hours[1] : null;
-    if (finite(lo) && finite(hi)) return { known: true, text: `${+lo.toFixed(2)}–${+hi.toFixed(2)} h`, reason: r.basis || r.reason || "measured benchmark" };
+    if (finite(lo) && finite(hi)) return { known: true, text: `${+lo.toFixed(2)} to ${+hi.toFixed(2)} h`, reason: r.basis || r.reason || "measured benchmark" };
     if (finite(r.hours)) return { known: true, text: `${+r.hours.toFixed(2)} h`, reason: r.basis || r.reason || "measured benchmark" };
     return { known: false, text: "Unknown", reason };
   }
@@ -432,8 +432,8 @@
     }
     return out;
   }
-  const usd = v => (finite(v) ? (v > 0 && v < 0.01 ? "<$0.01" : "$" + v.toFixed(2)) : "–");
-  const perH = v => (finite(v) ? "$" + v.toFixed(2) + "/GPU·h" : "–");
+  const usd = v => (finite(v) ? (v > 0 && v < 0.01 ? "<$0.01" : "$" + v.toFixed(2)) : "-");
+  const perH = v => (finite(v) ? "$" + v.toFixed(2) + "/GPU·h" : "-");
 
   OG.find = { SCHEMA, TASKS, METHODS, MODELS, PICKS, TIERS, FORM_KEYS, MAX_PASTE, DEMO_HREF, ANALYZER_KEYS,
     checkRequirements, validatePaste, prune, modelFromText, formErrors, requirementsFromForm, stateFromQuery, queryFromState,
@@ -542,8 +542,8 @@
           finite(m.recommended_gb) ? h("div", { class: "fd-big-v mono" }, fmtGb(m.recommended_gb)) : h("div", { class: "fd-big-v" }, OG.na("no memory estimate")),
           h("div", { class: "dim fd-big-s" }, finite(m.recommended_gb) ? "recommended, with headroom" : "not enough information yet"),
           h("div", { class: "fd-big-l" },
-            h("span", {}, h("span", { class: "dim" }, "Theoretical minimum "), h("b", { class: "mono" }, finite(m.min_total_gb) ? fmtGb(m.min_total_gb) : "–")),
-            Array.isArray(m.range_gb) && finite(m.range_gb[0]) && finite(m.range_gb[1]) ? h("span", {}, h("span", { class: "dim" }, "Range "), h("b", { class: "mono" }, `${fmtGb(m.range_gb[0]).replace(" GB", "")}–${fmtGb(m.range_gb[1])}`)) : null,
+            h("span", {}, h("span", { class: "dim" }, "Theoretical minimum "), h("b", { class: "mono" }, finite(m.min_total_gb) ? fmtGb(m.min_total_gb) : "-")),
+            Array.isArray(m.range_gb) && finite(m.range_gb[0]) && finite(m.range_gb[1]) ? h("span", {}, h("span", { class: "dim" }, "Range "), h("b", { class: "mono" }, `${fmtGb(m.range_gb[0]).replace(" GB", "")} to ${fmtGb(m.range_gb[1])}`)) : null,
             finite(m.per_gpu_gb) && gc.suggested > 1 ? h("span", {}, h("span", { class: "dim" }, "Per GPU "), h("b", { class: "mono" }, fmtGb(m.per_gpu_gb))) : null)),
         h("div", { class: "fd-facts" },
           fact("GPUs", gc.suggested != null ? `${gc.suggested}${gc.min != null && gc.min !== gc.suggested ? " (min " + gc.min + ")" : ""}` : null, gc.reason),
@@ -578,7 +578,7 @@
             onkeydown: ev => { if (ev.key === "Enter") { ev.preventDefault(); onAnswer(q.field, inp.value); } } });
           ctl = h("span", { class: "fd-qin" }, inp, h("button", { type: "button", class: "btn sm", onclick: () => onAnswer(q.field, inp.value) }, "Update"));
         }
-        return h("li", {}, h("div", {}, h("b", { id }, q.question || q.field), q.why ? h("span", { class: "dim" }, " — " + q.why) : null, h("span", { class: "mono dimmer fd-qf" }, q.field)), ctl);
+        return h("li", {}, h("div", {}, h("b", { id }, q.question || q.field), q.why ? h("span", { class: "dim" }, " (" + q.why + ")") : null, h("span", { class: "mono dimmer fd-qf" }, q.field)), ctl);
       })));
   }
 
@@ -625,7 +625,7 @@
     const ex = arr(rec && rec.excluded);
     if (ex.length) kids.push(h("details", { class: "sec fd-excl" }, h("summary", { class: "sec-h" }, `Excluded · ${ex.length}`),
       OG.table({ columns: [
-        { key: "gpu", label: "GPU", fmt: v => v ? OG.shortGpu(v) : "–" },
+        { key: "gpu", label: "GPU", fmt: v => v ? OG.shortGpu(v) : "-" },
         { key: "provider", label: "Provider", fmt: v => v ? OG.providerName(v) : h("span", { class: "dim" }, "all") },
         { key: "code", label: "Why", fmt: v => v ? OG.badge(String(v).replace(/_/g, " ")) : "" },
         { key: "reason", label: "Detail", cls: "dim" },
@@ -638,15 +638,15 @@
   function optionTable(rec, e) {
     return OG.table({
       columns: [
-        { key: "tier", label: "Tier", fmt: v => (TIERS.find(t => t[0] === v) || [null, v || "–"])[1] },
+        { key: "tier", label: "Tier", fmt: v => (TIERS.find(t => t[0] === v) || [null, v || "-"])[1] },
         { key: "gpu", label: "GPU", fmt: (v, o) => h("a", { class: "lnk", href: gpuHref(o), title: v }, OG.shortGpu(v || "")) },
         { key: "provider", label: "Provider", fmt: (v, o) => h("span", { class: "fd-tp" }, OG.logo(v, 14), o.provider_display || OG.providerName(v)) },
         { key: "region", label: "Region", cls: "dim" },
         { key: "price_per_gpu_hour", label: "$/GPU·h", num: true, fmt: v => perH(v).replace("/GPU·h", ""), title: "observed" },
         { key: "gpu_count", label: "GPUs", num: true },
-        { key: "fit", label: "Memory fit", value: o => memoryFit(o, e).headroom_pct, num: true, fmt: (v, o) => { const f = memoryFit(o, e); return f.known ? (f.over ? h("span", { class: "down" }, "does not fit") : `${fmtGb(f.needed).replace(" GB", "")}/${fmtGb(f.vram)} · ${Math.round(f.headroom_pct)}%`) : "–"; } },
+        { key: "fit", label: "Memory fit", value: o => memoryFit(o, e).headroom_pct, num: true, fmt: (v, o) => { const f = memoryFit(o, e); return f.known ? (f.over ? h("span", { class: "down" }, "does not fit") : `${fmtGb(f.needed).replace(" GB", "")}/${fmtGb(f.vram)} · ${Math.round(f.headroom_pct)}%`) : "-"; } },
         { key: "available", label: "Available", value: o => availability(o).label, fmt: (v, o) => OG.badge(availability(o).label.replace("Availability not reported", "not reported"), availability(o).tone) },
-        { key: "age_seconds", label: "Seen", num: true, fmt: (v, o) => v != null || o.observed_at ? OG.freshBadge(v != null ? v : o.observed_at, { provider: o.provider }) : "–" },
+        { key: "age_seconds", label: "Seen", num: true, fmt: (v, o) => v != null || o.observed_at ? OG.freshBadge(v != null ? v : o.observed_at, { provider: o.provider }) : "-" },
         { key: "ready", label: "OpenGrid", value: o => readiness(o).code, fmt: (v, o) => { const r = readiness(o); return h("span", { class: "fd-tr t-" + (r.tone || "plain"), title: r.detail }, r.code === "executable" ? "can run" : r.code === "stale" ? "stale" : r.code === "sold_out" ? "sold out" : "recommendation only"); } },
         { key: "acts", label: "", sort: false, csv: false, fmt: (v, o) => h("span", { class: "fd-tacts" }, h("a", { class: "btn sm", href: gpuHref(o) }, "GPU"), h("a", { class: "btn sm", href: routeHref(o) }, "Route")) },
       ], rows: arr(rec.options), compact: true, csv: "opengrid-find-options.csv", rowKey: o => o.option_id, sort: { key: "price_per_gpu_hour", dir: "asc" },
@@ -702,7 +702,7 @@
       const inBody = h("div", { class: "fd-in-b" });
       inBox.append(h("div", { class: "fd-in-h" }, tabs), inBody);
       const sentPre = h("pre", { class: "fd-sent mono", tabindex: "0", "aria-label": "Request body that will be sent" });
-      const sent = h("details", { class: "fd-sent-d" }, h("summary", {}, "What will be sent"), h("p", { class: "dim" }, "POST /v1/recommend — only this JSON leaves your browser."), sentPre);
+      const sent = h("details", { class: "fd-sent-d" }, h("summary", {}, "What will be sent"), h("p", { class: "dim" }, "POST /v1/recommend. Only this JSON leaves your browser."), sentPre);
 
       function currentRequirements() {
         if (mode === "paste") {
@@ -716,7 +716,7 @@
       }
       function refreshSent() {
         const c = currentRequirements();
-        sentPre.textContent = c.requirements ? JSON.stringify(c.requirements, null, 2) : "— fix the input first —";
+        sentPre.textContent = c.requirements ? JSON.stringify(c.requirements, null, 2) : "(fix the input first)";
         return c;
       }
       function syncUrl() {
@@ -794,7 +794,7 @@
           const v = validatePaste(pasteText);
           go.disabled = !v.ok;
           if (!pasteText.trim()) status.replaceChildren(h("span", { class: "dim" }, "Paste the JSON to check it. Nothing is sent until you press the button."));
-          else if (!v.ok) status.replaceChildren(h("div", { class: "fd-bad" }, h("b", {}, `Can't use this yet — ${v.errors.length} problem${v.errors.length === 1 ? "" : "s"}`), h("ul", {}, v.errors.map(x => h("li", { class: "mono" }, x)))));
+          else if (!v.ok) status.replaceChildren(h("div", { class: "fd-bad" }, h("b", {}, `Can't use this yet: ${v.errors.length} problem${v.errors.length === 1 ? "" : "s"}`), h("ul", {}, v.errors.map(x => h("li", { class: "mono" }, x)))));
           else {
             const a = v.analyzer;
             status.replaceChildren(h("div", { class: "fd-good" }, h("b", {}, "Looks good"),
@@ -828,9 +828,9 @@
         out.replaceChildren(h("div", { class: "fd-intro" },
           h("h2", {}, "What you'll get"),
           h("ol", {},
-            h("li", {}, h("b", {}, "A memory estimate"), " — how much GPU memory your workload needs, what it's made of, and every assumption."),
-            h("li", {}, h("b", {}, "Three picks"), " — the cheapest advertised option, the best for your workload, and the best OpenGrid can actually run."),
-            h("li", {}, h("b", {}, "Alternatives"), " — lower cost, balanced and higher performance, each with observed price, memory fit and cost per hour of runtime.")),
+            h("li", {}, h("b", {}, "A memory estimate"), ": how much GPU memory your workload needs, what it's made of, and every assumption."),
+            h("li", {}, h("b", {}, "Three picks"), ": the cheapest advertised option, the best for your workload, and the best OpenGrid can actually run."),
+            h("li", {}, h("b", {}, "Alternatives"), ": lower cost, balanced and higher performance, each with observed price, memory fit and cost per hour of runtime.")),
           h("p", { class: "dim" }, "Unknowns are fine: answer what you know, and OpenGrid tells you what it assumed and what to ask next."),
           h("p", { class: "dim" }, "Just want to see a training job end to end? ", h("a", { class: "lnk fd-a", href: DEMO_HREF }, "Train the example model (free simulation) →"))));
       }

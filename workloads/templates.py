@@ -20,7 +20,7 @@ _MNIST = {
     "id": "pytorch-mnist",
     "version": "1.0.0",
     "job_type": "training",
-    "title": "Train Your First AI Model — PyTorch MNIST",
+    "title": "Train Your First AI Model: PyTorch MNIST",
     "summary": "Train a small convolutional network to recognise handwritten digits on one cloud GPU.",
     "description": (
         "Downloads the MNIST handwritten-digit dataset (60,000 training and 10,000 test images) from "

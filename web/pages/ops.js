@@ -1,4 +1,4 @@
-/* /ops — internal ops / data-quality terminal. Operator only: every read is an admin endpoint.
+/* /ops: internal ops / data-quality terminal. Operator only: every read is an admin endpoint.
    Sources: /v1/ops/summary (everything broken in one view), /v1/ops/providers (full feed health),
    /v1/ops/quarantine (+ POST accept|reject), /v1/ops/incidents, /v1/ops/schema-changes,
    /v1/ops/unmapped, /v1/ops/stale, /v1/ops/jobs, /v1/news/sources (soft).
@@ -7,13 +7,13 @@
 (() => {
   const { h, fmt } = OG;
   const REFRESH_MS = 30000;
-  const ms = v => (v == null ? "–" : v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 2) + "s" : Math.round(v) + "ms");
-  const pct = v => (v == null ? "–" : (v * 100 >= 9.95 || v === 0 ? Math.round(v * 100) : (v * 100).toFixed(1)) + "%");
+  const ms = v => (v == null ? "-" : v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 2) + "s" : Math.round(v) + "ms");
+  const pct = v => (v == null ? "-" : (v * 100 >= 9.95 || v === 0 ? Math.round(v * 100) : (v * 100).toFixed(1)) + "%");
   const SEV = { major: "bad", notable: "warn", info: "" };
-  const sevBadge = s => OG.badge(s || "–", SEV[s] || "");
+  const sevBadge = s => OG.badge(s || "-", SEV[s] || "");
   const STATUS_TONE = { healthy: "good", degraded: "warn", down: "bad", ok: "good", failing: "bad", overdue: "warn", never_run: "", never_fetched: "", disabled: "" };
   // the normal state (healthy / ok) stays quiet: dot + word; anything else is a badge that stands out
-  const statusBadge = (s, title) => STATUS_TONE[s] === "good" ? h("span", { class: "dotx good", title: title || null }, (s || "–").replace("_", " ")) : OG.badge((s || "–").replace("_", " "), STATUS_TONE[s] ?? "warn", title);
+  const statusBadge = (s, title) => STATUS_TONE[s] === "good" ? h("span", { class: "dotx good", title: title || null }, (s || "-").replace("_", " ")) : OG.badge((s || "-").replace("_", " "), STATUS_TONE[s] ?? "warn", title);
   const shortId = id => { const s = String(id || ""); return s === "*" ? "* (provider)" : s.length > 28 ? s.slice(0, 12) + "…" + s.slice(-12) : s; };
   const jsonish = v => (v == null ? "∅" : typeof v === "object" ? JSON.stringify(v) : String(v));
   function detailText(d) {
@@ -191,16 +191,16 @@
           columns: [
             { key: "provider", label: "Provider", fmt: v => OG.providerLink(v) },
             { key: "status", label: "Status", value: r => ({ down: 0, degraded: 1, healthy: 2 })[r.status], csv: r => r.status, fmt: (v, r) => statusBadge(r.status, (r.status_reasons || []).join("; ") || null) },
-            { key: "source_type", label: "Source", cls: "dim", fmt: v => (v || "–").replace(/_/g, " ") },
+            { key: "source_type", label: "Source", cls: "dim", fmt: v => (v || "-").replace(/_/g, " ") },
             { key: "last_ok_fetch", label: "Last OK", num: true, value: r => r.last_ok_fetch ? -new Date(r.last_ok_fetch) : null, csv: r => r.last_ok_fetch, fmt: (v, r) => r.last_ok_fetch ? h("span", { title: fmt.dateTime(r.last_ok_fetch) }, fmt.age(r.last_ok_fetch)) : h("span", { class: "down" }, "never") },
-            { key: "consecutive_failures", label: "Consec", num: true, desc: true, fmt: v => h("span", { class: v >= 2 ? "down" : v ? "ops-warn" : "dimmer" }, String(v ?? "–")) },
+            { key: "consecutive_failures", label: "Consec", num: true, desc: true, fmt: v => h("span", { class: v >= 2 ? "down" : v ? "ops-warn" : "dimmer" }, String(v ?? "-")) },
             { key: "failure_rate_24h", label: "Fail%", num: true, desc: true, fmt: (v, r) => v == null ? OG.na("no fetches in 24h") : h("span", { class: v > 0.2 ? "down" : v > 0 ? "ops-warn" : "dimmer", title: `${r.failures_24h}/${r.fetches_24h}` }, pct(v)) },
             { key: "latency_ms_p50_24h", label: "p50", num: true, desc: true, fmt: v => v == null ? OG.na("no timings") : ms(v) },
             { key: "latency_ms_p95_24h", label: "p95", num: true, desc: true, fmt: v => v == null ? OG.na("no timings") : ms(v) },
             { key: "listings_now", label: "Now", num: true, desc: true, title: "Live listings now" },
             { key: "listings_24h_ago", label: "24h ago", num: true, desc: true, fmt: (v, r) => v == null ? OG.na(r.listings_24h_ago_note) : fmt.num(v) },
             { key: "last_failure", label: "Last failure", sort: false, csv: r => r.last_failure && r.last_failure.error, cls: "ops-err", ell: 200,
-              fmt: v => v ? h("span", { title: v.error || "" }, h("span", { class: "dim" }, fmt.age(v.at) + " "), v.status_code ? h("b", {}, v.status_code + " ") : null, (v.error || "").slice(0, 60)) : h("span", { class: "dimmer" }, "–") },
+              fmt: v => v ? h("span", { title: v.error || "" }, h("span", { class: "dim" }, fmt.age(v.at) + " "), v.status_code ? h("b", {}, v.status_code + " ") : null, (v.error || "").slice(0, 60)) : h("span", { class: "dimmer" }, "-") },
           ],
         }));
       }
@@ -227,7 +227,7 @@
             { key: "failures", label: "Fails", num: true, desc: true },
             { key: "last_status", label: "HTTP", num: true },
             { key: "last_at", label: "Last", num: true, value: r => -new Date(r.last_at), csv: r => r.last_at, fmt: (v, r) => fmt.age(r.last_at) },
-            { key: "last_error", label: "Last error", cls: "wrap ops-err", fmt: v => h("span", { title: v || "" }, String(v || "–").slice(0, 80)) },
+            { key: "last_error", label: "Last error", cls: "wrap ops-err", fmt: v => h("span", { title: v || "" }, String(v || "-").slice(0, 80)) },
           ] }) : OG.empty("No failed fetch in the last 24h" + (st.provider ? " for " + OG.providerName(st.provider) : "") + "."));
       }
 
@@ -242,7 +242,7 @@
             { key: "failures", label: "Fails", num: true, fmt: v => h("span", { class: v ? "down" : "dimmer" }, String(v)) },
             { key: "last_finished", label: "Last run", num: true, value: r => r.last_finished ? -new Date(r.last_finished) : null, fmt: (v, r) => r.running ? OG.badge("running", "good") : r.last_finished ? fmt.age(r.last_finished) : h("span", { class: "dimmer" }, "never") },
             { key: "last_duration_ms", label: "Took", num: true, fmt: v => ms(v) },
-            { key: "last_error", label: "Last error", cls: "wrap ops-err", fmt: v => v ? h("span", { title: v }, String(v).slice(0, 70)) : h("span", { class: "dimmer" }, "–") },
+            { key: "last_error", label: "Last error", cls: "wrap ops-err", fmt: v => v ? h("span", { title: v }, String(v).slice(0, 70)) : h("span", { class: "dimmer" }, "-") },
           ] }) : OG.empty("No background jobs registered."),
         jobs.length && jobs.every(j => j.runs === 0) ? h("p", { class: "note" }, "No job has run in this server process (jobs disabled with OPENGRID_NO_JOBS, or just started).") : null);
       }
@@ -275,7 +275,7 @@
           h("tbody", {}, probes.map(p => p.available ? h("tr", { title: "failure rule: " + p.failure_rule },
             h("td", { class: "mono" }, p.table), h("td", { class: "n" }, fmt.num(p.rows)), h("td", { class: "n" }, p.rows_24h == null ? OG.na("no time column") : fmt.num(p.rows_24h)),
             h("td", { class: "n " + (p.failures_24h ? "down" : "dimmer") }, String(p.failures_24h)),
-            h("td", { class: "wrap ops-err" }, (p.recent_errors || []).length ? p.recent_errors.slice(0, 3).map(e => h("div", { title: e }, e.slice(0, 90))) : h("span", { class: "dimmer" }, "–")))
+            h("td", { class: "wrap ops-err" }, (p.recent_errors || []).length ? p.recent_errors.slice(0, 3).map(e => h("div", { title: e }, e.slice(0, 90))) : h("span", { class: "dimmer" }, "-")))
             : h("tr", {}, h("td", { class: "mono" }, p.table), h("td", { colspan: 4, class: "dim" }, p.reason)))));
       }
 
@@ -310,7 +310,7 @@
             { key: "first_seen", label: "First", num: true, value: r => -new Date(r.first_seen), csv: r => r.first_seen, fmt: (v, r) => h("span", { title: fmt.dateTime(r.first_seen) }, fmt.age(r.first_seen)) },
             { key: "last_seen", label: "Last", num: true, value: r => -new Date(r.last_seen), csv: r => r.last_seen, fmt: (v, r) => fmt.age(r.last_seen) },
             { key: "status", label: "Status", fmt: (v, r) => v === "pending" ? OG.badge("pending", "warn") : h("span", { class: "dim", title: [r.resolved_by, r.note].filter(Boolean).join(" · ") }, v.replace("_", " ")) },
-            { key: "_act", label: "Decision", sort: false, csv: false, fmt: (v, r) => r.status === "pending" ? actions(r) : h("span", { class: "dimmer" }, r.resolved_at ? fmt.age(r.resolved_at) + " ago" : "–") },
+            { key: "_act", label: "Decision", sort: false, csv: false, fmt: (v, r) => r.status === "pending" ? actions(r) : h("span", { class: "dimmer" }, r.resolved_at ? fmt.age(r.resolved_at) + " ago" : "-") },
           ] }),
         h("p", { class: "note" }, "Accept applies the held value to current state now (and history if a tracked value moved). Reject keeps it held while the provider keeps sending it. Both are recorded with your identity. ",
           h("a", { class: "lnk", href: "/methodology/data-quality" }, "Lifecycle →")));
@@ -366,7 +366,7 @@
             { key: "severity", label: "Sev", value: r => ({ major: 0, notable: 1, info: 2 })[r.severity], csv: r => r.severity, fmt: (v, r) => sevBadge(r.severity) },
             { key: "kind", label: "Kind", cls: "mono" },
             { key: "provider", label: "Provider", fmt: v => v ? OG.providerLink(v, { logo: false }) : h("span", { class: "dimmer" }, "system") },
-            { key: "listing_id", label: "Listing / endpoint", cls: "mono dim", value: r => r.listing_id || r.endpoint, fmt: (v, r) => h("span", { title: (r.listing_id || "") + " " + (r.endpoint || "") }, shortId(r.listing_id || r.endpoint || "–")) },
+            { key: "listing_id", label: "Listing / endpoint", cls: "mono dim", value: r => r.listing_id || r.endpoint, fmt: (v, r) => h("span", { title: (r.listing_id || "") + " " + (r.endpoint || "") }, shortId(r.listing_id || r.endpoint || "-")) },
             { key: "detail", label: "Detail", sort: false, cls: "wrap ops-det", csv: r => JSON.stringify(r.detail), fmt: v => h("span", { title: JSON.stringify(v, null, 1) }, detailText(v).slice(0, 160)) },
             { key: "count", label: "Count", num: true, desc: true },
             { key: "first_seen", label: "First", num: true, value: r => +new Date(r.first_seen), csv: r => r.first_seen, fmt: (v, r) => h("span", { title: fmt.dateTime(r.first_seen) }, fmt.age(r.first_seen)) },
@@ -389,7 +389,7 @@
             { key: "added", label: "Added", value: r => (r.detail && r.detail.added_count) ?? ((r.detail && r.detail.added) || []).length, num: true, fmt: (v, r) => h("span", { title: ((r.detail && r.detail.added) || []).join("\n") }, String(v)) },
             { key: "removed", label: "Removed", value: r => (r.detail && r.detail.removed_count) ?? ((r.detail && r.detail.removed) || []).length, num: true, fmt: (v, r) => h("span", { class: v ? "down" : "dimmer", title: ((r.detail && r.detail.removed) || []).join("\n") }, String(v)) },
             { key: "retyped", label: "Retyped", value: r => ((r.detail && r.detail.retyped) || []).length, num: true, fmt: (v, r) => h("span", { class: v ? "down" : "dimmer", title: ((r.detail && r.detail.retyped) || []).join("\n") }, String(v)) },
-            { key: "paths", label: "Paths", sort: false, cls: "wrap mono ops-det", csv: r => detailText(r.detail), fmt: (v, r) => [...((r.detail && r.detail.removed) || []).map(p => "− " + p), ...((r.detail && r.detail.retyped) || []).map(p => "~ " + p), ...((r.detail && r.detail.added) || []).map(p => "+ " + p)].slice(0, 3).join("  ") || "–" },
+            { key: "paths", label: "Paths", sort: false, cls: "wrap mono ops-det", csv: r => detailText(r.detail), fmt: (v, r) => [...((r.detail && r.detail.removed) || []).map(p => "− " + p), ...((r.detail && r.detail.retyped) || []).map(p => "~ " + p), ...((r.detail && r.detail.added) || []).map(p => "+ " + p)].slice(0, 3).join("  ") || "-" },
             { key: "last_seen", label: "When", num: true, value: r => +new Date(r.last_seen), csv: r => r.last_seen, fmt: (v, r) => h("span", { title: fmt.dateTime(r.last_seen) }, fmt.age(r.last_seen)) },
             { key: "status", label: "Status", cls: "dim" },
           ] }) : OG.empty("No source schema change recorded" + (st.provider ? " for " + OG.providerName(st.provider) : "") + "."));
@@ -422,7 +422,7 @@
           columns: [
             { key: "provider", label: "Provider", fmt: v => OG.providerLink(v, { logo: false }) },
             { key: "canonical_gpu_name", label: "GPU", value: r => r.canonical_gpu_name || r.raw_gpu_name, fmt: (v, r) => r.canonical_gpu_name ? OG.gpuLink(r.canonical_gpu_name) : h("span", { class: "dim" }, r.raw_gpu_name) },
-            { key: "region", label: "Region", cls: "dim", fmt: v => v || "–" },
+            { key: "region", label: "Region", cls: "dim", fmt: v => v || "-" },
             { key: "age_seconds", label: "Age", num: true, desc: true, fmt: (v, r) => h("span", { class: r.freshness === "stale" ? "down" : "ops-warn" }, fmt.age(v)) },
           ] }) : OG.empty("No aging or stale listing" + (st.provider ? " for " + OG.providerName(st.provider) : "") + "."));
       }
@@ -447,8 +447,8 @@
             { key: "fetches_24h", label: "Fetch 24h", num: true, fmt: (v, r) => `${r.ok_fetches_24h}/${v}` },
             { key: "new_items_24h", label: "New 24h", num: true, desc: true },
             { key: "items_stored", label: "Stored", num: true, desc: true },
-            { key: "avg_fetch_ms_24h", label: "Avg", num: true, fmt: v => v == null ? "–" : ms(v) },
-            { key: "last_error", label: "Last error", cls: "wrap ops-err", fmt: v => v ? h("span", { title: v }, String(v).slice(0, 70)) : h("span", { class: "dimmer" }, "–") },
+            { key: "avg_fetch_ms_24h", label: "Avg", num: true, fmt: v => v == null ? "-" : ms(v) },
+            { key: "last_error", label: "Last error", cls: "wrap ops-err", fmt: v => v ? h("span", { title: v }, String(v).slice(0, 70)) : h("span", { class: "dimmer" }, "-") },
           ] }),
         h("p", { class: "note" }, "Ingestion failures from news_sources / news_fetch_log. ", h("a", { class: "lnk", href: "/methodology/news" }, "News methodology →")));
       }

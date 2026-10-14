@@ -1,14 +1,14 @@
-/* /indices — the OpenGrid index board; /indices/:id — one index.
+/* /indices: the OpenGrid index board; /indices/:id: one index.
    Sources: /v1/indices (level + changes for every index with data in 90 days), /v1/indices/{id}
    (definition, level, changes with reasons, high/low, volatility, coverage, constituents),
    /v1/indices/{id}/history (stored levels; unpublished hours carry their reason), /v1/indices/{id}/fixings +
    /v1/fixings/{fid}/verify (official settlement fixings of the settlement indices; methodology/settlement.md).
-   Board rows lazily fetch /v1/indices/{id} (high/low/vol) and 7d history (sparkline) — the list
+   Board rows lazily fetch /v1/indices/{id} (high/low/vol) and 7d history (sparkline). The list
    endpoint does not carry them. Nothing is computed here except constituent weights in the
    statistic, which follow the stated method exactly (median / 20% trimmed mean; methodology/indices.md). */
 (() => {
   // settlement fixings are referenced in UTC (the daily fixing is 00:00 UTC), never in local time
-  const fixUtc = t => t ? new Date(t).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "–";
+  const fixUtc = t => t ? new Date(t).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "-";
   const { h, fmt } = OG;
   const FAMILIES = [
     ["composite", "Composites", "Base-100 composites: the overall GPU Compute Index and class indices. Not the price of any single SKU."],
@@ -20,9 +20,9 @@
   const FAM_LABEL = Object.fromEntries(FAMILIES.map(f => [f[0], f[1]]));
   const WINDOWS = [["24h", "24H"], ["7d", "7D"], ["30d", "30D"], ["90d", "90D"], ["ytd", "YTD"], ["all", "ALL"]];
   const CHG = [["24h", "24h"], ["7d", "7d"], ["30d", "30d"], ["90d", "90d"], ["ytd", "YTD"], ["all", "All"]];
-  const levelFmt = (v, unit) => (v == null ? "–" : unit === "points" ? fmt.num(v, 2) : fmt.price(v));
+  const levelFmt = (v, unit) => (v == null ? "-" : unit === "points" ? fmt.num(v, 2) : fmt.price(v));
   const unitLabel = u => (u === "points" ? "points (base 100)" : "USD / GPU-hour");
-  const volFmt = v => (v == null ? "–" : (v * 100).toFixed(1) + "%");
+  const volFmt = v => (v == null ? "-" : (v * 100).toFixed(1) + "%");
   const STATUS_TXT = { included: "included", excluded_feed_down: "excluded: feed down", excluded_outlier: "excluded: outlier (> 3× from median)", unpublished: "unpublished this hour", no_data: "no data" };
 
   // Short form of an API reason for tight cells; the full reason always stays in the tooltip.
@@ -51,7 +51,7 @@
     f.status === "provisional" ? f.note : f.reason || (f.effective === false ? "superseded by a restatement" : "official fixing"));
   function fxFlags(flags) {
     const fl = (flags || []).filter(x => x.severity !== "info");
-    return fl.length ? h("span", {}, fl.map(x => OG.badge(x.code.replace(/_/g, " "), x.severity === "severe" ? "bad" : "warn", x.detail))) : h("span", { class: "dimmer" }, "–");
+    return fl.length ? h("span", {}, fl.map(x => OG.badge(x.code.replace(/_/g, " "), x.severity === "severe" ? "bad" : "warn", x.detail))) : h("span", { class: "dimmer" }, "-");
   }
   function verifyBtn(id) {
     const out = h("span", {});
@@ -179,7 +179,7 @@
           const sp = r._x && r._x.spark;
           return h("a", { class: "ix-card" + (r.published ? "" : " off") + (r.id === "gpu-compute" ? " main" : ""), href: "/indices/" + encodeURIComponent(r.id), title: r.published ? r.name : "not published: " + r.reason },
             h("div", { class: "ix-card-h" }, h("span", { class: "ix-card-n" }, r.name.replace(/^OpenGrid /, "")), h("span", { class: "mono dimmer" }, r.id)),
-            h("div", { class: "ix-card-v" }, r.published ? h("b", {}, fmt.num(r.level, 2)) : h("b", { class: "dimmer" }, "—"),
+            h("div", { class: "ix-card-v" }, r.published ? h("b", {}, fmt.num(r.level, 2)) : h("b", { class: "dimmer" }, "-"),
               r.published ? OG.chg(r.changes["24h"], { reason: r.change_reasons["24h"] }) : null, h("span", { class: "spacer" }),
               sp ? OG.charts.sparkline(sp, { width: 110, height: 26, dir: fmt.dir(r.changes["7d"]) }) : null),
             h("div", { class: "ix-card-s", title: r.reason || null }, r.published ? `${r.constituents} component${r.constituents === 1 ? "" : "s"}` : `not published · ${r.constituents} component${r.constituents === 1 ? "" : "s"} published`,
@@ -202,7 +202,7 @@
             fmt: (v, r) => !r._x ? h("span", { class: "dimmer" }, "·") : OG.value(v, volFmt, r._x.vol30 ? r._x.vol30.reason : "unavailable") },
           { key: "constituents", label: fam === "composite" ? "Comp." : "Prov.", num: true, desc: true, title: fam === "composite" ? "Published components this hour" : "Included providers this hour (3 needed)",
             fmt: (v, r) => h("span", { class: r.published ? "" : "ix-low" }, String(v)) },
-          { key: "spark", label: "7d", sort: false, csv: false, minor: 1, fmt: (v, r) => r._x && r._x.spark ? OG.charts.sparkline(r._x.spark, { width: 84, height: 18, dir: fmt.dir(r.changes["7d"]) }) : h("span", { class: "dimmer" }, r._x ? "–" : "·") },
+          { key: "spark", label: "7d", sort: false, csv: false, minor: 1, fmt: (v, r) => r._x && r._x.spark ? OG.charts.sparkline(r._x.spark, { width: 84, height: 18, dir: fmt.dir(r.changes["7d"]) }) : h("span", { class: "dimmer" }, r._x ? "-" : "·") },
           { key: "published", label: "Status", value: r => (r.published ? 1 : 0), desc: true, csv: r => (r.published ? "published" : "not published: " + r.reason), cls: "ix-st", fmt: (v, r) => statusCell(r) },
         ];
       }
@@ -348,7 +348,7 @@
             const p = pts[i];
             hoverEl.replaceChildren(h("span", { class: "dim" }, fmt.dateTime(p.t) + (st.resolved === "1d" ? " (day)" : "") + "  "),
               p.published ? [h("span", { class: "ix-pub" }, h("i"), "published "), h("b", {}, yf(p.level)),
-                st.resolved === "1d" ? h("span", { class: "dim" }, `  ${p.published_hours}/24 h published · range ${yf(p.low)}–${yf(p.high)}`) : h("span", { class: "dim" }, `  ${p.constituents} constituent${p.constituents === 1 ? "" : "s"}${p.link_constituents != null ? ", " + p.link_constituents + " linked" : ""}${p.reason ? " · " + p.reason : ""}`)]
+                st.resolved === "1d" ? h("span", { class: "dim" }, `  ${p.published_hours}/24 h published · range ${yf(p.low)} to ${yf(p.high)}`) : h("span", { class: "dim" }, `  ${p.constituents} constituent${p.constituents === 1 ? "" : "s"}${p.link_constituents != null ? ", " + p.link_constituents + " linked" : ""}${p.reason ? " · " + p.reason : ""}`)]
                 : [h("span", { class: "ix-unpub" }, h("i"), "not published: "), h("span", {}, p.reason || (st.resolved === "1d" ? "no published hour this day" : "no reason stored"))]);
           } };
         chartEl.textContent = "";
@@ -405,7 +405,7 @@
             columns: [
               { key: "name", label: "Component index", value: r => r.name || r.index_id, fmt: (v, r) => h("span", { class: "ix-name" }, h("a", { class: "lnk", href: "/indices/" + encodeURIComponent(r.index_id) }, String(v).replace(/^OpenGrid /, "")), h("span", { class: "ix-id" }, r.index_id)) },
               { key: "weight", label: "Weight", num: true, desc: true, fmt: v => fmt.pct(v).replace(/^\+/, "") },
-              { key: "level", label: "Level $/GPU·h", num: true, fmt: v => (v == null ? "–" : fmt.price(v)) },
+              { key: "level", label: "Level $/GPU·h", num: true, fmt: v => (v == null ? "-" : fmt.price(v)) },
               { key: "status", label: "Status", fmt: (v, r) => h("span", { class: v === "included" ? "ix-pub" : "ix-unpub" }, h("i"), STATUS_TXT[v] || v, r.linked === false ? h("span", { class: "dim" }, " · not linked this hour (rebased child)") : null) },
               { key: "segment_no", label: "Chain seg.", num: true, cls: "dim" },
             ] }),
@@ -416,17 +416,17 @@
         const rows = items.map(c => Object.assign({}, c, { _w: wt.get(c.provider) }));
         consEl.replaceChildren(OG.table({
           rows, compact: true, rowKey: r => r.provider, csv: `opengrid-${id}-constituents.csv`, sort: { key: "price", dir: "asc" },
-          title: `${items.filter(c => c.status === "included").length}/${items.length} providers included · ${when} · statistic: ${(d.method || "–").replace(/_/g, " ")}`,
+          title: `${items.filter(c => c.status === "included").length}/${items.length} providers included · ${when} · statistic: ${(d.method || "-").replace(/_/g, " ")}`,
           rowClass: r => (r.status === "included" ? "" : "out"),
           columns: [
             { key: "provider", label: "Provider", fmt: v => OG.providerLink(v) },
-            { key: "provider_class", label: "Class", cls: "dim", fmt: v => (v || "–").replace("_", " ") },
-            { key: "region", label: "Region", cls: "dim", fmt: v => v || "–" },
+            { key: "provider_class", label: "Class", cls: "dim", fmt: v => (v || "-").replace("_", " ") },
+            { key: "region", label: "Region", cls: "dim", fmt: v => v || "-" },
             { key: "price", label: "Vote $/GPU·h", num: true, title: "The provider's lowest eligible, not-sold-out listing price this hour", fmt: v => fmt.price(v) },
             { key: "status", label: "Included", value: r => (r.status === "included" ? 0 : 1), csv: r => r.status, fmt: (v, r) => h("span", { class: r.status === "included" ? "ix-pub" : "ix-unpub" }, h("i"), STATUS_TXT[r.status] || r.status) },
             { key: "w", label: "Weight in stat", num: true, desc: true, value: r => (r._w ? r._w.w : null), title: "Share of this hour's statistic, from the stated method (median or 20% trimmed mean over included votes). Derived, not stored.",
-              csv: r => (r._w ? r._w.w : null), fmt: (v, r) => (r._w ? h("span", { class: r._w.w ? "" : "dimmer", title: r._w.note || "" }, r._w.w ? (r._w.w * 100).toFixed(r._w.w === 1 ? 0 : 1) + "%" : r._w.note === "trimmed (20% each end)" ? "trimmed" : "0%") : h("span", { class: "dimmer" }, "–")) },
-            { key: "recorded_since", label: "Recorded since", num: true, value: r => (r.recorded_since ? +new Date(r.recorded_since) : null), csv: r => r.recorded_since, fmt: v => (v ? fmt.dateTime(v) : "–"), title: "First hour OpenGrid recorded this provider for this GPU" },
+              csv: r => (r._w ? r._w.w : null), fmt: (v, r) => (r._w ? h("span", { class: r._w.w ? "" : "dimmer", title: r._w.note || "" }, r._w.w ? (r._w.w * 100).toFixed(r._w.w === 1 ? 0 : 1) + "%" : r._w.note === "trimmed (20% each end)" ? "trimmed" : "0%") : h("span", { class: "dimmer" }, "-")) },
+            { key: "recorded_since", label: "Recorded since", num: true, value: r => (r.recorded_since ? +new Date(r.recorded_since) : null), csv: r => r.recorded_since, fmt: v => (v ? fmt.dateTime(v) : "-"), title: "First hour OpenGrid recorded this provider for this GPU" },
           ] }),
         h("p", { class: "note" }, "One vote per provider: its lowest eligible listing (on-demand, canonical, not sold out). Excluded when its feed was failing that hour or the vote is more than 3× above / below the median. Weight column is derived from the method; the level is chained on the providers common to consecutive hours."));
       }
@@ -449,7 +449,7 @@
         const links = [];
         if (gpuSlug) links.push(h("a", { class: "lnk", href: "/gpu/" + gpuSlug }, OG.shortGpu(d.gpu) + " market: prices, listings, history →"));
         if (d.kind === "composite") for (const c of def.components || []) links.push(h("a", { class: "lnk", href: "/indices/" + encodeURIComponent(c.index_id) }, (c.name || c.index_id).replace(/^OpenGrid /, "")));
-        relEl.replaceChildren(h("div", { class: "ix-rel-l" }, links.length ? links : h("span", { class: "dim" }, "–")));
+        relEl.replaceChildren(h("div", { class: "ix-rel-l" }, links.length ? links : h("span", { class: "dim" }, "-")));
         if (!d.gpu) return;
         const all = await OG.api.soft("/v1/indices");
         if (!ctx.alive() || !all) return;

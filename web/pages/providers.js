@@ -1,7 +1,7 @@
-/* /providers — provider league table.
-   Sources: /v1/providers (coverage, relative value over a window, feed health, facts — all from the
+/* /providers: provider league table.
+   Sources: /v1/providers (coverage, relative value over a window, feed health, facts, all from the
    hourly rollup, so a figure is null + reason until it has enough compared hours), /v1/capabilities
-   (integration level: what OpenGrid implements vs what is verified live — verified_live is false
+   (integration level: what OpenGrid implements vs what is verified live, and verified_live is false
    everywhere and the page says so), /v1/trust/providers (soft: feed status from the quality layer).
    Also exports OG.views.integration / OG.views.share / OG.views.feedStatus for pages/provider.js. */
 (() => {
@@ -10,7 +10,7 @@
   const SRC = { authenticated_api: "auth API", public_api: "public API", public_page: "public page", aggregator: "aggregator", public_pricing_file: "price file" };
 
   // Unsigned share of hours / listings: 0.234 -> "23%"
-  const share = v => (v == null || !isFinite(v) ? "–" : (v * 100 >= 9.95 || v === 0 ? Math.round(v * 100) : (v * 100).toFixed(1)) + "%");
+  const share = v => (v == null || !isFinite(v) ? "-" : (v * 100 >= 9.95 || v === 0 ? Math.round(v * 100) : (v * 100).toFixed(1)) + "%");
   const LEVEL_SHORT = { 0: "data only", 1: "avail. check", 2: "provision", 3: "lifecycle" };
 
   // Integration cell: the implemented level, with the three separate claims on hover. Never "live".
@@ -44,7 +44,7 @@
       : OG.badge(share(fh.failure_rate_24h) + " fail", fh.failure_rate_24h > 0.2 ? "bad" : "warn", `${fh.fetches_24h} fetches / 24h`);
   }
   OG.views = OG.views || {};
-  Object.assign(OG.views, { integration, share, feedStatus, providerSourceLabel: s => SRC[s] || s || "–" });
+  Object.assign(OG.views, { integration, share, feedStatus, providerSourceLabel: s => SRC[s] || s || "-" });
 
   OG.page("/providers", {
     title: "Providers",
@@ -127,19 +127,19 @@
         ]));
         const cols = [
           { key: "name", label: "Provider", fmt: (v, r) => OG.providerLink(r.provider), width: "150px" },
-          { key: "cls", label: "Class", cls: "dim", fmt: v => (v || "–").replace("_", " "), minor: 2 },
-          { key: "source_type", label: "Source", cls: "dim", fmt: v => SRC[v] || v || "–", title: "How OpenGrid reads this provider's prices", minor: 3 },
-          { key: "level", label: "Integration", value: r => r.level, fmt: (v, r) => integration(r.cap), title: "Integration level OpenGrid implements (0–3). Hover for API vs implemented vs verified. ·mock = adapter tested against mocked HTTP only", desc: true },
+          { key: "cls", label: "Class", cls: "dim", fmt: v => (v || "-").replace("_", " "), minor: 2 },
+          { key: "source_type", label: "Source", cls: "dim", fmt: v => SRC[v] || v || "-", title: "How OpenGrid reads this provider's prices", minor: 3 },
+          { key: "level", label: "Integration", value: r => r.level, fmt: (v, r) => integration(r.cap), title: "Integration level OpenGrid implements (0 to 3). Hover for API vs implemented vs verified. ·mock = adapter tested against mocked HTTP only", desc: true },
           { key: "gpus", label: "GPUs", num: true, desc: true, title: "Canonical GPU models listed now" },
           { key: "listings", label: "Listings", num: true, desc: true, title: "Live listings now (priced in title)", fmt: (v, r) => h("span", { title: `${r.priced} priced` }, fmt.num(v)) },
-          { key: "regions", label: "Regions", value: r => r.regions.length, desc: true, ell: 190, fmt: (v, r) => r.regions.length ? h("span", { class: "pv-regs", title: r.regions.join(", ") }, r.regions.join(" · ")) : r.listings ? h("span", { class: "dim", title: "listings carry no location OpenGrid can assign to a region group" }, "unassigned") : "–" },
+          { key: "regions", label: "Regions", value: r => r.regions.length, desc: true, ell: 190, fmt: (v, r) => r.regions.length ? h("span", { class: "pv-regs", title: r.regions.join(", ") }, r.regions.join(" · ")) : r.listings ? h("span", { class: "dim", title: "listings carry no location OpenGrid can assign to a region group" }, "unassigned") : "-" },
           { key: "premium", label: "Avg prem.", num: true, title: `Mean premium vs the median of other providers, same GPU, same hour (last ${st.days}d). Negative = cheaper.`,
             fmt: (v, r) => v == null ? OG.na(r.premium_r) : h("span", { class: v < 0 ? "up" : v > 0 ? "down" : "" }, fmt.pct(v)) },
           { key: "cheapest", label: "% cheapest", num: true, desc: true, title: "Share of market hours this provider was the cheapest", fmt: (v, r) => OG.value(v, share, r.cheapest_r) },
           { key: "avail", label: "Avail.", num: true, desc: true, title: "Share of tracked hours with a priced listing", fmt: (v, r) => OG.value(v, share, r.avail_r) },
           { key: "vol", label: "Vol (1d)", num: true, title: "Median across its GPUs of the stdev of daily log price changes", fmt: (v, r) => OG.value(v, x => (x * 100).toFixed(1) + "%", r.vol_r) },
           { key: "life", label: "Lifetime", num: true, value: r => r.lifetime && r.lifetime.median_hours, desc: true, title: "Median observed listing lifetime (first seen → last seen by OpenGrid; understates true lifetime)",
-            fmt: (v, r) => r.lifetime ? OG.value(r.lifetime.median_hours, x => x < 48 ? x.toFixed(1) + "h" : (x / 24).toFixed(0) + "d", r.lifetime.reason) : "–" },
+            fmt: (v, r) => r.lifetime ? OG.value(r.lifetime.median_hours, x => x < 48 ? x.toFixed(1) + "h" : (x / 24).toFixed(0) + "d", r.lifetime.reason) : "-" },
           { key: "feed", label: "Feed", value: r => r.tr ? r.tr.status : r.fh ? (r.fh.failure_rate_24h === 0 ? "ok" : "x") : null, fmt: (v, r) => feedStatus(r.tr, r.fh) },
           { key: "last_ok", label: "Last ok", num: true, value: r => r.last_ok ? -new Date(r.last_ok) : null, title: "Age of the last successful fetch", fmt: (v, r) => r.last_ok ? OG.freshBadge(r.last_ok, { intervalSeconds: r.tr && r.tr.polling_interval_seconds, provider: r.provider }) : h("span", { class: "dim" }, "never") },
         ];

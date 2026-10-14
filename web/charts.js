@@ -202,7 +202,7 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
         }), o.band ? hd("span", "c-key", hd("i", "sw band"), o.band.label || "range") : null));
       }
       if (!n) { svg.append(svgText({ x: W / 2, y: H / 2, "text-anchor": "middle", class: "c-mute" }, o.emptyText || "no data")); return; }
-      // Robust scale: the lines (median, lowest…) set the range; the low–high band may add headroom up to
+      // Robust scale: the lines (median, lowest…) set the range; the low-to-high band may add headroom up to
       // its 75th percentile (at most one line-range above the lines). A band high beyond that is clipped and
       // flagged at the top edge, so one outlier listing cannot flatten every line into the floor.
       const core = extent(...series.filter(x => !x.halo).map(x => x.values));
@@ -335,7 +335,7 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
         const vals = series.filter(x2 => !x2.halo || x2.label).map(x2 => [x2, x2.values[i]]).filter(v => v[1] != null).sort((a, b) => a[1] - b[1]);
         for (const [x2, v] of vals) if (!x2.halo) cross.append(s("circle", { cx: x, cy: ys(v), r: 3, fill: x2.color || "#94a3b8", class: "c-dot" }));
         const nodes = [hd("div", "ct-t", new Date(times[i]).toLocaleString([], span > 36 ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false } : { hour: "2-digit", minute: "2-digit", hour12: false }))];
-        if (o.band && o.band.lo[i] != null) nodes.push(row(o.band.label || "range", yf(o.band.lo[i]) + "–" + yf(o.band.hi[i])));
+        if (o.band && o.band.lo[i] != null) nodes.push(row(o.band.label || "range", yf(o.band.lo[i]) + " to " + yf(o.band.hi[i])));
         vals.slice(0, 12).forEach(([x2, v]) => nodes.push(row(x2.label || x2.key, yf(v), x2.halo ? null : x2.color, x2.halo || x2.strong)));
         if (vals.length > 12) nodes.push(hd("div", "ct-t", `+${vals.length - 12} more`));
         if (!vals.length) nodes.push(hd("div", "ct-t", (o.gapReason && o.gapReason(i)) || "no data at this time"));
@@ -443,7 +443,7 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
       for (const bin of b) {
         const x = xs(bin.x0), w = Math.max(1, (b.length === 1 ? 12 : xs(bin.x1) - xs(bin.x0)) - 2);
         const r = s("rect", { x: x + 1, y: ys(bin.count), width: w, height: H - Bm - ys(bin.count), fill: o.color || "var(--accent)", "fill-opacity": ".75", rx: 1 });
-        r.addEventListener("mousemove", e => f.tip(e.offsetX, e.offsetY, [hd("div", "ct-t", vf(bin.x0) + "–" + vf(bin.x1)), row("count", String(bin.count))]));
+        r.addEventListener("mousemove", e => f.tip(e.offsetX, e.offsetY, [hd("div", "ct-t", vf(bin.x0) + " to " + vf(bin.x1)), row("count", String(bin.count))]));
         r.addEventListener("mouseleave", () => f.hide());
         svg.append(r);
       }

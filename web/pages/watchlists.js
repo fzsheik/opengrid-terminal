@@ -1,4 +1,4 @@
-/* /watchlists — watchlists (GPU / provider / GPU+provider / region / index items) with live values, and
+/* /watchlists: watchlists (GPU / provider / GPU+provider / region / index items) with live values, and
    alert rules: templates for the founder's examples, rule state (ok / firing / unknown + reason),
    "test now" (POST /v1/alerts/{id}/test: dry, no state change, no delivery), firings feed, webhook channel.
    Email is an interface only: not implemented, and said so. ?add=<gpu> pre-fills an item (command "w <gpu>"). */
@@ -26,7 +26,7 @@
     const op = p.op || (p.metric === "available" ? ">" : p.metric === "index_new_low" ? "==" : "?");
     const val = p.value != null ? p.value : p.metric === "available" ? 0 : p.metric === "index_new_low" ? 1 : "?";
     const win = p.window_hours ? ` over ${p.window_hours}h` : p.window ? ` over ${p.window}` : "";
-    return `${m.label}${win} ${op} ${val}${subj ? " — " + subj : ""}`;
+    return `${m.label}${win} ${op} ${val}${subj ? ": " + subj : ""}`;
   }
   function stateBadge(r) {
     if (r.status === "paused") return OG.badge("paused");
@@ -145,10 +145,10 @@
         const tbl = OG.table({
           columns: [
             { key: "item", label: "Item", sort: false, fmt: (v, r) => itemLabel(r.i) },
-            { key: "low", label: "Low $/GPU·h", num: true, fmt: (v, r) => r.i.kind === "index" ? (r.l.index != null ? h("span", {}, fmt.num(r.l.index, 2), h("small", { class: "dim" }, " pts")) : OG.na(r.l.indexReason)) : r.l.low != null ? fmt.price(r.l.low) : ["gpu", "gpu_provider"].includes(r.i.kind) ? OG.na("no live priced listing") : h("span", { class: "dim" }, "–") },
-            { key: "median", label: "Median", num: true, fmt: (v, r) => r.l.median != null ? fmt.price(r.l.median) : h("span", { class: "dim" }, "–") },
+            { key: "low", label: "Low $/GPU·h", num: true, fmt: (v, r) => r.i.kind === "index" ? (r.l.index != null ? h("span", {}, fmt.num(r.l.index, 2), h("small", { class: "dim" }, " pts")) : OG.na(r.l.indexReason)) : r.l.low != null ? fmt.price(r.l.low) : ["gpu", "gpu_provider"].includes(r.i.kind) ? OG.na("no live priced listing") : h("span", { class: "dim" }, "-") },
+            { key: "median", label: "Median", num: true, fmt: (v, r) => r.l.median != null ? fmt.price(r.l.median) : h("span", { class: "dim" }, "-") },
             { key: "chg", label: "24h", num: true, fmt: (v, r) => r.l.chg != null ? OG.chg(r.l.chg) : OG.na(r.l.chgReason) },
-            { key: "avail", label: "Availability", sort: false, cls: "dim", fmt: (v, r) => r.l.avail || h("span", { class: "dim" }, "–") },
+            { key: "avail", label: "Availability", sort: false, cls: "dim", fmt: (v, r) => r.l.avail || h("span", { class: "dim" }, "-") },
             { key: "detail", label: "Detail", sort: false, cls: "dim wrap", fmt: (v, r) => r.l.detail || "" },
             { key: "x", label: "", sort: false, csv: false, fmt: (v, r) => h("span", { class: "wl-acts" },
               ["gpu", "gpu_provider"].includes(r.i.kind) ? h("button", { class: "btn sm", type: "button", title: "Start an alert rule for this item", onclick: () => prefill(r.i) }, "Alert…") : null,
@@ -261,7 +261,7 @@
             h("span", { class: "lbl" }, "Channels"),
             h("span", { class: "wl-chi" }, h("input", { type: "checkbox", checked: true, disabled: true }), "in-app feed (always)"),
             h("label", { class: "wl-chi" }, "webhook ", inp("webhook", { type: "url", placeholder: "https://… (signed, HMAC-SHA256)", style: "width:280px" })),
-            h("label", { class: "wl-chi dim", title: "Email delivery is an interface only: a firing records not_implemented" }, h("input", { type: "checkbox", checked: form.email ? true : null, onchange: e => { form.email = e.target.checked; } }), "email — ", h("b", { class: "warn-t" }, "not implemented yet"), " (recorded as not_implemented, never sent)"),
+            h("label", { class: "wl-chi dim", title: "Email delivery is an interface only: a firing records not_implemented" }, h("input", { type: "checkbox", checked: form.email ? true : null, onchange: e => { form.email = e.target.checked; } }), "email: ", h("b", { class: "warn-t" }, "not implemented yet"), " (recorded as not_implemented, never sent)"),
             h("span", { class: "spacer" }), h("button", { class: "btn pri", type: "submit" }, "Create rule")),
           h("p", { class: "note" }, m.help, ". Edge-triggered: fires on the transition to true, then waits for the cooldown; an unknown reading (thin history, provider not recorded) never fires. Webhook URLs must be https and public; the signing secret is shown once."),
           err));
@@ -278,7 +278,7 @@
         columns: [
           { key: "name", label: "Rule", fmt: (v, r) => h("span", {}, h("b", {}, v || "#" + r.id), h("div", { class: "dim wl-cnd" }, condText(r.params))) , value: r => r.name || "" },
           { key: "state", label: "State", value: r => r.status === "paused" ? "paused" : r.last_state || "", fmt: (v, r) => stateBadge(r) },
-          { key: "last_value", label: "Last value", num: true, fmt: (v, r) => v != null ? fmt.num(v, Math.abs(v) < 10 ? 3 : 1) : r.last_state === "unknown" ? OG.na(r.last_detail) : h("span", { class: "dim" }, "–") },
+          { key: "last_value", label: "Last value", num: true, fmt: (v, r) => v != null ? fmt.num(v, Math.abs(v) < 10 ? 3 : 1) : r.last_state === "unknown" ? OG.na(r.last_detail) : h("span", { class: "dim" }, "-") },
           { key: "last_detail", label: "Reading", cls: "wrap dim", fmt: v => v || "" },
           { key: "last_evaluated_at", label: "Evaluated", num: true, fmt: v => v ? fmt.age(v) + " ago" : h("span", { class: "dim" }, "never") },
           { key: "last_fired_at", label: "Last fired", num: true, fmt: v => v ? fmt.dateTime(v) : h("span", { class: "dim" }, "never") },
@@ -331,7 +331,7 @@
             columns: [
               { key: "fired_at", label: "Fired", num: true, fmt: v => fmt.dateTime(v) },
               { key: "rule_id", label: "Rule", value: r => names.get(r.rule_id) || "#" + r.rule_id },
-              { key: "value", label: "Value", num: true, fmt: v => v != null ? fmt.num(v, 3) : "–" },
+              { key: "value", label: "Value", num: true, fmt: v => v != null ? fmt.num(v, 3) : "-" },
               { key: "message", label: "Message", cls: "wrap" },
               { key: "delivery_status", label: "Delivery", sort: false, fmt: v => h("span", { class: "wl-chs" }, Object.entries(v || {}).map(([k, s]) => OG.badge(`${k}: ${s}`, s === "ok" ? "good" : s === "not_implemented" ? "warn" : "bad"))) },
             ], rows: fs, sort: { key: "fired_at", dir: "desc" }, compact: true, csv: "opengrid-alert-firings.csv", empty: "No alert has fired in the last 7 days.",

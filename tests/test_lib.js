@@ -10,8 +10,8 @@ ok(L.vendorOf("AMD Instinct MI300X 192GB") === "AMD" && L.vendorOf("Intel Gaudi 
 ok(L.providerName("voltagepark") === "Voltage Park" && L.providerName("newcloud") === "newcloud", "provider names, unknown passes through");
 
 // formatting
-ok(L.fmtPrice(1.3) === "$1.30" && L.fmtPrice(12.4) === "$12.40" && L.fmtPrice(0.045) === "$0.045" && L.fmtPrice(null) === "–", "prices");
-ok(L.fmtPct(0.021) === "+2.1%" && L.fmtPct(-0.004) === "−0.4%" && L.fmtPct(0.5) === "+50%" && L.fmtPct(null) === "–", "percentages use a real minus sign");
+ok(L.fmtPrice(1.3) === "$1.30" && L.fmtPrice(12.4) === "$12.40" && L.fmtPrice(0.045) === "$0.045" && L.fmtPrice(null) === "-", "prices");
+ok(L.fmtPct(0.021) === "+2.1%" && L.fmtPct(-0.004) === "−0.4%" && L.fmtPct(0.5) === "+50%" && L.fmtPct(null) === "-", "percentages use a real minus sign");
 ok(L.fmtPct(0.00001) === "0.0%", "a move that rounds to zero carries no sign: " + L.fmtPct(0.00001));
 ok(L.direction(0.00001) === "flat" && L.direction(0.02) === "up" && L.direction(-0.02) === "down" && L.direction(undefined) === "none", "direction");
 

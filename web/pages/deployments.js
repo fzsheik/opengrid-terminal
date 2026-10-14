@@ -1,5 +1,5 @@
-/* /deployments — every deployment this principal can see (GET /v1/deployments), uncertain ones first.
-   /deployments/:id — one deployment, end to end: the state machine strip, the events timeline (actor, reason,
+/* /deployments: every deployment this principal can see (GET /v1/deployments), uncertain ones first.
+   /deployments/:id: one deployment, end to end. The state machine strip, the events timeline (actor, reason,
    evidence), provision attempts, the pinned credential source (never the secret), the four cost numbers kept
    apart (quote / expected / provider-reported / OpenGrid transaction) with quote error, effective rate and
    rounding, runtime and the auto-terminate deadline, Terminate / Stop (confirmed, one Idempotency-Key per
@@ -11,7 +11,7 @@
   const TERMINAL = ["terminated", "rejected", "provision_failed", "provider_rejected", "quote_failed"];
   const PRE_LAUNCH = ["created", "quoted", "pending_approval", "approved", "quote_expired"];
   const dur = sec => {
-    if (sec == null) return "–";
+    if (sec == null) return "-";
     const s = Math.max(0, Math.round(sec));
     if (s < 60) return s + "s";
     if (s < 3600) return Math.floor(s / 60) + "m " + String(s % 60).padStart(2, "0") + "s";
@@ -33,10 +33,10 @@
       return `${stampOf(dt, false)} local (UTC ${stampOf(dt, true)})`;
     },
     ceilingSource: s => s ? (CEILING_SOURCE[s] || String(s).replace(/_/g, " ")) : "unknown",
-    // "Auto-terminates: <exact> — max runtime N min, source <src>"
+    // "Auto-terminates: <exact>, max runtime N min, source <src>"
     autoTerminate(iso, minutes, source) {
       const t = X.exactTime(iso);
-      return `Auto-terminates: ${t || "not set yet"} — max runtime ${minutes != null ? minutes + " min" : "unknown"}, source ${X.ceilingSource(source)}`;
+      return `Auto-terminates: ${t || "not set yet"}, max runtime ${minutes != null ? minutes + " min" : "unknown"}, source ${X.ceilingSource(source)}`;
     },
     // the backend's duration_warning, or the same check done here when the response did not carry it
     durationWarning(durationHours, minutes, backend) {
@@ -60,15 +60,15 @@
       else if (o.ephemeral) key = `ephemeral, private half discarded: nobody can SSH in${sa && sa.customer_key_fingerprint ? " · " + sa.customer_key_fingerprint : ""}`;
       else if (sa && sa.customer_key_fingerprint) key = sa.customer_key_fingerprint;
       else if (o.keyRef) key = `provider key name "${o.keyRef}" (your own BYO account; no fingerprint)`;
-      else { key = "MISSING — no SSH public key on this request"; keyTone = "bad"; missingKey = true; }
+      else { key = "MISSING: no SSH public key on this request"; keyTone = "bad"; missingKey = true; }
       let op, opTone = "bad", needsOverride = false;
       if (raw == null) { op = "UNKNOWN (not reported)"; }
       else if (validation) op = "OpenGrid operator key (validation only)";
       else if (raw.toLowerCase() === "none") { op = "NONE"; opTone = null; }
-      else if (raw.startsWith("blocked:")) { op = `${raw} — the provider may install its account-level keys; needs an admin override`; needsOverride = true; }
+      else if (raw.startsWith("blocked:")) { op = `${raw}: the provider may install its account-level keys; needs an admin override`; needsOverride = true; }
       else {
         const m = raw.match(/^provider_forced_account_key:override_by:(.+)$/);
-        op = m ? `${raw} — provider-forced account key, override by ${m[1]}` : raw;
+        op = m ? `${raw}: provider-forced account key, override by ${m[1]}` : raw;
       }
       const lines = [{ label: o.ephemeral ? "Instance SSH key" : "Customer supplied key", value: key, tone: keyTone }, { label: "OpenGrid operator access", value: op, tone: opTone }];
       return { lines, missingKey, needsOverride, validation, text: ["SSH access:"].concat(lines.map(l => `${l.label}: ${l.value}`)).join("\n") };
@@ -95,7 +95,7 @@
 
   const money = v => (v == null ? null : OG.money(v));
   const kv = rows => h("table", { class: "dep-kv" }, rows.filter(Boolean).map(([k, v, title]) =>
-    h("tr", { title: title || null }, h("th", {}, k), h("td", {}, v == null || v === "" ? h("span", { class: "dim" }, "–") : v))));
+    h("tr", { title: title || null }, h("th", {}, k), h("td", {}, v == null || v === "" ? h("span", { class: "dim" }, "-") : v))));
   function evText(o) {
     if (!o || typeof o !== "object") return o == null ? "" : String(o);
     return Object.entries(o).filter(([, v]) => v != null && v !== "").map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v).slice(0, 160) : v}`).join(" · ");
@@ -144,7 +144,7 @@
           { key: "exec", label: "Execution $/GPU·h", num: true, value: r => r.prices && r.prices.execution_price, fmt: v => v != null ? fmt.price(v) : OG.na("the provider has not reported an execution price") },
           { key: "created_at", label: "Created", num: true, fmt: v => fmt.dateTime(v) },
           { key: "uptime_seconds", label: "Runtime", num: true, fmt: v => dur(v), title: "OpenGrid-observed running time" },
-          { key: "terminate_deadline_at", label: "Auto-terminate", num: true, fmt: (v, r) => v && D.LIVE.includes(r.status) ? OG.countdown(v) : h("span", { class: "dim" }, v ? fmt.dateTime(v) : "–") },
+          { key: "terminate_deadline_at", label: "Auto-terminate", num: true, fmt: (v, r) => v && D.LIVE.includes(r.status) ? OG.countdown(v) : h("span", { class: "dim" }, v ? fmt.dateTime(v) : "-") },
           { key: "failure_reason", label: "Failure", cls: "wrap dim", fmt: v => v || "" },
         ],
         rows: [], sort: { key: "attention", dir: "asc" }, rowKey: r => r.deployment_id, rowHref: r => "/deployments/" + encodeURIComponent(r.deployment_id),
@@ -155,7 +155,7 @@
         if (!rows) return;
         const hot = rows.filter(r => rank(r) === 0);
         alarm.replaceChildren(hot.length ? h("div", { class: "og-alarm" }, h("b", {}, `${hot.length} deployment${hot.length === 1 ? "" : "s"} in an uncertain or failed-termination state`),
-          h("span", {}, " — an instance may exist and bill. Open each one; reconciliation evidence is on the detail page.")) : null);
+          h("span", {}, ": an instance may exist and bill. Open each one; reconciliation evidence is on the detail page.")) : null);
         stats.replaceChildren(OG.stats([
           { label: "Deployments", value: fmt.num(rows.length) },
           { label: "Live", value: fmt.num(rows.filter(r => D.LIVE.includes(r.status)).length), sub: "an instance may exist" },
@@ -239,15 +239,15 @@
             rec && rec.opengrid_transaction_cost ? `${rec.opengrid_transaction_cost.usage_records} usage record(s) · fees ${money(rec.opengrid_transaction_cost.fees_usd)} separate` : tx && tx.provider_cost_usd != null ? `metered so far ${money(tx.provider_cost_usd)} (${tx.cost_basis})` : null));
         const qe = rec && rec.quote_error, eff = rec && rec.effective_hourly_rate, rnd = rec && rec.billing_rounding, unx = rec && rec.unexpected_fees;
         const detail = rec ? kv([
-          ["Quote error", qe && qe.amount_usd != null ? h("span", { class: Math.abs(qe.pct || 0) > 2 ? "warn-t" : "" }, `${money(qe.amount_usd)} (${qe.pct != null ? fmt.num(qe.pct, 2) + "%" : "–"})`) : OG.na("no expected cost"), qe && qe.basis],
-          ["Effective rate", eff ? h("span", {}, eff.per_gpu_hour_transaction != null ? fmt.price(eff.per_gpu_hour_transaction) + "/GPU·h transaction" : "–",
+          ["Quote error", qe && qe.amount_usd != null ? h("span", { class: Math.abs(qe.pct || 0) > 2 ? "warn-t" : "" }, `${money(qe.amount_usd)} (${qe.pct != null ? fmt.num(qe.pct, 2) + "%" : "-"})`) : OG.na("no expected cost"), qe && qe.basis],
+          ["Effective rate", eff ? h("span", {}, eff.per_gpu_hour_transaction != null ? fmt.price(eff.per_gpu_hour_transaction) + "/GPU·h transaction" : "-",
             h("span", { class: "dim" }, " · provider " + (eff.per_gpu_hour_provider != null ? fmt.price(eff.per_gpu_hour_provider) + "/GPU·h" : "n/a"))) : null],
-          ["Billing rounding", rnd ? (rnd.amount_usd != null ? `${money(rnd.amount_usd)} · unit ${rnd.billing_unit}` : h("span", { class: "dim" }, rnd.reason || "–")) : null, rnd && rnd.evidence],
+          ["Billing rounding", rnd ? (rnd.amount_usd != null ? `${money(rnd.amount_usd)} · unit ${rnd.billing_unit}` : h("span", { class: "dim" }, rnd.reason || "-")) : null, rnd && rnd.evidence],
           ["Unexpected fees", unx ? (unx.amount_usd != null ? money(unx.amount_usd) : h("span", { class: "dim" }, unx.reason)) : null, unx && unx.basis],
           ["Runtime billed", rec.runtime ? `${dur(rec.runtime.billable_seconds)} billable · ${dur(rec.runtime.running_seconds)} running · ${dur(rec.runtime.stopped_seconds)} stopped` : null],
           ["Reconciled", d.reconciled_at ? fmt.dateTime(d.reconciled_at) : null, "source: " + R.src],
         ]) : h("p", { class: "note" }, why ? "Cost reconciliation: " + why + "." : "");
-        return OG.section("Cost — four numbers, never merged", cells, detail);
+        return OG.section("Cost: four numbers, never merged", cells, detail);
       }
 
       function pricesBlock() {
@@ -259,10 +259,10 @@
             [h("span", {}, "List ", OG.conceptBadge("list")), p.list_price != null ? fmt.price(p.list_price) : null, "The provider's catalogue price read at the live check"],
             [h("span", {}, "Quote ", OG.conceptBadge("quote")), p.quote != null ? h("span", {}, fmt.price(p.quote), h("span", { class: "dim" }, " · " + (p.quote_basis || "?"))) : null],
             [h("span", {}, "Execution ", OG.conceptBadge("execution")), p.execution_price != null ? fmt.price(p.execution_price) : OG.na("the provider has not reported what it charges")],
-            ["Credential (pinned)", d.credential_source ? h("span", {}, d.credential_source === "byo" ? "BYO — the customer's own provider account" : "OpenGrid-managed provider account",
+            ["Credential (pinned)", d.credential_source ? h("span", {}, d.credential_source === "byo" ? "BYO: the customer's own provider account" : "OpenGrid-managed provider account",
               att ? h("span", { class: "dim" }, " · ref " + att.credential_ref) : null) : h("span", { class: "dim" }, "not pinned yet (pinned at launch)"), "status, stop, terminate and reconciliation use exactly this credential; the secret is never shown"],
             ["Instance", d.provider_instance_id ? h("span", { class: "mono" }, d.provider_instance_id) : h("span", { class: "dim" }, "not known")],
-            ["Client name", h("span", { class: "mono" }, d.client_name || "–"), "the name OpenGrid sends the provider; reconciliation finds the instance by it"],
+            ["Client name", h("span", { class: "mono" }, d.client_name || "-"), "the name OpenGrid sends the provider; reconciliation finds the instance by it"],
             ["Approval", d.approved_at ? `${d.approval_mode || ""} by ${d.approved_by} · ${fmt.dateTime(d.approved_at)}` : d.approval_mode ? d.approval_mode + ": not approved yet" : null],
             d.override_limits ? ["Limits overridden", h("span", { class: "warn-t" }, d.override_reason || "")] : null,
           ]));
@@ -336,7 +336,7 @@
           columns: [
             { key: "provider", label: "Provider", fmt: v => OG.providerLink(v) },
             { key: "listing_id", label: "Listing", cls: "mono dim" },
-            { key: "outcome", label: "Outcome", fmt: v => OG.badge(v || "–", v === "accepted" ? "good" : v === "rejected" ? "bad" : "warn", v === "unknown" ? "the provider may have created an instance" : null) },
+            { key: "outcome", label: "Outcome", fmt: v => OG.badge(v || "-", v === "accepted" ? "good" : v === "rejected" ? "bad" : "warn", v === "unknown" ? "the provider may have created an instance" : null) },
             { key: "error_kind", label: "Error", cls: "dim", fmt: v => v || "" },
             { key: "status_code", label: "HTTP", num: true },
             { key: "latency_ms", label: "Latency ms", num: true },

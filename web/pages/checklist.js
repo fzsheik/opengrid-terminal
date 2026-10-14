@@ -1,4 +1,4 @@
-/* /admin/checklist — the First Real Route checklist (GET /v1/admin/checklist?provider=&route_request_id=&probe=),
+/* /admin/checklist: the First Real Route checklist (GET /v1/admin/checklist?provider=&route_request_id=&probe=),
    computed live by the server: every item green / red / unknown with its evidence and the fix. Overall is
    green only when every required item is green ("unknown is not green"). This is the gate before SUPERVISED:
    the page links straight to the mode control only when the gate is green. ?provider= and ?rr= are URL-synced;
@@ -43,7 +43,7 @@
         const green = d.overall === "green";
         body.replaceChildren(
           h("div", { class: "ck-overall ck-" + d.overall },
-            h("b", {}, green ? "GREEN — ready for a supervised first route" : d.overall === "red" ? "RED — do not enable SUPERVISED" : "NOT GREEN — unknown items are not green"),
+            h("b", {}, green ? "GREEN: ready for a supervised first route" : d.overall === "red" ? "RED: do not enable SUPERVISED" : "NOT GREEN: unknown items are not green"),
             h("span", { class: "mono" }, `${d.green} green · ${d.red} red · ${d.unknown} unknown`),
             h("span", { class: "dim" }, OG.providerName(d.provider) + (d.route_request_id ? " · " + d.route_request_id : "") + " · computed " + fmt.time(d.computed_at) + (probe ? " · probed" : "")),
             h("span", { class: "spacer" }),

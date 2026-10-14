@@ -1,4 +1,4 @@
-/* /admin/execution — the operator's execution control surface (admin scope; the API enforces it).
+/* /admin/execution: the operator's execution control surface (admin scope; the API enforces it).
    Top, because they can bill: uncertain deployments (launch_unknown / provider_timeout / termination_failed /
    orphan_suspected / credentials_unavailable / degraded) and ORPHANS (instances that may bill with no live
    deployment), each with its evidence and an action. Then the global STOP ALL LIVE PROVISIONING kill switch
@@ -57,7 +57,7 @@
               { key: "status", label: "State", fmt: v => OG.stateBadge(v) },
               { key: "deployment_id", label: "Deployment", cls: "mono", href: r => "/deployments/" + r.deployment_id },
               { key: "account_id", label: "Acct", num: true },
-              { key: "provider", label: "Provider", fmt: v => v ? OG.providerLink(v) : "–" },
+              { key: "provider", label: "Provider", fmt: v => v ? OG.providerLink(v) : "-" },
               { key: "gpu", label: "GPU", fmt: (v, r) => h("span", {}, `${r.gpu_count}× `, OG.gpuLink(v || "")) },
               { key: "client_name", label: "Client name", cls: "mono dim" },
               { key: "provider_instance_id", label: "Instance", cls: "mono", fmt: v => v || h("span", { class: "warn-t" }, "unknown") },
@@ -130,13 +130,13 @@
             : "No leftover temporary provider resources: every per-deployment key OpenGrid created is deleted."),
           rows.length ? OG.table({
             columns: [
-              { key: "provider", label: "Provider", fmt: v => v ? OG.providerLink(v) : "–" },
+              { key: "provider", label: "Provider", fmt: v => v ? OG.providerLink(v) : "-" },
               { key: "resource_type", label: "Type", cls: "mono" },
               { key: "name", label: "Name", cls: "mono" },
               { key: "provider_resource_id", label: "Resource id", cls: "mono dim", fmt: v => v || h("span", { class: "dim" }, "not created / unknown") },
               { key: "deployment_id", label: "Deployment", cls: "mono", fmt: v => v ? h("a", { class: "lnk", href: "/deployments/" + v }, v) : h("span", { class: "dim" }, "none") },
               { key: "status", label: "Status", fmt: v => OG.badge(v, v === "delete_failed" || v === "abandoned" ? "bad" : v === "active" ? "" : "warn") },
-              { key: "created_at", label: "Age", num: true, fmt: v => v ? fmt.age(v) : "–" },
+              { key: "created_at", label: "Age", num: true, fmt: v => v ? fmt.age(v) : "-" },
               { key: "last_error", label: "Last error", cls: "wrap dim", fmt: (v, r) => v ? h("span", { class: "down" }, v) : r.ownership_basis ? h("span", { class: "dim", title: "ownership basis" }, r.ownership_basis) : "" },
               { key: "act", label: "", sort: false, csv: false, fmt: (v, r) => cleanable(r) ? h("button", { class: "btn sm w4-danger", type: "button", onclick: () => cleanupResource(r) }, "Cleanup…")
                 : h("span", { class: "dim", title: r.provably_ours ? "" : "not provably OpenGrid's: OpenGrid never deletes it" }, r.provably_ours ? "" : "not ours?") },
@@ -225,7 +225,7 @@
             { key: "deployment_id", label: "Deployment", cls: "mono", href: r => "/deployments/" + r.deployment_id },
             { key: "purpose", label: "Purpose", fmt: v => v === "validation" ? OG.badge("validation", "warn") : h("span", { class: "dim" }, v) },
             { key: "account_id", label: "Acct", num: true },
-            { key: "provider", label: "Provider", fmt: v => v ? OG.providerLink(v) : "–" },
+            { key: "provider", label: "Provider", fmt: v => v ? OG.providerLink(v) : "-" },
             { key: "gpu", label: "GPU", fmt: (v, r) => h("span", {}, `${r.gpu_count}× `, OG.gpuLink(v || "")) },
             { key: "quote", label: "Quote $/GPU·h", num: true, value: r => r.prices && r.prices.quote, fmt: v => fmt.price(v) },
             ...extra,
@@ -244,7 +244,7 @@
         B.live.replaceChildren(OG.section(`Live deployments · ${live.length} · ≈ ${OG.money(perH)}/h at quote`, depTable(live, [
           { key: "uptime_seconds", label: "Runtime", num: true, fmt: v => fmt.age(v || 0) },
           { key: "terminate_deadline_at", label: "Auto-terminate", num: true, fmt: v => v ? OG.countdown(v, { expired: "past deadline" }) : OG.na("no deadline") },
-          { key: "accrued_cost_estimate_usd", label: "Accrued est.", num: true, fmt: v => v != null ? OG.money(v) : "–" },
+          { key: "accrued_cost_estimate_usd", label: "Accrued est.", num: true, fmt: v => v != null ? OG.money(v) : "-" },
           { key: "act", label: "", sort: false, csv: false, fmt: (v, r) => forceBtn(r) },
         ], "Nothing is running.")));
       }
@@ -262,7 +262,7 @@
             { key: "provider", label: "Provider", fmt: v => OG.providerLink(v) },
             { key: "level", label: "Lvl", num: true, title: "OpenGrid integration level (2+ = can provision)" },
             { key: "adapter_status", label: "Adapter", fmt: v => v === "validated" ? OG.badge("validated", "good") : OG.badge("simulated", "warn", "never run against a real provider account: customer launches refused") },
-            { key: "validated_at", label: "Validated", num: true, fmt: (v, r) => v ? h("span", {}, fmt.dateTime(v), r.validation_deployment_id ? [" ", h("a", { class: "lnk mono", href: "/deployments/" + r.validation_deployment_id }, "evidence")] : null) : "–" },
+            { key: "validated_at", label: "Validated", num: true, fmt: (v, r) => v ? h("span", {}, fmt.dateTime(v), r.validation_deployment_id ? [" ", h("a", { class: "lnk mono", href: "/deployments/" + r.validation_deployment_id }, "evidence")] : null) : "-" },
             { key: "creds", label: "Credentials", fmt: v => v ? OG.badge("configured", "good") : h("span", { class: "dim" }, "none") },
             { key: "supervised_enabled", label: "Supervised", sort: false, fmt: (v, r) => toggle(r, "supervised_enabled", r.adapter_status !== "validated" ? "validate the adapter first (validation launches do not need this flag)" : null) },
             { key: "live_enabled", label: "Live", sort: false, fmt: (v, r) => toggle(r, "live_enabled", r.adapter_status !== "validated" ? "live needs a validated adapter" : null) },
@@ -298,7 +298,7 @@
         if (!provs.length) { B.matrix.replaceChildren(OG.insufficient("No adapter publishes a capability matrix on this server.", "No matrix")); return; }
         const cellOf = (c, k) => {
           const x = c.matrix[k];
-          if (!x) return h("td", { class: "mx-c mx-na" }, "–");
+          if (!x) return h("td", { class: "mx-c mx-na" }, "-");
           const val = String(x.value ?? x);
           const t = /^yes/i.test(val) ? "yes" : /^no/i.test(val) ? "no" : /^partial/i.test(val) ? "partial" : "info";
           return h("td", { class: "mx-c mx-" + t, title: x.evidence || "" }, val);
@@ -472,8 +472,8 @@
           catch (e) { B.limits.append(OG.error(e)); }
         };
         B.limits.replaceChildren(head, OG.stats([
-          { label: "Active deployments", value: fmt.num(U.active_deployments), sub: "cap " + (L.max_active_deployments ?? "–") },
-          { label: "Active GPUs", value: fmt.num(U.active_gpus), sub: "cap " + (L.max_gpus ?? "–") },
+          { label: "Active deployments", value: fmt.num(U.active_deployments), sub: "cap " + (L.max_active_deployments ?? "-") },
+          { label: "Active GPUs", value: fmt.num(U.active_gpus), sub: "cap " + (L.max_gpus ?? "-") },
           { label: "Month spend", value: OG.money(U.month_spend), sub: `finished ${OG.money(U.month_finished_cost)} + active est. ${OG.money(U.month_active_estimated_cost)}`, kind: "estimated" },
           { label: "Monthly limit", value: L.monthly_spend_limit != null ? OG.money(L.monthly_spend_limit) : null, reason: "none" },
         ]), grid, h("div", { class: "bar" }, h("button", { class: "btn pri", type: "button", onclick: save }, "Save changes…"), h("span", { class: "dim" }, "blank = settings default · checked at quote AND again at launch; exceeding blocks the launch unless an admin overrides with a reason")));

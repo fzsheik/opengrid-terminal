@@ -1,4 +1,4 @@
-/* /compare/:a-vs-:b and /compare?a=&b=[&gpu=] — side by side.
+/* /compare/:a-vs-:b and /compare?a=&b=[&gpu=]: side by side.
 
 Each side resolves to a GPU (canonical slug), a provider, or a region group:
   GPU vs GPU            /v1/compare + /v1/gpus/{a,b} (providers selling both) + /v1/history/{a,b} (overlay)
@@ -11,10 +11,10 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
   const { h, fmt, Lib: L } = OG;
   const REGIONS = ["US", "Canada", "Europe", "UK", "APAC", "Middle East", "LATAM", "Africa"];
   const CA = "#4d94ff", CB = "#f5a524";
-  const small = v => (v == null || !isFinite(v) ? "–" : v >= 0.1 ? fmt.price(v) : "$" + Number(v).toPrecision(3));
+  const small = v => (v == null || !isFinite(v) ? "-" : v >= 0.1 ? fmt.price(v) : "$" + Number(v).toPrecision(3));
   const rel = (a, b) => (a == null || b == null || !a ? null : b / a - 1);
-  const pctCell = (v, invert) => h("span", { class: v == null || Math.abs(v) < 0.0005 ? "dim" : (v > 0) !== !!invert ? "up" : "down" }, v == null ? "–" : fmt.pct(v));
-  const priceDelta = v => h("span", { class: v == null || Math.abs(v) < 0.0005 ? "dim" : v > 0 ? "down" : "up", title: "B relative to A; green = B cheaper" }, v == null ? "–" : fmt.pct(v));
+  const pctCell = (v, invert) => h("span", { class: v == null || Math.abs(v) < 0.0005 ? "dim" : (v > 0) !== !!invert ? "up" : "down" }, v == null ? "-" : fmt.pct(v));
+  const priceDelta = v => h("span", { class: v == null || Math.abs(v) < 0.0005 ? "dim" : v > 0 ? "down" : "up", title: "B relative to A; green = B cheaper" }, v == null ? "-" : fmt.pct(v));
   const WINDOWS = [["7d", "7D", 168], ["30d", "30D", 720], ["90d", "90D", 2160]];
 
   function resolve(x) {
@@ -125,7 +125,7 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
     // spec diff
     const SPEC = [["vendor", "Vendor"], ["architecture", "Architecture"], ["generation", "Generation"], ["released", "Released"], ["segment", "Segment"], ["vram_gb", "VRAM (GB)", 1], ["memory_type", "Memory"],
       ["memory_bandwidth_tbps", "Bandwidth (TB/s)", 1], ["bf16_tflops_dense", "BF16 TFLOPS (dense)", 1], ["fp16_tflops_dense", "FP16 TFLOPS (dense)", 1], ["fp8_tflops_dense", "FP8 TFLOPS (dense)", 1],
-      ["fp32_tflops", "FP32 TFLOPS", 1], ["form_factor", "Form factor"], ["interconnect", "Host link"], ["nvlink", "GPU–GPU link"], ["tdp_w", "TDP (W)", 1], ["workload_class", "Workload class"]];
+      ["fp32_tflops", "FP32 TFLOPS", 1], ["form_factor", "Form factor"], ["interconnect", "Host link"], ["nvlink", "GPU-GPU link"], ["tdp_w", "TDP (W)", 1], ["workload_class", "Workload class"]];
     const specT = h("table", { class: "cmp-t cmp-spec" },
       h("thead", {}, h("tr", {}, h("th", {}, ""), h("th", { class: "n", style: `color:${CA}` }, sa), h("th", { class: "n", style: `color:${CB}` }, sb), h("th", { class: "n" }, "B / A"))),
       h("tbody", {}, SPEC.map(([k, l, num]) => {

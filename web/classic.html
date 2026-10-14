@@ -112,7 +112,7 @@ function age(iso) {
   if (s < 172800) return Math.round(s / 3600) + "h";
   return Math.round(s / 86400) + "d";
 }
-const money = (v, p) => v == null ? "–" : Number(v).toFixed(p);
+const money = (v, p) => v == null ? "-" : Number(v).toFixed(p);
 const stockOf = r => r.available === true ? "yes" : r.available === false ? "no" : "?";
 function el(tag, text, cls) { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; }
 
@@ -138,7 +138,7 @@ function chgNode(c, full) {
   if (!full) return document.createTextNode("");
   const [t, tip] = c.status === "flat" ? ["·", `unchanged vs ${winLabel()} ago`]
     : c.status === "new" ? ["new", `first listed less than ${winLabel()} ago`]
-    : ["–", `we were not recording this provider ${winLabel()} ago`];
+    : ["-", `we were not recording this provider ${winLabel()} ago`];
   const s = el("span", t, "chg dim"); s.title = tip; return s;
 }
 

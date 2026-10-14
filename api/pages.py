@@ -309,7 +309,7 @@ def seo_family(slug: str, fam: dict):
     note = ("Variants are different products (memory, form factor, interconnect); OpenGrid never merges their "
             "prices, so there is no single family price.")
     if priced:
-        title = (f"{fid} price: variants from {_price(priced[0]['low']['price'])}/hr — "
+        title = (f"{fid} price: variants from {_price(priced[0]['low']['price'])}/hr: "
                  + ", ".join(f"{_short(r['gpu'])} {_price(r['low']['price'])}" for r in priced[:4]))
         desc = (f"{fid} GPU cloud prices by variant, as of {when}: "
                 + "; ".join(f"{_short(r['gpu'])} from {_price(r['low']['price'])}/GPU-hour at "
@@ -606,7 +606,7 @@ def seo_methodology_doc(params: dict):
     first_p = re.search(r"<p>(.*?)</p>", markdown.render(src), re.S)
     desc = re.sub(r"<[^>]+>", "", first_p.group(1))[:300] if first_p else f"OpenGrid methodology: {t}"
     body = markdown.render(src) + '<p class="note"><a href="/methodology">All methodology</a> · <a href="/v1/methodology/' + esc(name) + '">raw markdown</a></p>'
-    return f"{t} — methodology", desc, body
+    return f"{t} · methodology", desc, body
 
 
 SEO.update({

@@ -1,4 +1,4 @@
-/* /jobs/:id — one training job, end to end (GET /v1/jobs/{id}, the jobs/models.py public() shape; polled every
+/* /jobs/:id: one training job, end to end (GET /v1/jobs/{id}, the jobs/models.py public() shape; polled every
    4 s while active, stopped once `finished`). Header (id, name, state, outcome, SIMULATED/real, deployment,
    provider, GPU, region, started, runtime, est + actual cost), the JOB lifecycle strip AND the DEPLOYMENT's own
    strip (two machines, never merged), the pending-approval block (admins approve on the existing route ticket
@@ -12,7 +12,7 @@
   const { h, fmt } = OG;
   const J = OG.jobs;
   const POLL_MS = 4000;
-  const kv = rows => h("table", { class: "dep-kv" }, rows.filter(Boolean).map(([k, v, title]) => h("tr", { title: title || null }, h("th", {}, k), h("td", {}, v == null || v === "" ? h("span", { class: "dim" }, "–") : v))));
+  const kv = rows => h("table", { class: "dep-kv" }, rows.filter(Boolean).map(([k, v, title]) => h("tr", { title: title || null }, h("th", {}, k), h("td", {}, v == null || v === "" ? h("span", { class: "dim" }, "-") : v))));
   const evText = o => !o || typeof o !== "object" ? String(o ?? "") : Object.entries(o).filter(([, v]) => v != null && v !== "").map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v).slice(0, 160) : v}`).join(" · ");
   const exact = iso => (OG.execText && OG.execText.exactTime(iso)) || fmt.dateTime(iso);
   const DISPO = { none: ["nothing created", "dim"], not_launched_yet: ["nothing launched yet", "dim"], possibly_billing: ["POSSIBLY BILLING", "down"],
@@ -38,7 +38,7 @@
       const top = h("div"), mid = h("div"), logBox = logPanel(), bottom = h("div"), advTop = h("div");
       // Everything technical (state machines, logs, checks, reconciliation, fingerprints) lives under one fold.
       const adv = h("details", { class: "jb-adv", open: query.adv === "1" ? true : null },
-        h("summary", {}, h("b", {}, "Advanced details"), h("span", { class: "dim" }, " — job and deployment state machines, logs, verification checks, cost reconciliation, events, request, routing decision")),
+        h("summary", {}, h("b", {}, "Advanced details"), h("span", { class: "dim" }, " (job and deployment state machines, logs, verification checks, cost reconciliation, events, request, routing decision)")),
         advTop, logBox.el, bottom);
       adv.addEventListener("toggle", () => { if (ctx.alive()) OG.qs.set({ adv: adv.open ? "1" : null }); });
 
@@ -99,7 +99,7 @@
               sm.deployment_id ? [" · ", h("a", { class: "lnk mono", href: "/deployments/" + encodeURIComponent(sm.deployment_id) }, sm.deployment_id)] : null,
               sm.route_request_id ? [" · ", h("a", { class: "lnk mono", href: "/route?rr=" + encodeURIComponent(sm.route_request_id) }, sm.route_request_id)] : null),
             J.sandboxBadge(sandbox()), J.stateBadge(s), o && o !== "simulated" ? J.outcomeBadge(o) : null, acts),
-          sandbox() ? h("div", { class: "jb-simban", role: "note" }, h("b", {}, "SIMULATED"), h("span", {}, "— no GPU was used; numbers are synthetic."), h("span", { class: "dim" }, job.simulated_note || "No provider was called and nothing was charged.")) : null,
+          sandbox() ? h("div", { class: "jb-simban", role: "note" }, h("b", {}, "SIMULATED"), h("span", {}, "No GPU was used; numbers are synthetic."), h("span", { class: "dim" }, job.simulated_note || "No provider was called and nothing was charged.")) : null,
           flash,
           billingAlarm(),
           errorBlock(),
@@ -143,7 +143,7 @@
             h("span", {}, r.termination_note || `Job ${String(s).replace(/_/g, " ")}${sm.deployment_status ? ", deployment " + String(sm.deployment_status).replace(/_/g, " ") : ""}: OpenGrid cannot confirm the instance is gone. Treat it as billing until the provider confirms.`),
             sm.deployment_id ? h("a", { class: "btn sm w4-danger", href: "/deployments/" + encodeURIComponent(sm.deployment_id) }, "Open deployment →") : null);
         if ((J.FAILED.includes(s) || J.outcomeOf(job) === "failed") && sm.possibly_billing)
-          return h("div", { class: "og-alarm t-warn" }, h("b", {}, "Job failed — instance not yet terminated"), h("span", {}, "A failed job does not mean the GPU stopped billing. OpenGrid terminates it via the provider API; watch the deployment state."));
+          return h("div", { class: "og-alarm t-warn" }, h("b", {}, "Job failed: instance not yet terminated"), h("span", {}, "A failed job does not mean the GPU stopped billing. OpenGrid terminates it via the provider API; watch the deployment state."));
         return null;
       }
       function errorBlock() {
@@ -164,7 +164,7 @@
             sm.deployment_id ? h("a", { class: "lnk mono", href: "/deployments/" + encodeURIComponent(sm.deployment_id) }, sm.deployment_id, " →") : null,
             h("span", { class: "dim" }, sandbox() ? "sandbox: no cloud resource" : sm.deployment_id ? "the cloud resource (its own state machine)" : "no deployment yet (created with the quote at submission)")),
           dep && dep.status ? OG.stateStrip(dep.status, dep.events)
-            : sm.deployment_status ? OG.stateStrip(sm.deployment_status, []) : h("div", { class: "jb-nodep dim" }, sandbox() ? "SIMULATED — no deployment, no instance." : "–"));
+            : sm.deployment_status ? OG.stateStrip(sm.deployment_status, []) : h("div", { class: "jb-nodep dim" }, sandbox() ? "SIMULATED: no deployment, no instance." : "-"));
       }
 
       function approvalBlock() {
@@ -201,10 +201,10 @@
             { label: "Latest loss", value: p.loss != null ? p.loss.toFixed(4) : null, reason: "no loss reported yet" },
             { label: "Test accuracy", value: p.acc != null ? (p.acc * 100).toFixed(2) + "%" : null, reason: "no accuracy reported yet" },
             { label: "Elapsed", value: p.elapsed != null ? J.duration(p.elapsed) : null, reason: "not reported", sub: "runner-reported" },
-            { label: "Progress", value: p.pct != null ? h("span", { class: "jb-pbar", title: Math.round(p.pct * 100) + "%" }, h("i", { style: { width: (p.pct * 100).toFixed(1) + "%" } })) : null, reason: "–" },
+            { label: "Progress", value: p.pct != null ? h("span", { class: "jb-pbar", title: Math.round(p.pct * 100) + "%" }, h("i", { style: { width: (p.pct * 100).toFixed(1) + "%" } })) : null, reason: "-" },
             res ? { label: "Runner result", value: String(res.outcome || "reported"), sub: res.summary && typeof res.summary === "object" ? evText(res.summary).slice(0, 60) : res.summary ? String(res.summary).slice(0, 60) : null, title: evText(res) } : null,
           ]),
-          !metrics.length ? (metErr ? J.notYet("GET /v1/jobs/{id}/metrics", metErr) : h("p", { class: "note" }, s === "training" ? "Training started; the first epoch's metrics arrive when it ends." : "Metrics appear once training reports its first epoch. Only persisted runner metrics are shown — nothing is extrapolated."))
+          !metrics.length ? (metErr ? J.notYet("GET /v1/jobs/{id}/metrics", metErr) : h("p", { class: "note" }, s === "training" ? "Training started; the first epoch's metrics arrive when it ends." : "Metrics appear once training reports its first epoch. Only persisted runner metrics are shown; nothing is extrapolated."))
             : h("div", { class: "cols-2" }, h("div", {}, h("div", { class: "sec-h" }, "Train loss"), lossEl), h("div", {}, h("div", { class: "sec-h" }, "Test accuracy"), accEl)));
       }
 
@@ -215,7 +215,7 @@
         return OG.section(`Verification · ${sandbox() ? "SIMULATED (no real check)" : `${passed} / ${cs.length} verified`}`,
           h("ul", { class: "ck-list jb-checks" }, cs.map(c => h("li", { class: "jb-ck-" + c.status, title: [c.status === "pending" ? "pending: no evidence yet" : c.status, c.source ? "source: " + c.source : c.expected_source ? "expected source: " + c.expected_source : null, c.evidence ? evText(c.evidence) : null, c.at ? exact(c.at) : null].filter(Boolean).join("\n") },
             h("span", { class: "jb-ck-i mono" }, icon(c)), h("b", {}, c.label),
-            h("span", { class: "dim jb-ck-e" }, c.status === "simulated" ? "simulated — not a real check" : c.evidence ? evText(c.evidence) : c.status === "pending" ? "pending" + (c.expected_source ? " · from " + c.expected_source : "") : c.status),
+            h("span", { class: "dim jb-ck-e" }, c.status === "simulated" ? "simulated, not a real check" : c.evidence ? evText(c.evidence) : c.status === "pending" ? "pending" + (c.expected_source ? " · from " + c.expected_source : "") : c.status),
             c.at ? h("span", { class: "mono dimmer" }, fmt.time(c.at)) : null))),
           h("p", { class: "note" }, "✓ only with recorded evidence from the named source (provider API, the runner on the GPU, or OpenGrid's own records). Hover a row for its evidence."));
       }
@@ -228,14 +228,14 @@
           columns: [
             { key: "name", label: "Name", fmt: (v, r) => h("span", { title: r.created_at ? "stored " + exact(r.created_at) : null }, h("a", { class: "lnk mono", href: r.download || href(v), download: v, rel: "external" }, v), r.source === "simulated" ? [" ", OG.badge("simulated", "warn")] : null) },
             { key: "size_bytes", label: "Size", num: true, value: r => r.size_bytes ?? r.size ?? null, fmt: v => J.bytes(v) },
-            { key: "sha256", label: "sha256", cls: "mono dim", fmt: v => v ? h("span", { class: "jb-sha", title: v }, String(v).slice(0, 10) + "…", " ", OG.copy(v, { label: "copy", title: "Copy the full sha256" })) : "–" },
+            { key: "sha256", label: "sha256", cls: "mono dim", fmt: v => v ? h("span", { class: "jb-sha", title: v }, String(v).slice(0, 10) + "…", " ", OG.copy(v, { label: "copy", title: "Copy the full sha256" })) : "-" },
             { key: "dl", label: "", sort: false, csv: false, fmt: (v, r) => h("a", { class: "btn sm", href: r.download || href(r.name), download: r.name, rel: "external" }, "Download") },
           ], rows, compact: true, csv: false, rowKey: r => r.name,
         }) : h("p", { class: "note" }, J.isTerminal(job) ? "No artifacts were stored." : "model.pt, config.json, metrics.json and env.json are uploaded when training ends (sha256 verified on receipt)."));
       }
 
       function terminationBlock() {
-        if (sandbox()) return OG.section("Termination", h("p", { class: "note" }, "SIMULATED — no instance existed, nothing to terminate."));
+        if (sandbox()) return OG.section("Termination", h("p", { class: "note" }, "SIMULATED: no instance existed, nothing to terminate."));
         const r = job.resource || {}, d = dep || {};
         const termEv = (d.events || []).filter(e => ["terminating", "terminated", "termination_failed"].includes(e.to)).pop();
         return OG.section("Termination evidence", kv([
@@ -258,13 +258,13 @@
           h("div", { class: "dep-cv" }, v != null ? J.usd(v) : OG.na(reason || why)), sub ? h("div", { class: "rt-cs" }, sub) : null);
         const qTotal = q.est_total_cost ?? a.est_total_cost ?? null;
         const qRate = q.price_per_gpu_hour ?? a.quote_price_per_gpu_hour ?? (dep && dep.prices ? dep.prices.quote : null);
-        return OG.section("Cost — four numbers, never merged" + (sandbox() ? " · SIMULATED" : ""), h("div", { class: "dep-costs" },
+        return OG.section("Cost: four numbers, never merged" + (sandbox() ? " · SIMULATED" : ""), h("div", { class: "dep-costs" },
           row("Quote", OG.conceptBadge("quote"), qTotal, qRate != null ? J.perGpuH(qRate) + (q.billing_unit ? " · billed " + q.billing_unit : "") : null, sandbox() ? "simulated: no quote" : qRate != null ? "hourly quote only" : "no quote yet (issued at submission)"),
           row("Expected cost", OG.kindBadge("estimated"), rec && rec.expected_cost ? rec.expected_cost.amount_usd : null, rec && rec.runtime ? `quote × ${fmt.num(rec.runtime.gpu_hours, 3)} metered GPU-h` : null),
           row("Provider-reported", OG.conceptBadge("execution"), rec && rec.provider_reported_cost ? rec.provider_reported_cost.amount_usd : null, rec && rec.provider_reported_cost ? rec.provider_reported_cost.basis || rec.provider_reported_cost.reason : null, rec && rec.provider_reported_cost && rec.provider_reported_cost.reason),
           row("OpenGrid transaction", OG.kindBadge("transaction"), rec && rec.opengrid_transaction_cost ? rec.opengrid_transaction_cost.amount_usd : null, rec && rec.opengrid_transaction_cost ? `${rec.opengrid_transaction_cost.usage_records} usage record(s) · fees ${J.usd(rec.opengrid_transaction_cost.fees_usd)} separate` : null)),
           h("p", { class: "note" }, "Estimates (", OG.kindBadge("estimated"), "): max ", J.usd(S().est_max), " · typical ", J.usd(S().est_typical),
-            rec && rec.quote_error && rec.quote_error.amount_usd != null ? ` · quote error ${J.usd(rec.quote_error.amount_usd)} (${rec.quote_error.pct != null ? fmt.num(rec.quote_error.pct, 2) + "%" : "–"})` : "",
+            rec && rec.quote_error && rec.quote_error.amount_usd != null ? ` · quote error ${J.usd(rec.quote_error.amount_usd)} (${rec.quote_error.pct != null ? fmt.num(rec.quote_error.pct, 2) + "%" : "-"})` : "",
             dep ? [" · full reconciliation evidence on ", h("a", { class: "lnk mono", href: "/deployments/" + encodeURIComponent(dep.deployment_id) }, dep.deployment_id)] : null));
       }
 
@@ -305,7 +305,7 @@
           ["Resources", `${r.gpu_count || 1}× ${r.gpu || "auto"} · ${r.region || "any region"}${r.strict_region ? " (strict)" : ""} · ${r.allow_spot ? "spot allowed" : "on-demand"}`],
           ["Strategy", (rq.routing && rq.routing.strategy) || null],
           ["Limits", `≤ ${J.perGpuH(l.max_price_per_gpu_hour_usd)} · ≤ ${J.usd(l.max_total_cost_usd)} total · ${l.max_runtime_minutes ?? "?"} min`],
-          ["SSH", ssh.mode === "customer" ? h("span", { class: "mono" }, ssh.fingerprint || "your key") : ssh.mode === "ephemeral" ? "ephemeral key — private half discarded: nobody can SSH in" : null, ssh.note],
+          ["SSH", ssh.mode === "customer" ? h("span", { class: "mono" }, ssh.fingerprint || "your key") : ssh.mode === "ephemeral" ? "ephemeral key, private half discarded: nobody can SSH in" : null, ssh.note],
           ["Bootstrap", b.sha256 ? h("span", { class: "mono", title: b.sha256 }, String(b.sha256).slice(0, 16) + "…", b.template_version ? h("span", { class: "dim" }, " · v" + b.template_version) : null) : null, b.note || "sha256 of the rendered startup script (the script itself is never stored)"],
         ]));
       }

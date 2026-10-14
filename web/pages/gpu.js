@@ -1,4 +1,4 @@
-/* /gpu/:slug — one GPU market, laid out like a stock / commodity page.
+/* /gpu/:slug: one GPU market, laid out like a stock / commodity page.
 
 Data (all in parallel, each section renders as soon as its own request lands):
   /v1/gpus/{slug}              hardware, current market (dispersion, score, by_provider), capability, alternatives
@@ -19,10 +19,10 @@ Nothing is computed here that the API does not state, except display arithmetic 
     training_oriented: "training", inference_oriented: "inference", similar_price_performance: "similar $/TFLOP" };
   const list = r => (Array.isArray(r) ? r : r && Array.isArray(r.items) ? r.items : []);
   // $/unit figures are often fractions of a cent: keep three significant digits
-  const small = v => (v == null || !isFinite(v) ? "–" : v >= 0.1 ? fmt.price(v) : "$" + Number(v).toPrecision(3));
-  const pctTxt = v => (v == null ? "–" : fmt.pct(v));
+  const small = v => (v == null || !isFinite(v) ? "-" : v >= 0.1 ? fmt.price(v) : "$" + Number(v).toPrecision(3));
+  const pctTxt = v => (v == null ? "-" : fmt.pct(v));
   const signedCls = v => (v == null ? "" : v < -0.0005 ? "down" : v > 0.0005 ? "up" : "");
-  const when = iso => (iso ? fmt.dateTime(iso) : "–");
+  const when = iso => (iso ? fmt.dateTime(iso) : "-");
   // A stat cell has room for a few words; the full reason stays in the tooltip
   const shortReason = r => !r ? null : /does not cover|insufficient history|not enough/i.test(r) ? "not enough history" : /not published/i.test(r) ? "not published" : /unavailable/i.test(r) ? "unavailable" : r.length > 28 ? r.slice(0, 26) + "…" : r;
   const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
@@ -89,7 +89,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
       const listingsBox = h("div", {});
 
       const winSeg = OG.seg(WINDOWS.map(w => [w[0], w[1]]), st.win, v => { st.win = v; OG.qs.set({ w: v === "7d" ? null : v }); loadChart(); loadTimeline(); });
-      const viewSeg = OG.seg([["market", "Market", "low–high band, median, lowest, index"], ["providers", "Providers", "one step line per provider"]], st.view,
+      const viewSeg = OG.seg([["market", "Market", "low-high band, median, lowest, index"], ["providers", "Providers", "one step line per provider"]], st.view,
         v => { st.view = v; OG.qs.set({ view: v === "market" ? null : v }); loadChart(); });
       const ovChip = (k, label, title) => h("button", { class: "chip sm", "aria-pressed": String(st.overlays.has(k)), title,
         onclick: e => { st.overlays.has(k) ? st.overlays.delete(k) : st.overlays.add(k); e.currentTarget.setAttribute("aria-pressed", String(st.overlays.has(k)));
@@ -227,10 +227,10 @@ Nothing is computed here that the API does not state, except display arithmetic 
           { key: "chg24", label: "24h", num: true, hidden: !rows.some(r => r.chg24k), title: "this provider's lowest price vs 24 hours earlier", fmt: (v, r) => OG.chg(v, { reason: r.chg24r || "no price 24 hours ago" }) },
           { key: "listings", label: "Lst", num: true, title: "priced eligible listings" },
           { key: "available", label: "Stock", fmt: v => v === true ? h("span", { class: "up" }, "in stock") : v === false ? h("span", { class: "down" }, "sold out") : h("span", { class: "dim", title: "provider does not publish availability" }, "unknown") },
-          { key: "region", label: "Region", cls: "dim", fmt: v => v || "–", minor: 2 },
+          { key: "region", label: "Region", cls: "dim", fmt: v => v || "-", minor: 2 },
           { key: "freshness", label: "Fresh", title: "from the trust endpoint: age of the observation", fmt: (v, r) => r.trust ? OG.freshBadge(r.age != null ? r.age : v, { provider: r.provider }) : trust === null ? h("span", { class: "dim" }, "…") : OG.na("trust data unavailable"), value: r => r.age },
-          { key: "confidence", label: "Trust", value: r => r.trust && r.trust.confidence, fmt: (v, r) => r.trust ? h("span", { class: "gp-trust t-" + (r.trust.confidence || "unknown"), title: (r.trust.confidence_reasons || []).join("; ") || "no issues" }, r.trust.confidence || "?") : "–" },
-          { key: "source_type", label: "Source", cls: "dim", fmt: v => (v || "–").replace(/_/g, " "), minor: 3 },
+          { key: "confidence", label: "Trust", value: r => r.trust && r.trust.confidence, fmt: (v, r) => r.trust ? h("span", { class: "gp-trust t-" + (r.trust.confidence || "unknown"), title: (r.trust.confidence_reasons || []).join("; ") || "no issues" }, r.trust.confidence || "?") : "-" },
+          { key: "source_type", label: "Source", cls: "dim", fmt: v => (v || "-").replace(/_/g, " "), minor: 3 },
           { key: "website", label: "", sort: false, csv: false, fmt: v => v ? ext(v, "site ↗") : "" },
         ];
         if (provTable && provTable.cols24 !== rows.some(r => r.chg24k)) provTable = null;   // column set changed
@@ -265,17 +265,17 @@ Nothing is computed here that the API does not state, except display arithmetic 
         OG.charts.dotplot(c, { rows });
         distBox.append(h("table", { class: "gp-kv" }, h("tbody", {},
           kv("Providers · listings", `${m.providers} · ${m.listings.priced} priced`),
-          kv("Q1 – Q3 (providers)", m.stats.q1 != null ? `${fmt.price(m.stats.q1)} – ${fmt.price(m.stats.q3)}` : OG.na(m.stats.reasons.iqr)),
+          kv("Q1 to Q3 (providers)", m.stats.q1 != null ? `${fmt.price(m.stats.q1)} to ${fmt.price(m.stats.q3)}` : OG.na(m.stats.reasons.iqr)),
           kv("Listing median", fmt.price(ls.median)),
           kv("Mean (providers)", fmt.price(m.stats.mean)))),
-          h("p", { class: "note" }, "Tick: median. Bar: low–high. Listing row: on-demand listings seen fresh, all GPU counts."));
+          h("p", { class: "note" }, "Tick: median. Bar: low-high. Listing row: on-demand listings seen fresh, all GPU counts."));
       }
-      const kv = (k, v, cls) => h("tr", {}, h("th", {}, k), h("td", { class: cls || "" }, v == null ? "–" : v));
+      const kv = (k, v, cls) => h("tr", {}, h("th", {}, k), h("td", { class: cls || "" }, v == null ? "-" : v));
 
       /* ---------- dispersion ---------- */
       function drawDispersion() {
         const m = st.g.market, sc = m.score, s = m.stats;
-        if (sc.efficiency == null) { dispBox.replaceChildren(OG.insufficient(sc.reason, "No efficiency score"), h("table", { class: "gp-kv" }, h("tbody", {}, kv("Spread", s.spread_pct_of_low != null ? fmt.pct(s.spread_pct_of_low) : "–")))); return; }
+        if (sc.efficiency == null) { dispBox.replaceChildren(OG.insufficient(sc.reason, "No efficiency score"), h("table", { class: "gp-kv" }, h("tbody", {}, kv("Spread", s.spread_pct_of_low != null ? fmt.pct(s.spread_pct_of_low) : "-")))); return; }
         const comp = sc.components, w = sc.weights;
         const bar = (label, raw, c, wt, rawFmt) => h("tr", {}, h("th", {}, label), h("td", { class: "n" }, rawFmt(raw)),
           h("td", { class: "gp-barc" }, h("span", { class: "gp-bar", style: `width:${Math.round(c * 100)}%` })), h("td", { class: "n dim" }, "×" + wt), h("td", { class: "n" }, (100 * wt * c).toFixed(1)));
@@ -301,7 +301,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
           ["Memory bandwidth", hw.memory_bandwidth_tbps ? hw.memory_bandwidth_tbps + " TB/s" : null],
           ["BF16 (dense)", tf(hw.bf16_tflops_dense)], ["FP16 (dense)", tf(hw.fp16_tflops_dense)],
           ["FP8 (dense)", hw.fp8_tflops_dense != null ? tf(hw.fp8_tflops_dense) : hw.fp8_supported === false ? "not supported" : OG.na("dense FP8 rate not published")],
-          ["FP32", tf(hw.fp32_tflops)], ["Form factor", hw.form_factor], ["Host link", hw.interconnect], ["GPU–GPU link", hw.nvlink || "none"],
+          ["FP32", tf(hw.fp32_tflops)], ["Form factor", hw.form_factor], ["Host link", hw.interconnect], ["GPU-GPU link", hw.nvlink || "none"],
           ["TDP", hw.tdp_w ? hw.tdp_w + " W" : null], ["Workload class", hw.workload_class],
           hw.parent ? ["Partition of", h("a", { class: "lnk", href: "/gpu/" + OG.slug(hw.parent) }, OG.shortGpu(hw.parent) + (hw.fraction_of_parent ? ` (${fmt.pct(hw.fraction_of_parent).replace("+", "")})` : ""))] : null,
         ].filter(Boolean);
@@ -319,7 +319,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
         const k1000 = k => /_tflop_hour$/.test(k) ? 1000 : 1;
         capBox.replaceChildren(h("table", { class: "gp-kv gp-cap" },
           h("thead", {}, h("tr", {}, h("th", {}, "$"), h("th", { class: "n" }, "spec"), h("th", { class: "n" }, "at low"), h("th", { class: "n" }, "at median"))),
-          h("tbody", {}, Object.entries(ms).map(([k, v]) => h("tr", { title: (v.unit || "") + (k1000(k) > 1 ? " · shown ×1,000: per PFLOP·h" : "") }, h("th", {}, LBL[k] || k), h("td", { class: "n dim" }, v.spec_value != null ? fmt.num(v.spec_value, v.spec_value >= 100 || Number.isInteger(v.spec_value) ? 0 : 2) : "–"),
+          h("tbody", {}, Object.entries(ms).map(([k, v]) => h("tr", { title: (v.unit || "") + (k1000(k) > 1 ? " · shown ×1,000: per PFLOP·h" : "") }, h("th", {}, LBL[k] || k), h("td", { class: "n dim" }, v.spec_value != null ? fmt.num(v.spec_value, v.spec_value >= 100 || Number.isInteger(v.spec_value) ? 0 : 2) : "-"),
             v.low == null ? h("td", { class: "n", colspan: 2 }, OG.na(v.reason)) : [h("td", { class: "n" }, small(v.low * k1000(k))), h("td", { class: "n" }, small(v.median * k1000(k)))])))),
           h("p", { class: "note" }, c.label, ". Price / vendor peak figure; spec in GB, TFLOPS or TB/s, FLOP rates priced per PFLOP·h. ", h("a", { class: "lnk", href: "/methodology/hardware" }, "Method")));
       }
@@ -344,7 +344,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
             { key: "cmp", label: "", sort: false, csv: false, fmt: (v, r) => h("a", { class: "lnk dim", href: `/compare/${slug}-vs-${OG.slug(r.gpu)}` }, "compare →") },
           ],
           rows: a.alternatives, compact: true, limit: 12, empty: "No priced GPU shares a dimension with this one.",
-          title: "Shares the listed dimensions — not equivalent products", csv: `opengrid-${slug}-alternatives.csv`,
+          title: "Shares the listed dimensions, not equivalent products", csv: `opengrid-${slug}-alternatives.csv`,
         }), h("p", { class: "note" }, a.note, ". Deltas are the alternative relative to the ", short, ".", " ", h("a", { class: "lnk", href: "/methodology/hardware" }, "Method")));
       }
 
@@ -389,9 +389,9 @@ Nothing is computed here that the API does not state, except display arithmetic 
           columns: [
             { key: "region", label: "Region group", fmt: v => v === "Unassigned" ? h("span", { class: "dim", title: "no location given, or a listing spanning several groups" }, "Unassigned") : h("b", {}, v) },
             { key: "cheapest", label: "Cheapest $/GPU·h", num: true, fmt: (v, r) => OG.value(v, fmt.price, r.reason || "no priced listing") },
-            { key: "provider", label: "at", hidden: !rows.some(r => r.provider), fmt: v => v ? OG.providerLink(v) : "–" },
+            { key: "provider", label: "at", hidden: !rows.some(r => r.provider), fmt: v => v ? OG.providerLink(v) : "-" },
             { key: "bar", label: "", sort: false, csv: false, fmt: (v, r) => r.cheapest == null || !fin.length ? "" : h("span", { class: "gp-rbar" }, h("i", { style: `width:${hi > lo ? 8 + 92 * (r.cheapest - lo) / (hi - lo) : 50}%` })) },
-            { key: "median", label: "Median", num: true, hidden: !rows.some(r => r.median != null), fmt: v => OG.value(v, fmt.price, "–") },
+            { key: "median", label: "Median", num: true, hidden: !rows.some(r => r.median != null), fmt: v => OG.value(v, fmt.price, "-") },
             { key: "premium", label: "vs global", num: true, hidden: !rows.some(r => r.premium != null), fmt: v => h("span", { class: signedCls(v) === "up" ? "down" : signedCls(v) === "down" ? "up" : "" }, pctTxt(v)), title: "regional median vs global median − 1" },
             { key: "providers", label: "Providers", num: true, hidden: !rows.some(r => r.providers != null) },
             { key: "listings", label: "Priced listings", num: true, hidden: !rows.some(r => r.listings != null) },
@@ -431,7 +431,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
             h("p", { class: "note" }, c0.explanation),
             h("div", { class: "gp-best-a" }, h("a", { class: "btn pri", href: routeHref }, "Route this →"), h("a", { class: "lnk dim", href: "/methodology/best-execution" }, "how it is scored"))),
           b.candidates.length > 1 ? h("table", { class: "gp-kv gp-runners" }, h("tbody", {}, b.candidates.slice(1, 6).map(c => h("tr", {},
-            h("td", { class: "n dim" }, c.rank), h("td", {}, OG.providerLink(c.provider)), h("td", { class: "dim" }, c.region || "–"), h("td", { class: "n" }, fmt.price(c.price_per_gpu_hour)), h("td", { class: "n dim" }, c.score.toFixed(2)))))) : null,
+            h("td", { class: "n dim" }, c.rank), h("td", {}, OG.providerLink(c.provider)), h("td", { class: "dim" }, c.region || "-"), h("td", { class: "n" }, fmt.price(c.price_per_gpu_hour)), h("td", { class: "n dim" }, c.score.toFixed(2)))))) : null,
           h("p", { class: "note" }, `${b.candidates_total} candidates, ${b.exclusions_total} excluded (`, Object.entries(b.exclusions_by_code || {}).map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`).join(", "), "). ",
             "Prices are observed market prices, not quotes. Reliability and performance are not used: no execution history yet."));
       }
@@ -489,7 +489,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
             { key: "lowest", label: "Lowest", values: s.map(p => p.lowest), color: dir === "down" ? "#ef5350" : "#2fbf71", width: 1.5 },
           ];
           if (idxPts.size) series.push({ key: "index", label: "OG index", values: times.map(t => idxPts.get(t) ?? null), color: "#f5a524", width: 1.25, dash: "4 3" });
-          opts = { times, series, band: { lo: s.map(p => p.lowest), hi: s.map(p => p.highest), label: "low–high" }, hatchBefore: hst.coherent_from };
+          opts = { times, series, band: { lo: s.map(p => p.lowest), hi: s.map(p => p.highest), label: "low-high" }, hatchBefore: hst.coherent_from };
           chartNote.replaceChildren(OG.kindBadge("observed"), ` Hourly cross-section of provider prices (one vote per provider), ${s.length} hours. `,
             hst.coherent_from ? `Hatched: before ${when(hst.coherent_from)} not every current provider was being recorded, so a level change there can be a provider joining, not a market move. ` : "",
             idxPts.size ? "Dashed: OpenGrid index. " : "", events.length ? `${events.length} markers on the time axis (hover). ` : "", h("a", { class: "lnk", href: "/methodology/indices" }, "Method"));
@@ -501,7 +501,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
           const sl = a => a.slice(i0);
           if (st.view === "market") {
             opts = { series: [{ key: "median", label: "Median", values: sl(d.median), color: "var(--chart-strong)", width: 1.75, strong: true }, { key: "lowest", label: "Lowest", values: sl(d.lowest), color: "#2fbf71", width: 1.5 }],
-              band: { lo: sl(d.lowest), hi: sl(d.highest), label: "low–high" } };
+              band: { lo: sl(d.lowest), hi: sl(d.highest), label: "low-high" } };
           } else {
             opts = { series: [{ key: "__low", label: "Best price", values: sl(d.lowest), color: "var(--chart-halo)", halo: true },
               ...d.providers.filter(p => p.series.some(v => v != null)).map(p => ({ key: p.provider, label: OG.providerName(p.provider), values: sl(p.series), color: L.providerColor(p.provider) }))] };

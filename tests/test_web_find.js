@@ -108,7 +108,7 @@ eq([mf.known, mf.needed, mf.vram, +mf.fill.toFixed(4), mf.headroom_pct, mf.fits,
 const mf2 = F.memoryFit({ vram_gb: 24 }, { memory: { per_gpu_gb: 29.2 } });
 eq([mf2.fill, mf2.headroom_pct, mf2.fits, mf2.over], [1, -21.7, false, true], "no memory_fit: from the estimate; over VRAM → fill capped, does not fit");
 eq(F.memoryFit({ vram_gb: 80 }, { memory: { per_gpu_gb: null } }).known, false, "no estimate → fit unknown (never invented)");
-eq([F.fmtGb(29.2), F.fmtGb(80), F.fmtGb(141), F.fmtGb(null)], ["29.2 GB", "80 GB", "141 GB", "–"], "GB formatting");
+eq([F.fmtGb(29.2), F.fmtGb(80), F.fmtGb(141), F.fmtGb(null)], ["29.2 GB", "80 GB", "141 GB", "-"], "GB formatting");
 
 // ---------- runtime: unknown is never a number ----------
 const rt = F.runtimeInfo(REC.estimate);
@@ -149,7 +149,7 @@ const sbInit = J.stages({ status: "initializing", sandbox: true, events: ev("cre
 eq(sbInit.current, "preparing", "sandbox initializing is still Preparing (no GPU to start)");
 const sbFail = J.stages({ status: "training_failed", sandbox: true, outcome: "failed", finished: true, events: ev("created", "validating", "initializing", "training", "training_failed") });
 eq(marks(sbFail), "preparing:done running:failed saving:skipped complete:done", "sandbox failure: running failed, saving skipped, ended");
-eq(sbFail.steps[3].label, "Ended — failed", "the failed simulation says it ended failed");
+eq(sbFail.steps[3].label, "Ended: failed", "the failed simulation says it ended failed");
 
 // ---------- job stages: real ----------
 const real = (status, hist, extra) => J.stages(Object.assign({ status, sandbox: false, events: ev(...hist) }, extra || {}));
@@ -171,7 +171,7 @@ eq(marks(recon), "preparing:done selecting:done approval:done starting:done runn
 eq([recon.steps[7].label, recon.steps[7].tone], ["Complete", "good"], "complete, green");
 const oom = real("reconciled", ["created", "validating", "quoted", "pending_approval", "approved", "provisioning", "initializing", "training", "out_of_memory", "terminating", "termination_confirmed", "reconciled"], { outcome: "failed", finished: true });
 eq(marks(oom), "preparing:done selecting:done approval:done starting:done running:failed saving:skipped shutting_down:done complete:done", "workload failed: running failed, the GPU still shut down, then reconciled");
-eq([oom.steps[7].label, oom.steps[7].tone, oom.failed_stage], ["Ended — failed", "bad", "running"], "a failed real job ends 'failed'");
+eq([oom.steps[7].label, oom.steps[7].tone, oom.failed_stage], ["Ended: failed", "bad", "running"], "a failed real job ends 'failed'");
 const failing = real("training_failed", ["created", "quoted", "pending_approval", "approved", "provisioning", "initializing", "training", "training_failed"], { outcome: "failed" });
 eq([failing.steps[4].mark, failing.steps[6].mark, failing.ended], ["failed", "todo", false], "just failed: shutting down still to come (not finished)");
 const vf = real("validation_failed", ["created", "validating", "validation_failed"], { outcome: "failed", finished: true });
@@ -179,7 +179,7 @@ eq(marks(vf), "preparing:failed selecting:skipped approval:skipped starting:skip
 const nep = real("no_eligible_provider", ["created", "validating", "no_eligible_provider"], { outcome: "failed", finished: true });
 eq(nep.steps[1].mark, "failed", "no eligible provider fails at Selecting GPU");
 const rej = real("approval_rejected", ["created", "validating", "quoted", "pending_approval", "approval_rejected"], { outcome: "cancelled", finished: true });
-eq([rej.steps[2].mark, rej.steps[2].tone, rej.steps[7].label], ["failed", "warn", "Ended — cancelled"], "rejected / cancelled before launch: amber, ended cancelled");
+eq([rej.steps[2].mark, rej.steps[2].tone, rej.steps[7].label], ["failed", "warn", "Ended: cancelled"], "rejected / cancelled before launch: amber, ended cancelled");
 const unc = real("provisioning_uncertain", ["created", "quoted", "pending_approval", "approved", "provisioning", "provisioning_uncertain"]);
 eq([unc.current, unc.steps[3].tone, unc.attention], ["starting", "warn", true], "uncertain launch: Starting GPU, amber, attention");
 const cred = real("credentials_unavailable", ["created", "quoted", "approved", "provisioning", "initializing", "training", "credentials_unavailable"]);
@@ -199,23 +199,23 @@ ok(allStates.every(s => { const sg = J.stages({ status: s, sandbox: false }); re
 // ---------- plain status ----------
 const ans1 = (list, key) => list.find(x => x.key === key);
 const psSb = J.plainStatus({ status: "training", sandbox: true, outcome: null }, null, [], {});
-eq([ans1(psSb, "money").a, ans1(psSb, "sim").a, ans1(psSb, "running").a, ans1(psSb, "gpu").a, ans1(psSb, "cost").a], ["No", "Yes", "Yes", "No — no GPU was ever used", "$0.00 — simulated"], "sandbox: no money, simulated, running, no GPU, $0");
+eq([ans1(psSb, "money").a, ans1(psSb, "sim").a, ans1(psSb, "running").a, ans1(psSb, "gpu").a, ans1(psSb, "cost").a], ["No", "Yes", "Yes", "No, no GPU was ever used", "$0.00 (simulated)"], "sandbox: no money, simulated, running, no GPU, $0");
 eq(psSb.map(x => x.q), ["Can real money be spent?", "Is this a simulation?", "Is it running?", "Is a GPU still active?", "Is action needed?", "Did it succeed?", "What outputs exist?", "What did it cost?"], "the eight beginner questions, in order");
 const psSbDone = J.plainStatus({ status: "training_completed", sandbox: true, outcome: "simulated", finished: true }, null, [{ name: "model.pt" }, { name: "metrics.json" }]);
-eq([ans1(psSbDone, "success").a, ans1(psSbDone, "outputs").a, ans1(psSbDone, "running").a], ["The simulation completed", "model.pt, metrics.json", "No — finished"], "sandbox done: completed (synthetic), outputs listed");
+eq([ans1(psSbDone, "success").a, ans1(psSbDone, "outputs").a, ans1(psSbDone, "running").a], ["The simulation completed", "model.pt, metrics.json", "No, finished"], "sandbox done: completed (synthetic), outputs listed");
 const psPa = J.plainStatus({ status: "pending_approval", sandbox: false, estimates: { est_max_total_usd: 1.5 } }, null, [], { admin: false });
-eq([ans1(psPa, "money").a, ans1(psPa, "action").a, ans1(psPa, "cost").a], ["Not yet", "Not from you — waiting for OpenGrid approval", "Not known yet"], "pending approval (customer)");
-eq(ans1(J.plainStatus({ status: "pending_approval", sandbox: false }, null, [], { admin: true }), "action").a, "Yes — approve or reject the quote", "pending approval (admin)");
+eq([ans1(psPa, "money").a, ans1(psPa, "action").a, ans1(psPa, "cost").a], ["Not yet", "Not from you, waiting for OpenGrid approval", "Not known yet"], "pending approval (customer)");
+eq(ans1(J.plainStatus({ status: "pending_approval", sandbox: false }, null, [], { admin: true }), "action").a, "Yes, approve or reject the quote", "pending approval (admin)");
 const psRun = J.plainStatus({ status: "training", sandbox: false, resource: { disposition: "possibly_billing", possibly_billing: true } }, null, []);
 eq([ans1(psRun, "money").tone, ans1(psRun, "gpu").a], ["bad", "Possibly"], "possibly billing is never played down");
 const psTrain = J.plainStatus({ status: "training", sandbox: false, resource: { disposition: "none" } }, null, []);
 eq([ans1(psTrain, "money").a, ans1(psTrain, "gpu").a, ans1(psTrain, "action").a], ["Yes", "Yes", "No"], "real run: money can be spent, GPU active");
 const psRec = J.plainStatus({ status: "reconciled", sandbox: false, outcome: "succeeded", finished: true, actual_cost_usd: 0.42, resource: { disposition: "terminated_confirmed" } }, null, [{ name: "model.pt" }]);
-eq([ans1(psRec, "money").a, ans1(psRec, "gpu").a, ans1(psRec, "success").a, ans1(psRec, "cost").a], ["Not any more", "No — terminated (provider confirmed)", "Yes", "$0.42"], "real reconciled");
+eq([ans1(psRec, "money").a, ans1(psRec, "gpu").a, ans1(psRec, "success").a, ans1(psRec, "cost").a], ["Not any more", "No, terminated (provider confirmed)", "Yes", "$0.42"], "real reconciled");
 const psOrph = J.plainStatus({ status: "orphan_suspected", sandbox: false }, null, []);
 eq([ans1(psOrph, "action").tone, ans1(psOrph, "money").tone], ["bad", "bad"], "orphan suspected: action needed, money at risk");
 const psVf = J.plainStatus({ status: "validation_failed", sandbox: false, outcome: "failed", finished: true, failure: { code: "validation_failed", reason: "epochs must be ≤ 10" } }, null, []);
-eq([ans1(psVf, "money").a, ans1(psVf, "success").a, ans1(psVf, "success").detail, ans1(psVf, "cost").a], ["No", "No", "epochs must be ≤ 10", "$0.00 — nothing launched"], "failed before launch");
+eq([ans1(psVf, "money").a, ans1(psVf, "success").a, ans1(psVf, "success").detail, ans1(psVf, "cost").a], ["No", "No", "epochs must be ≤ 10", "$0.00 (nothing launched)"], "failed before launch");
 
 // ---------- the new page is registered (server route checked by tests/test_pages.py) ----------
 const src = fs.readFileSync(path.join(__dirname, "..", "web", "pages", "find.js"), "utf8");

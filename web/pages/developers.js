@@ -1,4 +1,4 @@
-/* /developers — three ways to use OpenGrid outside the browser, kept apart on purpose:
+/* /developers: three ways to use OpenGrid outside the browser, kept apart on purpose:
      1. the terminal (the `opengrid` CLI from the repository's cli/ package)
      2. an AI coding assistant (the same package's MCP server: `opengrid mcp`, stdio)
      3. an application (the REST API; the full reference stays at /api)

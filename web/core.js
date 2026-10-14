@@ -139,7 +139,7 @@ Full docs: web/README.md.
     pct: v => L.fmtPct(toNum(v)),
     num(v, digits) {
       v = toNum(v);
-      if (v == null || !isFinite(v)) return "–";
+      if (v == null || !isFinite(v)) return "-";
       const d = digits == null ? (Number.isInteger(v) ? 0 : 2) : digits;
       const [ip, fp] = Math.abs(v).toFixed(d).split(".");          // group the integer part only
       const grouped = ip.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (fp ? "." + fp : "");
@@ -147,16 +147,16 @@ Full docs: web/README.md.
     },
     compact(v) {
       v = toNum(v);
-      if (v == null || !isFinite(v)) return "–";
+      if (v == null || !isFinite(v)) return "-";
       const a = Math.abs(v), sign = v < 0 ? L.MINUS : "";
       for (const [n, u] of [[1e9, "B"], [1e6, "M"], [1e3, "k"]]) if (a >= n) return sign + (a / n).toFixed(a / n < 10 ? 1 : 0) + u;
       return sign + (Number.isInteger(a) ? a : a.toFixed(1));
     },
     // Seconds (number) or a time (ISO / Date) -> "now", "42s", "5m", "3h", "2d"
     age(x, now) {
-      if (x == null) return "–";
+      if (x == null) return "-";
       const sec = typeof x === "number" ? x : ((now != null ? +new Date(now) : Date.now()) - +new Date(x)) / 1000;
-      if (!isFinite(sec)) return "–";
+      if (!isFinite(sec)) return "-";
       const a = Math.max(0, sec);
       if (a < 5) return "now";
       if (a < 60) return Math.round(a) + "s";
@@ -164,9 +164,9 @@ Full docs: web/README.md.
       if (a < 86400 * 2) return Math.floor(a / 3600) + "h";
       return Math.floor(a / 86400) + "d";
     },
-    time(iso) { if (!iso) return "–"; const d = new Date(iso); return isNaN(d) ? "–" : p2(d.getHours()) + ":" + p2(d.getMinutes()) + ":" + p2(d.getSeconds()); },
-    date(iso) { if (!iso) return "–"; const d = new Date(iso); return isNaN(d) ? "–" : MONTHS[d.getMonth()] + " " + d.getDate(); },
-    dateTime(iso) { if (!iso) return "–"; const d = new Date(iso); return isNaN(d) ? "–" : MONTHS[d.getMonth()] + " " + d.getDate() + " " + p2(d.getHours()) + ":" + p2(d.getMinutes()); },
+    time(iso) { if (!iso) return "-"; const d = new Date(iso); return isNaN(d) ? "-" : p2(d.getHours()) + ":" + p2(d.getMinutes()) + ":" + p2(d.getSeconds()); },
+    date(iso) { if (!iso) return "-"; const d = new Date(iso); return isNaN(d) ? "-" : MONTHS[d.getMonth()] + " " + d.getDate(); },
+    dateTime(iso) { if (!iso) return "-"; const d = new Date(iso); return isNaN(d) ? "-" : MONTHS[d.getMonth()] + " " + d.getDate() + " " + p2(d.getHours()) + ":" + p2(d.getMinutes()); },
     dir: v => L.direction(toNum(v)),
     // CSS class for a change. invert: true when a rise is bad news (unused by default: up is green, as elsewhere in the UI)
     cls: (v, invert) => { const d = L.direction(toNum(v)); return invert && (d === "up" || d === "down") ? (d === "up" ? "down" : "up") : d; },
@@ -210,7 +210,7 @@ Full docs: web/README.md.
     if (/unavailable|not available/i.test(s)) return "unavailable";
     if (/one provider|single provider|only provider/i.test(s)) return "one provider only";
     const cut = s.slice(0, n - 1), sp = cut.lastIndexOf(" ");
-    return (sp > n * 0.5 ? cut.slice(0, sp) : cut).replace(/[\s,;:.(–-]+$/, "") + "…";
+    return (sp > n * 0.5 ? cut.slice(0, sp) : cut).replace(/[\s,;:.(\u2013\u2014-]+$/, "") + "…";
   }
 
   // Family-aware "g <query>" routing. families: [{slug, id, name, variants: [{gpu, slug}] | variant_count}].
@@ -634,7 +634,7 @@ Full docs: web/README.md.
 
   OG.chg = (v, opts) => {
     const d = fmt.cls(v, opts && opts.invert);
-    if (d === "none") return h("span", { class: "chg none", title: (opts && opts.reason) || "not enough history" }, "–");
+    if (d === "none") return h("span", { class: "chg none", title: (opts && opts.reason) || "not enough history" }, "-");
     const arrow = L.direction(toNum(v)) === "up" ? "▲" : L.direction(toNum(v)) === "down" ? "▼" : "";
     return h("span", { class: "chg " + d }, arrow ? arrow + " " : "", fmt.pct(v));
   };
@@ -664,7 +664,7 @@ Full docs: web/README.md.
   const INTERVALS = new Map();
   OG.data_intervals = INTERVALS;
   OG.pollInterval = p => INTERVALS.get(p) || null;
-  // OG.freshBadge(isoOrSeconds | label, {intervalSeconds, provider, now}) — thresholds relative to the
+  // OG.freshBadge(isoOrSeconds | label, {intervalSeconds, provider, now}): thresholds relative to the
   // provider's poll interval when known (fresh <= 2x, aging <= 6x). A second argument that is not an
   // object is the legacy `now`.
   OG.freshBadge = (x, opts) => {
@@ -759,7 +759,7 @@ Full docs: web/README.md.
   });
 
   /* ---- shared: execution (deployment state, quote countdown, execution mode) ---- */
-  OG.stateBadge = s => h("span", { class: "badge og-st st-" + (depTone(s) || "plain"), title: DEP_UNCERTAIN.includes(s) ? "uncertain: an instance may exist and bill" : DEP_FAILED.includes(s) ? "failure state" : null }, String(s || "–").replace(/_/g, " "));
+  OG.stateBadge = s => h("span", { class: "badge og-st st-" + (depTone(s) || "plain"), title: DEP_UNCERTAIN.includes(s) ? "uncertain: an instance may exist and bill" : DEP_FAILED.includes(s) ? "failure state" : null }, String(s || "-").replace(/_/g, " "));
   OG.stateStrip = (status, events) => h("ol", { class: "og-strip", "aria-label": "deployment state machine" },
     depStrip(status, (events || []).map(e => e.to)).map(st => h("li", { class: "m-" + st.mark + (st.tone ? " t-" + st.tone : "") + (st.off ? " off" : ""), title: st.mark === "skipped" ? st.state + ": not passed through" : st.state, "aria-current": st.mark === "current" ? "step" : null }, st.state.replace(/_/g, " "))));
   // A live countdown to `iso` ("4m 12s"); "expired" (or o.expired) after. Stops when removed from the page.
@@ -769,7 +769,7 @@ Full docs: web/README.md.
     const t = +new Date(iso);
     let fired = false;
     const tick = () => {
-      if (!iso || isNaN(t)) { el.textContent = "–"; return false; }
+      if (!iso || isNaN(t)) { el.textContent = "-"; return false; }
       const s = Math.round((t - Date.now()) / 1000);
       if (s <= 0) {
         el.textContent = o.expired || "expired"; el.classList.add("over");
@@ -814,7 +814,7 @@ Full docs: web/README.md.
     execution: ["execution", "Execution price: what the provider actually charged a real deployment"],
   };
   OG.conceptBadge = c => h("a", { class: "badge w4-pc pc-" + c, href: "/methodology/data-kinds", title: (CONCEPT[c] || [c, c])[1] }, (CONCEPT[c] || [c])[0]);
-  OG.money = v => (v == null || !isFinite(v) ? "–" : (v < 0 ? "−$" : "$") + fmt.num(Math.abs(v), 2));
+  OG.money = v => (v == null || !isFinite(v) ? "-" : (v < 0 ? "−$" : "$") + fmt.num(Math.abs(v), 2));
 
   // OG.drawer({label, onClose}) -> {el, head(...nodes), body(...nodes), append(node), close(), open}
   // A right-hand panel over the page. Close button, Esc (unless a dialog is open) and close() all call
@@ -890,7 +890,7 @@ Full docs: web/README.md.
     const missing = it.value == null || it.value === "";
     const line = it.sub != null && it.sub !== "" ? it.sub : missing && it.reason ? shortReason(it.reason) : null;
     const full = [it.title, missing && it.reason && it.reason !== line ? it.reason : null, typeof line === "string" && line.length > 30 ? line : null].filter(Boolean);
-    return h("div", { class: "stat", title: full.length ? [...new Set(full)].join(" — ") : null },
+    return h("div", { class: "stat", title: full.length ? [...new Set(full)].join("; ") : null },
       h("div", { class: "stat-l" }, it.label, it.kind ? OG.kindBadge(it.kind) : null),
       h("div", { class: "stat-v" }, missing ? OG.na(it.reason) : it.value, it.change !== undefined ? OG.chg(it.change, { invert: it.invert }) : null),
       line != null ? h("div", { class: "stat-s" }, line) : null);
@@ -934,7 +934,7 @@ Full docs: web/README.md.
     tbl.append(thead, tbody); scroll.append(tbl);
     if (spec.title || spec.csv || spec.toolbar) wrap.append(bar);
     wrap.append(scroll, more, foot);
-    // Column visibility: a column whose every cell is empty ("–", "n/a", blank) is hidden and named once in the
+    // Column visibility: a column whose every cell is empty ("-", "n/a", blank) is hidden and named once in the
     // footer (its reason on hover) instead of repeating n/a down the page (spec.autoHide: false or column.keep
     // to opt out); columns with `minor: n` are dropped highest-n first when the table is wider than its box.
     // Anything still too wide scrolls sideways with a visible fade at the clipped edge.
@@ -956,13 +956,13 @@ Full docs: web/README.md.
     }
     function cell(c, r, i) {
       const v = colValue(c, r);
-      let out = c.fmt ? c.fmt(c.key in r ? r[c.key] : v, r) : v == null || v === "" ? "–" : c.num && typeof v === "number" ? fmt.num(v) : String(v);
+      let out = c.fmt ? c.fmt(c.key in r ? r[c.key] : v, r) : v == null || v === "" ? "-" : c.num && typeof v === "number" ? fmt.num(v) : String(v);
       if (c.href) { const href = c.href(r); if (href) out = h("a", { class: "lnk", href }, out); }
       if (c.ell) { out = h("span", { class: "ell", style: `max-width:${typeof c.ell === "number" ? c.ell + "px" : c.ell}` }, out); if (!out.querySelector("[title]")) out.title = out.textContent; }
       return h("td", { class: (c.num ? "n " : "") + (c.cls ? (typeof c.cls === "function" ? c.cls(r) || "" : c.cls) : "") + stickCls(i) }, out);
     }
-    const EMPTY_TXT = new Set(["", "–", "-", "—", "n/a"]);
-    // empty = only "–" / "n/a" / blank text, and no purely visual element (a bar, a swatch, a sparkline)
+    const EMPTY_TXT = new Set(["", "-", "\u2013", "\u2014", "n/a"]);
+    // empty = only "-" (or a legacy en/em dash) / "n/a" / blank text, and no purely visual element (a bar, a swatch, a sparkline)
     const emptyCell = td => EMPTY_TXT.has(td.textContent.trim()) && !td.querySelector("svg,img,input,button,select,canvas") &&
       [...td.querySelectorAll("*")].every(e => e.textContent.trim() !== "");
     function setCol(i, hide) {
@@ -1205,7 +1205,7 @@ Full docs: web/README.md.
     const stale = statusState.ok === false || (age != null && age > 600);
     dot.className = "dot " + (statusState.ok == null ? "" : stale ? "stale" : "live");
     txt.textContent = statusState.ok === false ? statusState.text : age != null && age > 600 ? "stale" : statusState.ok ? "live" : statusState.text;
-    asof.textContent = statusState.asOf ? fmt.time(statusState.asOf) : "–";
+    asof.textContent = statusState.asOf ? fmt.time(statusState.asOf) : "-";
     asof.title = statusState.asOf ? "data as of " + new Date(statusState.asOf).toString() : "";
   }
   OG.status = {

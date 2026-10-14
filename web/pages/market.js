@@ -36,7 +36,7 @@
         { key: "spark", label: "Trend", sort: false, csv: false, fmt: (v, r) => OG.charts.sparkline(v, { dir: fmt.dir(r.change_pct), width: 90, height: 18 }) },
         { key: "median", label: "Median", num: true, fmt: v => fmt.price(v) },
         { key: "highest", label: "High", num: true, fmt: v => fmt.price(v) },
-        { key: "spread", label: "Spread", num: true, value: r => (r.lowest ? r.highest / r.lowest - 1 : null), fmt: (v, r) => r.providers > 1 ? fmt.pct(r.lowest ? r.highest / r.lowest - 1 : null) : "–", title: "Highest / lowest − 1 across providers now" },
+        { key: "spread", label: "Spread", num: true, value: r => (r.lowest ? r.highest / r.lowest - 1 : null), fmt: (v, r) => r.providers > 1 ? fmt.pct(r.lowest ? r.highest / r.lowest - 1 : null) : "-", title: "Highest / lowest − 1 across providers now" },
         { key: "providers", label: "Prov", num: true, desc: true, title: "Providers selling in stock now" },
         { key: "lowest_provider", label: "Cheapest at", fmt: v => OG.providerLink(v) },
       ],

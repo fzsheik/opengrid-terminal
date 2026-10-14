@@ -34,8 +34,8 @@ OG.page("/gpu/:slug", {
   `ctx.ssr` is the server-rendered `#ssr` node for this path on the first page load (else null).
 - Navigation: `OG.go(url, {replace})`. Plain `<a href="/x">` links are intercepted when a page matches
   (modifier-clicks, `target`, `download`, `rel="external"`, `/static`, `/v1`, `/docs` are left to the browser).
-- URL state (shareable): `OG.qs.get(key, default)`, `OG.qs.all()`, `OG.qs.set({key: value | null}, {push})`
-  — replaces the URL without remounting. Pure: `OG.qs.parse(str)`, `OG.qs.stringify(obj)`.
+- URL state (shareable): `OG.qs.get(key, default)`, `OG.qs.all()`, `OG.qs.set({key: value | null}, {push})`:
+  replaces the URL without remounting. Pure: `OG.qs.parse(str)`, `OG.qs.stringify(obj)`.
 
 ## Data
 
@@ -54,11 +54,11 @@ OG.page("/gpu/:slug", {
 
 ## Honesty components (use them; never print a placeholder number)
 
-- `OG.insufficient(reason, title)` — block shown when the API returns `null` + a reason.
-- `OG.na(reason)` — inline `n/a` carrying the reason; `OG.value(v, fmtFn, reason)` picks value or `na`.
+- `OG.insufficient(reason, title)`: block shown when the API returns `null` + a reason.
+- `OG.na(reason)`: inline `n/a` carrying the reason; `OG.value(v, fmtFn, reason)` picks value or `na`.
 - `OG.reasonOf(obj)` reads `reason | unavailable_reason | insufficient_reason | coverage_reason`.
 - `OG.kindBadge("observed" | "estimated" | "transaction"; "inferred" renders nothing)` (links to /methodology/data-kinds),
-  `OG.freshBadge(isoOrSeconds | "fresh" | "aging" | "stale", {intervalSeconds, provider, now})` — relative to the
+  `OG.freshBadge(isoOrSeconds | "fresh" | "aging" | "stale", {intervalSeconds, provider, now})`: relative to the
   provider's poll interval when known (fresh ≤ 2×, aging ≤ 6×; `{provider}` looks it up from /polling via
   `OG.data.intervals()`), else fresh ≤ 30 min, aging ≤ 3 h. `OG.badge(text, tone)`.
 - `OG.loading(text)`, `OG.empty(text)`, `OG.error(err, retryFn)`.
@@ -70,7 +70,7 @@ OG.page("/gpu/:slug", {
   `append` / `prepend` / `replaceChildren` are patched app-wide to drop `null` / `undefined` / booleans and flatten
   arrays (`OG.cleanKids(kids)` is the pure helper; `OG.fill(el, ...kids)` the explicit form).
 - `OG.head(title, sub, ...right)`, `OG.section(title, ...kids)`, `OG.stub(el, {title, line, links: [[href, label]]})`.
-- `OG.stats([{label, value, sub, change, invert, reason, kind, title}])` — compact strip; `value: null` shows `n/a` + reason.
+- `OG.stats([{label, value, sub, change, invert, reason, kind, title}])`: compact strip; `value: null` shows `n/a` + reason.
   `sub` is a short line, `title` the full text on hover; a long reason is shortened in the cell (`OG.shortReason`)
   and kept whole in the tooltip.
 - `OG.dialog({title, body, confirm, cancel, danger, ack})` → `Promise<boolean>` (confirmation modal; `ack` = required checkbox).
@@ -117,18 +117,18 @@ OG.page("/gpu/:slug", {
 
 A JOB is the workload and its outcome; a DEPLOYMENT is the cloud resource. Both states are always shown, never merged.
 
-- `/jobs` — `GET /v1/jobs`: name, id, template, state, outcome, provider, GPU, created, runtime, est. max, actual
-  (reconciled transaction only), SIMULATED / real; the "Train Your First AI Model — PyTorch MNIST" CTA.
-- `/jobs/new` — templates from `GET /v1/jobs/templates` (config_schema bounds, limits_bounds, preset); the MNIST preset
+- `/jobs`: `GET /v1/jobs` lists name, id, template, state, outcome, provider, GPU, created, runtime, est. max, actual
+  (reconciled transaction only), SIMULATED / real; the "Train Your First AI Model: PyTorch MNIST" CTA.
+- `/jobs/new`: templates from `GET /v1/jobs/templates` (config_schema bounds, limits_bounds, preset); the MNIST preset
   (founder's defaults); client validation mirroring `workloads/spec.py`; optional SSH public key (empty = ephemeral key,
-  private half discarded: nobody can SSH in); Sandbox ("SIMULATED — no GPU, no spend"); readiness from
-  `GET /v1/jobs/readiness`. **Preview route** = `POST /v1/jobs/preview`: three separate views — MARKET RECOMMENDATION
-  (`market_best`, information only), EXECUTION-READY ROUTE (`execution_ready`), SANDBOX — plus the estimate (typical /
+  private half discarded: nobody can SSH in); Sandbox ("SIMULATED: no GPU, no spend"); readiness from
+  `GET /v1/jobs/readiness`. **Preview route** = `POST /v1/jobs/preview`, which returns three separate views: MARKET RECOMMENDATION
+  (`market_best`, information only), EXECUTION-READY ROUTE (`execution_ready`) and SANDBOX, plus the estimate (typical /
   max, billed minutes, billing unit, basis), why it won (score breakdown), alternatives, exclusions, ineligible GPUs,
   `submission` and a BLOCKERS box with links (global first, then per provider). **Submit** = `POST /v1/jobs` (one
   Idempotency-Key per intent) after a dialog stating the max cost exposure, the runtime ceiling and that approval is
   required. A real job cannot be submitted without an execution-ready route.
-- `/jobs/:id` — `GET /v1/jobs/{id}` polled every 4 s until `finished`: header, SIMULATED banner, job lifecycle strip
+- `/jobs/:id`: `GET /v1/jobs/{id}` polled every 4 s until `finished`: header, SIMULATED banner, job lifecycle strip
   (sandbox: its shorter flow) + the deployment's own strip (`GET /v1/deployments/{id}`), approval block (admins approve on
   the existing ticket `/route?rr=…`; no second approval path), progress + loss / accuracy charts from `/metrics` only,
   cursor-paged logs (`?after=<id>`, filter, auto-scroll), the 12 checks (✓ only with evidence; sandbox shows `~
@@ -165,13 +165,13 @@ onRequirements(req), onRecommendation(rec)})` renders in a toggleable panel when
 - `histogram(el, {values, bins = 20, fmt, marks: [{value, label}], height, color})`.
 - `heatmap(el, {rows: [label], cols: [label], values: [[v | null]], scale: "sequential" | "diverging",
   domain: [lo, hi] | [lo, mid, hi], fmt, cellTitle(r, c, v), onCell(r, c, v), rowHref(r), colHref(c), nullText,
-  labelWidth | labelMax = 260, units, invert})` — null cells hatched, legend (with `units`), hover outline; `invert` gives
+  labelWidth | labelMax = 260, units, invert})`: null cells hatched, legend (with `units`), hover outline; `invert` gives
   low values the strong colour on a sequential scale (cheap prices stand out).
 - `dotplot(el, {rows: [{label, href, points: [{key, value, color, label, href}], low, median, high}], fmt, axisMin, axisMax})`.
 - `dotplot` truncates row labels in narrow columns (full text on hover) and drops colliding axis labels.
 - Pure (tested): `scale`, `extent`, `padExtent`, `timeTicks`, `bins`, `lerpColor`, `colorSeq`, `colorDiv`, `bandPath`, `nearest`,
   `isolated`, `thinLabels`, `fitLabel`.
-- Provider colours: `OG.Lib.providerColor(p)` — fixed per provider, never by rank.
+- Provider colours: `OG.Lib.providerColor(p)`: fixed per provider, never by rank.
 
 ## Navigation (information architecture)
 

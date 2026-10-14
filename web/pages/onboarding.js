@@ -1,10 +1,10 @@
-/* /onboarding — the design-partner path to a first real route, from GET /v1/onboarding (steps done, evidence,
+/* /onboarding: the design-partner path to a first real route, from GET /v1/onboarding (steps done, evidence,
    next): 1 account, 2 API key (inline, secret shown once), 3 provider credentials (optional: managed vs BYO),
    4 route preview prefilled from the partner profile, 5 why the provider won (the scoring explanation),
    6 request a supervised deployment (on /route, the one place money moves). Plus the partner profile form
    (GET/POST/PATCH /v1/partners/me). The operator can preview a partner: ?account=<id> reads that partner's
    status from /v1/admin/partners (actions on this page still run as the signed-in principal).
-   /admin/partners — every partner with onboarding progress; create one (account + profile + first key in one
+   /admin/partners: every partner with onboarding progress; create one (account + profile + first key in one
    step, key shown once); per-partner deployments and feedback. */
 (() => {
   const { h, fmt } = OG;
@@ -129,7 +129,7 @@
             h("a", { class: "lnk mono", href: "/v1/route/" + d.route_request_id, target: "_blank", rel: "external noopener" }, d.route_request_id, " ↗")));
           const factors = Object.entries(c.factors || {}).filter(([, x]) => x && x.weight).sort((a, b) => (b[1].contribution || 0) - (a[1].contribution || 0));
           whyBox.replaceChildren(h("ul", { class: "rt-why" }, factors.map(([k, x]) => h("li", { class: x.imputed ? "imp" : null }, h("b", {}, k.replace(/_/g, " ")), " ",
-            x.note || "", x.imputed ? OG.badge("imputed 0.5", "warn") : null, h("span", { class: "rt-contrib mono" }, `${(x.weight * 100).toFixed(0)}% × ${x.value != null ? x.value.toFixed(2) : "–"} = +${(x.contribution || 0).toFixed(3)}`)))),
+            x.note || "", x.imputed ? OG.badge("imputed 0.5", "warn") : null, h("span", { class: "rt-contrib mono" }, `${(x.weight * 100).toFixed(0)}% × ${x.value != null ? x.value.toFixed(2) : "-"} = +${(x.contribution || 0).toFixed(3)}`)))),
             (d.alternatives || []).length ? h("p", { class: "note" }, "Runner-up: ", OG.providerName(d.alternatives[0].provider), " at ", fmt.price(d.alternatives[0].price_per_gpu_hour), "/GPU·h, score ", (d.alternatives[0].score || 0).toFixed(3), " vs ", c.score.toFixed(3), ".") : null,
             h("p", { class: "note" }, "Reliability and performance carry no weight until OpenGrid has real execution records; nothing is invented. ", h("a", { class: "lnk", href: routeHref(pvBody) }, "Full breakdown on /route →")));
         } catch (e) { pvBox.replaceChildren(OG.error(e, runPreview)); }
@@ -203,14 +203,14 @@
           columns: [
             { key: "company", label: "Company", fmt: (v, r) => h("b", {}, v) },
             { key: "account_id", label: "Acct", num: true },
-            { key: "status", label: "Status", fmt: v => OG.badge(v || "–", v === "active" ? "good" : "warn") },
+            { key: "status", label: "Status", fmt: v => OG.badge(v || "-", v === "active" ? "good" : "warn") },
             { key: "technical_contact_name", label: "Contact", cls: "dim", fmt: (v, r) => [v, r.technical_contact_email].filter(Boolean).join(" · ") },
-            { key: "progress", label: "Onboarding", value: r => r.onboarding && r.onboarding.progress, fmt: (v, r) => h("span", {}, r.onboarding && r.onboarding.complete ? OG.badge("complete", "good") : v || "–") },
+            { key: "progress", label: "Onboarding", value: r => r.onboarding && r.onboarding.progress, fmt: (v, r) => h("span", {}, r.onboarding && r.onboarding.complete ? OG.badge("complete", "good") : v || "-") },
             { key: "next", label: "Next step", cls: "dim", value: r => r.onboarding && r.onboarding.next_step ? r.onboarding.next_step.label : "" },
             { key: "preferred_gpus", label: "GPUs", cls: "mono dim", fmt: v => show(v) },
             { key: "regions", label: "Regions", cls: "dim", fmt: v => show(v) },
-            { key: "normal_price_per_gpu_hour", label: "Normal $/GPU·h", num: true, fmt: (v, r) => v != null ? h("span", { title: r.normal_price_kind || "partner-reported" }, fmt.price(v), " ", OG.badge("reported")) : "–" },
-            { key: "max_price_per_gpu_hour", label: "Max $/GPU·h", num: true, fmt: v => v != null ? fmt.price(v) : "–" },
+            { key: "normal_price_per_gpu_hour", label: "Normal $/GPU·h", num: true, fmt: (v, r) => v != null ? h("span", { title: r.normal_price_kind || "partner-reported" }, fmt.price(v), " ", OG.badge("reported")) : "-" },
+            { key: "max_price_per_gpu_hour", label: "Max $/GPU·h", num: true, fmt: v => v != null ? fmt.price(v) : "-" },
             { key: "open", label: "", sort: false, fmt: (v, r) => h("a", { class: "btn sm", href: "/onboarding?account=" + r.account_id }, "Onboarding view") },
           ], rows, compact: true, csv: "opengrid-partners.csv", rowKey: r => r.account_id, onRow: r => { sel = r.account_id; OG.qs.set({ account: sel }); drawDetail(); },
           empty: "No design partners yet. Create one: it returns the first API key once.",
@@ -225,13 +225,13 @@
         if (!ctx.alive()) return;
         const mine = (deps || []).filter(d => d.account_id === p.account_id);
         const items = (fb && fb.items) || [];
-        const yn = v => v === true ? OG.badge("yes", "good") : v === false ? OG.badge("no", "bad") : h("span", { class: "dim" }, "–");
+        const yn = v => v === true ? OG.badge("yes", "good") : v === false ? OG.badge("no", "bad") : h("span", { class: "dim" }, "-");
         detail.replaceChildren(OG.section(`${p.company} · account #${p.account_id}`,
           h("div", { class: "bar" }, h("a", { class: "btn", href: "/admin/execution?acct=" + p.account_id }, "Cost guards →"), h("a", { class: "btn", href: "/onboarding?account=" + p.account_id }, "Onboarding view →")),
           h("div", { class: "cols-2" },
             OG.section(`Deployments · ${mine.length}`, OG.table({
               columns: [{ key: "status", label: "State", fmt: v => OG.stateBadge(v) }, { key: "deployment_id", label: "Deployment", cls: "mono", href: r => "/deployments/" + r.deployment_id },
-                { key: "provider", label: "Provider", fmt: v => v ? OG.providerLink(v) : "–" }, { key: "gpu", label: "GPU", fmt: (v, r) => `${r.gpu_count}× ${OG.shortGpu(v || "")}` },
+                { key: "provider", label: "Provider", fmt: v => v ? OG.providerLink(v) : "-" }, { key: "gpu", label: "GPU", fmt: (v, r) => `${r.gpu_count}× ${OG.shortGpu(v || "")}` },
                 { key: "quote", label: "Quote", num: true, value: r => r.prices.quote, fmt: v => fmt.price(v) }, { key: "created_at", label: "Created", num: true, fmt: v => fmt.dateTime(v) }],
               rows: mine, compact: true, csv: false, sort: { key: "created_at", dir: "desc" }, empty: "No deployments yet." })),
             OG.section(`Feedback · ${items.length}`, items.length ? OG.table({

@@ -1,9 +1,9 @@
-/* /heatmaps — every /v1/heatmaps kind as a matrix. Null cells (no data — never zero) are hatched.
+/* /heatmaps: every /v1/heatmaps kind as a matrix. Null cells (no data, never zero) are hatched.
    Diverging scale (blue = below, red = above) for premiums and changes; sequential for availability,
    prices, counts and volatility. Kind and window are in the URL (?kind=…&days=…). */
 (() => {
   const { h, fmt, Lib: L } = OG;
-  const share = v => (v == null ? "–" : Math.round(v * 100) + "%");
+  const share = v => (v == null ? "-" : Math.round(v * 100) + "%");
   const GROUPS = [
     ["provider", "GPU × provider", [["gpu-provider-premium", "Premium vs market"], ["gpu-provider-availability", "Availability"], ["gpu-provider-change24h", "24h change"]]],
     ["region", "GPU × region", [["gpu-region-cheapest", "Cheapest"], ["gpu-region-premium", "Premium vs global"], ["gpu-region-availability", "Priced listings"]]],
@@ -31,7 +31,7 @@
       const st = { kind: K[OG.qs.get("kind")] ? OG.qs.get("kind") : "gpu-provider-premium", days: OG.qs.get("days"), order: OG.qs.get("order", "coverage"), empty: OG.qs.get("empty") === "1" };
       const grpHold = h("div", { class: "pv-hold" }), kindHold = h("div", { class: "pv-hold" }), dayHold = h("div", { class: "pv-hold" }), ordHold = h("div", { class: "pv-hold" });
       const statsEl = h("div", {}), chartEl = h("div", { class: "box box-p hm-box" }), legendEl = h("div", { class: "hm-legend" });
-      el.append(OG.head("Heatmaps", "Where each GPU is cheap, dear, available or moving — across providers, regions and days. Hatched = no data, not zero.",
+      el.append(OG.head("Heatmaps", "Where each GPU is cheap, dear, available or moving, across providers, regions and days. Hatched = no data, not zero.",
         h("span", { class: "flt" }, h("span", {}, "Order"), ordHold)),
         h("div", { class: "bar hm-ctl" }, grpHold, kindHold, h("span", { class: "spacer" }), dayHold),
         statsEl, legendEl, chartEl);
@@ -102,7 +102,7 @@
         }
         legendEl.replaceChildren(...[h("span", { class: "hm-k" }, kd.div ? "diverging" : "sequential"),
           h("span", {}, h("b", {}, groupOf(st.kind)[2].find(k => k[0] === st.kind)[1] + ": "), kd.read),
-          h("span", { class: "dim" }, ` Unit: ${meta.unit || "–"}${meta.definition ? " · " + meta.definition : ""}${meta.min_hours ? ` · needs ≥ ${meta.min_hours} hours` : ""}${kd.div ? ` · colour clipped at ±${fmt.pct(domain[2]).replace("+", "")}` : ""}.`),
+          h("span", { class: "dim" }, ` Unit: ${meta.unit || "-"}${meta.definition ? " · " + meta.definition : ""}${meta.min_hours ? ` · needs ≥ ${meta.min_hours} hours` : ""}${kd.div ? ` · colour clipped at ±${fmt.pct(domain[2]).replace("+", "")}` : ""}.`),
           meta.hour ? h("span", { class: "dim" }, ` Hour ${fmt.dateTime(meta.hour)}.`) : null,
           " ", h("a", { class: "lnk dim", href: "/methodology/" + (st.kind === "gpu-provider-availability" ? "provider-value" : "dispersion") }, "Methodology →"),
           hidden.length ? h("div", { class: "dim hm-hidden" }, `${hidden.length} GPU${hidden.length === 1 ? "" : "s"} with no cell hidden${st.kind.endsWith("-premium") ? " (a premium needs a second provider or region to compare with)" : ""}: `,

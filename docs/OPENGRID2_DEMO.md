@@ -27,16 +27,16 @@ then ask "Show me the cheapest available H100 options through OpenGrid" and
 
 ## Ten-minute demo
 
-1. **/** — headline, three actions, live board of popular GPUs (observed prices).
-2. **GPUs → H100 80GB SXM5** — the market terminal: index level, providers, chart, regions, events (unchanged).
-3. **Find Compute** — "Fine-tune", model "Llama 3.1 8B", LoRA, budget $50 → memory estimate with components and
-   assumptions, three picks (cheapest advertised / best for your workload / best OpenGrid can run — the last is
+1. **/**: headline, three actions, live board of popular GPUs (observed prices).
+2. **GPUs → H100 80GB SXM5**: the market terminal, with index level, providers, chart, regions, events (unchanged).
+3. **Find Compute**: "Fine-tune", model "Llama 3.1 8B", LoRA, budget $50 → memory estimate with components and
+   assumptions, three picks (cheapest advertised / best for your workload / best OpenGrid can run; the last is
    empty with the reason: only the MNIST demo is runnable), tiers, cost scenarios, "runtime: unknown".
-4. **Ask in plain English** (on Find Compute) — "What's the cheapest available H100?" → per-variant prices.
+4. **Ask in plain English** (on Find Compute): "What's the cheapest available H100?" → per-variant prices.
 5. **Preview route** from an option → the existing order ticket (`/route`), preview only.
 6. **Try a Training Demo** → "Start free simulation" → the job page walks Preparing → Running → Saving results →
    Complete, says it is simulated and that no money was spent; Advanced details hold logs and state history.
-7. **Terminal**: `opengrid analyze <project>` then `opengrid recommend <project>` — same picks as the website.
+7. **Terminal**: `opengrid analyze <project>` then `opengrid recommend <project>`: same picks as the website.
 8. **Claude Code** (if connected): the two prompts above.
 
 ## Simulated vs real

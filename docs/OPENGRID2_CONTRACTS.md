@@ -59,7 +59,7 @@ optional: unknown is `null`, never a guess. The analyzer fills what it has evide
 }
 ```
 
-## 2. Estimate — `POST /v1/recommend/estimate`
+## 2. Estimate: `POST /v1/recommend/estimate`
 
 Body: WorkloadRequirements. Pure computation (no DB writes, no provider calls). Public (anonymous allowed).
 
@@ -89,7 +89,7 @@ Body: WorkloadRequirements. Pure computation (no DB writes, no provider calls). 
 }
 ```
 
-## 3. Recommendation — `POST /v1/recommend`
+## 3. Recommendation: `POST /v1/recommend`
 
 Body: WorkloadRequirements (+ optional `"limit": 1-20`). Read-only (uses `scoring.rank_listings`, never
 `engine.preview`, so no audit/quote rows). Public (anonymous allowed); execution readiness for an
@@ -139,7 +139,7 @@ Rules every interface must keep:
 - `needs_gpu=false` recommendations must say so plainly and return no options.
 - `allow_spot: null` means not stated (treated as on-demand only); unknown `region` values are a 422 `unknown_region`.
 
-## 4. Local analyzer output — `opengrid analyze <dir> --json`
+## 4. Local analyzer output: `opengrid analyze <dir> --json`
 
 ```jsonc
 {
@@ -154,7 +154,7 @@ The analyzer never executes project code, never installs anything, never reads s
 and never sends file contents anywhere: only `requirements` leaves the machine (and only when the user asks
 for a recommendation).
 
-## 5. Assistant — `POST /v1/assistant`
+## 5. Assistant: `POST /v1/assistant`
 
 ```jsonc
 // request
@@ -169,4 +169,4 @@ for a recommendation).
   "engine": "deterministic" | "llm:<model>", "grounded": true }
 ```
 The deterministic engine (no LLM) must handle the core intents; an LLM, when configured, only phrases and
-routes — every number in a reply comes from a tool result in `cards`.
+routes; every number in a reply comes from a tool result in `cards`.

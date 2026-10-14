@@ -1,4 +1,4 @@
-/* /gpus — the full GPU market table.
+/* /gpus: the full GPU market table.
 
 Joins three reads on the canonical GPU name, each optional except the first:
   /v1/gpus?limit=1000        hardware summary + current low / median / high, providers, listings
@@ -9,9 +9,9 @@ in the URL so a filtered view is shareable. $/GB-VRAM-h = current low / VRAM: th
 */
 (() => {
   const { h, fmt, Lib: L } = OG;
-  const VRAM_BANDS = [["", "Any VRAM"], ["0-24", "≤ 24 GB"], ["24-48", "25–48 GB"], ["48-96", "49–96 GB"], ["96-160", "97–160 GB"], ["160-9999", "> 160 GB"]];
+  const VRAM_BANDS = [["", "Any VRAM"], ["0-24", "≤ 24 GB"], ["24-48", "25-48 GB"], ["48-96", "49-96 GB"], ["96-160", "97-160 GB"], ["160-9999", "> 160 GB"]];
   const inBand = (v, band) => { if (!band) return true; if (v == null) return false; const [a, b] = band.split("-").map(Number); return v > a && v <= b; };
-  const small = v => (v == null || !isFinite(v) ? "–" : v >= 0.1 ? fmt.price(v) : "$" + Number(v).toPrecision(2));
+  const small = v => (v == null || !isFinite(v) ? "-" : v >= 0.1 ? fmt.price(v) : "$" + Number(v).toPrecision(2));
 
   OG.page("/gpus", {
     title: "GPU markets",
@@ -29,18 +29,18 @@ in the URL so a filtered view is shareable. $/GB-VRAM-h = current low / VRAM: th
           { key: "short", label: "GPU", fmt: (v, r) => h("b", {}, v), href: r => "/gpu/" + r.slug, ell: 300 },
           { key: "vendor", label: "Vendor", cls: "dim", hidden: true },
           { key: "arch", label: "Arch", cls: "dim", minor: 3 },
-          { key: "vram", label: "VRAM", num: true, fmt: v => (v ? v + " GB" : "–") },
+          { key: "vram", label: "VRAM", num: true, fmt: v => (v ? v + " GB" : "-") },
           { key: "ff", label: "Form", cls: "dim", minor: 2 },
           { key: "wl", label: "Class", cls: "dim", title: "workload class (editorial, from vendor positioning)", minor: 4 },
-          { key: "low", label: "Low $/GPU·h", num: true, fmt: v => (v == null ? h("span", { class: "dimmer" }, "–") : h("b", {}, fmt.price(v))), title: "lowest current on-demand price per GPU-hour" },
+          { key: "low", label: "Low $/GPU·h", num: true, fmt: v => (v == null ? h("span", { class: "dimmer" }, "-") : h("b", {}, fmt.price(v))), title: "lowest current on-demand price per GPU-hour" },
           { key: "median", label: "Median", num: true, fmt: v => fmt.price(v), title: "median of each provider's lowest price" },
           { key: "high", label: "High", num: true, fmt: v => fmt.price(v) },
           { key: "chg", label: "24h", num: true, fmt: (v, r) => OG.chg(v, { reason: r.chgReason }), title: "change of the lowest price over 24h, from when every current provider was recorded" },
           { key: "spark", label: "24h trend", sort: false, csv: false, minor: 1, fmt: (v, r) => (v ? OG.charts.sparkline(v, { dir: fmt.dir(r.chg), width: 64, height: 16 }) : "") },
           { key: "providers", label: "Prov", num: true, desc: true, title: "providers with a priced listing now" },
           { key: "available", label: "Avail", num: true, desc: true, title: "listings with explicit availability now" },
-          { key: "spread", label: "Spread", num: true, fmt: (v, r) => (r.providers > 1 ? fmt.pct(v) : "–"), title: "high / low − 1 across providers" },
-          { key: "eff", label: "Eff.", num: true, desc: true, fmt: (v, r) => (v == null ? OG.na(r.effReason) : h("span", { class: v >= 75 ? "up" : v < 50 ? "down" : "warn" }, v.toFixed(0))), title: "market efficiency score 0–100 (100 − fragmentation); needs 3+ providers" },
+          { key: "spread", label: "Spread", num: true, fmt: (v, r) => (r.providers > 1 ? fmt.pct(v) : "-"), title: "high / low − 1 across providers" },
+          { key: "eff", label: "Eff.", num: true, desc: true, fmt: (v, r) => (v == null ? OG.na(r.effReason) : h("span", { class: v >= 75 ? "up" : v < 50 ? "down" : "warn" }, v.toFixed(0))), title: "market efficiency score 0 to 100 (100 − fragmentation); needs 3+ providers" },
           { key: "perGb", label: "$/GB·h", num: true, fmt: v => small(v), title: "low price / VRAM: theoretical capability pricing" },
           { key: "perTf", label: "$/BF16 PF·h", num: true, fmt: v => small(v), title: "low price per dense BF16 petaFLOP-hour (1 PFLOP = 1,000 TFLOPS, vendor peak): theoretical" },
         ],

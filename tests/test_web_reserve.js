@@ -55,9 +55,9 @@ ok(R.refRows({ index: { level: null, reason: "no eligible constituents" }, best_
 
 // ---------- offers / copy / formatting ----------
 ok(R.offerOf({ offer: { offer_seq: 2 } }).offer_seq === 2 && R.offerOf({ offer: null }) === null, "offerOf");
-ok(R.ACCEPTED === "Accepted — OpenGrid will contact you to sign the order form; nothing is billed by this action.", "acceptance copy (exact)");
+ok(R.ACCEPTED === "Accepted: OpenGrid will contact you to sign the order form; nothing is billed by this action.", "acceptance copy (exact)");
 ok(R.BANNER.includes("not a financial contract, not tradable, no cash settlement") && R.BANNER.includes("only when provider capacity backs it"), "banner copy");
-ok(R.usd(12345.6) === "$12,345.60" && R.usd(null) === "–", "usd");
+ok(R.usd(12345.6) === "$12,345.60" && R.usd(null) === "-", "usd");
 ok(R.perGpuH(2.19) === "$2.190/GPU·h" && R.perGpuH(12.5) === "$12.50/GPU·h", "per GPU-hour");
 ok(R.hoursText(5376) === "5,376 GPU·h", "GPU-hours");
 ok(R.localToIso("") === null && R.localToIso("not a date") === null, "localToIso guards");

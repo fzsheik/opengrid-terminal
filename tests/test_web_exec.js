@@ -113,7 +113,7 @@ const eq = (a, b, m) => ok(JSON.stringify(a) === JSON.stringify(b), m + " -> " +
   const local = `${dt.getFullYear()}-${P(dt.getMonth() + 1)}-${P(dt.getDate())} ${P(dt.getHours())}:${P(dt.getMinutes())}:${P(dt.getSeconds())}`;
   eq(X.exactTime(iso), `${local} local (UTC 2026-10-07 14:05:09)`, "exact local + UTC time");
   ok(X.exactTime(null) === null && X.exactTime("nope") === null, "no time -> null");
-  eq(X.autoTerminate(iso, 60, "system_default"), `Auto-terminates: ${local} local (UTC 2026-10-07 14:05:09) — max runtime 60 min, source system default`, "auto-terminate line");
+  eq(X.autoTerminate(iso, 60, "system_default"), `Auto-terminates: ${local} local (UTC 2026-10-07 14:05:09), max runtime 60 min, source system default`, "auto-terminate line");
   ok(["request", "account", "system default", "hard max", "validation cap"].join() === ["request", "account", "system_default", "system_hard_max", "validation_cap"].map(X.ceilingSource).join(), "ceiling source labels");
   ok(/not set yet/.test(X.autoTerminate(null, 30, "validation_cap")), "deadline not set yet");
   const now = Date.parse(iso);

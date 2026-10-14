@@ -210,7 +210,7 @@ def provider_readiness(provider: str, who, mode: str, ssh_public_key: str | None
             no("provider_killed", f"{provider}: provider kill switch on ({f.get('kill_reason') or 'no reason'}); an "
                                   "admin must unkill it")
         if f.get("adapter_status") != "validated":
-            no("adapter_not_validated", f"{provider}: adapter simulated — run the supervised validation first")
+            no("adapter_not_validated", f"{provider}: adapter simulated; run the supervised validation first")
         if mode == control.LIVE:
             if not (f.get("live_enabled") or f.get("supervised_enabled")):
                 no("provider_not_enabled", f"{provider}: neither live nor supervised launches are enabled "

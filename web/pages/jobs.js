@@ -1,6 +1,6 @@
-/* /jobs — training jobs (the founder's flow: Execute → Jobs → New Training Job → Preview Route → Submit →
+/* /jobs: training jobs (the founder's flow: Execute → Jobs → New Training Job → Preview Route → Submit →
    Approve → Train → Results).
-   /jobs        job history (GET /v1/jobs) + the card-free "Train Your First AI Model — PyTorch MNIST" CTA.
+   /jobs        job history (GET /v1/jobs) + the card-free "Train Your First AI Model: PyTorch MNIST" CTA.
    /jobs/new    the job form: templates from GET /v1/jobs/templates, the MNIST preset (founder's defaults),
                 client-side bounds that mirror the server's, Preview route (POST /v1/jobs/preview: MARKET
                 RECOMMENDATION vs EXECUTION-READY ROUTE vs SANDBOX, blockers with actionable links) and Submit
@@ -79,17 +79,17 @@
   }
   const isSandbox = job => !!job && (job.sandbox === true || job.simulated === true || outcomeOf(job) === "simulated" || job.mode === "sandbox");
 
-  // Money: "$1.23"; positive amounts under a cent are "<$0.01" (never shown as $0.00); null → "–".
+  // Money: "$1.23"; positive amounts under a cent are "<$0.01" (never shown as $0.00); null → "-".
   function usd(v, digits) {
-    if (v == null || v === "" || !isFinite(+v)) return "–";
+    if (v == null || v === "" || !isFinite(+v)) return "-";
     const n = +v;
     if (n > 0 && n < 0.01) return "<$0.01";
     const d = digits == null ? 2 : digits;
     return (n < 0 ? "−$" : "$") + Number(Math.round(Math.abs(n) + "e" + d) + "e-" + d).toFixed(d);   // half-up, no float drift (0.215 → 0.22)
   }
-  const perGpuH = v => (v == null || !isFinite(+v) ? "–" : "$" + (+v).toFixed(+v < 10 ? 3 : 2) + "/GPU·h");
+  const perGpuH = v => (v == null || !isFinite(+v) ? "-" : "$" + (+v).toFixed(+v < 10 ? 3 : 2) + "/GPU·h");
   function duration(sec) {
-    if (sec == null || !isFinite(+sec)) return "–";
+    if (sec == null || !isFinite(+sec)) return "-";
     const s = Math.max(0, Math.round(+sec));
     if (s < 60) return s + "s";
     if (s < 3600) return Math.floor(s / 60) + "m " + String(s % 60).padStart(2, "0") + "s";
@@ -97,7 +97,7 @@
     return Math.floor(s / 86400) + "d " + Math.floor(s % 86400 / 3600) + "h";
   }
   function bytes(n) {
-    if (n == null || !isFinite(+n)) return "–";
+    if (n == null || !isFinite(+n)) return "-";
     n = +n;
     if (n < 1024) return n + " B";
     if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
@@ -200,7 +200,7 @@
     const errors = {};
     const name = String(form.name || "").trim();
     if (!name) errors.name = "Name is required";
-    else if (!NAME_RE.test(name)) errors.name = "1–64 characters a-z 0-9 . _ - (lower case), starting with a letter or digit";
+    else if (!NAME_RE.test(name)) errors.name = "1-64 characters a-z 0-9 . _ - (lower case), starting with a letter or digit";
     if (!form.template) errors.template = "Pick a template";
     if ((form.job_type || "training") !== "training") errors.job_type = "Only training is supported in this release";
     const config = {};
@@ -266,7 +266,7 @@
       exec: { label: "EXECUTION-READY ROUTE", cand: executable ? er : null, blocked_cand: executable ? null : er, executable,
         violations: executable && Array.isArray(er.limit_violations) ? er.limit_violations : [],
         note: executable ? "The best candidate OpenGrid can actually run now. Submit creates a quote; an admin approves it before anything launches." : "Nothing is executable right now: see the blockers." },
-      sandbox: { label: "SANDBOX", selected: !!opts.sandbox, note: "SIMULATED — no GPU, no spend. Runs the job lifecycle with synthetic numbers, labelled simulated everywhere." },
+      sandbox: { label: "SANDBOX", selected: !!opts.sandbox, note: "SIMULATED: no GPU, no spend. Runs the job lifecycle with synthetic numbers, labelled simulated everywhere." },
       blockers, executable,
     };
   }
@@ -544,8 +544,8 @@
   }
   function completeLabel(ended, o, sb) {
     if (!ended) return "Complete";
-    if (o === "failed") return "Ended — failed";
-    if (o === "cancelled") return "Ended — cancelled";
+    if (o === "failed") return "Ended: failed";
+    if (o === "cancelled") return "Ended: cancelled";
     if (sb || o === "simulated") return "Complete (simulated)";
     return "Complete";
   }
@@ -563,34 +563,34 @@
     if (sb) add("money", "Can real money be spent?", "No", "good", "This is a free simulation: no provider is called and nothing is charged.");
     else if (ENDED_BEFORE_LAUNCH.includes(s)) add("money", "Can real money be spent?", "No", "good", "The job ended before anything was launched.");
     else if (s === "reconciled") add("money", "Can real money be spent?", "Not any more", "good", "The GPU was terminated and the provider confirmed it.");
-    else if (uncertain) add("money", "Can real money be spent?", "Yes — possibly right now", "bad", "OpenGrid cannot yet confirm the GPU is gone; treat it as billing.");
+    else if (uncertain) add("money", "Can real money be spent?", "Yes, possibly right now", "bad", "OpenGrid cannot yet confirm the GPU is gone; treat it as billing.");
     else if (MAY_BILL.includes(s)) add("money", "Can real money be spent?", "Yes", "warn", "A rented GPU exists for this job" + (cap ? ` (cost ceiling ${cap})` : "") + ".");
     else add("money", "Can real money be spent?", "Not yet", "", "Nothing is charged until an OpenGrid admin approves the quote" + (cap ? ` (max ${cap})` : "") + ".");
     // 2. simulation
     add("sim", "Is this a simulation?", sb ? "Yes" : "No", sb ? "warn" : "", sb ? "Every log line, metric and file is synthetic and labelled SIMULATED." : "A real provider run on a rented GPU.");
     // 3. running
-    if (ended) add("running", "Is it running?", "No — finished", "");
+    if (ended) add("running", "Is it running?", "No, finished", "");
     else if (RUNNING.includes(s)) add("running", "Is it running?", "Yes", "good", s === "training" ? (sb ? "Simulated training in progress." : "Training on the GPU.") : String(s).replace(/_/g, " ") + ".");
-    else if (s === "pending_approval") add("running", "Is it running?", "Not yet — waiting for approval", "warn");
+    else if (s === "pending_approval") add("running", "Is it running?", "Not yet, waiting for approval", "warn");
     else if (PRE_LAUNCH.includes(s)) add("running", "Is it running?", "Not yet", "", String(s).replace(/_/g, " ") + ".");
-    else add("running", "Is it running?", "No — wrapping up", "", String(s).replace(/_/g, " ") + ".");
+    else add("running", "Is it running?", "No, wrapping up", "", String(s).replace(/_/g, " ") + ".");
     // 4. GPU
-    if (sb) add("gpu", "Is a GPU still active?", "No — no GPU was ever used", "good");
+    if (sb) add("gpu", "Is a GPU still active?", "No, no GPU was ever used", "good");
     else if (uncertain) add("gpu", "Is a GPU still active?", "Possibly", "bad", "Termination is not confirmed by the provider yet.");
-    else if (sm.disposition === "terminated_confirmed" || s === "reconciled" || s === "termination_confirmed" || s === "reconciliation_pending") add("gpu", "Is a GPU still active?", "No — terminated (provider confirmed)", "good");
+    else if (sm.disposition === "terminated_confirmed" || s === "reconciled" || s === "termination_confirmed" || s === "reconciliation_pending") add("gpu", "Is a GPU still active?", "No, terminated (provider confirmed)", "good");
     else if (MAY_BILL.includes(s)) add("gpu", "Is a GPU still active?", "Yes", "warn", "OpenGrid terminates it when the run ends, fails or hits its runtime ceiling.");
     else add("gpu", "Is a GPU still active?", "No", "good", "Nothing has been launched.");
     // 5. action
-    if (uncertain) add("action", "Is action needed?", "Yes — check the deployment", "bad", "OpenGrid keeps retrying termination and the operator is alerted.");
-    else if (s === "pending_approval") add("action", "Is action needed?", opts.admin ? "Yes — approve or reject the quote" : "Not from you — waiting for OpenGrid approval", "warn");
-    else if (s === "quote_expired") add("action", "Is action needed?", "Yes — the quote expired and must be re-quoted", "warn");
+    if (uncertain) add("action", "Is action needed?", "Yes, check the deployment", "bad", "OpenGrid keeps retrying termination and the operator is alerted.");
+    else if (s === "pending_approval") add("action", "Is action needed?", opts.admin ? "Yes, approve or reject the quote" : "Not from you, waiting for OpenGrid approval", "warn");
+    else if (s === "quote_expired") add("action", "Is action needed?", "Yes, the quote expired and must be re-quoted", "warn");
     else add("action", "Is action needed?", "No", "");
     // 6. success
     const reason = j.failure && (j.failure.reason || j.failure.code);
     if (o === "succeeded") add("success", "Did it succeed?", "Yes", "good");
     else if (o === "failed") add("success", "Did it succeed?", "No", "bad", reason ? String(reason).slice(0, 200) : null);
     else if (o === "cancelled") add("success", "Did it succeed?", "Cancelled", "warn");
-    else if (sb && ended && STAGE_FAILS.includes(s)) add("success", "Did it succeed?", "No — the simulation failed", "bad", reason ? String(reason).slice(0, 200) : null);
+    else if (sb && ended && STAGE_FAILS.includes(s)) add("success", "Did it succeed?", "No, the simulation failed", "bad", reason ? String(reason).slice(0, 200) : null);
     else if (sb && ended) add("success", "Did it succeed?", "The simulation completed", "good", "Synthetic numbers: this is not a real training result.");
     else add("success", "Did it succeed?", "Not known yet", "");
     // 7. outputs
@@ -598,9 +598,9 @@
     add("outputs", "What outputs exist?", arts.length ? arts.map(a => a && a.name).filter(Boolean).join(", ") : "None yet", arts.length ? "good" : "",
       arts.length ? (sb ? "Simulated files." : "sha256-verified on receipt.") : ended ? "No files were stored." : "Files are saved when training ends.");
     // 8. cost
-    if (sb) add("cost", "What did it cost?", "$0.00 — simulated", "good");
+    if (sb) add("cost", "What did it cost?", "$0.00 (simulated)", "good");
     else if (sm.actual != null) add("cost", "What did it cost?", usd(sm.actual), "", sm.actual_basis === "transaction" ? "Reconciled from provider usage." : null);
-    else if (ENDED_BEFORE_LAUNCH.includes(s)) add("cost", "What did it cost?", "$0.00 — nothing launched", "good");
+    else if (ENDED_BEFORE_LAUNCH.includes(s)) add("cost", "What did it cost?", "$0.00 (nothing launched)", "good");
     else add("cost", "What did it cost?", "Not known yet", "", "Known after termination is confirmed and reconciled" + (cap ? ` · ceiling ${cap}` : "") + ".");
     return out;
   }
@@ -620,8 +620,8 @@
 
   /* =============================== DOM helpers (shared with job.js) =============================== */
   const J = OG.jobs;
-  J.stateBadge = s => h("span", { class: "badge og-st st-" + (tone(s) || "plain"), title: UNCERTAIN.includes(s) ? "uncertain: an instance may exist and bill" : FAILED.includes(s) ? "failure state" : null }, String(s || "–").replace(/_/g, " "));
-  J.outcomeBadge = o => o ? OG.badge(o, OUTCOME_TONE[o] || "", o === "simulated" ? "SIMULATED — no GPU was used; numbers are synthetic" : null) : h("span", { class: "dim" }, "–");
+  J.stateBadge = s => h("span", { class: "badge og-st st-" + (tone(s) || "plain"), title: UNCERTAIN.includes(s) ? "uncertain: an instance may exist and bill" : FAILED.includes(s) ? "failure state" : null }, String(s || "-").replace(/_/g, " "));
+  J.outcomeBadge = o => o ? OG.badge(o, OUTCOME_TONE[o] || "", o === "simulated" ? "SIMULATED: no GPU was used; numbers are synthetic" : null) : h("span", { class: "dim" }, "-");
   J.sandboxBadge = sb => sb ? OG.badge("SIMULATED", "warn", "Sandbox: no provider, no GPU, no spend. Numbers are synthetic.") : OG.badge("real", "", "A real provider run (after approval)");
   J.stripEl = (status, events, sandbox) => h("ol", { class: "og-strip jb-strip", "aria-label": "job lifecycle" },
     strip(status, (events || []).map(e => e.to || e.to_status || e.state), sandbox).map(st => h("li", { class: "m-" + st.mark + (st.tone ? " t-" + st.tone : "") + (st.off ? " off" : ""), title: st.mark === "skipped" ? st.state + ": not passed through" : st.state, "aria-current": st.mark === "current" ? "step" : null }, st.state.replace(/_/g, " "))));
@@ -634,12 +634,12 @@
     { key: "availability_persistence", label: "Availability history", color: "#f5a524" }, { key: "price_stability", label: "Price stability", color: "#e0729e" },
     { key: "integration_level", label: "OpenGrid integration", color: "#4fc3d0" },
   ];
-  J.scoreBar = (c, width) => h("span", { class: "rt-bar", style: width ? `width:${width}px` : null, title: "score " + (c && c.score != null ? (+c.score).toFixed(3) : "–") + " of 1.000" },
+  J.scoreBar = (c, width) => h("span", { class: "rt-bar", style: width ? `width:${width}px` : null, title: "score " + (c && c.score != null ? (+c.score).toFixed(3) : "-") + " of 1.000" },
     FACTORS.map(f => {
       const x = c && c.factors && c.factors[f.key];
       if (!x || !x.contribution) return null;
       return h("i", { style: { width: (x.contribution * 100).toFixed(2) + "%", background: f.color }, class: x.imputed ? "imp" : null,
-        title: `${f.label}: +${(+x.contribution).toFixed(3)} (weight ${((x.weight || 0) * 100).toFixed(0)}% × value ${x.imputed ? "0.5 imputed — no data" : x.value})` });
+        title: `${f.label}: +${(+x.contribution).toFixed(3)} (weight ${((x.weight || 0) * 100).toFixed(0)}% × value ${x.imputed ? "0.5 imputed, no data" : x.value})` });
     }));
   J.whyList = c => {
     const fs = (c && c.factors) || {};
@@ -650,7 +650,7 @@
         x.imputed ? h("span", { class: "badge warn" }, "imputed 0.5") : null, h("span", { class: "rt-contrib mono" }, "+" + (+x.contribution || 0).toFixed(3)));
     }).filter(Boolean);
     if (!items.length) return c && c.explanation ? h("p", { class: "note" }, c.explanation) : h("p", { class: "note" }, "No score breakdown in the response.");
-    return h("ul", { class: "rt-why" }, items, (c.not_used || ["reliability", "performance"]).length ? h("li", { class: "nodata" }, h("b", {}, "Reliability, performance"), " — no data, not used (no execution history yet)") : null);
+    return h("ul", { class: "rt-why" }, items, (c.not_used || ["reliability", "performance"]).length ? h("li", { class: "nodata" }, h("b", {}, "Reliability, performance"), ": no data, not used (no execution history yet)") : null);
   };
   J.regionText = c => [c && c.region, c && c.country].filter(Boolean).join(", ") || "location not given";
 
@@ -669,7 +669,7 @@
         OG.views && OG.views.startHere ? OG.views.startHere(null) : null,
         h("a", { class: "jb-cta", href: "/jobs/new?preset=mnist" },
           h("span", { class: "jb-cta-k" }, "TEMPLATE · pytorch-mnist"),
-          h("b", {}, "Train Your First AI Model — PyTorch MNIST"),
+          h("b", {}, "Train Your First AI Model: PyTorch MNIST"),
           h("span", { class: "jb-cta-s" }, "A small CNN on MNIST, 1 GPU, ≤ 30 min, ≤ $2 total. Preview the route for free; nothing launches before OpenGrid approves the quote. No card needed: try the SIMULATED sandbox first."),
           h("span", { class: "btn pri jb-cta-b" }, "Start →")),
         stats, holder);
@@ -736,7 +736,7 @@
             h("a", { class: "btn", href: "/jobs" }, "← Jobs"), h("a", { class: "btn", href: "/jobs/new?preset=mnist&sandbox=1&advanced=1" }, "Full job form")),
           OG.views && OG.views.startHere ? OG.views.startHere("demo") : null,
           easyBox,
-          h("details", { class: "jb-advd" }, h("summary", {}, h("b", {}, "Advanced details"), h("span", { class: "dim" }, " — the full job form: route preview, execution readiness, limits, SSH access, real-GPU submission")),
+          h("details", { class: "jb-advd" }, h("summary", {}, h("b", {}, "Advanced details"), h("span", { class: "dim" }, " (the full job form: route preview, execution readiness, limits, SSH access, real-GPU submission)")),
             fullHead, fullGrid));
       } else root.append(fullHead, fullGrid);
 
@@ -748,7 +748,7 @@
       catch (e) { tplErr = e; templates = []; }
       if (!ctx.alive()) return;
       // until the server lists templates, the only allowlisted one is known by name (bounds re-checked server-side)
-      const tpls = templates.length ? templates : [{ id: "pytorch-mnist", name: "Train Your First AI Model — PyTorch MNIST", job_type: "training", _fallback: true }];
+      const tpls = templates.length ? templates : [{ id: "pytorch-mnist", name: "Train Your First AI Model: PyTorch MNIST", job_type: "training", _fallback: true }];
       let tpl = tpls.find(t => templateId(t) === (query.template || "pytorch-mnist")) || tpls[0];
       let spec = configSpec(tpl), lb = limitBounds(tpl);
       const f = preset(tpl);
@@ -773,14 +773,14 @@
           h("span", { title: tpl.description || null }, [tpl.framework ? (tpl.framework.name || tpl.framework) + (tpl.framework.torch ? " " + tpl.framework.torch : "") + (tpl.framework.cuda ? " · CUDA " + tpl.framework.cuda : "") : "PyTorch",
             tpl.dataset ? tpl.dataset.name || tpl.dataset : "MNIST", tpl.model ? (tpl.model.name || tpl.model) + (tpl.model.architecture ? " (" + tpl.model.architecture + ")" : "") : "small CNN"].join(" · ")),
           r.min_vram_gb || r.min_compute_capability ? h("span", { class: "dimmer", title: [r.vram_note, r.max_compute_capability_reason, r.on_demand_note].filter(Boolean).join("\n") || null },
-            ` · needs ${r.vendor || "NVIDIA"} CUDA${r.min_vram_gb ? ", ≥ " + r.min_vram_gb + " GB VRAM" : ""}${r.min_compute_capability ? ", compute " + r.min_compute_capability + (r.max_compute_capability ? "–" + r.max_compute_capability : "+") : ""}${r.on_demand_only ? ", on-demand only" : ""}`) : null,
-          tpl.expected_runtime && tpl.expected_runtime.default_band_minutes ? h("span", { class: "dimmer", title: tpl.expected_runtime.note || null }, ` · expected ${tpl.expected_runtime.default_band_minutes.join("–")} min (estimate)`) : null,
+            ` · needs ${r.vendor || "NVIDIA"} CUDA${r.min_vram_gb ? ", ≥ " + r.min_vram_gb + " GB VRAM" : ""}${r.min_compute_capability ? ", compute " + r.min_compute_capability + (r.max_compute_capability ? "-" + r.max_compute_capability : "+") : ""}${r.on_demand_only ? ", on-demand only" : ""}`) : null,
+          tpl.expected_runtime && tpl.expected_runtime.default_band_minutes ? h("span", { class: "dimmer", title: tpl.expected_runtime.note || null }, ` · expected ${tpl.expected_runtime.default_band_minutes.join("-")} min (estimate)`) : null,
           tpl._fallback ? h("span", { class: "warn-t" }, tplErr && (tplErr.status === 404 || tplErr.status === 405) ? " · GET /v1/jobs/templates not available yet: built-in defaults; the server re-validates" : " · templates unavailable: built-in defaults") : null);
         cfgBox.replaceChildren(...Object.entries(spec).map(([k, b]) => {
           if (f.config[k] == null && b.default != null) f.config[k] = b.default;
           const i = h("input", { class: "field num", type: "number", value: f.config[k] ?? "", min: b.min, max: b.max, step: b.step || "any", "aria-label": b.label || k });
           i.addEventListener("input", () => { f.config[k] = i.value === "" ? null : +i.value; changed(); });
-          return field(b.label || k, i, h("span", { title: b.hint || null }, `${b.min ?? "–"} – ${b.max ?? "–"} · default ${b.default ?? "–"}`), "config." + k);
+          return field(b.label || k, i, h("span", { title: b.hint || null }, `${b.min ?? "-"} to ${b.max ?? "-"} · default ${b.default ?? "-"}`), "config." + k);
         }));
       }
       const presetBtn = h("button", { type: "button", class: "btn jb-preset", title: "Fill the founder's defaults: opengrid-first-training-test, 1 GPU auto, US, BALANCED, on-demand, ≤ $3/GPU·h, ≤ $2 total, 30 min" },
@@ -813,14 +813,14 @@
       const maxPriceIn = numInput("max_price_per_gpu_hour_usd", lb.max_price_per_gpu_hour_usd, { step: 0.01, "aria-label": "Max price per GPU-hour" });
       const maxTotalIn = numInput("max_total_cost_usd", lb.max_total_cost_usd, { step: 0.01, "aria-label": "Max total cost" });
       const maxRunIn = numInput("max_runtime_minutes", lb.max_runtime_minutes, { step: 1, "aria-label": "Max runtime minutes" });
-      const sshIn = bind("ssh_public_key", h("textarea", { class: "field jb-ssh", rows: 2, spellcheck: "false", autocomplete: "off", placeholder: "ssh-ed25519 AAAA… you@laptop   (optional — PUBLIC key only)", "aria-label": "SSH public key" }));
+      const sshIn = bind("ssh_public_key", h("textarea", { class: "field jb-ssh", rows: 2, spellcheck: "false", autocomplete: "off", placeholder: "ssh-ed25519 AAAA… you@laptop   (optional, PUBLIC key only)", "aria-label": "SSH public key" }));
       const sbIn = h("input", { type: "checkbox", checked: f.sandbox ? true : null, onchange: e => { f.sandbox = e.target.checked; drawSandbox(); changed(); } });
-      const sbBox = h("label", { class: "jb-sb" }, sbIn, h("span", {}, h("b", {}, "Sandbox"), h("span", { class: "jb-sim" }, "SIMULATED — no GPU, no spend"), h("span", { class: "rt-h" }, "No provider is called. The lifecycle, logs and metrics are synthetic and labelled simulated everywhere.")));
+      const sbBox = h("label", { class: "jb-sb" }, sbIn, h("span", {}, h("b", {}, "Sandbox"), h("span", { class: "jb-sim" }, "SIMULATED: no GPU, no spend"), h("span", { class: "rt-h" }, "No provider is called. The lifecycle, logs and metrics are synthetic and labelled simulated everywhere.")));
       function drawSandbox() { sbBox.classList.toggle("on", !!f.sandbox); submitBtn.textContent = f.sandbox ? "Submit sandbox job…" : "Submit for approval…"; }
 
       const previewBtn = h("button", { class: "btn pri", type: "submit", title: "POST /v1/jobs/preview: validation + workload-aware selection; never calls a provider" }, "Preview route", h("kbd", {}, "↵"));
       const submitBtn = h("button", { class: "btn jb-submit", type: "button", onclick: () => submit() }, "Submit for approval…");
-      const dirty = h("span", { class: "rt-dirty", hidden: true }, "form changed — preview again");
+      const dirty = h("span", { class: "rt-dirty", hidden: true }, "form changed: preview again");
       const formErr = h("div", { class: "jb-ferr" });
 
       function paint() {
@@ -856,10 +856,10 @@
         h("span", { class: "rt-h" }, "Off: on-demand only (spot is refused in this release)."),
         h("div", { class: "rt-f" }, h("span", { class: "rt-l" }, "Routing strategy"), stratSeg, stratHint, errEl("strategy")),
         h("div", { class: "jb-sub" }, "Limits (hard caps; the quote must fit)"),
-        h("div", { class: "jb-row3" }, field("Max $/GPU·h", maxPriceIn, null, "max_price_per_gpu_hour_usd"), field("Max total $", maxTotalIn, null, "max_total_cost_usd"), field("Max runtime min", maxRunIn, `auto-terminate · ${lb.max_runtime_minutes.min}–${lb.max_runtime_minutes.max}`, "max_runtime_minutes")),
+        h("div", { class: "jb-row3" }, field("Max $/GPU·h", maxPriceIn, null, "max_price_per_gpu_hour_usd"), field("Max total $", maxTotalIn, null, "max_total_cost_usd"), field("Max runtime min", maxRunIn, `auto-terminate · ${lb.max_runtime_minutes.min}-${lb.max_runtime_minutes.max}`, "max_runtime_minutes")),
         h("div", { class: "jb-sub" }, "Access"),
         field("SSH public key (optional)", sshIn, null, "ssh_public_key"),
-        h("p", { class: "rt-h jb-sshnote" }, "If empty, OpenGrid generates an ", h("b", {}, "ephemeral"), " key pair for the launch and discards the private half at once: ", h("b", {}, "nobody — including OpenGrid — can SSH in."),
+        h("p", { class: "rt-h jb-sshnote" }, "If empty, OpenGrid generates an ", h("b", {}, "ephemeral"), " key pair for the launch and discards the private half at once: ", h("b", {}, "nobody (including OpenGrid) can SSH in."),
           " Results arrive through the job's logs, metrics and artifacts. Paste only a PUBLIC key (.pub)."),
         sbBox,
         h("div", { class: "rt-acts" }, previewBtn, submitBtn), dirty, formErr,
@@ -883,19 +883,19 @@
           if (ctx.alive()) startBtn.disabled = false;
         }
         easyBox.replaceChildren(h("section", { class: "jb-easy box", "aria-label": "Train an example model" },
-          h("div", { class: "jb-easy-ban", role: "note" }, h("b", {}, "FREE SIMULATION"), h("span", { class: "jb-sim" }, "SIMULATED — no GPU, no spend"),
+          h("div", { class: "jb-easy-ban", role: "note" }, h("b", {}, "FREE SIMULATION"), h("span", { class: "jb-sim" }, "SIMULATED: no GPU, no spend"),
             h("span", { class: "dim" }, "Nothing is rented and nothing is charged. No card, no approval.")),
           h("div", { class: "jb-easy-g" },
             h("div", {},
               h("h2", {}, "Teach a small network to read handwritten digits"),
-              h("p", {}, "This is OpenGrid's PyTorch MNIST example: a small convolutional network learns from 60,000 images of handwritten digits and is tested on 10,000 more. You'll see exactly what a real training job looks like — without renting a GPU."),
+              h("p", {}, "This is OpenGrid's PyTorch MNIST example: a small convolutional network learns from 60,000 images of handwritten digits and is tested on 10,000 more. You'll see exactly what a real training job looks like, without renting a GPU."),
               h("ol", { class: "jb-easy-steps" },
-                h("li", {}, h("b", {}, "Preparing"), " — OpenGrid creates and checks the job, exactly as for a real run."),
-                h("li", {}, h("b", {}, "Running"), " — a simulator plays the training epochs. Loss and accuracy are synthetic."),
-                h("li", {}, h("b", {}, "Saving results"), " — you get logs, metrics and output files, all labelled SIMULATED."),
-                h("li", {}, h("b", {}, "Complete"), " — usually within a minute. Cost: $0.00."))),
+                h("li", {}, h("b", {}, "Preparing"), ": OpenGrid creates and checks the job, exactly as for a real run."),
+                h("li", {}, h("b", {}, "Running"), ": a simulator plays the training epochs. Loss and accuracy are synthetic."),
+                h("li", {}, h("b", {}, "Saving results"), ": you get logs, metrics and output files, all labelled SIMULATED."),
+                h("li", {}, h("b", {}, "Complete"), ": usually within a minute. Cost: $0.00."))),
             h("div", { class: "jb-easy-side" },
-              h("label", { class: "rt-f" }, h("span", { class: "rt-l" }, "Epochs (passes over the data)"), epochsIn, h("span", { class: "rt-h" }, `${eb.min}–${eb.max} · more epochs = a longer simulated run`)),
+              h("label", { class: "rt-f" }, h("span", { class: "rt-l" }, "Epochs (passes over the data)"), epochsIn, h("span", { class: "rt-h" }, `${eb.min}-${eb.max} · more epochs = a longer simulated run`)),
               startBtn,
               h("p", { class: "rt-h" }, "Starts at once and opens the job page."),
               easyMsg)),
@@ -950,7 +950,7 @@
           confirm: v.body.sandbox ? "Submit sandbox job" : "Submit for approval",
           ack: v.body.sandbox ? null : `I accept a maximum cost exposure of ${usd(L.max_total_cost_usd)} and a ${L.max_runtime_minutes}-minute runtime ceiling`,
           body: h("div", { class: "jb-dlg" },
-            v.body.sandbox ? h("p", { class: "jb-sim-b" }, h("b", {}, "SIMULATED — no GPU, no spend."), " No provider is called; every number is synthetic and labelled so.")
+            v.body.sandbox ? h("p", { class: "jb-sim-b" }, h("b", {}, "SIMULATED: no GPU, no spend."), " No provider is called; every number is synthetic and labelled so.")
               : h("p", {}, "Creates the job and a ", h("b", {}, "quote"), ". ", h("b", {}, sub.would === "launch" ? "LIVE mode: a validated, live-enabled provider may launch at once (within cost guards)." : "Approval is required before anything launches:"),
                 sub.would === "launch" ? "" : " an OpenGrid admin approves that exact quote on the route ticket. Nothing is charged before then."),
             h("table", { class: "rt-dlg-t" },
@@ -958,7 +958,7 @@
               !v.body.sandbox && c ? h("tr", {}, h("th", {}, "Route"), h("td", { class: "mono" }, `${OG.providerName(c.provider)} · ${c.gpu_count || v.body.resources.gpu_count}× ${OG.shortGpu(c.gpu || "")} · ${J.regionText(c)}`)) : null,
               !v.body.sandbox ? h("tr", {}, h("th", {}, "Max cost exposure"), h("td", { class: "mono" }, h("b", {}, usd(L.max_total_cost_usd)), est.est_max_total != null ? ` · est. max ${usd(est.est_max_total)} · typical ${usd(est.est_typical_total)}` : "")) : null,
               h("tr", {}, h("th", {}, "Price cap"), h("td", { class: "mono" }, `${perGpuH(L.max_price_per_gpu_hour_usd)}`)),
-              h("tr", {}, h("th", {}, "Runtime ceiling"), h("td", { class: "mono" }, `${L.max_runtime_minutes} min — the instance is terminated at the deadline (set at approval), training failure terminates too`)),
+              h("tr", {}, h("th", {}, "Runtime ceiling"), h("td", { class: "mono" }, `${L.max_runtime_minutes} min: the instance is terminated at the deadline (set at approval), training failure terminates too`)),
               h("tr", {}, h("th", {}, "SSH"), h("td", {}, v.body.ssh_public_key ? "your public key only" : "ephemeral key, private half discarded: nobody can SSH in")))),
         });
         if (!ok) return;
@@ -975,12 +975,12 @@
           msg.replaceChildren(h("div", { class: "og-ok" }, h("b", {}, "Submitted"), " ", JSON.stringify(r).slice(0, 200)));
         } catch (e) {
           msg.replaceChildren(apiErr(e, "POST /v1/jobs"), I.submit.state === "unknown" ? h("p", { class: "warn-t" }, "Outcome unknown. ",
-            h("button", { class: "btn sm", type: "button", onclick: () => { msg.remove(); doSubmit(body, where); } }, "Retry (same Idempotency-Key)"), " — the server replays the first answer instead of creating a second job.") : null);
+            h("button", { class: "btn sm", type: "button", onclick: () => { msg.remove(); doSubmit(body, where); } }, "Retry (same Idempotency-Key)"), ": the server replays the first answer instead of creating a second job.") : null);
         }
       }
       if (query.preset === "mnist" || !query.template) { /* defaults already applied */ }
       if (query.preview === "1") preview();
-      else out.replaceChildren(h("div", { class: "jb-empty" }, h("p", {}, "The MNIST preset is filled in. ", h("b", {}, "Preview route"), " shows the market's best listing, the route OpenGrid can actually execute now and why — or exactly what blocks a real run."),
+      else out.replaceChildren(h("div", { class: "jb-empty" }, h("p", {}, "The MNIST preset is filled in. ", h("b", {}, "Preview route"), " shows the market's best listing, the route OpenGrid can actually execute now and why, or exactly what blocks a real run."),
         h("p", { class: "dim" }, "Tick ", h("b", {}, "Sandbox"), " to walk the whole lifecycle with synthetic numbers first: no GPU, no spend.")));
     },
   });
@@ -1021,7 +1021,7 @@
       h("span", {}, ready ? "Every required gate is open; an admin still approves each quote." : `${bl.length} required gate${bl.length === 1 ? "" : "s"} closed: ${bl.map(b => String(b.code || "").replace(/^job_job_/, "job_").replace(/_/g, " ")).join(", ")}. Sandbox jobs still run (simulated).`),
       r.execution_mode ? OG.badge("mode " + r.execution_mode) : null,
       r.live_provisioning_enabled === false ? OG.badge("live provisioning off") : null,
-      items.length ? h("details", { class: "jb-rd" }, h("summary", {}, `${items.length} checks · ${provs.length} provisionable provider${provs.length === 1 ? "" : "s"} — details`),
+      items.length ? h("details", { class: "jb-rd" }, h("summary", {}, `${items.length} checks · ${provs.length} provisionable provider${provs.length === 1 ? "" : "s"}: details`),
         h("ul", { class: "ck-list" }, items.map(i => h("li", { class: i.ok ? "ck-green" : i.required === false ? "ck-unknown" : "ck-red" }, h("i", { class: "ck-dot" }),
           h("b", {}, String(i.code || i.key || "").replace(/^job_job_/, "job_").replace(/_/g, " ")), h("span", { class: "dim" }, i.detail || i.reason || ""), link(i))),
           provs.map(p => h("li", { class: p.ready ? "ck-green" : "ck-red" }, h("i", { class: "ck-dot" }), h("b", {}, OG.providerName(p.provider)),
@@ -1055,7 +1055,7 @@
       const strip = (b, p) => p && String(b.message).toLowerCase().startsWith(String(p).toLowerCase() + ":") ? String(b.message).slice(String(p).length + 1).trim() : b.message;
       const groups = groupBlockers(s.blockers);
       kids.push(h("div", { class: "jb-blockers", role: "alert" },
-        h("div", { class: "jb-bl-h" }, h("b", {}, "NOTHING IS EXECUTABLE RIGHT NOW"), h("span", { class: "dim" }, vw.blockers.length + " blocker" + (vw.blockers.length === 1 ? "" : "s") + " — a real run cannot launch until they are cleared" + (o.sandbox ? " (the sandbox still runs: simulated)" : ""))),
+        h("div", { class: "jb-bl-h" }, h("b", {}, "NOTHING IS EXECUTABLE RIGHT NOW"), h("span", { class: "dim" }, vw.blockers.length + " blocker" + (vw.blockers.length === 1 ? "" : "s") + ": a real run cannot launch until they are cleared" + (o.sandbox ? " (the sandbox still runs: simulated)" : ""))),
         groups.filter(g => !g.provider).map(g => h("ol", { class: "jb-bl-glob" }, g.items.map(b => h("li", {}, h("span", {}, b.message), b.code ? h("span", { class: "mono dimmer" }, b.code) : null, act(b))))),
         groups.some(g => g.provider) ? h("details", { class: "jb-bl-prov", open: groups.filter(g => g.provider).length <= 2 ? true : null },
           h("summary", {}, `Per provider · ${groups.filter(g => g.provider).length} provisionable provider${groups.filter(g => g.provider).length === 1 ? "" : "s"} not ready (codes; open for the exact reasons)`),
@@ -1068,7 +1068,7 @@
     if (sub) kids.push(h("div", { class: "jb-subm " + (sub.can_submit ? "ok" : "no") }, h("span", { class: "eyebrow" }, "Submit would"),
       h("b", { class: "mono" }, sub.would === "pending_approval" ? "create the job + a quote → PENDING APPROVAL" : sub.would === "simulated" ? "run a SIMULATED job (no provider)" : sub.would === "launch" ? "LAUNCH (LIVE mode)" : sub.would === "refused" ? "be REFUSED" : String(sub.would || "?")),
       sub.refusal ? h("span", { class: "dim" }, (sub.refusal.code || "").replace(/_/g, " ")) : null, sub.note ? h("span", { class: "dim" }, sub.note) : null,
-      sub.ssh ? h("span", { class: "dim" }, "SSH: ", sub.ssh.mode === "customer" ? h("span", { class: "mono" }, sub.ssh.fingerprint || "your key") : "ephemeral key, private half discarded — nobody can SSH in") : null));
+      sub.ssh ? h("span", { class: "dim" }, "SSH: ", sub.ssh.mode === "customer" ? h("span", { class: "mono" }, sub.ssh.fingerprint || "your key") : "ephemeral key, private half discarded: nobody can SSH in") : null));
     if (vw.exec.violations.length) kids.push(h("div", { class: "og-alarm t-warn" }, h("b", {}, `${vw.exec.violations.length} account limit violation${vw.exec.violations.length === 1 ? "" : "s"}`),
       h("span", {}, "the route is executable but an admin must override these at approval (recorded with a reason): "), h("span", { class: "mono" }, vw.exec.violations.map(v => v.code || v.message).join(", "))));
 
@@ -1076,21 +1076,21 @@
       viewCard("exec", vw.exec.label, vw.exec.cand || vw.exec.blocked_cand, vw.exec.executable, vw.exec.executable ? vw.exec.note : vw.exec.blocked_cand ? "The server named a candidate but it is not executable." : vw.exec.note),
       viewCard("market", vw.market.label, vw.market.cand, false, vw.market.same_as_exec ? "Same listing as the execution-ready route." : vw.market.note),
       h("div", { class: "jb-view jb-v-sandbox" + (o.sandbox ? " on" : "") }, h("div", { class: "jb-vh" }, h("span", { class: "jb-vl" }, vw.sandbox.label), o.sandbox ? OG.badge("selected", "warn") : OG.badge("available")),
-        h("div", { class: "jb-sim" }, "SIMULATED — no GPU, no spend"), h("p", { class: "rt-h" }, s.sandbox_note || vw.sandbox.note))));
+        h("div", { class: "jb-sim" }, "SIMULATED: no GPU, no spend"), h("p", { class: "rt-h" }, s.sandbox_note || vw.sandbox.note))));
 
     const forTxt = est ? (est.for === "execution_ready" ? "for the execution-ready route" : "for the market recommendation (NOT executable)") : null;
     kids.push(h("div", { class: "jb-est" },
       cell("Est. typical total", est && est.est_typical_total != null ? usd(est.est_typical_total) : OG.na("no candidate"),
-        est ? (est.est_typical_range ? `${usd(est.est_typical_range[0])}–${usd(est.est_typical_range[1])} · ` : "") + (est.typical_minutes ? `${est.typical_minutes.join("–")} min expected (estimate)` : "") : null, OG.kindBadge("estimated")),
+        est ? (est.est_typical_range ? `${usd(est.est_typical_range[0])} to ${usd(est.est_typical_range[1])} · ` : "") + (est.typical_minutes ? `${est.typical_minutes.join("-")} min expected (estimate)` : "") : null, OG.kindBadge("estimated")),
       cell("Est. max total", est && est.est_max_total != null ? h("span", { class: "rt-q" }, usd(est.est_max_total)) : OG.na("no candidate"), est ? estimateLine(est) : null, OG.kindBadge("estimated")),
-      cell("Your cap", Lm ? usd(Lm.max_total_cost_usd) : "–", Lm ? "max_total_cost_usd: candidates over it are excluded" : null),
-      cell("Strategy", s.strategy || "–", (STRATEGIES.find(x => x[0] === s.strategy) || [])[2] || null)));
+      cell("Your cap", Lm ? usd(Lm.max_total_cost_usd) : "-", Lm ? "max_total_cost_usd: candidates over it are excluded" : null),
+      cell("Strategy", s.strategy || "-", (STRATEGIES.find(x => x[0] === s.strategy) || [])[2] || null)));
     if (est) kids.push(h("p", { class: "note jb-basis" }, h("b", {}, "Estimate " + forTxt + ": "), est.basis || ""));
 
     const top = vw.exec.cand || vw.market.cand;
     kids.push(h("div", { class: "cols-2" },
       top && top.factors ? OG.section("Why it won · " + OG.providerName(top.provider) + (vw.exec.cand ? "" : " (market recommendation)"), J.whyList(top),
-        h("div", { class: "jb-sbar" }, "score ", h("b", { class: "mono" }, top.score != null ? (+top.score).toFixed(3) : "–"), " ", J.scoreBar(top, 220)),
+        h("div", { class: "jb-sbar" }, "score ", h("b", { class: "mono" }, top.score != null ? (+top.score).toFixed(3) : "-"), " ", J.scoreBar(top, 220)),
         top.why ? h("details", { class: "note jb-why" }, h("summary", {}, "Full explanation"), top.why) : null) : OG.section("Why it won", h("p", { class: "note" }, "No candidate to explain.")),
       OG.section("Workload requirements", requirementsBlock(s))));
 
@@ -1098,14 +1098,14 @@
     kids.push(OG.section(`Next-best alternatives · ${alts.length}`, alts.length ? OG.table({
       columns: [
         { key: "rank", label: "#", num: true, width: "28px" },
-        { key: "provider", label: "Provider", fmt: v => v ? OG.providerLink(v) : "–" },
-        { key: "gpu", label: "GPU", fmt: v => v ? OG.gpuLink(v) : "–" },
+        { key: "provider", label: "Provider", fmt: v => v ? OG.providerLink(v) : "-" },
+        { key: "gpu", label: "GPU", fmt: v => v ? OG.gpuLink(v) : "-" },
         { key: "region", label: "Location", value: r => J.regionText(r), cls: "dim" },
         { key: "price_per_gpu_hour", label: "$/GPU·h", num: true, fmt: v => fmt.price(v), title: "Observed market price" },
-        { key: "est_max", label: "Est. max", num: true, value: r => r.cost ? r.cost.est_max_total : null, fmt: v => v != null ? usd(v) : "–" },
+        { key: "est_max", label: "Est. max", num: true, value: r => r.cost ? r.cost.est_max_total : null, fmt: v => v != null ? usd(v) : "-" },
         { key: "executable", label: "Executable", value: r => candExecutable(r) && !vw.blockers.length ? 1 : 0,
           fmt: (v, r) => v ? OG.badge("executable", "good") : h("span", { class: "dim", title: ((r.readiness && r.readiness.reasons) || []).map(x => x.reason).join("\n") || null }, "no" + (r.readiness && r.readiness.reasons && r.readiness.reasons.length ? ` · ${r.readiness.reasons.length} reason${r.readiness.reasons.length === 1 ? "" : "s"}` : "")) },
-        { key: "score", label: "Score", num: true, fmt: v => v != null ? (+v).toFixed(3) : "–" },
+        { key: "score", label: "Score", num: true, fmt: v => v != null ? (+v).toFixed(3) : "-" },
         { key: "bar", label: "Breakdown", sort: false, csv: false, fmt: (v, r) => J.scoreBar(r, 110) },
         { key: "vs_selected", label: "vs #1", cls: "dim jb-rs", fmt: v => h("span", { title: v || null }, v || "") },
       ], rows: alts, sort: { key: "rank", dir: "asc" }, compact: true, csv: "opengrid-job-alternatives.csv",
@@ -1117,9 +1117,9 @@
       OG.section(`Exclusions · ${s.exclusions_total ?? ex.length}`, byCode.length ? h("div", { class: "jb-codes mono dim" }, byCode.map(([c, n]) => `${c.replace(/_/g, " ")} ${n}`).join(" · ")) : null,
         ex.length ? OG.table({
           columns: [
-            { key: "provider", label: "Provider", fmt: v => v ? OG.providerLink(v) : "–" },
-            { key: "gpu", label: "GPU", fmt: v => v ? OG.shortGpu(v) : "–", cls: "dim" },
-            { key: "price_per_gpu_hour", label: "$/GPU·h", num: true, fmt: v => v != null ? fmt.price(v) : "–" },
+            { key: "provider", label: "Provider", fmt: v => v ? OG.providerLink(v) : "-" },
+            { key: "gpu", label: "GPU", fmt: v => v ? OG.shortGpu(v) : "-", cls: "dim" },
+            { key: "price_per_gpu_hour", label: "$/GPU·h", num: true, fmt: v => v != null ? fmt.price(v) : "-" },
             { key: "code", label: "Code", fmt: v => v ? OG.badge(String(v).replace(/_/g, " ")) : "" },
             { key: "reason", label: "Reason", cls: "dim jb-rs", fmt: v => h("span", { title: v || null }, v || "") },
           ], rows: ex, compact: true, csv: "opengrid-job-exclusions.csv", limit: 60,
@@ -1127,7 +1127,7 @@
         }) : h("p", { class: "note" }, "Nothing excluded.")),
       OG.section(`Ineligible GPUs · ${inel.length}`, inel.length ? OG.table({
         columns: [
-          { key: "gpu", label: "GPU", fmt: v => v ? OG.shortGpu(v) : "–" },
+          { key: "gpu", label: "GPU", fmt: v => v ? OG.shortGpu(v) : "-" },
           { key: "code", label: "Code", fmt: v => v ? OG.badge(String(v).replace(/_/g, " ")) : "" },
           { key: "reason", label: "Why not", cls: "dim jb-rs", fmt: v => h("span", { title: v || null }, v || "") },
         ], rows: inel, compact: true, csv: false, limit: 300,
@@ -1168,7 +1168,7 @@
     if (!r && !el.length) return h("p", { class: "note" }, "Requirements not returned.");
     const rows = r ? [
       ["GPU", `${r.vendor || "NVIDIA"}${r.cuda_required ? " · CUDA" : ""}${r.gpu_count ? " · " + r.gpu_count + " GPU" : ""}`],
-      ["Compute capability", r.min_compute_capability != null ? `${r.min_compute_capability}${r.max_compute_capability != null ? " – " + r.max_compute_capability : "+"}` : null, r.max_compute_capability_reason],
+      ["Compute capability", r.min_compute_capability != null ? `${r.min_compute_capability}${r.max_compute_capability != null ? " to " + r.max_compute_capability : "+"}` : null, r.max_compute_capability_reason],
       ["VRAM", r.min_vram_gb != null ? `≥ ${r.min_vram_gb} GB` : null, r.vram_note],
       ["Host", [r.host_cpu_arch, r.min_vcpu != null ? "≥ " + r.min_vcpu + " vCPU" : null, r.min_ram_gb != null ? "≥ " + r.min_ram_gb + " GB RAM" : null, r.min_disk_gb != null ? "≥ " + r.min_disk_gb + " GB disk" : null].filter(Boolean).join(" · ") || null, r.resource_minimums_note],
       ["Capacity", r.on_demand_only ? "on-demand only" : null, r.on_demand_note],

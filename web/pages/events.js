@@ -1,4 +1,4 @@
-/* /events — Market Events feed from /v1/events (+ catalogue /v1/events/types).
+/* /events: Market Events feed from /v1/events (+ catalogue /v1/events/types).
    Filters (type, sev, gpu, provider, since) live in the URL. Newest first, day separators,
    "load more" paging, a per-day count histogram of the filtered set.
    Also exports OG.views.eventRow / OG.views.EVENT_TYPES, used by the overview page. */

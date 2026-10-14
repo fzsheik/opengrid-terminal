@@ -1,4 +1,4 @@
-/* /explorer — every current listing, filterable, sortable, shareable (all state lives in the URL), CSV export.
+/* /explorer: every current listing, filterable, sortable, shareable (all state lives in the URL), CSV export.
    Data: /listings (always). Extra columns appear when these answer (fail soft on 404):
      /v1/gpus            -> VRAM, architecture  (items: {name|gpu, vram_gb|spec.vram_gb, architecture|spec.architecture})
      /v1/trust/listings  -> freshness, availability basis  (items: {provider, listing_id, freshness, availability_basis, source_type})
@@ -74,7 +74,7 @@
           { key: "canonical_gpu_name", label: "GPU", value: r => r.canonical_gpu_name ? L.shortGpu(r.canonical_gpu_name) : null,
             fmt: (v, r) => v ? OG.gpuLink(v) : h("span", { class: "dim", title: "raw name, not mapped to a canonical GPU" }, r.raw_gpu_name), csv: r => r.canonical_gpu_name, ell: 200 },
           { key: "raw_gpu_name", label: "Raw name", hidden: true },
-          specs ? { key: "vram", label: "VRAM", num: true, value: r => (specOf(r) || {}).vram_gb ?? null, fmt: (v, r) => { const s = specOf(r); return s && s.vram_gb ? s.vram_gb + "G" : "–"; } } : null,
+          specs ? { key: "vram", label: "VRAM", num: true, value: r => (specOf(r) || {}).vram_gb ?? null, fmt: (v, r) => { const s = specOf(r); return s && s.vram_gb ? s.vram_gb + "G" : "-"; } } : null,
           specs ? { key: "arch", label: "Arch", value: r => (specOf(r) || {}).architecture ?? null, cls: "dim", minor: 3 } : null,
           { key: "provider", label: "Provider", value: r => OG.providerName(r.provider), fmt: (v, r) => OG.providerLink(r.provider), csv: r => r.provider },
           { key: "sku", label: "SKU", cls: "dim mono", ell: 170, minor: 2 },
@@ -84,17 +84,17 @@
             fmt: v => (v > 0 ? fmt.price(v) : OG.na("no price published for this listing")), cls: "strong" },
           { key: "last_change", label: "Last chg", num: true, title: "Change from the previous recorded price of this listing (observed)",
             value: r => (r.previous_price_per_gpu_hour && r.price_per_gpu_hour != null ? r.price_per_gpu_hour / r.previous_price_per_gpu_hour - 1 : null),
-            fmt: (v, r) => (r.previous_price_per_gpu_hour && r.price_per_gpu_hour != null ? h("span", { title: `was ${fmt.price(r.previous_price_per_gpu_hour)}, changed ${fmt.dateTime(r.changed_at)}` }, OG.chg(r.price_per_gpu_hour / r.previous_price_per_gpu_hour - 1)) : h("span", { class: "dimmer" }, "–")) },
-          { key: "price_per_instance_hour", label: "$/inst·h", num: true, value: r => (r.price_per_instance_hour > 0 ? r.price_per_instance_hour : null), csv: r => r.price_per_instance_hour, fmt: v => (v > 0 ? fmt.price(v) : "–"), minor: 4 },
+            fmt: (v, r) => (r.previous_price_per_gpu_hour && r.price_per_gpu_hour != null ? h("span", { title: `was ${fmt.price(r.previous_price_per_gpu_hour)}, changed ${fmt.dateTime(r.changed_at)}` }, OG.chg(r.price_per_gpu_hour / r.previous_price_per_gpu_hour - 1)) : h("span", { class: "dimmer" }, "-")) },
+          { key: "price_per_instance_hour", label: "$/inst·h", num: true, value: r => (r.price_per_instance_hour > 0 ? r.price_per_instance_hour : null), csv: r => r.price_per_instance_hour, fmt: v => (v > 0 ? fmt.price(v) : "-"), minor: 4 },
           { key: "region", label: "Region", cls: "dim", ell: 140 },
           { key: "country", label: "Ctry", cls: "dim", minor: 5 },
           { key: "market_type", label: "Market", cls: "dim" },
           { key: "provider_tier", label: "Tier", cls: "dim", minor: 6 },
-          { key: "interruptible", label: "Intr", title: "Interruptible (can be preempted)", fmt: v => v === true ? "yes" : v === false ? "no" : "–", cls: "dim", minor: 5 },
+          { key: "interruptible", label: "Intr", title: "Interruptible (can be preempted)", fmt: v => v === true ? "yes" : v === false ? "no" : "-", cls: "dim", minor: 5 },
           { key: "available", label: "Stock", fmt: v => stock(v) },
           trust ? { key: "avail_basis", label: "Stock basis", value: r => (trustOf(r) || {}).availability_basis ?? null, cls: "dim", minor: 7 } : null,
           { key: "vcpu", label: "vCPU", num: true, minor: 9 },
-          { key: "ram_gb", label: "RAM", num: true, fmt: v => v != null ? fmt.num(v, 0) + "G" : "–", minor: 9 },
+          { key: "ram_gb", label: "RAM", num: true, fmt: v => v != null ? fmt.num(v, 0) + "G" : "-", minor: 9 },
           { key: "source_type", label: "Source", value: r => (trustOf(r) || {}).source_type || (OG.providerMeta(r.provider) || {}).source_type || null, cls: "dim", title: "How OpenGrid reads this provider (provider_meta)", minor: 8 },
           { key: "observed_at", label: "Seen", num: true, title: "Last observed (freshness: fresh ≤30m, aging ≤3h, else stale)",
             value: r => r.observed_at ? -new Date(r.observed_at) : null,

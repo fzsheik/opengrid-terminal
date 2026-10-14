@@ -1,4 +1,4 @@
-/* /reserve — reserved-compute price-lock requests (methodology/reservations.md).
+/* /reserve: reserved-compute price-lock requests (methodology/reservations.md).
    /reserve       your requests (GET /v1/reservations; the operator can switch to every account via
                   GET /v1/admin/reservations) + the new-request form with the INDICATIVE reference for the GPU
                   (GET /v1/reservations/reference) and Submit (POST /v1/reservations/requests, one Idempotency-Key
@@ -18,8 +18,8 @@
   const CLOSED = ["declined", "expired", "withdrawn", "cancelled"];
   const OPEN = ["requested", "under_review", "offered"];
   const TERMINAL = ["declined", "expired", "withdrawn", "fulfilled", "cancelled"];
-  const BANNER = "Price-lock requests are reviewed by OpenGrid. An offer is made only when provider capacity backs it. This is a commercial order for compute delivered by OpenGrid — not a financial contract, not tradable, no cash settlement.";
-  const ACCEPTED = "Accepted — OpenGrid will contact you to sign the order form; nothing is billed by this action.";
+  const BANNER = "Price-lock requests are reviewed by OpenGrid. An offer is made only when provider capacity backs it. This is a commercial order for compute delivered by OpenGrid, not a financial contract, not tradable, no cash settlement.";
+  const ACCEPTED = "Accepted: OpenGrid will contact you to sign the order form; nothing is billed by this action.";
   const REGIONS = ["US", "Canada", "Europe", "UK", "APAC", "Middle East", "LATAM", "Africa"];
   // reservations/service.py bounds (the server re-validates and is the authority)
   const BOUNDS = { gpu_count: { min: 1, max: 1024 }, total_gpu_hours: { min: 1, max: 10000000 }, max_price_per_gpu_hour: { min_exclusive: 0, max: 1000 }, notes: 2000 };
@@ -50,12 +50,12 @@
   const isTerminal = r => !!r && (r.terminal === true || TERMINAL.includes(r.status));
 
   function usd(v, digits) {
-    if (v == null || v === "" || !isFinite(+v)) return "–";
+    if (v == null || v === "" || !isFinite(+v)) return "-";
     const d = digits == null ? 2 : digits;
     return "$" + (+v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
   }
-  const perGpuH = v => (v == null || !isFinite(+v) ? "–" : "$" + (+v).toFixed(+v < 10 ? 3 : 2) + "/GPU·h");
-  const hoursText = v => (v == null || !isFinite(+v) ? "–" : (+v).toLocaleString("en-US", { maximumFractionDigits: 2 }) + " GPU·h");
+  const perGpuH = v => (v == null || !isFinite(+v) ? "-" : "$" + (+v).toFixed(+v < 10 ? 3 : 2) + "/GPU·h");
+  const hoursText = v => (v == null || !isFinite(+v) ? "-" : (+v).toLocaleString("en-US", { maximumFractionDigits: 2 }) + " GPU·h");
 
   // <input type="datetime-local"> value (local time, no zone) -> ISO with zone; "" -> null
   function localToIso(v) {
@@ -84,9 +84,9 @@
     if (!f.gpu) errors.gpu = "pick one GPU variant";
     const c = numOrNull(f.gpu_count), hrs = numOrNull(f.total_gpu_hours), p = numOrNull(f.max_price_per_gpu_hour);
     if (c == null || !Number.isInteger(c)) errors.gpu_count = "a whole number of GPUs";
-    else if (c < BOUNDS.gpu_count.min || c > BOUNDS.gpu_count.max) errors.gpu_count = `1 – ${BOUNDS.gpu_count.max}`;
+    else if (c < BOUNDS.gpu_count.min || c > BOUNDS.gpu_count.max) errors.gpu_count = `1 to ${BOUNDS.gpu_count.max}`;
     if (hrs == null) errors.total_gpu_hours = "required";
-    else if (hrs < BOUNDS.total_gpu_hours.min || hrs > BOUNDS.total_gpu_hours.max) errors.total_gpu_hours = `1 – ${BOUNDS.total_gpu_hours.max.toLocaleString("en-US")}`;
+    else if (hrs < BOUNDS.total_gpu_hours.min || hrs > BOUNDS.total_gpu_hours.max) errors.total_gpu_hours = `1 to ${BOUNDS.total_gpu_hours.max.toLocaleString("en-US")}`;
     else if (c != null && hrs < c) errors.total_gpu_hours = "at least one hour on each GPU";
     else if (Math.round(hrs * 100) / 100 !== hrs) errors.total_gpu_hours = "at most 2 decimals";
     if (p == null) errors.max_price_per_gpu_hour = "your limit is required";
@@ -127,9 +127,9 @@
 
   /* =============================== DOM helpers =============================== */
   const R = OG.reserve;
-  const badge = s => h("span", { class: "badge og-st st-" + (tone(s) || "plain") }, String(s || "–").replace(/_/g, " "));
+  const badge = s => h("span", { class: "badge og-st st-" + (tone(s) || "plain") }, String(s || "-").replace(/_/g, " "));
   const indBadge = () => OG.badge("indicative", "warn", "Observed public prices and OpenGrid index levels. Not a quote, not an offer, not a binding price.");
-  const kv = rows => h("table", { class: "dep-kv" }, rows.filter(Boolean).map(([k, v, title]) => h("tr", { title: title || null }, h("th", {}, k), h("td", {}, v == null || v === "" ? h("span", { class: "dim" }, "–") : v))));
+  const kv = rows => h("table", { class: "dep-kv" }, rows.filter(Boolean).map(([k, v, title]) => h("tr", { title: title || null }, h("th", {}, k), h("td", {}, v == null || v === "" ? h("span", { class: "dim" }, "-") : v))));
   const banner = () => h("div", { class: "rs-ban", role: "note" }, h("b", {}, "NOT A FINANCIAL CONTRACT"), h("span", {}, BANNER), h("a", { class: "lnk", href: "/methodology/reservations" }, "How price-lock requests work →"));
   const notYet = (what, e) => e && (e.status === 404 || e.status === 405) && !(e.body && e.body.detail && e.body.detail.code) ? OG.insufficient(what + " is not available on this server yet.", "Not available yet") : apiErr(e, what);
   function apiErr(e, what) {
@@ -162,7 +162,7 @@
       h("tbody", {}, best.listings.map(l => h("tr", {}, h("td", {}, OG.providerLink(l.provider)), h("td", { class: "mono" }, String(l.gpu_count)),
         h("td", { class: "dim" }, [l.region, l.country].filter(Boolean).join(", ") || "not stated"), h("td", { class: "num mono" }, perGpuH(l.price_per_gpu_hour)),
         h("td", { class: "num" }, l.available === true ? "yes" : l.available === false ? "no" : h("span", { class: "dim" }, "unknown")),
-        h("td", { class: "num dim" }, l.observed_at ? fmt.age(l.observed_at) + " ago" : "–"))))) : null;
+        h("td", { class: "num dim" }, l.observed_at ? fmt.age(l.observed_at) + " ago" : "-"))))) : null;
     return OG.section(h("span", {}, title, " ", indBadge()), stats, tbl,
       h("p", { class: "note" }, ref.note || "Indicative only.", ref.as_of ? " As of " + fmt.dateTime(ref.as_of) + "." : "", " ",
         fixing && fixing.verify ? h("a", { class: "lnk", href: fixing.link }, "Fixing evidence →") : null, " ",
@@ -205,7 +205,7 @@
       const notesIn = bind("notes", h("textarea", { class: "field jb-ssh", rows: 2, maxlength: BOUNDS.notes, placeholder: "Optional: workload, interconnect, contract length, contact…", "aria-label": "Notes" }));
       const totalLine = h("span", { class: "rt-h" });
       const formErr = h("div", { class: "jb-ferr" });
-      const submitBtn = h("button", { class: "btn pri", type: "submit", title: "POST /v1/reservations/requests — reviewed by OpenGrid; nothing is reserved, launched or billed" }, "Submit request…");
+      const submitBtn = h("button", { class: "btn pri", type: "submit", title: "POST /v1/reservations/requests: reviewed by OpenGrid; nothing is reserved, launched or billed" }, "Submit request…");
       const form = h("form", { class: "box jb-form", onsubmit: e => { e.preventDefault(); submit(); } },
         h("div", { class: "rt-tt" }, h("b", {}, "New price-lock request"), h("span", { class: "dimmer" }, " · free · reviewed by OpenGrid")),
         field("GPU", gpuSel, "One GPU variant (families and auto are not accepted for a price lock)", "gpu"),
@@ -286,7 +286,7 @@
           load();
         } catch (e) {
           formErr.replaceChildren(apiErr(e, "POST /v1/reservations/requests"), I.submit.state === "unknown" ? h("p", { class: "warn-t" }, "Outcome unknown. ",
-            h("button", { class: "btn sm", type: "button", onclick: () => submit() }, "Retry (same Idempotency-Key)"), " — the server replays the first answer instead of creating a second request.") : null);
+            h("button", { class: "btn sm", type: "button", onclick: () => submit() }, "Retry (same Idempotency-Key)"), ": the server replays the first answer instead of creating a second request.") : null);
           const fld = e && e.body && e.body.detail && e.body.detail.field;
           if (fld && errs[fld]) errs[fld].textContent = e.body.detail.message;
         }
@@ -303,7 +303,7 @@
           { key: "start_after", label: "Start window", fmt: (v, r) => h("span", { class: "mono dim" }, fmt.date(v) + " → " + fmt.date(r.start_before)) },
           { key: "max_price_per_gpu_hour", label: "Your limit", num: true, fmt: v => perGpuH(v) },
           { key: "index", label: "Index at request", num: true, value: r => r.indicative && r.indicative.index ? r.indicative.index.level : null, fmt: v => v != null ? perGpuH(v) : OG.na("index not published") },
-          { key: "offer_price", label: "Offer", num: true, value: r => offerOf(r) ? r.offer.price_per_gpu_hour : null, fmt: (v, r) => v != null ? h("span", { class: offerOf(r).valid ? "" : "dim" }, perGpuH(v)) : h("span", { class: "dim" }, "–") },
+          { key: "offer_price", label: "Offer", num: true, value: r => offerOf(r) ? r.offer.price_per_gpu_hour : null, fmt: (v, r) => v != null ? h("span", { class: offerOf(r).valid ? "" : "dim" }, perGpuH(v)) : h("span", { class: "dim" }, "-") },
           scope === "all" ? { key: "account_id", label: "Account", cls: "mono dim", fmt: v => v == null ? "operator" : String(v) } : null,
           { key: "created_at", label: "Created", num: true, fmt: v => fmt.dateTime(v) },
         ].filter(Boolean),
@@ -434,7 +434,7 @@
           r = out; draw();
           return out;
         } catch (e) {
-          flash.replaceChildren(apiErr(e, "POST " + path.replace(id, "{id}")), intent && intent.state === "unknown" ? h("p", { class: "warn-t" }, "Outcome unknown: try again — it reuses the same Idempotency-Key.") : null);
+          flash.replaceChildren(apiErr(e, "POST " + path.replace(id, "{id}")), intent && intent.state === "unknown" ? h("p", { class: "warn-t" }, "Outcome unknown: try again. It reuses the same Idempotency-Key.") : null);
           return null;
         }
       }

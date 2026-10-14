@@ -74,7 +74,7 @@
         columns: [
           { key: "gpu", label: "Variant", value: r => OG.shortGpu(r.gpu || r.slug), fmt: (v, r) => h("span", { class: "lnk prov" }, h("i", { class: "sw", style: `background:${colorOf.get(vslug(r))}` }), h("a", { class: "lnk", href: "/gpu/" + vslug(r), title: r.gpu }, h("b", {}, OG.shortGpu(r.gpu || r.slug)))) },
           { key: "low", label: "Low $/GPU·h", num: true, fmt: (v, r) => (v == null ? OG.na(r.reason || "no in-stock on-demand listing now") : h("b", {}, fmt.price(v))), title: "Lowest observed on-demand price of this variant" },
-          { key: "low_provider", label: "at", hidden: !rows.some(r => r.low_provider), fmt: v => (v ? OG.providerLink(v) : "–") },
+          { key: "low_provider", label: "at", hidden: !rows.some(r => r.low_provider), fmt: v => (v ? OG.providerLink(v) : "-") },
           { key: "median", label: "Median", num: true, fmt: v => OG.value(v, fmt.price, "no priced providers") },
           { key: "high", label: "High", num: true, fmt: v => OG.value(v, fmt.price, "no priced providers") },
           { key: "change_24h", label: "24h", num: true, value: r => chgPct(r), fmt: (v, r) => OG.chg(chgPct(r), { reason: (r.change_24h && r.change_24h.reason) || "not enough history" }), title: "24-hour change of this variant's own index level" },

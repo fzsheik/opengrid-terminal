@@ -1,4 +1,4 @@
-/* /keys — API keys, usage, rate limits, BYO provider credentials, billing preview.
+/* /keys: API keys, usage, rate limits, BYO provider credentials, billing preview.
    GET/POST /v1/keys, DELETE /v1/keys/{id} (secret shown once), GET /v1/me, GET /v1/usage,
    GET/POST/DELETE /v1/credentials, GET /v1/billing/{policy,usage,invoices} (drafts only: no payments).
    The web UI acts as the operator account (site password / open dev). */
@@ -33,7 +33,7 @@
     return rows.length ? rows : null;
   }
   let SCOPES = FALLBACK_SCOPES, scopeSource = "built-in list (the API did not publish a scope catalogue)";
-  const when = v => (v ? h("span", { title: new Date(v).toString() }, fmt.dateTime(v)) : h("span", { class: "dim" }, "–"));
+  const when = v => (v ? h("span", { title: new Date(v).toString() }, fmt.dateTime(v)) : h("span", { class: "dim" }, "-"));
   const ago = v => (v ? h("span", { title: new Date(v).toString() }, fmt.age(v) + " ago") : h("span", { class: "dim" }, "never"));
   const STATE_TONE = { active: "good", revoked: "bad", expired: "warn" };
 
@@ -68,7 +68,7 @@
           const a = me.account || {};
           meBox.replaceChildren(OG.stats([
             { label: "Signed in as", value: me.principal === "operator" ? "operator" : me.key ? me.key.name : me.principal, sub: me.principal === "operator" ? "site password / open dev: every scope" : "API key " + (me.key && me.key.prefix) },
-            { label: "Account", value: a.name || null, sub: `#${a.id} · ${a.plan || "–"} · ${a.status || "–"}`, reason: "no account" },
+            { label: "Account", value: a.name || null, sub: `#${a.id} · ${a.plan || "-"} · ${a.status || "-"}`, reason: "no account" },
             { label: "Scopes", value: me.scopes && me.scopes[0] === "*" ? "all" : String((me.scopes || []).length), sub: me.scopes && me.scopes[0] === "*" ? "operator holds every scope" : (me.scopes || []).join(" ") },
             { label: "Active keys", value: fmt.num(st.keys.filter(k => k.state === "active").length), sub: `${st.keys.length} total` },
             { label: "Rate budget now", value: me.rate_limit ? `${me.rate_limit.read.remaining}/${me.rate_limit.read.limit}` : null, reason: "not rate limited: the operator is not an API key", sub: me.rate_limit ? "read requests left this minute" : "per API key, not per operator" },
@@ -229,7 +229,7 @@
           h("option", { value: "" }, "Provider…"),
           provs.slice().sort((a, b) => ((capOf.get(b) || {}).level_implemented >= 2) - ((capOf.get(a) || {}).level_implemented >= 2) || a.localeCompare(b)).map(p => {
             const lvl = (capOf.get(p) || {}).level_implemented;
-            return h("option", { value: p }, OG.providerName(p) + (lvl >= 2 ? "  — OpenGrid can provision" : "  — no adapter: stored, not used"));
+            return h("option", { value: p }, OG.providerName(p) + (lvl >= 2 ? " (OpenGrid can provision)" : " (no adapter: stored, not used)"));
           }));
         const secret = h("input", { class: "field ky-secret-in", type: "password", autocomplete: "off", placeholder: "provider API key", "aria-label": "Secret" });
         const label = h("input", { class: "field", placeholder: "label (optional)", "aria-label": "Label" });
@@ -256,7 +256,7 @@
         const byoTbl = OG.table({
           columns: [
             { key: "provider", label: "Provider", fmt: v => OG.providerLink(v) },
-            { key: "label", label: "Label", fmt: v => v || h("span", { class: "dim" }, "–") },
+            { key: "label", label: "Label", fmt: v => v || h("span", { class: "dim" }, "-") },
             { key: "hint", label: "Secret", cls: "mono", fmt: v => v + " (masked)" },
             { key: "state", label: "State", fmt: v => OG.badge(v, STATE_TONE[v]) },
             { key: "created_at", label: "Added", num: true, fmt: when },
@@ -268,9 +268,9 @@
           h("div", { class: "ky-cred-modes" },
             h("div", { class: "box box-p" }, h("div", { class: "ky-mode-h" }, OG.badge("default", "good"), h("b", {}, "OpenGrid-managed")),
               h("p", {}, "OpenGrid provisions with its own provider accounts, pays the provider, and bills your usage: provider cost plus OpenGrid's fee lines (see billing below). One OpenGrid key, no provider accounts needed."),
-              h("p", { class: "dim" }, "Configured on this server: ", managed.length ? managed.map(p => OG.providerName(p)).join(", ") : h("b", { class: "warn-t" }, "none — routing here has no managed provider credentials"), ".")),
+              h("p", { class: "dim" }, "Configured on this server: ", managed.length ? managed.map(p => OG.providerName(p)).join(", ") : h("b", { class: "warn-t" }, "none: routing here has no managed provider credentials"), ".")),
             h("div", { class: "box box-p" }, h("div", { class: "ky-mode-h" }, OG.badge("optional"), h("b", {}, "Bring your own (BYO)")),
-              h("p", {}, "Store your own key for a provider: routing uses it first for that provider, the provider bills you directly, and OpenGrid charges only its fee lines. Encrypted at rest (Fernet); never returned by any API — only the last 4 characters are shown. One active credential per provider."),
+              h("p", {}, "Store your own key for a provider: routing uses it first for that provider, the provider bills you directly, and OpenGrid charges only its fee lines. Encrypted at rest (Fernet); never returned by any API; only the last 4 characters are shown. One active credential per provider."),
               st.me && st.me.principal === "operator" ? h("p", { class: "warn-t" }, "Note: routes started from this web UI run as the operator, which currently resolves OpenGrid-managed credentials only; BYO credentials apply to this account's API keys.") : null)),
           byoTbl, h("div", { class: "box box-p ky-add" }, h("div", { class: "lbl" }, "Add a BYO credential"), form, err));
       }
@@ -318,7 +318,7 @@
             rows: i.lines || [], compact: true, csv: false })))) : OG.empty("No invoices. Drafts are built by the operator per month from recorded usage.");
         const credits = inv.error ? [] : inv.credits || [];
         billBox.replaceChildren(
-          h("div", { class: "ky-nopay" }, OG.badge("preview", "warn"), h("b", {}, "No payments are processed."), " OpenGrid charges no cards and simulates no payment processor. Invoices are drafts generated from recorded usage; all figures are ", OG.kindBadge("transaction"), " data — provider cost and OpenGrid's fees are separate lines, never folded together. ", h("a", { class: "lnk", href: "/methodology/billing" }, "Billing method →")),
+          h("div", { class: "ky-nopay" }, OG.badge("preview", "warn"), h("b", {}, "No payments are processed."), " OpenGrid charges no cards and simulates no payment processor. Invoices are drafts generated from recorded usage; all figures are ", OG.kindBadge("transaction"), " data. Provider cost and OpenGrid's fees are separate lines, never folded together. ", h("a", { class: "lnk", href: "/methodology/billing" }, "Billing method →")),
           h("div", { class: "cols-2" },
             h("div", {}, h("div", { class: "lbl" }, "Fee policy in force"), h("div", { class: "box box-p" }, policyEl)),
             h("div", {}, h("div", { class: "lbl" }, "Credits"), credits.length ? OG.table({ columns: [{ key: "amount_usd", label: "Amount", num: true, fmt: v => money(v) }, { key: "remaining_usd", label: "Remaining", num: true, fmt: v => money(v) }, { key: "reason", label: "Reason", cls: "wrap dim" }, { key: "expires_at", label: "Expires", num: true, fmt: v => v ? fmt.date(v) : "never" }], rows: credits, compact: true, csv: false }) : OG.empty("No credits."))),

@@ -1,4 +1,4 @@
-/* /provider/:name — one provider in depth.
+/* /provider/:name: one provider in depth.
    /v1/providers/{p}        catalog vs market, relative value, rank history, beats / expensive, feed health, facts
    /v1/capabilities/{p}     integration level: provider API vs implemented vs verified live (never merged)
    /v1/timeline?gpu&provider  this provider's hourly lowest for one GPU (+ market lowest / median, events, news)
@@ -9,10 +9,10 @@
 (() => {
   const { h, fmt, Lib: L } = OG;
   const V = () => OG.views || {};
-  const share = v => (V().share ? V().share(v) : v == null ? "–" : Math.round(v * 100) + "%");
+  const share = v => (V().share ? V().share(v) : v == null ? "-" : Math.round(v * 100) + "%");
   const pctCls = v => (v == null ? "" : v < 0 ? "up" : v > 0 ? "down" : "");
   const prem = (v, reason) => (v == null ? OG.na(reason) : h("span", { class: pctCls(v) }, fmt.pct(v)));
-  const kv = rows => h("table", { class: "pv-kv" }, h("tbody", {}, rows.filter(Boolean).map(([k, v, t]) => h("tr", { title: t || null }, h("td", {}, k), h("td", {}, v == null || v === "" ? h("span", { class: "dim" }, "–") : v)))));
+  const kv = rows => h("table", { class: "pv-kv" }, h("tbody", {}, rows.filter(Boolean).map(([k, v, t]) => h("tr", { title: t || null }, h("td", {}, k), h("td", {}, v == null || v === "" ? h("span", { class: "dim" }, "-") : v)))));
   const box = (...kids) => h("div", { class: "box box-p" }, kids);
   const mins = s => (s == null ? null : s >= 3600 ? Math.round(s / 3600) + "h" : Math.round(s / 60) + "m");
 
@@ -119,7 +119,7 @@
           const one = d.catalog.filter(c => c.market_providers >= 2 && c.rank_now === 1);
           if (one.length) out.push(h("li", {}, OG.kindBadge("observed"), ` Cheapest provider right now for `, one.slice(0, 6).map((c, i) => [i ? ", " : "", OG.gpuLink(c.gpu)]), one.length > 6 ? ` and ${one.length - 6} more` : "", "."));
           const solo = d.catalog.filter(c => c.market_providers === 1 && c.best_price != null);
-          if (solo.length) out.push(h("li", {}, OG.kindBadge("observed"), ` Only provider OpenGrid sees selling `, solo.slice(0, 5).map((c, i) => [i ? ", " : "", OG.gpuLink(c.gpu)]), solo.length > 5 ? ` and ${solo.length - 5} more` : "", " — no comparison possible."));
+          if (solo.length) out.push(h("li", {}, OG.kindBadge("observed"), ` Only provider OpenGrid sees selling `, solo.slice(0, 5).map((c, i) => [i ? ", " : "", OG.gpuLink(c.gpu)]), solo.length > 5 ? ` and ${solo.length - 5} more` : "", ". No comparison possible."));
         } else out.push(h("li", { class: "dim" }, `No priced live listings from ${name} on this server.`));
         if (!(d.facts || []).length) out.push(h("li", { class: "dim" }, `Window statistics (cheapest share, average premium) need ≥ 24 compared hours in the last ${st.days} days.`));
         factsEl.replaceChildren(...out);
@@ -134,7 +134,7 @@
             { key: "best_price", label: "Best $/GPU·h", num: true, fmt: v => v == null ? OG.na("no priced in-stock listing") : h("b", {}, fmt.price(v)) },
             { key: "market_median", label: "Mkt median", num: true, fmt: v => fmt.price(v), title: "Median of every provider's lowest price for this GPU now" },
             { key: "premium_now", label: "Prem. now", num: true, fmt: (v, r) => prem(v, r.market_providers < 2 ? "only provider selling it: nothing to compare with" : "not priced now"), title: "Own lowest / median of the OTHER providers' lowest − 1. Negative = cheaper than the market" },
-            { key: "rank_now", label: "Rank", num: true, fmt: (v, r) => v == null ? "–" : h("span", { class: v === 1 && r.market_providers > 1 ? "up" : "" }, `${v}/${r.market_providers}`), title: "1 = cheapest of the providers selling it now" },
+            { key: "rank_now", label: "Rank", num: true, fmt: (v, r) => v == null ? "-" : h("span", { class: v === 1 && r.market_providers > 1 ? "up" : "" }, `${v}/${r.market_providers}`), title: "1 = cheapest of the providers selling it now" },
             { key: "wprem", label: `Avg ${st.days}d`, num: true, value: r => r.w.premium_avg, fmt: (v, r) => prem(r.w.premium_avg, (r.w.reasons || {}).premium_avg) },
             { key: "wcheap", label: "% cheapest", num: true, desc: true, value: r => r.w.cheapest_share, fmt: (v, r) => OG.value(r.w.cheapest_share, share, (r.w.reasons || {}).cheapest_share) },
             { key: "avail", label: "In stock", num: true, desc: true, fmt: (v, r) => h("span", { title: `${r.available_listings} of ${r.listings} listings explicitly in stock (others sold out or unknown)` }, `${r.available_listings}/${r.listings}`) },
@@ -225,7 +225,7 @@
         const sums = (cx && cx.summaries) || [];
         ctxEl.replaceChildren(...sums.map(s => h("li", {}, OG.kindBadge("observed"), " ", s)),
           ...(cx ? Object.values(cx.windows || {}).filter(w => w.reason).slice(0, 1).map(w => h("li", { class: "dim" }, `Percentile vs its own history: ${w.reason}.`)) : []));
-        priceNote.replaceChildren(OG.kindBadge("observed"), ` Hourly lowest eligible on-demand price per GPU-hour from the rollup; market lines are every provider's lowest. Markers: market events, price moves (≥ ${mine.price_moves.threshold_pct}%) and news mentioning this GPU — related in time, not necessarily causal.`);
+        priceNote.replaceChildren(OG.kindBadge("observed"), ` Hourly lowest eligible on-demand price per GPU-hour from the rollup; market lines are every provider's lowest. Markers: market events, price moves (≥ ${mine.price_moves.threshold_pct}%) and news mentioning this GPU (related in time, not necessarily causal).`);
       }
 
       // ------------------------------------------------------------ right column
@@ -237,14 +237,14 @@
           : c.level_implemented === 2 ? "launch through the API" : c.level_implemented === 1 ? "check availability live" : null;
         intEl.replaceChildren(
           h("div", { class: "pd-int" }, V().integration ? V().integration(c, { long: true }) : lv(c.level_implemented), c.verified_live ? OG.badge("verified live", "good") : OG.badge("not verified live", "warn", "no adapter has made a real call against a provider account yet")),
-          h("p", { class: "pd-can" }, can ? `OpenGrid's adapter can ${can} — tested against mocked HTTP built from the documented API only; no real provisioning call has been made.`
+          h("p", { class: "pd-can" }, can ? `OpenGrid's adapter can ${can}. It was tested against mocked HTTP built from the documented API only; no real provisioning call has been made.`
             : `OpenGrid reads ${name}'s prices only. It cannot check stock live, quote or provision here${c.level_supported_by_provider_api ? ` (the provider's API documents L${c.level_supported_by_provider_api}; OpenGrid has no adapter)` : ""}.`),
           kv([["Provider API documents", lv(c.level_supported_by_provider_api), c.docs_checked],
             ["OpenGrid implements", lv(c.level_implemented)],
             ["Verified live", c.verified_live ? "yes" : h("span", { class: "pv-unv" }, "no")],
             ["Avail. check live-verified", c.availability_check_verified_live ? h("span", { class: "up" }, "yes · read-only") : "no"],
             c.via ? ["Routed via", `${c.via} (aggregator; it is the counterparty and its listing is the price)`] : null,
-            ["Resource", c.resource], ["Credential", (c.credential_requirement || "–").replace(/_/g, " ")],
+            ["Resource", c.resource], ["Credential", (c.credential_requirement || "-").replace(/_/g, " ")],
             ["Configured here", c.credentials_configured ? "yes" : "no", "whether OpenGrid-managed credentials are set on this server"],
             ["Stop supported", c.supports_stop ? "yes" : "no"],
             ["API docs", c.docs_url ? h("a", { class: "lnk", href: c.docs_url, target: "_blank", rel: "noopener external" }, (c.docs_checked || "docs") + " ↗") : null]]),
@@ -308,7 +308,7 @@
         // all current listings with their trust block
         listEl.replaceChildren(mine.length ? OG.table({
           columns: [
-            { key: "canonical_gpu_name", label: "GPU", fmt: (v, r) => v ? OG.gpuLink(v) : h("span", { class: "dim", title: "not mapped to a canonical GPU — never guessed" }, r.raw_gpu_name + " · unmapped") },
+            { key: "canonical_gpu_name", label: "GPU", fmt: (v, r) => v ? OG.gpuLink(v) : h("span", { class: "dim", title: "not mapped to a canonical GPU (never guessed)" }, r.raw_gpu_name + " · unmapped") },
             { key: "raw_gpu_name", label: "Raw name", cls: "dim" },
             { key: "gpu_count", label: "GPUs", num: true },
             { key: "price_per_gpu_hour", label: "$/GPU·h", num: true, fmt: v => fmt.price(v) },
@@ -317,7 +317,7 @@
             { key: "region", label: "Region", cls: "dim" },
             { key: "available", label: "Stock", fmt: (v, r) => { const b = (trustBy.get(r.listing_id) || {}).availability_basis; const t = b ? `availability ${b}` : null; return v === true ? h("span", { title: t }, "in stock") : v === false ? h("span", { class: "down", title: t }, "sold out") : h("span", { class: "dim", title: t }, "unknown"); } },
             { key: "fresh", label: "Fresh", value: r => (trustBy.get(r.listing_id) || {}).freshness || null, fmt: (v, r) => OG.freshBadge(v || r.observed_at, { provider: p }), csv: r => (trustBy.get(r.listing_id) || {}).freshness },
-            { key: "conf", label: "Conf.", value: r => (trustBy.get(r.listing_id) || {}).confidence || null, cls: "dim", title: "Data-trust confidence (quality layer)", fmt: (v, r) => v ? h("span", { title: ((trustBy.get(r.listing_id) || {}).confidence_reasons || []).join("; ") || null }, v) : "–" },
+            { key: "conf", label: "Conf.", value: r => (trustBy.get(r.listing_id) || {}).confidence || null, cls: "dim", title: "Data-trust confidence (quality layer)", fmt: (v, r) => v ? h("span", { title: ((trustBy.get(r.listing_id) || {}).confidence_reasons || []).join("; ") || null }, v) : "-" },
           ],
           rows: mine, sort: { key: "price_per_gpu_hour", dir: "asc" }, compact: true, limit: 50, csv: `opengrid-${p}-listings.csv`, title: `${mine.length} listings incl. sold-out and ineligible rows`,
         }) : OG.empty("No current listings from this provider on this server."));

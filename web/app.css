@@ -1675,7 +1675,7 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .pg-rsv .sec { margin-top: 10px; }
 /* ---- end page: reserve ---- */
 
-/* ---------------- OpenGrid Assistant (web/pages/assistant.js) — theme tokens only ---------------- */
+/* ---------------- OpenGrid Assistant (web/pages/assistant.js): theme tokens only ---------------- */
 .ag { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--line-2); border-radius: 4px; background: var(--surface); padding: 10px; max-width: 980px; }
 .ag-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .ag-head .btn { margin-left: auto; }

@@ -1,4 +1,4 @@
-/* /api — public API docs, generated from the live /openapi.json and grouped by domain, plus auth (Bearer opg_
+/* /api: public API docs, generated from the live /openapi.json and grouped by domain, plus auth (Bearer opg_
    keys, scopes), the {data, meta} envelope, data kinds / price concepts, rate limits, an example
    /v1/route/preview call, and "try it" for GET endpoints (runs in this browser with the page's own session). */
 (() => {
@@ -58,7 +58,7 @@
               h("p", { class: "note" }, h("b", {}, "401"), " missing / invalid / revoked / expired key · ", h("b", {}, "403"), " key lacks the scope, or account suspended · ", h("b", {}, "429"), " over the rate limit.")),
             h("table", { class: "dep-kv api-scopes" }, [
               ["data:read", "market data, indices, events, news, capabilities, best execution"], ["route:preview", "dry-run routing decisions and audit records"],
-              ["route:execute", "provision compute through OpenGrid — spends money"], ["deployments:read", "your deployments"], ["deployments:write", "stop / terminate deployments"],
+              ["route:execute", "provision compute through OpenGrid (spends money)"], ["deployments:read", "your deployments"], ["deployments:write", "stop / terminate deployments"],
               ["watchlists", "watchlists and alerts"], ["billing:read", "usage and draft invoices"], ["account:manage", "keys and BYO provider credentials"], ["admin", "operator functions"],
             ].map(([s, d]) => h("tr", {}, h("th", { class: "mono" }, s), h("td", { class: s === "route:execute" ? "warn-t" : "" }, d)))))),
         sec("envelope", "Response envelope",
@@ -66,7 +66,7 @@
             h("pre", { class: "w4-code" }, JSON.stringify({ data: { "…": "the payload" }, meta: { as_of: "2026-10-07T01:08:25Z", kind: "observed", methodology: "/methodology/data-kinds", price_concept: "observed_market_price", note: "…" } }, null, 2)),
             h("div", {},
               h("p", { class: "note" }, h("code", { class: "mono" }, "meta.as_of"), " is when the response was built; ", h("code", { class: "mono" }, "meta.kind"), " is the data kind; ", h("code", { class: "mono" }, "meta.methodology"), " links the method behind every number. Lists page with ", h("code", { class: "mono" }, "limit / offset"), " where offered."),
-              h("p", { class: "note" }, "A statistic OpenGrid cannot compute honestly is ", h("code", { class: "mono" }, "null"), " with a ", h("code", { class: "mono" }, "reason"), " — never a placeholder number."),
+              h("p", { class: "note" }, "A statistic OpenGrid cannot compute honestly is ", h("code", { class: "mono" }, "null"), " with a ", h("code", { class: "mono" }, "reason"), ", never a placeholder number."),
               h("p", { class: "note" }, "Errors: ", h("code", { class: "mono" }, '{"detail": "…"}'), " with the HTTP status.")))),
         sec("kinds", "Data kinds & price concepts",
           h("div", { class: "cols-2" },
@@ -81,15 +81,15 @@
               h("tr", {}, h("th", {}, OG.conceptBadge("execution")), h("td", {}, "what the provider charged a real deployment")))),
           h("p", { class: "note" }, "The four price concepts are never mixed in one field. ", h("a", { class: "lnk", href: "/methodology/data-kinds" }, "Data kinds methodology →"))),
         sec("limits", "Rate limits",
-          h("p", { class: "note" }, "Per key and per request class — ", h("b", {}, "read"), " (GET/HEAD/OPTIONS), ", h("b", {}, "write"), " (other methods), ", h("b", {}, "execute"),
-            " (non-GET under /v1/route and /v1/deployments) — as a token bucket refilled continuously, so a full minute's budget can burst. Each response carries ",
+          h("p", { class: "note" }, "Per key and per request class (", h("b", {}, "read"), " (GET/HEAD/OPTIONS), ", h("b", {}, "write"), " (other methods), ", h("b", {}, "execute"),
+            " (non-GET under /v1/route and /v1/deployments), as a token bucket refilled continuously, so a full minute's budget can burst. Each response carries ",
             h("code", { class: "mono" }, "X-RateLimit-Limit"), ", ", h("code", { class: "mono" }, "-Remaining"), ", ", h("code", { class: "mono" }, "-Reset"), ", ", h("code", { class: "mono" }, "-Class"),
             "; a 429 adds ", h("code", { class: "mono" }, "Retry-After"), ". ", h("code", { class: "mono" }, "GET /v1/me"), " shows the key's current budget.")),
         sec("example", "Example: route preview",
           h("p", { class: "note" }, "“I need 8 H100s in the US under $2.50/hr for a day.” Preview is free, never calls a provider, and returns the selected listing, its quote, alternatives with per-factor scores, exclusions with reasons, and an audit id (", h("code", { class: "mono" }, "GET /v1/route/{route_request_id}"), ")."),
           h("div", { class: "api-ex" }, h("pre", { class: "w4-code" }, curl), copyBtn(curl)),
           h("p", { class: "note" }, h("a", { class: "lnk", href: "/route" + OG.qs.stringify({ gpu: EXAMPLE.gpu, count: 8, region: "US", max: 2.5, dur: 24 }) }, "Run this preview in the terminal →"),
-            " · ", h("code", { class: "mono" }, "POST /v1/route"), " with the same body (scope route:execute) checks, quotes and — only where live provisioning is enabled — provisions; otherwise it returns ", h("code", { class: "mono" }, "status: not_provisioned"), ".")));
+            " · ", h("code", { class: "mono" }, "POST /v1/route"), " with the same body (scope route:execute) checks, quotes and (only where live provisioning is enabled) provisions; otherwise it returns ", h("code", { class: "mono" }, "status: not_provisioned"), ".")));
 
       const epHolder = h("div", {}, OG.loading("Reading /openapi.json…"));
       body.append(epHolder);

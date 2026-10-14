@@ -1,4 +1,4 @@
-/* /opportunities — the opportunity monitor (/v1/opportunities, computed live, cached 60 s).
+/* /opportunities: the opportunity monitor (/v1/opportunities, computed live, cached 60 s).
    Tabs by type (with counts), sorted by score; each item: score, explanation, the numbers, observed/inferred,
    links. Filters (type, gpu, provider, min) live in the URL. Types the server could not evaluate are listed with
    the reason. These are observations about listed prices, not advice and not quotes. */
@@ -10,7 +10,7 @@
     new_cheapest_provider: "New cheapest provider", supply_change: "Supply change",
   };
   const label = t => LABEL[t] || String(t).replace(/_/g, " ");
-  const pctAbs = v => v == null ? "–" : fmt.pct(v).replace(/^\+/, "");
+  const pctAbs = v => v == null ? "-" : fmt.pct(v).replace(/^\+/, "");
   const MIN = [["0", "ANY"], ["25", "25+"], ["50", "50+"], ["75", "75+"]];
 
   // The numbers behind each type, as [label, value-node] pairs.
@@ -20,17 +20,17 @@
       case "wide_spread": return [["spread", pctAbs(n.spread)], ["low", [P(n.lowest), " ", pv(n.lowest_provider)]], ["median", P(n.median)], ["high", [P(n.highest), " ", pv(n.highest_provider)]],
         n.p90_30d != null ? ["30d p90", pctAbs(n.p90_30d)] : ["baseline", h("span", { class: "dim" }, n.baseline || "none")], ["providers", String(n.providers)]];
       case "price_cut": return [["24h ago", P(n.price_24h_ago)], ["now", P(n.price)], ["chg", OG.chg(n.pct)]];
-      case "new_cheap_inventory": return [["price", P(n.price)], ["mkt median", P(n.market_median)], ["vs median", OG.chg(n.discount)], ["region", n.region || "–"], ["GPUs", String(n.gpu_count ?? "–")], ["first seen", fmt.dateTime(n.first_seen)]];
+      case "new_cheap_inventory": return [["price", P(n.price)], ["mkt median", P(n.market_median)], ["vs median", OG.chg(n.discount)], ["region", n.region || "-"], ["GPUs", String(n.gpu_count ?? "-")], ["first seen", fmt.dateTime(n.first_seen)]];
       case "regional_dislocation": return [["group median", P(n.group_median)], ["global median", P(n.global_median)], ["gap", OG.chg(n.gap)], ["providers", `${n.group_providers}/${n.providers}`]];
       case "below_usual_premium": return [["price", P(n.price)], ["mkt median", P(n.market_median)], ["premium now", fmt.pct(n.premium_now)], ["30d avg", fmt.pct(n.premium_30d)], ["Δ pts", fmt.num((n.delta || 0) * 100, 1)], ["samples", String(n.samples)]];
-      case "scarcity": return [["available", String(n.available_listings)], ["30d avg", fmt.num(n.average_30d, 1)], ["ratio", pctAbs(n.ratio)], ["providers avail", String(n.providers_available ?? "–")]];
+      case "scarcity": return [["available", String(n.available_listings)], ["30d avg", fmt.num(n.average_30d, 1)], ["ratio", pctAbs(n.ratio)], ["providers avail", String(n.providers_available ?? "-")]];
       case "new_cheapest_provider": return [["price", P(n.price)], ["was", [P(n.previous_price), " ", pv(n.previous_provider)]], ["since", fmt.dateTime(n.since)]];
       case "supply_change": return [["providers", `${n.providers_priced_then} → ${n.providers_priced_now}`], ["listings", `${n.available_listings_then} → ${n.available_listings_now}`], ["matched", String(n.providers_matched)]];
       default: return Object.entries(n).filter(([, v]) => typeof v === "number" || typeof v === "string").slice(0, 6).map(([k, v]) => [k.replace(/_/g, " "), typeof v === "number" ? fmt.num(v, 3) : v]);
     }
   }
   const numsCell = it => h("span", { class: "op-nums" }, nums(it).map(([k, v]) => h("span", { class: "op-kv" }, h("i", {}, k), h("b", {}, v))));
-  const scoreCell = s => h("span", { class: "op-sc", title: "score 0–100: larger or more unusual is higher (see methodology)" },
+  const scoreCell = s => h("span", { class: "op-sc", title: "score 0 to 100: larger or more unusual is higher (see methodology)" },
     h("span", { class: "op-sc-b" }, h("i", { style: { width: Math.max(2, Math.min(100, s)) + "%" } })), h("b", {}, fmt.num(s, 0)));
 
   function table(items, showType, title) {
@@ -41,7 +41,7 @@
       columns: [
         { key: "score", label: "Score", num: true, desc: true, fmt: v => scoreCell(v), width: "84px" },
         { key: "type", label: "Type", hidden: !showType, fmt: v => h("span", { class: "op-ty" }, label(v)) },
-        { key: "gpu", label: "GPU", width: "136px", fmt: (v, r) => v ? OG.gpuLink(v) : "–", value: r => r.gpu ? L.shortGpu(r.gpu) : null },
+        { key: "gpu", label: "GPU", width: "136px", fmt: (v, r) => v ? OG.gpuLink(v) : "-", value: r => r.gpu ? L.shortGpu(r.gpu) : null },
         { key: "provider", label: "Provider / region", width: "128px", fmt: (v, r) => v ? OG.providerLink(v) : r.region_group ? h("span", { class: "op-rg" }, r.region_group) : h("span", { class: "dimmer" }, "market"), value: r => r.provider_name || r.region_group },
         { key: "explanation", label: "Why it is listed", cls: "wrap op-ex", sort: false },
         { key: "numbers", label: "Numbers", cls: "wrap", width: "30%", sort: false, fmt: (v, r) => numsCell(r), csv: r => JSON.stringify(r.numbers) },

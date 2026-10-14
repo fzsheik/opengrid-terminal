@@ -425,7 +425,7 @@ def test_first_paid_job_e2e():
                             for ch in json.dumps(json.loads(body), ensure_ascii=False) if ord(ch) > 127})
         g.content.decode("utf-8")
         step(f"mojibake: none in decoded JSON; content-type {g.headers.get('content-type')!r}; non-ASCII chars "
-             f"served: {non_ascii}; a latin-1 decode would show e.g. {'—'.encode().decode('latin-1')!r}")
+             f"served: {non_ascii}; a latin-1 decode would show e.g. {'\u2014'.encode().decode('latin-1')!r}")
         if torch_ok:
             no_mojibake("GET /v1/jobs/{R}", c.get(f"/v1/jobs/{jr}", headers=cust).text)
         no_mojibake("jobs.selection (DB)", json.dumps([r[0] for r in q("SELECT selection FROM jobs")],

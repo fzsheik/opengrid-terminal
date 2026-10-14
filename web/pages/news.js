@@ -1,8 +1,8 @@
-/* /news — News & signals. Story-clustered items from /v1/news, filters in the URL so provider-, GPU- and
+/* /news: News & signals. Story-clustered items from /v1/news, filters in the URL so provider-, GPU- and
    region-specific views are just links (/news?provider=vast, /news?gpu=h100, /news?region=Europe).
    Relevance components come from the list item (else /v1/news/{id}) on hover; family suggestions from /v1/news/families. Source health from /v1/news/sources, topic
    catalogue from /v1/news/topics. view=timeline overlays /v1/timeline for one GPU: prices, availability,
-   market events and news on one axis — related in time, not necessarily causal. */
+   market events and news on one axis, related in time, not necessarily causal. */
 (() => {
   const { h, fmt, Lib: L } = OG;
   const REGIONS = ["US", "Canada", "Europe", "UK", "APAC", "Middle East", "LATAM", "Africa"];
@@ -29,7 +29,7 @@
       const feedEl = h("div", {}), moreEl = h("div", { class: "nw-more" }), countEl = h("span", { class: "dim nw-count" });
       const tlEl = h("div", {}), srcEl = h("div", {}, OG.loading()), topicEl = h("div", {}, OG.loading());
       const left = h("div", {}), right = h("div", {}, OG.section("Source health", srcEl), OG.section("Topics · 30d", topicEl));
-      el.append(OG.head("News & signals", "GPU-compute news, story-clustered, tagged with the GPUs, providers and regions it mentions. Related to market moves by time and entity only — never presented as a cause.", viewSeg),
+      el.append(OG.head("News & signals", "GPU-compute news, story-clustered, tagged with the GPUs, providers and regions it mentions. Related to market moves by time and entity only, never presented as a cause.", viewSeg),
         fbar, chipsEl, activeEl, h("div", { class: "cols nw-cols" }, left, right));
 
       // ------------------------------------------------------------ filters
@@ -133,7 +133,7 @@
             h("div", { class: "nw-m" },
               h("span", { class: "mono", title: (n.published_at_inferred ? "no publish time from the source; first seen · " : "") + fmt.dateTime(n.published_at) }, fmt.age(n.published_at) + " ago"),
               h("a", { class: "lnk", href: "/news?source=" + encodeURIComponent(n.source_id) }, n.source_name),
-              h("span", { class: "tier-t t-" + (n.trust_tier || "none"), title: "source tier" }, n.trust_tier || "–"),
+              h("span", { class: "tier-t t-" + (n.trust_tier || "none"), title: "source tier" }, n.trust_tier || "-"),
               n.source_count > 1 ? h("span", { class: "nw-srcs", title: others.map(s => `${s.source_name}: ${s.title}`).join("\n") }, `+${n.source_count - 1} source${n.source_count > 2 ? "s" : ""}: `,
                 others.slice(0, 4).map((s, i) => [i ? ", " : "", h("a", { class: "lnk", href: safeHref(s.url), target: "_blank", rel: "noopener external" }, s.source_name)])) : null,
               ents.length ? h("span", { class: "nw-ents" }, ents) : null)));
@@ -160,7 +160,7 @@
         const evs = [
           ...((d.market_events && d.market_events.events) || []).map(e => ({ t: e.occurred_at, label: e.title, kind: "event · " + e.type.replace(/_/g, " "), severity: e.severity, href: "/events" })),
           ...((d.price_moves && d.price_moves.moves) || []).map(m => ({ t: m.at, label: `lowest ${fmt.price(m.from)} → ${fmt.price(m.to)} (${fmt.pct(m.change_pct / 100)})`, kind: "move", severity: "notable",
-            detail: m.provider_set_changed ? "the set of priced providers changed this hour — may be coverage, not a market move" : null })),
+            detail: m.provider_set_changed ? "the set of priced providers changed this hour (may be coverage, not a market move)" : null })),
           ...((d.availability_changes && d.availability_changes.changes) || []).map(c => ({ t: c.at || c.hour, label: `${OG.providerName(c.provider)}: ${c.from || "?"} → ${c.to || "?"}`, kind: "availability", color: "#c9b5ff" })),
           ...((d.news && d.news.items) || []).map(n => ({ t: n.published_at, label: n.title, kind: "news · " + n.source_name + " · rel " + n.relevance, color: "#8fc3ff", detail: "related by entity and time, not necessarily causal" })),
         ].filter(e => e.t);

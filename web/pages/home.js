@@ -1,4 +1,4 @@
-/* / — homepage for a first-time visitor: what OpenGrid is (headline), three actions (Explore GPUs, Find Compute,
+/* / (homepage) for a first-time visitor: what OpenGrid is (headline), three actions (Explore GPUs, Find Compute,
    the sandbox training demo), a compact live board of the most-covered GPUs and how OpenGrid works.
 
    Data (all real, none invented): /v1/overview (board: lowest price, cheapest provider, provider count, matched
@@ -29,7 +29,7 @@
         { key: "change_24h_median", label: "24h", num: true, desc: true, title: "matched 24h change of the median: providers priced at both times only",
           fmt: (v, r) => OG.chg(v, { reason: r.providers_matched < 2 ? `needs >= 2 providers priced 24h ago and now (${r.providers_matched || 0} matched)` : "not enough history" }) },
         { key: "spark", label: "24h low", sort: false, csv: false, title: "lowest price over the last 24h (/market)",
-          fmt: (v, r) => (r.spark ? OG.charts.sparkline(r.spark, { dir: fmt.dir(r.spark_chg), width: 84, height: 16 }) : h("span", { class: "dimmer" }, "–")) },
+          fmt: (v, r) => (r.spark ? OG.charts.sparkline(r.spark, { dir: fmt.dir(r.spark_chg), width: 84, height: 16 }) : h("span", { class: "dimmer" }, "-")) },
       ],
       rows: [], sort: { key: "providers", dir: "desc" }, compact: true, csv: false, limit: BOARD_ROWS,
       rowKey: r => r.gpu, rowHref: r => "/gpu/" + r.gpu_slug, empty: "No GPU is priced right now.",
@@ -77,7 +77,7 @@
             h("h1", { class: "hm-h1" }, "The smartest way to find and run GPU compute."),
             h("p", { class: "hm-sub" }, "Compare GPU prices across ", provN, ", find compute suited to your workload, and manage execution through one platform."),
             h("p", { class: "hm-honest" },
-              "Prices are observed from provider price lists and APIs, labelled with their age. Real launches are supervised: each one waits for OpenGrid approval. The training demo is a free simulation — no GPU, no spend.")),
+              "Prices are observed from provider price lists and APIs, labelled with their age. Real launches are supervised: each one waits for OpenGrid approval. The training demo is a free simulation: no GPU, no spend.")),
           h("div", { class: "hm-acts" },
             action("/gpus", "Explore GPUs", "Live prices, availability and history for every GPU across providers.", null, true),
             action("/find", "Find Compute", "Describe your workload; get GPUs that fit it, ranked by price and fit.", null),

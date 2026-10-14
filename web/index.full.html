@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OpenGrid — The compute market, in focus</title>
+<title>OpenGrid: The compute market, in focus</title>
 <meta name="description" content="Explore the GPU compute market. Compare live provider pricing, availability, and price history with OpenGrid.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -60,7 +60,7 @@ main{max-width:1344px;margin:auto;padding:42px 48px 60px}.intro{display:flex;ali
       <div class="hero-id" id="hero-id"></div>
       <div class="price-block">
         <div class="price-label">Lowest available price</div>
-        <div class="big-price" id="hero-price">—</div>
+        <div class="big-price" id="hero-price">-</div>
         <div class="price-sub" id="hero-sub"></div>
       </div>
       <div class="chart" id="chart"><div class="tip" id="tip"></div></div>
@@ -139,11 +139,11 @@ const state = {
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const n = v => (v === null || v === undefined ? null : Number(v));
-const money = (v, d = 3) => (v === null || v === undefined ? "—" : "$" + v.toFixed(d));
+const money = (v, d = 3) => (v === null || v === undefined ? "-" : "$" + v.toFixed(d));
 const moneyAuto = v => money(v, v !== null && v < 0.1 ? 3 : 2);
 
 function age(ts) {
-  if (!ts) return "—";
+  if (!ts) return "-";
   const s = Math.max(0, (Date.now() - new Date(ts)) / 1000);
   if (s < 90) return `${Math.round(s)}s`;
   if (s < 5400) return `${Math.round(s / 60)}m`;
@@ -183,8 +183,8 @@ function row(r) {
 }
 function pctChange(now, before) { return now === null || before === null || !before ? null : ((now - before) / before) * 100; }
 function deltaHTML(pct, cls = "") {
-  if (pct === null) return `<span class="${cls} flat">—</span>`;
-  if (Math.abs(pct) < 0.05) return `<span class="${cls} flat">—</span>`;
+  if (pct === null) return `<span class="${cls} flat">-</span>`;
+  if (Math.abs(pct) < 0.05) return `<span class="${cls} flat">-</span>`;
   return `<span class="${cls} ${pct > 0 ? "up" : "down"}">${pct > 0 ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}%</span>`;
 }
 
@@ -260,7 +260,7 @@ function renderHero() {
   if (!g) {
     $("#picks").innerHTML = "";
     $("#hero-id").innerHTML = '<div class="muted">No GPU data available yet</div>';
-    $("#hero-price").textContent = "—";
+    $("#hero-price").textContent = "-";
     $("#hero-sub").textContent = "Prices appear when providers report availability.";
     $("#chart").querySelector("svg")?.remove();
     $("#book").innerHTML = '<div class="empty">No provider listings yet.</div>';
@@ -284,7 +284,7 @@ function renderHero() {
       <div class="traits">${traits(g.name).map(t => `<span class="trait">${esc(t)}</span>`).join("")}</div>
     </div>`;
 
-  $("#hero-price").innerHTML = g.floor === null ? "—" : `${money(g.floor, 2)}<small>/GPU-hr</small>`;
+  $("#hero-price").innerHTML = g.floor === null ? "-" : `${money(g.floor, 2)}<small>/GPU-hr</small>`;
 
   const series = floorSeries(g);
   const first = series.find(p => p.v !== null);
@@ -470,7 +470,7 @@ function renderTable() {
         <div class="raw">${esc(r.raw_gpu_name)}</div></div></div></td>
       <td><span class="prov"><i class="pdot" style="background:${PROVIDER_COLOR(r.provider)}"></i>${esc(r.provider)}</span></td>
       <td class="num col-hide muted">${cfg}</td>
-      <td class="col-hide">${esc(r.region || "—")}</td>
+      <td class="col-hide">${esc(r.region || "-")}</td>
       <td><span class="tag ${r.market_type === "spot" ? "spot" : ""}">${r.market_type === "spot" ? "Spot" : "On-demand"}</span>${r.provider_tier ? ` <span class="muted" style="font-size:11px">${esc(r.provider_tier)}</span>` : ""}</td>
       <td class="r px">${money(r.price)}</td>
       <td class="r chg col-hide">${deltaHTML(pctChange(r.price, r.prev))}</td>

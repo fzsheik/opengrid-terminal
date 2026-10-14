@@ -204,7 +204,7 @@ def test_templates_registry():
     ts = templates.list_templates()
     assert [t["id"] for t in ts] == ["pytorch-mnist"]
     t = templates.get_template("pytorch-mnist")
-    assert t["title"] == "Train Your First AI Model — PyTorch MNIST"
+    assert t["title"] == "Train Your First AI Model: PyTorch MNIST"
     assert t["framework"]["torch"] == "2.4.1" and t["framework"]["torchvision"] == "0.19.1" and t["framework"]["cuda"] == "12.1"
     assert t["expected_runtime"]["kind"] == "estimated"
     assert templates.expected_minutes(t, {"epochs": 3}) == (6, 15)
@@ -450,7 +450,7 @@ def test_unvalidated_never_execution_ready():
     mb, er = out["market_best"], out["execution_ready"]
     assert mb["provider"] == "syn_a" and not mb["executable"]
     r = [x for x in mb["readiness"]["reasons"] if x["code"] == "adapter_not_validated"]
-    assert r and r[0]["reason"] == "syn_a: adapter simulated — run the supervised validation first"
+    assert r and r[0]["reason"] == "syn_a: adapter simulated; run the supervised validation first"
     assert er is not None and er["provider"] == "syn_d" and er["provider"] != "syn_a"
     # nobody validated -> nothing executable, blockers explain each provider
     reset()
@@ -569,7 +569,7 @@ def test_lambda_readiness_without_provider_calls():
         control.set_mode("SUPERVISED", reason="test", by="test")
         out = select(body(resources={"gpu": "a100-40gb-pcie"}), WHO, now=NOW)
         r = [x for x in out["market_best"]["readiness"]["reasons"] if x["code"] == "adapter_not_validated"]
-        assert r and r[0]["reason"] == "lambda: adapter simulated — run the supervised validation first"
+        assert r and r[0]["reason"] == "lambda: adapter simulated; run the supervised validation first"
     finally:
         settings.lambda_api_key = old
         with normalize.SessionLocal.begin() as s:

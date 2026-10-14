@@ -44,16 +44,16 @@ ok(OG.slug("AMD Instinct MI300X 192GB") === "mi300x-192gb" && OG.slug("Intel Gau
 ok(OG.slug("NVIDIA RTX PRO 6000 Blackwell 96GB (Workstation)") === "rtx-pro-6000-blackwell-96gb-workstation", "punctuation collapses, no trailing dash");
 
 // ---------- formatting ----------
-ok(OG.fmt.price(1.3) === "$1.30" && OG.fmt.price("2.5") === "$2.50" && OG.fmt.price(null) === "–" && OG.fmt.price("") === "–", "price (numbers, strings, null)");
+ok(OG.fmt.price(1.3) === "$1.30" && OG.fmt.price("2.5") === "$2.50" && OG.fmt.price(null) === "-" && OG.fmt.price("") === "-", "price (numbers, strings, null)");
 ok(OG.fmt.pct(0.021) === "+2.1%" && OG.fmt.pct(-0.004) === "−0.4%", "pct uses lib");
-ok(OG.fmt.num(1234567.891, 2) === "1,234,567.89" && OG.fmt.num(-1234) === "−1,234" && OG.fmt.num(0.5) === "0.50" && OG.fmt.num(null) === "–", "num groups the integer part only: " + OG.fmt.num(1234567.891, 2));
+ok(OG.fmt.num(1234567.891, 2) === "1,234,567.89" && OG.fmt.num(-1234) === "−1,234" && OG.fmt.num(0.5) === "0.50" && OG.fmt.num(null) === "-", "num groups the integer part only: " + OG.fmt.num(1234567.891, 2));
 ok(OG.fmt.compact(1530) === "1.5k" && OG.fmt.compact(2500000) === "2.5M" && OG.fmt.compact(12) === "12" && OG.fmt.compact(-15300) === "−15k", "compact");
 const now = "2026-10-06T12:00:00Z";
 ok(OG.fmt.age("2026-10-06T11:59:58Z", now) === "now" && OG.fmt.age("2026-10-06T11:59:20Z", now) === "40s" && OG.fmt.age("2026-10-06T11:55:00Z", now) === "5m"
-  && OG.fmt.age("2026-10-06T09:00:00Z", now) === "3h" && OG.fmt.age("2026-10-01T12:00:00Z", now) === "5d" && OG.fmt.age(90) === "1m" && OG.fmt.age(null) === "–", "age");
+  && OG.fmt.age("2026-10-06T09:00:00Z", now) === "3h" && OG.fmt.age("2026-10-01T12:00:00Z", now) === "5d" && OG.fmt.age(90) === "1m" && OG.fmt.age(null) === "-", "age");
 ok(OG.fmt.age("2026-10-06T12:05:00Z", now) === "now", "a clock skewed into the future reads now, not negative");
 ok(OG.fmt.cls(0.02) === "up" && OG.fmt.cls(-0.02) === "down" && OG.fmt.cls(0.00001) === "flat" && OG.fmt.cls(null) === "none" && OG.fmt.cls(0.02, true) === "down", "change classes (and invert)");
-ok(/^\d\d:\d\d:\d\d$/.test(OG.fmt.time(now)) && OG.fmt.time(null) === "–" && OG.fmt.time("garbage") === "–", "time");
+ok(/^\d\d:\d\d:\d\d$/.test(OG.fmt.time(now)) && OG.fmt.time(null) === "-" && OG.fmt.time("garbage") === "-", "time");
 ok(OG.freshness(60) === "fresh" && OG.freshness(3600) === "aging" && OG.freshness(5 * 3600) === "stale" && OG.freshness(null) === "unknown" && OG.freshness("aging") === "aging", "freshness thresholds");
 
 // ---------- sorting ----------

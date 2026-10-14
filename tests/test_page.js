@@ -81,7 +81,7 @@ const payload = (h) => ({ hours: h, cutoff: iso(h * 60), tracking_since: iso(100
   ok(chgCell("b").children[0].className.includes("chg-up"), "up arrow is the red class");
   ok(chgCell("c").textContent === "·", "flat shows a dim dot");
   ok(chgCell("d").textContent === "new", "newly listed shows 'new'");
-  ok(chgCell("e").textContent === "–", "no history shows a dash");
+  ok(chgCell("e").textContent === "-", "no history shows a dash");
   ok(chgCell("f").textContent === "", "stale listing shows no arrow even though /changes says up");
   ok(chgCell("g").textContent === "", "listing missing from /changes shows nothing, not a wrong arrow");
   ok(chgCell("a").children[0].title.includes("2.500") && chgCell("a").children[0].title.includes("2.000"), "tooltip names old and new price");

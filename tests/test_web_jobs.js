@@ -37,13 +37,13 @@ ok(J.isSandbox({ sandbox: true }) && J.isSandbox({ simulated: true }) && J.isSan
 ok(J.stateOf({ status: "training" }) === "training" && J.stateOf({ state: "quoted" }) === "quoted", "status (API) read first");
 
 // ---------- cost formatting ----------
-eq([J.usd(2), J.usd(0.215), J.usd(0.004), J.usd(0), J.usd(null), J.usd(-1.5), J.usd("x")], ["$2.00", "$0.22", "<$0.01", "$0.00", "–", "−$1.50", "–"], "usd (half-up, never $0.00 for a positive amount)");
-eq([J.perGpuH(1.29), J.perGpuH(12.5), J.perGpuH(null)], ["$1.290/GPU·h", "$12.50/GPU·h", "–"], "per GPU-hour");
-eq([J.duration(42), J.duration(125), J.duration(3720), J.duration(null)], ["42s", "2m 05s", "1h 02m", "–"], "duration");
-eq([J.bytes(512), J.bytes(2048), J.bytes(3500000), J.bytes(null)], ["512 B", "2.0 KB", "3.34 MB", "–"], "bytes");
+eq([J.usd(2), J.usd(0.215), J.usd(0.004), J.usd(0), J.usd(null), J.usd(-1.5), J.usd("x")], ["$2.00", "$0.22", "<$0.01", "$0.00", "-", "−$1.50", "-"], "usd (half-up, never $0.00 for a positive amount)");
+eq([J.perGpuH(1.29), J.perGpuH(12.5), J.perGpuH(null)], ["$1.290/GPU·h", "$12.50/GPU·h", "-"], "per GPU-hour");
+eq([J.duration(42), J.duration(125), J.duration(3720), J.duration(null)], ["42s", "2m 05s", "1h 02m", "-"], "duration");
+eq([J.bytes(512), J.bytes(2048), J.bytes(3500000), J.bytes(null)], ["512 B", "2.0 KB", "3.34 MB", "-"], "bytes");
 
 // ---------- template + preset (workloads/templates.py shape) ----------
-const tpl = { id: "pytorch-mnist", version: "1.0.0", job_type: "training", title: "Train Your First AI Model — PyTorch MNIST",
+const tpl = { id: "pytorch-mnist", version: "1.0.0", job_type: "training", title: "Train Your First AI Model: PyTorch MNIST",
   config_schema: { epochs: { type: "integer", min: 1, max: 10, default: 3 }, batch_size: { type: "integer", min: 32, max: 512, default: 128 },
     learning_rate: { type: "number", min: 1e-5, max: 1e-1, default: 1e-3 }, seed: { type: "integer", min: 0, max: 2147483647, default: 42 } },
   requirements: { gpu_count: 1, min_vram_gb: 8, on_demand_only: true },
@@ -97,7 +97,7 @@ ok(J.validate(p, J.configSpec(null)).ok, "fallback bounds accept the preset");
 // ---------- preview labelling (workloads/select.py shape): never mark a non-executable candidate executable ----------
 const cand = (prov, executable, reasons) => ({ rank: 1, provider: prov, listing_id: prov + "-1", gpu: "NVIDIA A10 24GB", gpu_count: 1, price_per_gpu_hour: 0.75, score: 0.8,
   executable, readiness: { ready: executable, reasons: reasons || [] }, cost: { est_max_total: 0.75, est_typical_total: 0.19, billed_minutes: 60 } });
-const notValidated = { code: "adapter_not_validated", reason: "lambda: adapter simulated — run the supervised validation first", provider: "lambda" };
+const notValidated = { code: "adapter_not_validated", reason: "lambda: adapter simulated; run the supervised validation first", provider: "lambda" };
 let v = J.views({ market_best: cand("vast", false, [{ code: "not_provisionable", reason: "vast: market data only", provider: "vast" }]), execution_ready: null, blockers: [notValidated] });
 ok(!v.executable && !v.exec.executable && v.exec.cand === null && v.market.executable === false, "no execution_ready → nothing executable; market is information only");
 ok(v.market.not_ready.length === 1, "the market recommendation's own readiness reasons are kept");
@@ -115,7 +115,7 @@ ok(!v.executable, "readiness reasons veto even if executable says true");
 v = J.views({ execution_ready: {}, blockers: [] });
 ok(!v.executable, "an empty execution_ready object is not a route");
 ok(!J.views(null).executable && J.views(null, { sandbox: true }).sandbox.selected && !J.views(null, { sandbox: true }).executable, "null preview → nothing executable; the sandbox is a separate view");
-ok(/SIMULATED — no GPU, no spend/.test(J.views({}).sandbox.note), "sandbox labelled SIMULATED — no GPU, no spend");
+ok(/SIMULATED: no GPU, no spend/.test(J.views({}).sandbox.note), "sandbox labelled SIMULATED: no GPU, no spend");
 ok(!J.candExecutable(cand("x", undefined)) && J.candExecutable(cand("x", undefined), true), "an alternative needs executable === true explicitly");
 const viol = J.views({ execution_ready: Object.assign(cand("lambda", true), { limit_violations: [{ code: "max_total_cost" }] }), blockers: [] });
 ok(viol.executable && viol.exec.violations.length === 1, "limit violations carried for the approval override warning");

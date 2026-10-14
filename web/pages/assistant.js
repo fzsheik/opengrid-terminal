@@ -101,11 +101,11 @@
   if (typeof OG.page !== "function" || typeof document === "undefined" || !OG.h) return;   // node tests: pure part only
 
   /* ============================ DOM ============================ */
-  const money = v => (v == null ? "–" : OG.money ? OG.money(v) : "$" + Number(v).toFixed(2));
-  const num = v => (v == null ? "–" : fmt.num ? fmt.num(v) : String(v));
+  const money = v => (v == null ? "-" : OG.money ? OG.money(v) : "$" + Number(v).toFixed(2));
+  const num = v => (v == null ? "-" : fmt.num ? fmt.num(v) : String(v));
   const badge = k => (OG.kindBadge ? OG.kindBadge(kindOf(k)) : h("span", { class: "badge" }, kindOf(k)));
   const lnk = (l, cls) => { const href = safeHref(l.href); return href ? h("a", { class: cls || "lnk", href }, l.label) : null; };
-  const gpuA = (name, slug) => (slug ? h("a", { class: "lnk", href: "/gpu/" + slug }, OG.shortGpu ? OG.shortGpu(name) : name) : h("span", {}, name || "–"));
+  const gpuA = (name, slug) => (slug ? h("a", { class: "lnk", href: "/gpu/" + slug }, OG.shortGpu ? OG.shortGpu(name) : name) : h("span", {}, name || "-"));
   const tbl = (columns, rows, empty) => (OG.table ? OG.table({ columns, rows, compact: true, autoHide: false, empty: empty || "No rows." }) : h("div"));
 
   function recCard(data, ctx) {
@@ -145,7 +145,7 @@
     return h("div", { class: "ag-card" }, tbl([
       { key: "gpu", label: "GPU", fmt: (x, r) => gpuA(r.gpu, r.slug) }, { key: "vram", label: "VRAM GB", num: true }, { key: "bw", label: "TB/s", num: true },
       { key: "bf16", label: "BF16 TFLOPS", num: true }, { key: "fp8", label: "FP8 TFLOPS", num: true },
-      { key: "low", label: "Low $/GPU-h", num: true, fmt: x => (x == null ? "–" : h("span", {}, money(x), " ", badge("observed"))) },
+      { key: "low", label: "Low $/GPU-h", num: true, fmt: x => (x == null ? "-" : h("span", {}, money(x), " ", badge("observed"))) },
       { key: "median", label: "Median", num: true, fmt: x => money(x) }, { key: "providers", label: "Providers", num: true },
     ], compareRows(data)), data.note ? h("div", { class: "dim ag-foot" }, data.note) : null);
   }
@@ -165,7 +165,7 @@
   }
   function questionsCard(data, ask) {
     return h("div", { class: "ag-card ag-qs" }, questionButtons(data).map(q => h("div", { class: "ag-q" },
-      h("div", {}, q.question, q.why ? h("span", { class: "dim" }, " — " + q.why) : null),
+      h("div", {}, q.question, q.why ? h("span", { class: "dim" }, " (" + q.why + ")") : null),
       q.buttons.length ? h("div", { class: "ag-chips", role: "group", "aria-label": q.question },
         q.buttons.map(b => h("button", { type: "button", class: "chip", onclick: () => ask(b.message) }, b.label))) : null)));
   }

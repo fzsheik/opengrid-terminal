@@ -1,4 +1,4 @@
-/* /route — best-execution order ticket.
+/* /route: best-execution order ticket.
    "I need 8 H100s in the US under $2.50/hr": the ticket builds a POST /v1/route/preview body, the
    result shows the selected listing, its QUOTE (distinct from the observed market price), the score
    breakdown per candidate, exclusions with reasons and the factors that have no data.
@@ -61,9 +61,9 @@
       const x = c.factors && c.factors[f.key];
       if (!x || !x.contribution) return null;
       return h("i", { style: { width: (x.contribution * 100).toFixed(2) + "%", background: f.color }, class: x.imputed ? "imp" : null,
-        title: `${f.label}: +${x.contribution.toFixed(3)} (weight ${(x.weight * 100).toFixed(0)}% × value ${x.imputed ? "0.5 imputed — no data" : x.value})` });
+        title: `${f.label}: +${x.contribution.toFixed(3)} (weight ${(x.weight * 100).toFixed(0)}% × value ${x.imputed ? "0.5 imputed, no data" : x.value})` });
     });
-    return h("span", { class: "rt-bar", style: width ? `width:${width}px` : null, title: "score " + (c.score != null ? c.score.toFixed(3) : "–") + " of 1.000" }, segs);
+    return h("span", { class: "rt-bar", style: width ? `width:${width}px` : null, title: "score " + (c.score != null ? c.score.toFixed(3) : "-") + " of 1.000" }, segs);
   }
   function legend(weights) {
     return h("div", { class: "rt-legend" }, FACTORS.map(f => {
@@ -200,9 +200,9 @@
       const regionSel = h("select", { class: "field", "aria-label": "Region group", onchange: e => { st.region = e.target.value || null; strictIn.disabled = !st.region; sync(); drawWeights(); markDirty(); } },
         h("option", { value: "" }, "Any region"), REGIONS.map(g => h("option", { value: g, selected: st.region === g ? true : null }, g)));
       const maxIn = numIn("max", { min: 0, step: 0.01, placeholder: "none", "aria-label": "Max price per GPU-hour" });
-      const durIn = numIn("dur", { min: 0, step: 1, placeholder: "–", "aria-label": "Duration hours" });
-      const dlIn = numIn("dl", { min: 0, step: 1, placeholder: "–", "aria-label": "Deadline hours" });
-      const maxRunIn = numIn("maxRun", { min: 1, step: 1, placeholder: "–", "aria-label": "Auto-terminate after minutes" });
+      const durIn = numIn("dur", { min: 0, step: 1, placeholder: "-", "aria-label": "Duration hours" });
+      const dlIn = numIn("dl", { min: 0, step: 1, placeholder: "-", "aria-label": "Deadline hours" });
+      const maxRunIn = numIn("maxRun", { min: 1, step: 1, placeholder: "-", "aria-label": "Auto-terminate after minutes" });
 
       const modeSeg = OG.seg(MODES, st.mode, v => { st.mode = v; modeHint.textContent = MODES.find(m => m[0] === v)[2]; drawWeights(); sync(); markDirty(); });
       modeSeg.classList.add("rt-modes");
@@ -215,7 +215,7 @@
         const total = usable.reduce((s, f) => s + (st.weights[f.key] || 0), 0);
         weightsBox.replaceChildren(...FACTORS.map(f => {
           if (f.nodata) return h("div", { class: "rt-w off", title: "OpenGrid has no execution history yet, so this factor cannot be weighted" },
-            h("span", { class: "rt-wl" }, f.label), h("input", { type: "range", min: 0, max: 100, value: 0, disabled: true }), h("span", { class: "rt-wv" }, "no data — not used"));
+            h("span", { class: "rt-wl" }, f.label), h("input", { type: "range", min: 0, max: 100, value: 0, disabled: true }), h("span", { class: "rt-wv" }, "no data, not used"));
           const off = f.key === "region_match" && !st.region;
           const v = st.weights[f.key] || 0;
           const r = h("input", { type: "range", min: 0, max: 100, step: 5, value: off ? 0 : v, disabled: off ? true : null, "aria-label": f.label + " weight",
@@ -256,11 +256,11 @@
         field("SSH public key", launchIn("ssh_public_key", "ssh-ed25519 AAAA… you@host")),
         field("SSH key name", launchIn("ssh_key", "BYO credentials only")),
         field("Image", launchIn("image", "e.g. pytorch/pytorch:latest")),
-        field("Disk GB", launchIn("disk_gb", "–", { type: "number", min: 10, max: 20000, class: "field num" })));
+        field("Disk GB", launchIn("disk_gb", "-", { type: "number", min: 10, max: 20000, class: "field num" })));
 
       const previewBtn = h("button", { class: "btn pri rt-go", type: "submit" }, "Preview", h("kbd", {}, "↵"));
       const routeBtn = h("button", { class: "btn rt-exec", type: "button", onclick: () => routeNow(), title: "POST /v1/route: live check + quote + cost guards; SUPERVISED mode waits for admin approval" }, "Request route…");
-      const dirty = h("span", { class: "rt-dirty", hidden: true }, "ticket changed — preview again");
+      const dirty = h("span", { class: "rt-dirty", hidden: true }, "ticket changed: preview again");
       function markDirty() { if (st.last) dirty.hidden = false; }
 
       ticket.append(
@@ -367,7 +367,7 @@
         for (const f of FACTORS) {
           const x = c.factors[f.key];
           if (!x) continue;
-          if (f.nodata) { items.push(h("li", { class: "nodata" }, h("b", {}, f.label), " — no data, not used (no execution history yet)")); continue; }
+          if (f.nodata) { items.push(h("li", { class: "nodata" }, h("b", {}, f.label), ": no data, not used (no execution history yet)")); continue; }
           if (!x.weight) continue;
           items.push(h("li", { class: x.imputed ? "imp" : null }, h("i", { class: "sw", style: { background: f.color } }), h("b", {}, f.label), " ", x.note.replace(/ \(scored neutral 0\.5\)$/, ""),
             x.imputed ? h("span", { class: "badge warn" }, "imputed 0.5") : null,
@@ -382,10 +382,10 @@
         return OG.table({
           columns: [
             { key: "factor", label: "Factor", value: r => r.f.label, fmt: (v, r) => h("span", { class: "rt-fl" }, h("i", { class: "sw", style: { background: r.f.nodata ? "transparent" : r.f.color, border: r.f.nodata ? "1px dashed #4f5a66" : null } }), r.f.label), sort: false },
-            { key: "kind", label: "Kind", sort: false, fmt: (v, r) => r.x.kind === "observed" ? OG.kindBadge(r.x.kind) : r.x.kind && r.x.kind !== "inferred" ? OG.badge(r.x.kind) : h("span", { class: "dim" }, "–") },
+            { key: "kind", label: "Kind", sort: false, fmt: (v, r) => r.x.kind === "observed" ? OG.kindBadge(r.x.kind) : r.x.kind && r.x.kind !== "inferred" ? OG.badge(r.x.kind) : h("span", { class: "dim" }, "-") },
             { key: "weight", label: "Weight", num: true, sort: false, value: r => r.x.weight, fmt: (v, r) => r.f.nodata ? h("span", { class: "dim" }, "0 · locked") : r.x.weight ? (r.x.weight * 100).toFixed(1) + "%" : h("span", { class: "dim" }, "0") },
-            { key: "value", label: "Value 0–1", num: true, sort: false, value: r => r.x.value, fmt: (v, r) => r.x.value != null ? r.x.value.toFixed(3) : OG.na(r.f.nodata ? "no data — not used" : "insufficient data") },
-            { key: "contribution", label: "Contribution", num: true, sort: false, value: r => r.x.contribution, fmt: (v, r) => r.x.contribution ? h("span", {}, "+" + r.x.contribution.toFixed(3), r.x.imputed ? h("span", { class: "rt-imp", title: "No data for this listing: scored a neutral 0.5" }, "*") : null) : h("span", { class: "dim" }, "–") },
+            { key: "value", label: "Value 0-1", num: true, sort: false, value: r => r.x.value, fmt: (v, r) => r.x.value != null ? r.x.value.toFixed(3) : OG.na(r.f.nodata ? "no data, not used" : "insufficient data") },
+            { key: "contribution", label: "Contribution", num: true, sort: false, value: r => r.x.contribution, fmt: (v, r) => r.x.contribution ? h("span", {}, "+" + r.x.contribution.toFixed(3), r.x.imputed ? h("span", { class: "rt-imp", title: "No data for this listing: scored a neutral 0.5" }, "*") : null) : h("span", { class: "dim" }, "-") },
           ],
           rows, compact: true, csv: false, rowClass: r => (r.f.nodata || !r.x.weight) ? "out" : "",
         });
@@ -407,9 +407,9 @@
             { key: "available", label: "Stock", fmt: (v, r) => availText(r) },
             { key: "age_seconds", label: "Seen", num: true, fmt: v => fmt.age(v) },
             { key: "integration_level", label: "Lvl", num: true, title: "OpenGrid integration level (2+ = can provision)", fmt: v => h("span", { class: v >= 2 ? "up" : "dim" }, v) },
-            { key: "score", label: "Score", num: true, desc: true, fmt: v => v != null ? v.toFixed(3) : "–" },
+            { key: "score", label: "Score", num: true, desc: true, fmt: v => v != null ? v.toFixed(3) : "-" },
             { key: "bar", label: "Breakdown", sort: false, csv: false, fmt: (v, r) => scoreBar(r, 150) },
-            { key: "vs_selected", label: "vs #1", cls: "wrap dim", value: r => r === top ? "selected" : r.vs_selected, fmt: (v, r) => r === top ? h("b", { class: "up" }, "selected") : v || "–" },
+            { key: "vs_selected", label: "vs #1", cls: "wrap dim", value: r => r === top ? "selected" : r.vs_selected, fmt: (v, r) => r === top ? h("b", { class: "up" }, "selected") : v || "-" },
           ],
           rows: cands, sort: { key: "rank", dir: "asc" }, compact: true, csv: "opengrid-route-candidates.csv",
           rowKey: r => r.provider + ":" + r.listing_id, rowClass: r => r === top ? "rt-top" : "",
@@ -471,7 +471,7 @@
           h("span", { class: "mono" }, fmt.price(d.best_provisionable.price_per_gpu_hour) + "/GPU·h"), OG.conceptBadge("observed"), h("span", { class: "dim" }, regionText(d.best_provisionable)),
           h("span", { class: "dim" }, "rank " + d.best_provisionable.rank + " · score " + d.best_provisionable.score.toFixed(3)), scoreBar(d.best_provisionable, 140), levelBadge(d.best_provisionable.integration_level)));
         kids.push(h("div", { class: "cols-2 rt-two" },
-          OG.section("Why this route", whyList(d), h("p", { class: "note" }, "Every factor is normalized 0–1 and weighted by the mode. A factor with thin history is scored a neutral 0.5 and flagged; reliability and performance are never invented. ",
+          OG.section("Why this route", whyList(d), h("p", { class: "note" }, "Every factor is normalized 0 to 1 and weighted by the mode. A factor with thin history is scored a neutral 0.5 and flagged; reliability and performance are never invented. ",
             h("a", { class: "lnk", href: "/methodology/best-execution" }, "Method →"))),
           OG.section("Factor breakdown · selected", factorTable(d))));
         const all = [d.selected, ...(d.alternatives || [])];
@@ -534,7 +534,7 @@
         const est = q.expected_cost_usd != null ? `${OG.money(q.expected_cost_usd)} (${fmt.price(q.price_per_gpu_hour)}/GPU·h × ${d.count} GPUs × ${q.hours} h, from the observed listing)`
           : q.price_per_hour != null ? `${OG.money(q.price_per_hour)} per hour, open-ended: set a duration or the auto-terminate cap` : "no quote (no eligible listing)";
         const ok = await OG.dialog({
-          title: eff === "LIVE" ? "Request route — LIVE mode may launch without approval" : "Request route — creates a quote for OpenGrid approval",
+          title: eff === "LIVE" ? "Request route: LIVE mode may launch without approval" : "Request route: creates a quote for OpenGrid approval",
           danger: eff === "LIVE", confirm: "Request route",
           ack: eff === "LIVE" ? "I understand a validated, live-enabled provider can launch a paid instance immediately" : null,
           body: h("div", { class: "rt-dlg" },
@@ -545,7 +545,7 @@
               h("tr", {}, h("th", {}, "Request"), h("td", { class: "mono" }, `${d.count}× ${OG.shortGpu(d.gpu)} · ${d.region_group || "any region"} · ${d.mode}`)),
               h("tr", {}, h("th", {}, "Estimate"), h("td", { class: "mono" }, est)),
               h("tr", {}, h("th", {}, "Price cap"), h("td", {}, b.max_price_per_gpu_hour ? `live quote must be ≤ ${fmt.price(b.max_price_per_gpu_hour)}/GPU·h` : h("span", { class: "warn-t" }, "none set: cost guards still apply"))),
-              h("tr", {}, h("th", {}, "Top candidate"), h("td", {}, d.selected ? `${OG.providerName(d.selected.provider)} — ${d.can_provision_selected ? "provisionable" : "not provisionable: skipped"}` : "none")))),
+              h("tr", {}, h("th", {}, "Top candidate"), h("td", {}, d.selected ? `${OG.providerName(d.selected.provider)}: ${d.can_provision_selected ? "provisionable" : "not provisionable: skipped"}` : "none")))),
         });
         if (!ok) return;
         await requestRoute(b);
@@ -562,7 +562,7 @@
         } catch (e) {
           routed.replaceChildren(h("div", { class: "box rt-res rt-res-failed" }, h("div", { class: "rt-res-h" }, h("span", { class: "eyebrow" }, "Route request"), OG.error(e)),
             I.route.state === "unknown" ? h("p", { class: "note" }, "Outcome unknown. ", h("button", { class: "btn sm", type: "button", onclick: () => requestRoute(b) }, "Retry (same Idempotency-Key)"),
-              " — the server replays the first answer instead of routing twice.") : null));
+              ". The server replays the first answer instead of routing twice.") : null));
         }
       }
 
@@ -599,7 +599,7 @@
             { key: "rank", label: "#", num: true }, { key: "provider", label: "Provider", fmt: v => OG.providerLink(v) },
             { key: "listing_id", label: "Listing", cls: "mono dim", fmt: v => String(v).slice(0, 30) }, { key: "step", label: "Step", cls: "mono" },
             { key: "outcome", label: "Outcome", fmt: v => OG.badge(String(v).replace(/_/g, " "), v === "ok" || v === "accepted" ? "good" : ["not_attempted", "skipped", "pending_approval"].includes(v) ? "warn" : ["failed", "error", "unknown"].includes(v) ? "bad" : "") },
-            { key: "reason", label: "Reason", cls: "wrap dim" }, { key: "quote", label: "Quote", num: true, fmt: v => v != null ? fmt.price(v) : "–" },
+            { key: "reason", label: "Reason", cls: "wrap dim" }, { key: "quote", label: "Quote", num: true, fmt: v => v != null ? fmt.price(v) : "-" },
           ], rows: r.considered, sort: { key: "rank", dir: "asc" }, compact: true, csv: false,
         }));
         routed.replaceChildren(h("div", { class: "box rt-res rt-res-" + (S[1] === "good" ? "provisioned" : S[1] === "bad" ? "failed" : "not_provisioned") }, kids));
@@ -634,7 +634,7 @@
         const msg = h("div", { class: "tk-msg" });
         const exp = h("span", {});
         if (!pending) {
-          actions.append(h("span", {}, "This route is ", OG.stateBadge(dep.status), " — ", h("a", { class: "lnk", href: "/deployments/" + dep.deployment_id }, "open the deployment →")));
+          actions.append(h("span", {}, "This route is ", OG.stateBadge(dep.status), ": ", h("a", { class: "lnk", href: "/deployments/" + dep.deployment_id }, "open the deployment →")));
         } else if (expired) {
           actions.append(OG.badge("quote expired", "bad"), h("span", { class: "dim" }, "A launch never uses an expired quote."),
             h("button", { class: "btn pri", type: "button", disabled: t.request ? null : true, title: t.request ? null : "the original request is not available", onclick: () => requote(t, msg) }, "Re-quote…"));
@@ -740,7 +740,7 @@
             return;
           }
           msg.replaceChildren(OG.error(e), det && det.violations ? OG.violationTable(det.violations) : null,
-            I.approve.state === "unknown" ? h("p", { class: "warn-t" }, "Outcome unknown. ", h("button", { class: "btn sm", type: "button", onclick: () => retryApprove(t, b, msg) }, "Retry (same Idempotency-Key)"), " — cannot launch twice.") : null);
+            I.approve.state === "unknown" ? h("p", { class: "warn-t" }, "Outcome unknown. ", h("button", { class: "btn sm", type: "button", onclick: () => retryApprove(t, b, msg) }, "Retry (same Idempotency-Key)"), " It cannot launch twice.") : null);
         }
       }
       // the deadline the server set at approval (re-stated at launch)
