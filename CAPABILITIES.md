@@ -23,6 +23,7 @@ important — what it deliberately does not claim.
 6. [Execution layer: routing & provisioning](#6-execution-layer-routing--provisioning)
    - [Training jobs (OpenGrid Jobs)](#6a-training-jobs-opengrid-jobs)
    - [Reserved compute: price-lock requests](#6b-reserved-compute-price-lock-requests-reservations-methodologyreservationsmd)
+   - [Workload intelligence, CLI, MCP and assistant](#6c-workload-intelligence-cli-mcp-and-assistant-opengrid-20)
 7. [Reconciliation, billing & cost accounting](#7-reconciliation-billing--cost-accounting)
 8. [Routing quality, reliability & economics](#8-routing-quality-reliability--economics)
 9. [Design partners, onboarding & product analytics](#9-design-partners-onboarding--product-analytics)
@@ -47,15 +48,16 @@ important — what it deliberately does not claim.
 | Canonical GPU models | **91**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL) |
 | OpenGrid indices defined | **251** (per-GPU, family composites, overall compute index, regional, spot, provider-class) |
 | News & signal sources | **44** verified feeds (hyperscalers, neoclouds, NVIDIA/AMD, US Federal Register, trade press) |
-| API operations | **200** (185 under `/v1`, 61 of them admin-only), plus 3 runner-callback routes outside the public schema |
-| Web pages | **33** routes, dense dark terminal UI, keyboard command bar |
-| Database tables | **71** (Postgres, migrated by Alembic, 19 migrations) |
+| API operations | **203** (188 under `/v1`, 61 of them admin-only), plus 3 runner-callback routes outside the public schema |
+| Web pages | **37** routes: five-item navigation (GPUs, Find Compute, My Jobs, Markets, Developers), light/dark themes, keyboard command bar |
+| Database tables | **71** (Postgres, migrated by Alembic, 20 migrations) |
 | Background jobs | **17** (polling, rollups, indices, settlement fixings, events, news, reconciliation, tracking, training-job sync, reservation expiry, alerts, feeds…) |
 | Provisioning adapters | **9 providers** (Lambda, RunPod, Hyperstack, DigitalOcean, Crusoe/Denvr/Latitude via Shadeform, Vast, Verda) |
 | Discord channels | **4** (ops, deployments, market, news) with OpenGrid-branded embeds |
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
-| Automated tests | **55** Python test files + **6** JavaScript test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team |
+| Workload intelligence | GPU memory estimator, project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (11 tools), grounded assistant |
+| Automated tests | **58** Python test files + **9** JavaScript test files + **4** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team |
 
 ---
 
@@ -462,6 +464,32 @@ Customers ask for a locked price ("8× H100 SXM5, 5,376 GPU-hours, starting Oct 
   transferable, no cash settlement. The legal framing is in docs/FUTURES_REGULATORY_PATH.md, Path B.
 
 ---
+
+## 6c. Workload intelligence, CLI, MCP and assistant (OpenGrid 2.0)
+
+One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; method: methodology/recommendations.md).
+- **Estimator** (`intelligence/memory.py`, `estimate.py`): weights, gradients, optimizer states, activations
+  (Korthikanti et al. 2022), KV cache, framework overhead, ZeRO sharding / offload, 20% margin; minimum vs
+  recommended VRAM, ranges, confidence and every assumption listed. Model configs from published HF configs.
+- **Recommender** (`intelligence/recommend.py`, `POST /v1/recommend`, `/v1/recommend/estimate`, public, read-only):
+  compatible GPUs and counts → fresh on-demand listings via `rank_listings` (never `engine.preview`, no rows
+  written) → tiers (lower cost / balanced / higher performance by theoretical specs) and three picks
+  (cheapest advertised, best for the workload, best OpenGrid can run). Runtime is never invented: cost is
+  scenarios with stated assumptions and listed unknown costs. "Executable" needs the readiness checks and a
+  supported workload (today only the MNIST template). `performance_observations` table (0020) is ready for
+  measured benchmarks; no data yet.
+- **Local analyzer** (`cli/src/opengrid_cli/analyze`): allowlisted files only, `.gitignore`, symlink and size
+  limits, never reads secrets/weights/datasets, never executes code, redacts secret-looking values, flags
+  prompt-injection text; only the structured requirements ever leave the machine. Dry-run mode.
+- **CLI** (`cli/`, `uv tool install ./cli`): doctor, gpu search/show/compare/market, providers, analyze,
+  estimate, recommend, route preview, jobs list/status/logs/cancel, demo train (sandbox only), mcp; `--json`.
+  No command can provision.
+- **MCP server** (`opengrid mcp`, stdio; optional loopback HTTP): 11 tools, read-only except a non-provisioning
+  route preview and a confirm-gated job cancel. Verified with MCP Inspector 2.10.1 (`--strict`), Claude Code
+  and Codex registration.
+- **Assistant** (`assistant/`, `POST /v1/assistant`, `/assistant`, panel on Find Compute): deterministic intents
+  by default; optional vendor-neutral LLM (off unless configured) whose replies are post-checked so every
+  number comes from tool results; no mutation tools.
 
 ## 7. Reconciliation, billing & cost accounting
 
