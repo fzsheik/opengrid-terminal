@@ -358,6 +358,11 @@ def test_i_unsupported_execution_still_recommends():
         out = rec(LORA7)
         assert out["options"] and out["picks"]["cheapest_market"] and out["picks"]["best_for_workload"]
         assert out["picks"]["best_executable"] is None
+        assert out["picks_unavailable"]["best_executable"] == "the workload is not a supported template", \
+            "a null pick always says why"
+        tiers = [o["tier"] for o in out["options"]]
+        rank = {"lower_cost": 0, "balanced": 1, "higher_performance": 2}
+        assert [rank[t] for t in tiers] == sorted(rank[t] for t in tiers), f"options ordered by tier: {tiers}"
         for o in out["options"]:
             ex = o["execution"]
             assert ex["executable"] is False and ex["workload_supported"] is False

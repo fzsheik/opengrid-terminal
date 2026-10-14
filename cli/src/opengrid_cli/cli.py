@@ -562,7 +562,8 @@ def show_recommendation(r: dict) -> None:
                        ("best_executable", "best executable")):
         p = picks.get(key)
         if not p:
-            print(f"  {label:18}: none")
+            why_none = (r.get("picks_unavailable") or {}).get(key)
+            print(f"  {label:18}: none" + (f" ({why_none})" if why_none else ""))
             continue
         o = opts.get(p.get("option_id"))
         print(f"  {label:18}: {_opt_line(o) if o else p.get('option_id')}")

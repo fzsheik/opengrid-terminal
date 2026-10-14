@@ -164,16 +164,20 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
     notes = ["Prices are observed list prices, not quotes: a route quotes and re-validates before any launch.",
              "Runtime is not estimated (no measured benchmark); costs are scenarios at stated hours.",
              "Hardware comparisons use theoretical vendor specs (memory bandwidth, dense throughput), not benchmarks."]
+    # picks_unavailable: for each pick that is null, why (so no interface shows an unexplained blank)
     out = {"estimate": est, "picks": {"cheapest_market": None, "best_for_workload": None, "best_executable": None},
+           "picks_unavailable": {},
            "options": [], "excluded": [], "excluded_total": 0, "excluded_by_code": {}, "questions": est["questions"],
            "notes": notes, "as_of": now.isoformat(), "methodology": METHODOLOGY}
     if est["needs_gpu"] is False:
         out["notes"] = [f"This workload does not need a GPU: {est['needs_gpu_reason']}. No GPU options are shown; "
                         "a regular CPU server is enough."]
+        out["picks_unavailable"] = {k: "this workload does not need a GPU" for k in out["picks"]}
         return out
     if mem["method"] == "unavailable":
         out["notes"] = [f"GPU memory could not be estimated ({mem.get('unavailable_reason')}), so no GPU is "
                         "recommended: answer the questions and ask again."] + notes[:1]
+        out["picks_unavailable"] = {k: "GPU memory could not be estimated: answer the questions" for k in out["picks"]}
         return out
     if c.allow_spot:
         notes.append("allow_spot is set, but spot / interruptible listings are not ranked in this release: on-demand "
@@ -399,8 +403,10 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
     for must in (cheapest, bfw, exe):
         if must is not None and must not in chosen:
             chosen = chosen[:limit - 1] + [must] if len(chosen) >= limit else chosen + [must]
+    # presented lower cost -> balanced -> higher performance, cheapest first within a tier (value order breaks ties)
     order = {id(x): i for i, x in enumerate(pool)}
-    chosen.sort(key=lambda x: order[id(x)])
+    tier_rank = {"lower_cost": 0, "balanced": 1, "higher_performance": 2}
+    chosen.sort(key=lambda x: (tier_rank.get(x["option"]["tier"], 1), x["price_inst"], order[id(x)]))
     out["options"] = [x["option"] for x in chosen]
 
     def ref(x, reason):
@@ -417,10 +423,14 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
         out["picks"]["best_executable"] = ref(exe, "first option OpenGrid can launch for you now (readiness checks "
                                                    "pass and the workload is a supported template)")
     elif pool:
-        notes.append("No option is executable through OpenGrid for this request: "
-                     + ("the workload is not a supported template" if not supported else
-                        "readiness checks did not pass (see each option's execution.reasons)")
+        why_not = ("the workload is not a supported template" if not supported else
+                   "readiness checks did not pass (see each option's execution.reasons)")
+        out["picks_unavailable"]["best_executable"] = why_not
+        notes.append("No option is executable through OpenGrid for this request: " + why_not
                      + ". The market recommendations above still apply.")
+    if not pool:
+        for k in ("cheapest_market", "best_for_workload", "best_executable"):
+            out["picks_unavailable"][k] = "no fresh, on-demand listing fits this workload under the constraints"
     if not pool:
         notes.append("No fresh, on-demand listing fits this workload under the constraints; see excluded.")
 

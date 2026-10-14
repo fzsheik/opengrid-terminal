@@ -103,6 +103,7 @@ anonymous caller is reported as "sign in / API key required", never assumed.
     "best_for_workload": <option-ref> | null,  // fits with headroom, balanced score, fresh
     "best_executable":  <option-ref> | null    // first option OpenGrid can actually launch for this caller
   },                                            // option-ref = {"option_id": "...", "reason": "..."}
+  "picks_unavailable": { "best_executable": "the workload is not a supported template" },  // why each null pick is null
   "options": [ {
     "option_id": "h100-80gb-sxm5:lambda:us-east-1:1",
     "tier": "lower_cost" | "balanced" | "higher_performance",
@@ -123,6 +124,8 @@ anonymous caller is reported as "sign in / API key required", never assumed.
                    "route_preview_url": "/route?gpu=h100-80gb-sxm5&count=1" }
   } ],
   "excluded": [ { "gpu": "NVIDIA L4 24GB", "code": "insufficient_vram", "reason": "24 GB < 29.2 GB needed" } ],
+  "excluded_total": 412, "excluded_by_code": { "stale": 120, "insufficient_vram": 24 },   // options are ordered
+                                                // lower_cost -> balanced -> higher_performance, cheapest first
   "questions": [ ...same as estimate.questions... ],
   "notes": ["Prices are observed list prices, not quotes.", ...],
   "as_of": "...", "methodology": "/methodology/recommendations"
@@ -134,6 +137,7 @@ Rules every interface must keep:
 - Runtime is unknown unless a measured benchmark exists; cost is shown as scenarios with stated assumptions.
 - "Executable" requires the existing readiness checks AND a supported workload (today: the MNIST template).
 - `needs_gpu=false` recommendations must say so plainly and return no options.
+- `allow_spot: null` means not stated (treated as on-demand only); unknown `region` values are a 422 `unknown_region`.
 
 ## 4. Local analyzer output — `opengrid analyze <dir> --json`
 
