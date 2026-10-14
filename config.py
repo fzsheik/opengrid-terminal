@@ -151,6 +151,28 @@ class Settings(BaseSettings):
     job_sync_interval_seconds: int = 30          # job_sync: deployment state + runner callbacks -> job state
     job_bootstrap_timeout_minutes: int = 20      # running with no runner callback this long -> bootstrap_failed
     job_token_grace_minutes: int = 15            # runner token expires at the deployment deadline + this
+    # --- OpenGrid Assistant (assistant/, api/assistant.py; POST /v1/assistant) ---
+    # The deterministic engine always works. An LLM is OPTIONAL and off unless BOTH a provider and its key are
+    # set: ASSISTANT_LLM_PROVIDER=anthropic + ANTHROPIC_API_KEY (and `uv sync --extra llm` for the SDK).
+    # The LLM only classifies unclear questions and phrases replies; every number is post-checked against the
+    # tool results and an ungrounded reply is replaced by the deterministic one.
+    assistant_llm_provider: str | None = None    # None (off) | "anthropic"
+    assistant_llm_model: str = "claude-haiku-5-5"   # inexpensive current model; any Messages API model id
+    anthropic_api_key: str | None = None
+    assistant_llm_timeout_seconds: float = 15.0
+    assistant_llm_max_calls_per_minute: int = 30    # process-wide ceiling on model calls (cost guard)
+    # POST /v1/assistant budget per anonymous client IP (on top of PUBLIC_RATE_LIMIT_PER_MINUTE).
+    assistant_public_rate_limit_per_minute: int = 20
+
+    @field_validator("assistant_llm_provider")
+    @classmethod
+    def _assistant_provider(cls, v: str | None) -> str | None:
+        v = (v or "").strip().lower() or None
+        if v in (None, "none", "off", "false", "0"):
+            return None
+        if v != "anthropic":
+            raise ValueError("ASSISTANT_LLM_PROVIDER must be unset or 'anthropic'")
+        return v
 
     @model_validator(mode="after")
     def _raw_retention_order(self):

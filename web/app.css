@@ -1640,3 +1640,35 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .pg-rsv .rs-notes { white-space: pre-wrap; word-break: break-word; }
 .pg-rsv .sec { margin-top: 10px; }
 /* ---- end page: reserve ---- */
+
+/* ---------------- OpenGrid Assistant (web/pages/assistant.js) — theme tokens only ---------------- */
+.ag { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--line-2); border-radius: 4px; background: var(--surface); padding: 10px; max-width: 980px; }
+.ag-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ag-head .btn { margin-left: auto; }
+.ag-note { color: var(--muted); font-size: 11.5px; }
+.ag-log { display: flex; flex-direction: column; gap: 8px; max-height: 62vh; overflow-y: auto; padding-right: 2px; }
+.ag-compact .ag-log { max-height: 42vh; }
+.ag-msg { border-radius: 4px; padding: 7px 9px; line-height: 1.45; font-size: 12.5px; overflow-wrap: anywhere; }
+.ag-user { align-self: flex-end; max-width: 80%; background: var(--raised); border: 1px solid var(--line-2); color: var(--text); white-space: pre-wrap; }
+.ag-bot { align-self: stretch; border: 1px solid var(--line); color: var(--text-2); }
+.ag-reply { margin: 0 0 6px; color: var(--text); }
+.ag-card { border-top: 1px solid var(--line); padding-top: 6px; margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+.ag-picks, .ag-notes, .ag-ctx ul, .ag-news ul { margin: 0; padding-left: 16px; }
+.ag-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 0; }
+.ag-pick-l { color: var(--muted); min-width: 170px; font-size: 11.5px; }
+.ag-why { font-size: 11.5px; }
+.ag-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.ag-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ag-chips .chip { height: auto; min-height: 22px; text-align: left; }
+.ag-q { display: flex; flex-direction: column; gap: 4px; }
+.ag-warn { color: var(--warn); font-size: 11.5px; }
+.ag-foot, .ag-meta { font-size: 11px; }
+.ag-form { display: flex; gap: 6px; align-items: flex-end; }
+.ag-in { flex: 1; height: auto; min-height: 36px; resize: vertical; font: inherit; padding: 6px 8px; }
+.ag :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (max-width: 640px) {
+  .ag { padding: 8px; }
+  .ag-user { max-width: 92%; }
+  .ag-pick-l { min-width: 0; width: 100%; }
+  .ag-form { flex-direction: column; align-items: stretch; }
+}

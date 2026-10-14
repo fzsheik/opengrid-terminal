@@ -13,3 +13,8 @@ dependencies = [
     "textual>=8.2.8",
     "uvicorn[standard]>=0.53.0",
 ]
+
+[project.optional-dependencies]
+llm = [
+    "anthropic>=1.13.0",
+]
