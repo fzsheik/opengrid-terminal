@@ -72,7 +72,7 @@ class Constraints(_M):
     runtime_hours: float | None = Field(None, gt=0, le=100_000)
     region: str | None = Field(None, max_length=32)
     max_gpus: int | None = Field(None, ge=1, le=1_024)
-    allow_spot: bool = False
+    allow_spot: bool | None = None  # null = not stated: treated as on-demand only
     vendor: Literal["NVIDIA", "AMD"] | None = None
     include_providers: list[str] = Field(default_factory=list, max_length=_LIST)
     exclude_providers: list[str] = Field(default_factory=list, max_length=_LIST)

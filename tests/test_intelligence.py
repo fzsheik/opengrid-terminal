@@ -288,7 +288,7 @@ def test_requirements_validation():
     r = W.model_validate({"frameworks": ["PyTorch", "pytorch", " PEFT "],
                           "constraints": {"exclude_providers": ["Lambda"]}})
     assert r.frameworks == ["pytorch", "peft"] and r.constraints.exclude_providers == ["lambda"]
-    assert r.constraints.allow_spot is False
+    assert r.constraints.allow_spot is None, "not stated: null (treated as on-demand only)"
 
 
 def test_estimate_is_pure_and_deterministic():
