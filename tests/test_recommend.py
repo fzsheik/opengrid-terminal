@@ -177,6 +177,9 @@ def test_a_small_training_gets_a_modest_gpu():
     m = out["estimate"]["memory"]
     assert m["confidence"] == "low" and m["lower_bound"] is True and m["recommended_gb"] < 3
     assert opt(out, "cheapest_market")["gpu"] == T4, "an ASSUMED bf16 never excludes the T4"
+    assert out["notes"][0].startswith("This is a small model (0.5M parameters): it can likely train on a CPU"), \
+        "a tiny model is not pushed towards renting a big GPU"
+    assert not any("small model" in n for n in rec(RESNET)["notes"]), "ResNet-50 (25.6M) gets no CPU note"
 
 
 # --------------------------------------------------------------------------

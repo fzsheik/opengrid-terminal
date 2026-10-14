@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from .facts import (P_CODE, P_DEFAULT, PACKAGES, Collector, apply_key, as_int, looks_like_model_id,
                     map_dtype, map_optimizer)
+from . import modelsize
 
 TRAINING_ARG_CLASSES = {"TrainingArguments", "Seq2SeqTrainingArguments", "SFTConfig", "DPOConfig", "ORPOConfig",
                         "KTOConfig", "GRPOConfig", "RewardConfig", "PPOConfig", "CPOConfig", "UnslothTrainingArguments"}
@@ -65,6 +66,7 @@ class PyAnalyzer:
             for child in ast.iter_child_nodes(node):
                 self.parents[child] = node
         self._collect_imports(tree)
+        self._model_classes(tree)
         self._collect_assigns(tree)
         self._collect_defaults(tree)
         for node in ast.walk(tree):
@@ -83,6 +85,19 @@ class PyAnalyzer:
             elif isinstance(node, (ast.List, ast.Tuple)) and 2 <= len(node.elts) <= 200:
                 self._command_list(node)
         return self.local_imports
+
+    def _model_classes(self, tree: ast.AST) -> None:
+        """nn.Module classes (for an exact parameter count in engine.merge) and torchvision training datasets."""
+        try:
+            res = modelsize.scan(tree)
+        except RecursionError:
+            return
+        for name, ci in res["classes"].items():
+            self.c.module_classes.setdefault(name, (ci, self.loc(ci.lineno)))
+        self.c.called |= set(list(res["called"])[:2000])
+        for lineno, ds, samples in res["datasets"]:
+            self.c.fact("training.dataset_samples", samples, self.loc(lineno), "medium", P_DEFAULT)
+            self.c.signal("dataset", f"torchvision {ds} (training split: {samples:,} samples)", self.loc(lineno))
 
     def _command_list(self, node: ast.List | ast.Tuple) -> None:
         """A literal argv list such as subprocess.run(["torchrun", "--nproc_per_node", "8", ...])."""

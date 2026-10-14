@@ -36,6 +36,8 @@ from workloads import templates as T
 MAX_EXCLUDED = 200
 HOURS = (1, 10, 100)
 MIN_HEADROOM_PCT = 10.0
+# below this many billion parameters a training run is small enough that a CPU is a realistic option
+SMALL_MODEL_B = 0.01
 UNKNOWN_COSTS = ["storage", "egress", "startup / provisioning time", "idle time before and after the run"]
 DROP_EXCLUSION_CODES = ("wrong_count",)     # other instance shapes of the same GPU: not a reason, just a shape
 REGION_ALIASES = {"us": "US", "usa": "US", "eu": "Europe", "europe": "Europe", "uk": "UK", "ca": "Canada",
@@ -179,6 +181,12 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
                         "recommended: answer the questions and ask again."] + notes[:1]
         out["picks_unavailable"] = {k: "GPU memory could not be estimated: answer the questions" for k in out["picks"]}
         return out
+    params_b = (((mem.get("profile") or {}).get("model") or {}).get("parameters_b")
+                or (req.model.parameters_b if req.model else None))
+    if params_b is not None and params_b < SMALL_MODEL_B and est["workload_type"] in ("training", "fine_tuning"):
+        notes.insert(0, f"This is a small model ({params_b * 1e3:,.1f}M parameters): it can likely train on a CPU, and "
+                        "if you rent a GPU the cheapest one that fits is enough; a bigger GPU won't be needed for "
+                        "memory. Runtime has not been benchmarked.")
     if c.allow_spot:
         notes.append("allow_spot is set, but spot / interruptible listings are not ranked in this release: on-demand "
                      "only.")

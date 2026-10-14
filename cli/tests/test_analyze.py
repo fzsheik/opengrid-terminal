@@ -302,6 +302,66 @@ url: http://example.com/a#frag
 # Fixture projects A-F
 
 
+def test_model_parameter_counter() -> None:
+    import ast as _ast
+    from opengrid_cli.analyze import modelsize as M
+    src = """
+import torch, torch.nn as nn
+WIDTH = 64
+class Block(nn.Module):
+    def __init__(self, c, expand=4):
+        super().__init__()
+        self.net = nn.Sequential(nn.Conv2d(c, c * expand, 1, bias=False), nn.BatchNorm2d(c * expand), nn.ReLU(),
+                                 nn.Conv2d(c * expand, c, 3, padding=1, groups=c))
+class Model(nn.Module):
+    def __init__(self, depth=3, num_classes=100):
+        super().__init__()
+        self.stem = nn.Conv2d(3, WIDTH, 3)
+        self.blocks = nn.ModuleList([Block(WIDTH) for _ in range(depth)])
+        self.head = nn.Linear(WIDTH, num_classes)
+        self.norm = nn.LayerNorm(WIDTH)
+        self.emb = nn.Embedding(1000, WIDTH)
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, WIDTH))
+class Rnn(nn.Module):
+    def __init__(self, n):
+        super().__init__()
+        self.rnn = nn.LSTM(n, 128)
+class Cond(nn.Module):
+    def __init__(self, big=False):
+        super().__init__()
+        if big:
+            self.fc = nn.Linear(10, 10)
+class Runtime(nn.Module):
+    def __init__(self, sizes):
+        super().__init__()
+        self.layers = nn.ModuleList([nn.Linear(a, b) for a, b in zip(sizes, sizes[1:])])
+class Pretrained(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.backbone = torchvision.models.resnet18(weights="DEFAULT")
+"""
+    classes = M.scan(_ast.parse(src))["classes"]
+    block = 64 * 256 * 1 + 2 * 256 + (256 // 64) * 64 * 9 + 64   # 1x1 conv no bias, BN, grouped 3x3 conv + bias
+    expected = (3 * 64 * 9 + 64) + 3 * block + (64 * 100 + 100) + 2 * 64 + 1000 * 64 + 64
+    eq(M.count(classes, "Model"), (expected, "exact count from the layer definitions"), "nested/ModuleList/groups")
+    for name, why in (("Rnn", "LSTM"), ("Cond", "if statement"), ("Runtime", "loop over runtime values"),
+                      ("Pretrained", "resnet18")):
+        n, reason = M.count(classes, name)
+        assert n is None and why in reason, (name, reason)
+    assert M.count(classes, "Block")[0] is None, "Block alone has an unresolved channel count: not guessed"
+    # two different top-level models built: no count, a warning instead
+    proj = pathlib.Path(tempfile.mkdtemp()) / "p"
+    proj.mkdir()
+    (proj / "requirements.txt").write_text("torch\n")
+    (proj / "train.py").write_text(src.replace("torchvision.models.resnet18(weights=\"DEFAULT\")", "nn.Identity()")
+                                   + "\nA = Model()\nB = Pretrained()\nloss.backward()\n")
+    out = analyze(proj)
+    eq(out["requirements"]["model"]["parameters_b"], None, "two models built: not inferred")
+    assert any("several model classes are built" in w for w in out["warnings"]), out["warnings"]
+    shutil.rmtree(proj.parent)
+    ok("parameter counter: exact for standard layers, refuses RNNs, conditionals, runtime sizes, pretrained, ambiguity")
+
+
 def test_a_small_pytorch() -> None:
     with guarded() as (opened, _):
         out = analyze(FIX / "small_pytorch_training")
@@ -310,7 +370,11 @@ def test_a_small_pytorch() -> None:
     eq(r["workload_type"], "training", "A workload")
     eq(r["frameworks"], ["pytorch"], "A frameworks")
     eq(r["model"]["name"], None, "A model name")
-    eq(r["model"]["parameters_b"], None, "A params")
+    eq(r["model"]["parameters_b"], 0.001199882, "A params: Net counted exactly from model.py (1,199,882)")
+    eq(r["model"]["architecture"], "cnn", "A architecture (conv layers)")
+    eq(r["training"]["dataset_samples"], 60_000, "A dataset: torchvision MNIST training split")
+    eq(ev(out, "model.parameters_b")["source"], "model.py:5", "A params evidence")
+    eq(ev(out, "model.parameters_b")["confidence"], "high", "A params confidence (Net() is built in train.py)")
     eq(r["training"]["method"], "full", "A method")
     eq(r["training"]["optimizer"], "sgd", "A optimizer")
     eq(r["training"]["micro_batch_size"], 64, "A batch (argparse default, test loader ignored)")
@@ -318,7 +382,9 @@ def test_a_small_pytorch() -> None:
     eq(r["training"]["lora_rank"], None, "A lora")
     eq(r["hardware_hints"]["gpus_mentioned"], ["T4"], "A gpus mentioned")
     eq(r["hardware_hints"]["gpu_count"], None, "A gpu count")
-    assert {"model.name", "training.dataset_tokens", "constraints.budget_usd"} <= set(qfields(out)), qfields(out)
+    assert "constraints.budget_usd" in qfields(out), qfields(out)
+    assert "model.name" not in qfields(out) and "training.dataset_tokens" not in qfields(out), \
+        "model size and dataset size are known: not asked"
     assert "training.method" not in qfields(out)
     paths = [f["path"] for f in out["files_inspected"]]
     assert "utils.py" in paths, "local module imported by train.py is followed (one hop)"
@@ -326,7 +392,7 @@ def test_a_small_pytorch() -> None:
        "local module imported by a relevant script (imported by train.py)", "import reason")
     eq(ev(out, "training.micro_batch_size")["source"], "train.py:15", "A batch evidence")
     eq(ev(out, "training.micro_batch_size")["confidence"], "medium", "A batch confidence")
-    ok("A small_pytorch_training: training / pytorch / full / sgd / batch 64 / model-size question")
+    ok("A small_pytorch_training: training / pytorch / full / sgd / batch 64 / 1,199,882 params / MNIST 60k")
 
 
 def test_b_llama_lora() -> None:
@@ -706,7 +772,8 @@ def test_hf_config_and_misc() -> None:
 
 
 def main() -> None:
-    for fn in [test_gitignore, test_policy_names, test_redact, test_injection, test_yaml, test_a_small_pytorch,
+    for fn in [test_gitignore, test_policy_names, test_redact, test_injection, test_yaml, test_model_parameter_counter,
+               test_a_small_pytorch,
                test_b_llama_lora, test_c_full_70b, test_d_vllm, test_e_non_gpu, test_f_missing, test_g_malicious,
                test_excludes_and_notebook, test_hf_config_and_misc, test_root_errors_and_cli]:
         fn()

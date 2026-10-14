@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import ast
+
 import os
 import re
 from typing import Any
 
 from . import extract as ex
 from . import policy
-from .facts import CONF_RANK, P_DERIVED, PACKAGES, Collector, Fact, params_from_name
+from . import modelsize
+from .facts import CONF_RANK, P_CODE, P_DERIVED, PACKAGES, Collector, Fact, params_from_name
 from .pyextract import PyAnalyzer
 from .redact import find_injections, find_secrets, redact_obj
 
@@ -251,6 +254,35 @@ def _version_key(v: str) -> tuple[int, ...]:
     return tuple(int(x) for x in re.findall(r"\d+", v)) or (0,)
 
 
+def _count_local_model(c: Collector, chosen: dict[str, Fact]) -> None:
+    """Pick the model class a script builds and count its parameters exactly (modelsize); never guess."""
+    mods = {n: v for n, v in c.module_classes.items() if v[0].is_module}
+    if not mods:
+        return
+    classes = {n: v[0] for n, v in c.module_classes.items()}
+    used_inside = {sub for ci, _ in mods.values() for lay in ci.layers for node in ast.walk(lay)
+                   if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                   for sub in [node.func.id] if sub in mods}
+    top = [n for n in mods if n not in used_inside]
+    built = [n for n in top if n in c.called]
+    pick, conf = (built, "high") if built else (top, "medium")
+    if len(pick) != 1:
+        if len(pick) > 1:
+            c.warn("several model classes are built (" + ", ".join(sorted(pick)[:5]) + "): parameter count not "
+                   "inferred; state model.parameters_b")
+        return
+    name = pick[0]
+    n, why = modelsize.count(classes, name)
+    src = mods[name][1]
+    if n is None:
+        c.warn(f"{src}: parameters of {name} not counted ({why})")
+        return
+    chosen["model.parameters_b"] = Fact("model.parameters_b", round(n / 1e9, 9), src, conf, P_CODE)
+    c.signal("model_parameters", f"{name}: {n:,} parameters (exact, from its layer definitions)", src)
+    if "model.architecture" not in chosen and mods[name][0].has_conv:
+        chosen["model.architecture"] = Fact("model.architecture", "cnn", src, "medium", P_DERIVED)
+
+
 def merge(c: Collector, inspected: list[dict]) -> dict[str, Any]:
     req = _empty_requirements()
     evidence: list[dict] = []
@@ -288,6 +320,10 @@ def merge(c: Collector, inspected: list[dict]) -> dict[str, Any]:
         f = choose(fld)
         if f is not None:
             chosen[fld] = f
+
+    # exact parameter count of a locally defined nn.Module (no model name, no stated size)
+    if "model.parameters_b" not in chosen and "model.name" not in chosen:
+        _count_local_model(c, chosen)
 
     # parameter count from the model name ("Llama-2-7b-hf" -> 7)
     if "model.parameters_b" not in chosen and "model.name" in chosen:
@@ -484,9 +520,10 @@ def questions(req: dict[str, Any], c: Collector) -> list[dict[str, str]]:
         if t["micro_batch_size"] is None:
             q.append({"field": "training.micro_batch_size", "question": "What per-GPU batch size will you use?",
                       "why": "activation memory grows with batch size"})
-        q.append({"field": "training.dataset_tokens",
-                  "question": "How large is the training dataset (samples or tokens), and how many epochs?",
-                  "why": "datasets are never read by the analyzer; size drives runtime and cost"})
+        if t["dataset_samples"] is None and t["dataset_tokens"] is None:
+            q.append({"field": "training.dataset_tokens",
+                      "question": "How large is the training dataset (samples or tokens), and how many epochs?",
+                      "why": "datasets are never read by the analyzer; size drives runtime and cost"})
     if wl in ("inference", "batch"):
         if inf["concurrency"] is None:
             q.append({"field": "inference.concurrency", "question": "How many concurrent requests or sequences?",

@@ -333,6 +333,8 @@ uv run --project cli python cli/tests/test_mcp_stdio.py  # spawns `opengrid mcp`
 
 ## Troubleshooting
 
+* **The installed `opengrid` doesn't have a change you just pulled**: uv caches the built package while the
+  version stays the same. Reinstall with `uv tool install --force --reinstall ./cli`.
 * **`error: cannot reach OpenGrid at http://localhost:8000`** (exit 5): no server is running there. Start
   the server, or point `--url` / `OPENGRID_URL` at production.
 * **`needs an OpenGrid API key with scope '...'`** (exit 3): set `OPENGRID_API_KEY`, or run

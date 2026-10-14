@@ -38,6 +38,10 @@ class Collector:
     signals: list[dict] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     frameworks: dict[str, str] = field(default_factory=dict)
+    # nn.Module classes seen in any file (name -> (modelsize.ClassInfo, "file:line")) and names called anywhere,
+    # so engine.merge can count the parameters of the model a script builds (model.py defines, train.py calls)
+    module_classes: dict[str, tuple] = field(default_factory=dict)
+    called: set = field(default_factory=set)
     _sig_seen: set = field(default_factory=set)
 
     def fact(self, fld: str, value: Any, source: str, confidence: str = "high", prio: int = P_CODE) -> None:

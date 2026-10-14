@@ -13,7 +13,7 @@ Add `POLLER_ENABLED=false OPENGRID_NO_JOBS=1` for a read-only server that doesn'
 
 ### CLI and MCP (from the repo; not published to PyPI)
 ```sh
-uv tool install ./cli                          # puts `opengrid` on PATH
+uv tool install ./cli                          # puts `opengrid` on PATH (after a pull: add --force --reinstall)
 export OPENGRID_URL=http://localhost:8000
 opengrid doctor
 opengrid gpu search --model H100
