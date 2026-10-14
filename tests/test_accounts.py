@@ -221,7 +221,11 @@ def test_byo_credentials():
     c2 = credentials.add(a["id"], "lambda", "sk-second-key-5678")
     assert [x["id"] for x in credentials.list_for(a["id"])] == [c2["id"]]
     credentials.revoke(a["id"], c2["id"])
-    assert credentials.resolve(a["id"], "lambda") is None
+    saved_lambda, settings.lambda_api_key = settings.lambda_api_key, None  # a local .env may hold a managed key
+    try:
+        assert credentials.resolve(a["id"], "lambda") is None
+    finally:
+        settings.lambda_api_key = saved_lambda
     # Through the API: never the secret.
     k = keys.create_key(a["id"], "mgr", ["account:manage"])
     r = client.post("/v1/credentials", json={"provider": "vast", "secret": "vast-SECRET-abcdefgh"}, headers=bearer(k["secret"]))
