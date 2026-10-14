@@ -282,6 +282,10 @@ from api import reservations as reservations_api  # noqa: E402  (price-lock requ
 
 app.include_router(reservations_api.router)
 
+from api import assistant as assistant_api  # noqa: E402  (POST /v1/assistant: read-only, grounded)
+
+app.include_router(assistant_api.router)
+
 # Last: the page router owns "/" and the catch-all page paths.
 app.include_router(pages_api.router)
 

@@ -68,6 +68,8 @@ PAGES: list[tuple[str, str, str, bool]] = [
     ("/admin/value", "Value", "Economic value, routing quality, reliability and funnel.", False),
     ("/watchlists", "Watchlists", "Your watchlists and alerts.", False),
     ("/keys", "API keys", "Your OpenGrid API keys.", False),
+    ("/assistant", "Assistant", "Ask about live GPU prices, which GPU fits a workload, comparisons and price moves. "
+                                "Answers use OpenGrid's live market data; estimates are labelled.", True),
     ("/api", "API", "The OpenGrid API: market data, routing and deployments with one key.", True),
     ("/methodology", "Methodology", "How OpenGrid computes every number it publishes.", True),
     ("/methodology/{name}", "Methodology", "OpenGrid methodology.", True),
@@ -86,7 +88,12 @@ def is_page_path(path: str) -> bool:
 # /v1 areas readable without a key when PUBLIC_PAGES is on (GET/HEAD only).
 PUBLIC_V1 = ("gpus", "markets", "indices", "history", "spreads", "events", "news", "providers", "heatmaps",
              "overview", "tape", "methodology", "timeline", "best", "capabilities", "opportunities", "trust",
-             "families", "scopes", "fixings")
+             "families", "scopes", "fixings", "assistant")
+# POSTs that are public too: read-only computations over the request body (no writes, no provider calls, no
+# quotes; the market read is routing.scoring.rank_listings). Exactly these paths; the anonymous rate limit applies.
+# /v1/assistant: the OpenGrid Assistant is READ-ONLY (assistant/tools.py has no mutation tools; it writes no rows,
+# issues no quote, calls no provider); POST only because the question and context are a body.
+PUBLIC_POST = ("/v1/assistant",)
 # Never public, whatever else matches: money, private data, operator functions.
 PRIVATE_V1 = ("route", "deployments", "keys", "admin", "ops", "me", "usage", "billing", "watchlists", "alerts", "credentials", "jobs", "quotes",
               "reservations")
@@ -95,9 +102,12 @@ PUBLIC_LEGACY = ("/market", "/market/detail", "/listings", "/polling", "/changes
 
 
 def is_public(request: Request) -> bool:
-    """With PUBLIC_PAGES on: which requests skip the site password. GETs of pages and data only."""
+    """With PUBLIC_PAGES on: which requests skip the site password. GETs of pages and data, plus the PUBLIC_POST
+    read-only computations and anonymous product analytics."""
     if request.method == "POST" and request.url.path == "/v1/events/track":
         return True  # anonymous product analytics: rate-limited, no PII, writes only product_events
+    if request.method == "POST" and request.url.path in PUBLIC_POST:
+        return True  # read-only computations (see PUBLIC_POST), rate-limited per IP
     if request.method not in ("GET", "HEAD"):
         return False
     path = request.url.path
