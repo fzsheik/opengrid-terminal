@@ -157,6 +157,24 @@ A JOB is the workload and its outcome; a DEPLOYMENT is the cloud resource. Both 
   `isolated`, `thinLabels`, `fitLabel`.
 - Provider colours: `OG.Lib.providerColor(p)` — fixed per provider, never by rank.
 
+## Navigation (information architecture)
+
+Five primary destinations in `index.html`, each a `.nav-sec` group whose secondary links stay in the DOM
+(the command bar's page suggestions scrape every `.nav a[data-nav]`, with `data-alias` as extra search text):
+
+| Primary | Secondary |
+|---|---|
+| GPUs `/gpus` | Compare, Explorer, Heatmaps, Providers |
+| Find Compute `/find` | (page built separately; script tag placeholder in index.html) |
+| My Jobs `/jobs` | Deployments, Reserve, Watchlists, Route |
+| Markets `/markets` (the market dashboard, pages/overview.js) | Indices, Opportunities, Events, News |
+| Developers `/developers` | API docs, API keys, Onboarding |
+
+Utility links (Methodology, Ops) sit below; the Admin group is shown only to admins. A group opens when its
+page is current (`OG.navKeyFor(path)` or the page's `nav`; every data-nav must be unique) or when its chevron
+is clicked. Under 820px the nav is a menu behind `#nav-toggle` and closes on navigation. `/` is the homepage
+(pages/home.js, nav key `home`: no nav link, the brand is home). Tests: `node tests/test_web_nav.js`.
+
 ## Commands (terminal mode)
 
 `/` focuses the command bar, `?` shows help, `Esc` closes. Built in: `g <gpu>` (`g h100` → the H100 family page when it has

@@ -1,4 +1,4 @@
-/* / — Market overview. One /v1/overview request for the market sections, plus /v1/indices (soft),
+/* /markets — Market overview (the dashboard that was "/" before the homepage). One /v1/overview request for the market sections, plus /v1/indices (soft),
    /v1/spreads, /v1/events?min_severity=notable, /v1/news (soft) and /market (sparklines only).
    Every section the API marks unavailable shows its reason in place, never zeros. Refreshes every 60 s. */
 (() => {
@@ -166,9 +166,9 @@
     });
   }
 
-  OG.page("/", {
-    title: "Overview",
-    nav: "overview",
+  OG.page("/markets", {
+    title: "Markets",
+    nav: "markets",
     mount(el, params, query, ctx) {
       el.classList.add("pg-overview");
       const sub = h("span", {}, "On-demand GPU market · observed list prices per GPU-hour");

@@ -242,6 +242,7 @@
 
   OG.page("/assistant", {
     title: "Assistant",
+    nav: "find",  // the assistant is the plain-English way into Find Compute
     mount(el, params, query) {
       const host = h("div", { class: "ag-page" });
       el.append(OG.head("Assistant", "Ask about live GPU prices, which GPU fits a training, fine-tuning or inference job, comparisons and price moves"), host);

@@ -84,6 +84,17 @@ Full docs: web/README.md.
     return best;
   }
 
+  // Which left-nav link (data-nav) a path highlights when its page sets no `nav` of its own.
+  // "/" is the homepage (no nav link: the brand is home); /admin/<x> -> "admin-<x>"; else the first segment,
+  // with the singular detail paths folded into their list page.
+  function navKeyFor(path) {
+    const parts = String(path || "/").split("?")[0].split("/");
+    const seg0 = parts[1] || "";
+    if (seg0 === "admin") return parts[2] ? "admin-" + parts[2] : "admin-execution";
+    return { "": "home", gpu: "gpus", gpus: "gpus", provider: "providers", indices: "indices", compare: "compare", methodology: "methodology",
+      markets: "markets", overview: "markets", job: "jobs", jobs: "jobs", deployment: "deployments", developers: "developers" }[seg0] ?? seg0;
+  }
+
   // Old hash URLs from the first web UI -> new paths
   function legacyHash(hash, slugify) {
     // Only the old app's "#/market..." form: a plain "#routing" is an in-page anchor, not a route.
@@ -428,7 +439,7 @@ Full docs: web/README.md.
     };
   }
 
-  Object.assign(OG, { compile, matchRoute, legacyHash, slug, fmt, freshness, freshLimits, cleanKids, familyTarget, shortReason, sortRows, csvCell, csvString,
+  Object.assign(OG, { compile, matchRoute, legacyHash, navKeyFor, slug, fmt, freshness, freshLimits, cleanKids, familyTarget, shortReason, sortRows, csvCell, csvString,
     fuzzy, fuzzyScore, parseCommand, command, findCommand, COMMANDS, unwrap, withParams, reasonOf,
     randomId, stableJson, outcomeUnknown, intentFor, settleIntent, makeTracker, TRACK_EVENTS,
     dep: { FLOW: DEP_FLOW, UNCERTAIN: DEP_UNCERTAIN, FAILED: DEP_FAILED, LIVE: DEP_LIVE, tone: depTone, strip: depStrip },
@@ -1081,9 +1092,40 @@ Full docs: web/README.md.
     render();
   };
 
-  function navKeyFor(path) {
-    const seg0 = path.split("/")[1] || "";
-    return { "": "overview", gpu: "gpus", gpus: "gpus", provider: "providers", indices: "indices", compare: "compare", methodology: "methodology" }[seg0] ?? seg0;
+  // Highlight the current nav link and open its group (other groups stay as the user left them).
+  function markNav(nav) {
+    let group = null;
+    document.querySelectorAll(".nav a[data-nav]").forEach(a => {
+      if (a.dataset.nav === nav) { a.setAttribute("aria-current", "page"); group = a.closest(".nav-sec"); }
+      else a.removeAttribute("aria-current");
+    });
+    document.querySelectorAll(".nav-sec").forEach(g => {
+      const cur = g === group;
+      g.classList.toggle("has-cur", cur);
+      if (cur) setGroupOpen(g, true);
+      else if (!g.dataset.pinned) setGroupOpen(g, false);
+    });
+    setMenuOpen(false);   // the mobile menu closes on every navigation
+  }
+  function setGroupOpen(g, open) {
+    g.classList.toggle("open", open);
+    const b = g.querySelector(".nav-tg");
+    if (b) b.setAttribute("aria-expanded", String(open));
+  }
+  function setMenuOpen(open) {
+    document.body.classList.toggle("nav-open", open);
+    const b = $("#nav-toggle");
+    if (b) { b.setAttribute("aria-expanded", String(open)); b.setAttribute("aria-label", open ? "Close menu" : "Open menu"); }
+  }
+  function setupNav() {
+    document.querySelectorAll(".nav-sec .nav-tg").forEach(b => b.addEventListener("click", () => {
+      const g = b.closest(".nav-sec"), open = !g.classList.contains("open");
+      setGroupOpen(g, open);
+      if (open) g.dataset.pinned = "1"; else delete g.dataset.pinned;
+    }));
+    const t = $("#nav-toggle");
+    if (t) t.addEventListener("click", () => setMenuOpen(!document.body.classList.contains("nav-open")));
+    document.addEventListener("keydown", e => { if (e.key === "Escape" && document.body.classList.contains("nav-open")) setMenuOpen(false); });
   }
   function render() {
     const path = location.pathname;
@@ -1109,7 +1151,7 @@ Full docs: web/README.md.
     };
     current = { ctx, route: m && m.route };
     const nav = m ? (m.route.nav || navKeyFor(path)) : null;
-    document.querySelectorAll(".nav a[data-nav]").forEach(a => { if (a.dataset.nav === nav) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
+    markNav(nav);
     if (!m) { ctx.setTitle("Not found"); page.append(OG.head("Not found", path), OG.empty("No page at this address.")); return; }
     const t = typeof m.route.title === "function" ? m.route.title(m.params, ctx.query) : m.route.title;
     ctx.setTitle(t);
@@ -1206,7 +1248,8 @@ Full docs: web/README.md.
   }
 
   /* ================= command bar ================= */
-  function navItems() { return [...document.querySelectorAll(".nav a[data-nav]")].map(a => ({ label: a.textContent.trim(), href: a.getAttribute("href") })); }
+  // Every nav link, primary or secondary (collapsed groups stay in the DOM), plus its search aliases.
+  function navItems() { return [...document.querySelectorAll(".nav a[data-nav]")].map(a => ({ label: a.textContent.trim(), href: a.getAttribute("href"), alias: a.dataset.alias || "" })); }
   let gpuList = null;
   async function gpusForSearch() { if (!gpuList) gpuList = await OG.data.gpus().catch(() => []); return gpuList; }
   OG.resolveGpu = async q => {
@@ -1257,7 +1300,7 @@ Full docs: web/README.md.
     }
     for (const g of fuzzy(q, gpus, g => [g.slug, g.short, g.name]).slice(0, 6)) out.push({ label: g.short, hint: g.live ? `GPU · ${g.weight} provider${g.weight === 1 ? "" : "s"}` : "GPU · none live", run: () => OG.go("/gpu/" + g.slug) });
     for (const p of fuzzy(q, provs, p => [p.name, p.display_name]).slice(0, 4)) out.push({ label: p.display_name, hint: "provider", run: () => OG.go("/provider/" + p.name) });
-    for (const n of fuzzy(q, navItems(), n => n.label).slice(0, 3)) out.push({ label: n.label, hint: "page", run: () => OG.go(n.href) });
+    for (const n of fuzzy(q, navItems(), n => [n.label, n.alias].filter(Boolean)).slice(0, 3)) out.push({ label: n.label, hint: "page", run: () => OG.go(n.href) });
     return out.slice(0, 12);
   }
   function setupCommandBar() {
@@ -1341,6 +1384,7 @@ Full docs: web/README.md.
     window.addEventListener("popstate", render);
     builtinCommands();
     setupCommandBar();
+    setupNav();
     const tt = $("#theme-toggle");
     if (tt) tt.addEventListener("click", () => OG.setTheme(OG.theme() === "light" ? "dark" : "light"));
     drawThemeToggle();
