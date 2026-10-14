@@ -1,0 +1,7 @@
+# axolotl-style config
+base_model: mistralai/Mistral-7B-v0.1
+adapter: lora
+lora_r: 8
+sequence_len: 1024
+micro_batch_size: 2
+hub_token: hf_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE11

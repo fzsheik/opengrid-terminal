@@ -1,0 +1,32 @@
+services:
+  llm:
+    image: vllm/vllm-openai:v0.6.3
+    # OpenAI-compatible endpoint for the chat UI
+    command:
+      - "--model"
+      - "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4"
+      - "--quantization"
+      - "awq"
+      - "--max-model-len"
+      - "8192"
+      - "--max-num-seqs"
+      - "32"
+      - "--tensor-parallel-size"
+      - "1"
+      - "--gpu-memory-utilization"
+      - "0.90"
+    ports:
+      - "8000:8000"
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+  ui:
+    image: ghcr.io/example/chat-ui:latest
+    ports:
+      - "3000:3000"

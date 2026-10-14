@@ -1,0 +1,5 @@
+# runtime-created by the test: secrets/ holds a config.json that must never be read
+secrets/
+/private_notes/
+*.log
+!keep.log
