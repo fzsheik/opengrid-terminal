@@ -1,0 +1,26 @@
+[project]
+name = "opengrid-cli"
+version = "0.1.0"
+description = "OpenGrid command-line client and local MCP server: GPU market data, workload-aware recommendations, read-only by design"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "httpx>=0.27",
+    "mcp>=2.3",
+]
+
+[project.scripts]
+opengrid = "opengrid_cli.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+# src layout. The package directory is listed explicitly so the build does not depend on any one module
+# (opengrid_cli/__init__.py and opengrid_cli/analyze/ are maintained separately).
+[tool.hatch.build.targets.wheel]
+packages = ["src/opengrid_cli"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/opengrid_cli", "tests", "README.md"]
