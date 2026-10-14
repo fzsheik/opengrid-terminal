@@ -1,7 +1,7 @@
 # OpenGrid Terminal — Capabilities & Features
 
 **OpenGrid Terminal is a market-intelligence and execution terminal for GPU compute.**
-It watches 22 GPU clouds, turns their prices into one trustworthy market, explains what is moving
+It watches 32 GPU clouds, turns their prices into one trustworthy market, explains what is moving
 and why, and routes a workload to the best provider through one OpenGrid API key — with every
 decision audited and every dollar reconciled.
 
@@ -43,7 +43,7 @@ important — what it deliberately does not claim.
 
 | | |
 |---|---|
-| GPU clouds monitored | **22** (AWS, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run) |
+| GPU clouds monitored | **32** (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb) |
 | Canonical GPU models | **91**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL) |
 | OpenGrid indices defined | **251** (per-GPU, family composites, overall compute index, regional, spot, provider-class) |
 | News & signal sources | **44** verified feeds (hyperscalers, neoclouds, NVIDIA/AMD, US Federal Register, trade press) |
@@ -55,14 +55,14 @@ important — what it deliberately does not claim.
 | Discord channels | **4** (ops, deployments, market, news) with OpenGrid-branded embeds |
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
-| Automated tests | **49** Python test files + **6** JavaScript test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team |
+| Automated tests | **55** Python test files + **6** JavaScript test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team |
 
 ---
 
 ## 2. Architecture
 
 ```
-                    ┌──────────────────────── 22 GPU clouds ───────────────────────┐
+                    ┌──────────────────────── 32 GPU clouds ───────────────────────┐
                     │ APIs · public price pages · pricing files · aggregator feeds │
                     └──────────────────────────────┬────────────────────────────────┘
                                                    │ independent poll loop per provider
@@ -120,6 +120,10 @@ provider never holds up the others.
 | Provider | Class | How OpenGrid reads prices |
 |---|---|---|
 | AWS | hyperscaler | public pricing file |
+| Google Cloud | hyperscaler | public page (us-central1; attachable T4/V100 are GPU-only and kept out of market statistics) |
+| Microsoft Azure | hyperscaler | public API (Retail Prices, eastus + eastus2) |
+| Oracle Cloud | hyperscaler | public pricing file (global list prices) |
+| IBM Cloud | general cloud | public API (Global Catalog; on-demand and spot) |
 | Lambda | neocloud | authenticated API |
 | RunPod | neocloud | authenticated API |
 | Hyperstack | neocloud | authenticated API |
@@ -137,11 +141,20 @@ provider never holds up the others.
 | Jarvislabs | neocloud | public page |
 | Hot Aisle (AMD MI300X) | neocloud | public page |
 | Vultr | general cloud | public API |
-| Crusoe · Denvr · Latitude.sh · Boost Run | neocloud | aggregator (via Shadeform) |
+| Akamai/Linode | general cloud | public API |
+| OVHcloud | general cloud | public API (the two USD catalogues, US and World) |
+| Koyeb | general cloud | public API (serverless GPU instances) |
+| Scaleway | general cloud | aggregator (via Shadeform; its own catalogue is EUR-only) |
+| Crusoe · Denvr · Latitude.sh · Boost Run · Horizon Compute · Phyntec | neocloud | aggregator (via Shadeform) |
 
 Candidates checked and **not** added (2026-10-13): Paperspace (its own page contradicts the aggregator),
 Thunder Compute (terms forbid automated access), TensorWave ("starting at" floors only), Fluidstack,
-Nscale and Sesterce (no public prices), Genesis Cloud (unreachable). A provider is added only when it
+Nscale and Sesterce (no public prices), Genesis Cloud (unreachable). Also declined: Alibaba Cloud (price API needs an
+AccessKey; robots.txt disallows the page's data files), TensorDock (key-only API, "from" floors), Cudo Compute (public
+on-demand closed 2026-03-31), SF Compute (login; robots disallows /api), Akash (estimates from stale bids, variants mixed),
+io.net and Oblivus (terms forbid scraping), Prime Intellect (auth; an aggregator), Clore.ai (key; per day), Nosana
+(token-priced), Exoscale (no GPU model in the keyless feed), Civo and Gcore (key required), Seeweb (EUR only), and
+Shadeform's Excess Supply and IMWT (unidentifiable or reselling other clouds). A provider is added only when it
 publishes on-demand prices that can be read without an account and its terms allow it.
 
 ### 3.2 Normalization
@@ -670,7 +683,7 @@ automatically at startup. A push to GitHub does not trigger a Railway build on i
 
 ## 16. Testing
 
-49 Python test files and 6 JavaScript test files (plain scripts, scratch Postgres databases, no real
+55 Python test files and 6 JavaScript test files (plain scripts, scratch Postgres databases, no real
 provider calls):
 - unit and integration tests for every analytics module, API and page;
 - **routing benchmark**: 50 deterministic decision scenarios;
@@ -688,7 +701,8 @@ provider calls):
   restatements, evidence retention;
 - **reservations**: state machine, supply-basis enforcement, tenant isolation, nothing launched or billed;
 - **provider page parsers**: the newer scraped price pages parsed from saved real copies (CoreWeave, Together AI,
-  Jarvislabs, Hot Aisle, Boost Run, Vultr);
+  Jarvislabs, Hot Aisle, Boost Run, Vultr, Nebius), plus one parser test file each for Google Cloud, Azure,
+  Oracle, IBM, the general clouds (Linode, OVHcloud, Scaleway, Koyeb) and Shadeform's Horizon / Phyntec;
 - JavaScript tests for the terminal's core, charts and execution UI.
 
 ---

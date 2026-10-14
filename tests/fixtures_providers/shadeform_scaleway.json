@@ -1,0 +1,636 @@
+{
+ "instance_types": [
+  {
+   "cloud": "scaleway",
+   "shade_instance_type": "L4",
+   "cloud_instance_type": "L4-1-24G",
+   "configuration": {
+    "memory_in_gb": 48,
+    "storage_in_gb": 500,
+    "vcpus": 8,
+    "num_gpus": 1,
+    "gpu_type": "L4",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu22.04_cuda12.4_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 24,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 48,
+   "storage_in_gb": 500,
+   "vcpus": 8,
+   "num_gpus": 1,
+   "gpu_type": "L4",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 95,
+   "availability": [
+    {
+     "region": "paris-france-5",
+     "available": true,
+     "display_name": "FR, Paris",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "paris-france-1",
+     "available": false,
+     "display_name": "FR, Paris",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "warsaw-poland-1",
+     "available": true,
+     "display_name": "PL, Warsaw",
+     "rental_type": "on_demand"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 480
+   },
+   "deployment_type": "vm",
+   "flex_vm": false
+  },
+  {
+   "cloud": "scaleway",
+   "shade_instance_type": "H100x2",
+   "cloud_instance_type": "H100-2-80G",
+   "configuration": {
+    "memory_in_gb": 480,
+    "storage_in_gb": 2000,
+    "vcpus": 48,
+    "num_gpus": 2,
+    "gpu_type": "H100",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu24.04_cuda12.8_shade_os",
+     "ubuntu24.04_cuda13.0_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 80,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 480,
+   "storage_in_gb": 2000,
+   "vcpus": 48,
+   "num_gpus": 2,
+   "gpu_type": "H100",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 660,
+   "availability": [
+    {
+     "region": "paris-france-1",
+     "available": true,
+     "display_name": "FR, Paris",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "warsaw-poland-1",
+     "available": false,
+     "display_name": "PL, Warsaw",
+     "rental_type": "on_demand"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 480
+   },
+   "deployment_type": "vm",
+   "flex_vm": false
+  },
+  {
+   "cloud": "scaleway",
+   "shade_instance_type": "L40S",
+   "cloud_instance_type": "L40S-1-48G",
+   "configuration": {
+    "memory_in_gb": 96,
+    "storage_in_gb": 1000,
+    "vcpus": 8,
+    "num_gpus": 1,
+    "gpu_type": "L40S",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu24.04_cuda12.8_shade_os",
+     "ubuntu24.04_cuda13.0_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 48,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 96,
+   "storage_in_gb": 1000,
+   "vcpus": 8,
+   "num_gpus": 1,
+   "gpu_type": "L40S",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 170,
+   "availability": [
+    {
+     "region": "paris-france-1",
+     "available": false,
+     "display_name": "FR, Paris",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "warsaw-poland-1",
+     "available": true,
+     "display_name": "PL, Warsaw",
+     "rental_type": "on_demand"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 480
+   },
+   "deployment_type": "vm",
+   "flex_vm": false
+  },
+  {
+   "cloud": "scaleway",
+   "shade_instance_type": "L40Sx8",
+   "cloud_instance_type": "L40S-8-48G",
+   "configuration": {
+    "memory_in_gb": 768,
+    "storage_in_gb": 4000,
+    "vcpus": 64,
+    "num_gpus": 8,
+    "gpu_type": "L40S",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu24.04_cuda12.8_shade_os",
+     "ubuntu24.04_cuda13.0_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 48,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 768,
+   "storage_in_gb": 4000,
+   "vcpus": 64,
+   "num_gpus": 8,
+   "gpu_type": "L40S",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 1360,
+   "availability": [
+    {
+     "region": "warsaw-poland-1",
+     "available": false,
+     "display_name": "PL, Warsaw",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "paris-france-1",
+     "available": false,
+     "display_name": "FR, Paris",
+     "rental_type": "on_demand"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 480
+   },
+   "deployment_type": "vm",
+   "flex_vm": false
+  },
+  {
+   "cloud": "scaleway",
+   "shade_instance_type": "L40Sx2",
+   "cloud_instance_type": "L40S-2-48G",
+   "configuration": {
+    "memory_in_gb": 192,
+    "storage_in_gb": 2000,
+    "vcpus": 16,
+    "num_gpus": 2,
+    "gpu_type": "L40S",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu24.04_cuda12.8_shade_os",
+     "ubuntu24.04_cuda13.0_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 48,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 192,
+   "storage_in_gb": 2000,
+   "vcpus": 16,
+   "num_gpus": 2,
+   "gpu_type": "L40S",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 340,
+   "availability": [
+    {
+     "region": "paris-france-1",
+     "available": false,
+     "display_name": "FR, Paris",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "warsaw-poland-1",
+     "available": false,
+     "display_name": "PL, Warsaw",
+     "rental_type": "on_demand"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 480
+   },
+   "deployment_type": "vm",
+   "flex_vm": false
+  },
+  {
+   "cloud": "scaleway",
+   "shade_instance_type": "L40Sx4",
+   "cloud_instance_type": "L40S-4-48G",
+   "configuration": {
+    "memory_in_gb": 384,
+    "storage_in_gb": 3000,
+    "vcpus": 32,
+    "num_gpus": 4,
+    "gpu_type": "L40S",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu24.04_cuda12.8_shade_os",
+     "ubuntu24.04_cuda13.0_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 48,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 384,
+   "storage_in_gb": 3000,
+   "vcpus": 32,
+   "num_gpus": 4,
+   "gpu_type": "L40S",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 680,
+   "availability": [
+    {
+     "region": "warsaw-poland-1",
+     "available": false,
+     "display_name": "PL, Warsaw",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "paris-france-1",
+     "available": false,
+     "display_name": "FR, Paris",
+     "rental_type": "on_demand"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 480
+   },
+   "deployment_type": "vm",
+   "flex_vm": false
+  },
+  {
+   "cloud": "scaleway",
+   "shade_instance_type": "L4x4",
+   "cloud_instance_type": "L4-4-24G",
+   "configuration": {
+    "memory_in_gb": 192,
+    "storage_in_gb": 500,
+    "vcpus": 32,
+    "num_gpus": 4,
+    "gpu_type": "L4",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu22.04_cuda12.4_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 24,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 192,
+   "storage_in_gb": 500,
+   "vcpus": 32,
+   "num_gpus": 4,
+   "gpu_type": "L4",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 380,
+   "availability": [
+    {
+     "region": "paris-france-5",
+     "available": false,
+     "display_name": "FR, Paris",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "warsaw-poland-1",
+     "available": false,
+     "display_name": "PL, Warsaw",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "paris-france-1",
+     "available": false,
+     "display_name": "FR, Paris",
+     "rental_type": "on_demand"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 480
+   },
+   "deployment_type": "vm",
+   "flex_vm": false
+  },
+  {
+   "cloud": "scaleway",
+   "shade_instance_type": "L4x2",
+   "cloud_instance_type": "L4-2-24G",
+   "configuration": {
+    "memory_in_gb": 96,
+    "storage_in_gb": 500,
+    "vcpus": 16,
+    "num_gpus": 2,
+    "gpu_type": "L4",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu22.04_cuda12.4_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 24,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 96,
+   "storage_in_gb": 500,
+   "vcpus": 16,
+   "num_gpus": 2,
+   "gpu_type": "L4",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 190,
+   "availability": [
+    {
+     "region": "paris-france-5",
+     "available": true,
+     "display_name": "FR, Paris",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "warsaw-poland-1",
+     "available": true,
+     "display_name": "PL, Warsaw",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "paris-france-1",
+     "available": false,
+     "display_name": "FR, Paris",
+     "rental_type": "on_demand"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 480
+   },
+   "deployment_type": "vm",
+   "flex_vm": false
+  },
+  {
+   "cloud": "scaleway",
+   "shade_instance_type": "L4x8",
+   "cloud_instance_type": "L4-8-24G",
+   "configuration": {
+    "memory_in_gb": 384,
+    "storage_in_gb": 500,
+    "vcpus": 64,
+    "num_gpus": 8,
+    "gpu_type": "L4",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu22.04_cuda12.4_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 24,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 384,
+   "storage_in_gb": 500,
+   "vcpus": 64,
+   "num_gpus": 8,
+   "gpu_type": "L4",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 760,
+   "availability": [
+    {
+     "region": "paris-france-5",
+     "available": false,
+     "display_name": "FR, Paris",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "paris-france-1",
+     "available": false,
+     "display_name": "FR, Paris",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "warsaw-poland-1",
+     "available": false,
+     "display_name": "PL, Warsaw",
+     "rental_type": "on_demand"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 480
+   },
+   "deployment_type": "vm",
+   "flex_vm": false
+  },
+  {
+   "cloud": "scaleway",
+   "shade_instance_type": "B300x8",
+   "cloud_instance_type": "B300-SXM-8-288G",
+   "configuration": {
+    "memory_in_gb": 3750,
+    "storage_in_gb": 6000,
+    "vcpus": 224,
+    "num_gpus": 8,
+    "gpu_type": "B300",
+    "interconnect": "sxm6",
+    "nvlink": true,
+    "os_options": [
+     "ubuntu24.04_cuda13.0_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 288,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 3750,
+   "storage_in_gb": 6000,
+   "vcpus": 224,
+   "num_gpus": 8,
+   "gpu_type": "B300",
+   "interconnect": "sxm6",
+   "nvlink": true,
+   "hourly_price": 7206,
+   "availability": [
+    {
+     "region": "paris-france-1",
+     "available": false,
+     "display_name": "FR, Paris",
+     "rental_type": "on_demand"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 480
+   },
+   "deployment_type": "vm",
+   "flex_vm": false
+  },
+  {
+   "cloud": "scaleway",
+   "shade_instance_type": "H100",
+   "cloud_instance_type": "H100-1-80G",
+   "configuration": {
+    "memory_in_gb": 240,
+    "storage_in_gb": 1000,
+    "vcpus": 24,
+    "num_gpus": 1,
+    "gpu_type": "H100",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu24.04_cuda12.8_shade_os",
+     "ubuntu24.04_cuda13.0_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 80,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 240,
+   "storage_in_gb": 1000,
+   "vcpus": 24,
+   "num_gpus": 1,
+   "gpu_type": "H100",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 330,
+   "availability": [
+    {
+     "region": "paris-france-1",
+     "available": true,
+     "display_name": "FR, Paris",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "warsaw-poland-1",
+     "available": true,
+     "display_name": "PL, Warsaw",
+     "rental_type": "on_demand"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 480
+   },
+   "deployment_type": "vm",
+   "flex_vm": false
+  },
+  {
+   "cloud": "vultr",
+   "shade_instance_type": "A40",
+   "cloud_instance_type": "vcg-a40-24c-120g-48vram",
+   "configuration": {
+    "memory_in_gb": 120,
+    "storage_in_gb": 1400,
+    "vcpus": 24,
+    "num_gpus": 1,
+    "gpu_type": "A40",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu22.04_cuda12.0_shade_os",
+     "ubuntu20.04_cuda12.0_shade_os",
+     "ubuntu24.04_cuda12.4_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 48,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 120,
+   "storage_in_gb": 1400,
+   "vcpus": 24,
+   "num_gpus": 1,
+   "gpu_type": "A40",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 186,
+   "availability": [
+    {
+     "region": "frankfurt-germany-6",
+     "available": false,
+     "display_name": "DE, Frankfurt",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "tokyo-japan-2",
+     "available": false,
+     "display_name": "JP, Tokyo",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "sanjose-usa-1",
+     "available": false,
+     "display_name": "US, Silicon Valley, CA",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "sydney-australia-1",
+     "available": false,
+     "display_name": "AU, Sydney",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "losangeles-usa-1",
+     "available": true,
+     "display_name": "US, Los Angeles, CA",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "bangalore-india-1",
+     "available": false,
+     "display_name": "IN, Bangalore",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "london-uk-1",
+     "available": false,
+     "display_name": "GB, London",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "singapore-singapore-1",
+     "available": false,
+     "display_name": "SG, Singapore",
+     "rental_type": "on_demand"
+    },
+    {
+     "region": "newark-usa-1",
+     "available": false,
+     "display_name": "US, Newark, NJ",
+     "rental_type": "on_demand"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 600
+   },
+   "deployment_type": "vm",
+   "flex_vm": false
+  }
+ ]
+}

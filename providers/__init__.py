@@ -12,19 +12,34 @@ from providers.base import (
     to_decimal,
 )
 from providers.aws import AwsProvider
+from providers.azure import AzureProvider
 from providers.coreweave import CoreWeaveProvider
 from providers.digitalocean import DigitalOceanProvider
+from providers.gcp import GcpProvider
 from providers.hotaisle import HotAisleProvider
 from providers.hyperbolic import HyperbolicProvider
 from providers.hyperstack import HyperstackProvider
+from providers.ibm import IbmProvider
 from providers.jarvislabs import JarvislabsProvider
+from providers.koyeb import KoyebProvider
 from providers.lambda_labs import LambdaProvider
+from providers.linode import LinodeProvider
 from providers.lium import LiumProvider
 from providers.massedcompute import MassedComputeProvider
 from providers.nebius import NebiusProvider
+from providers.oracle import OracleProvider
+from providers.ovhcloud import OvhCloudProvider
 from providers.runpod import RunPodProvider
 from providers.salad import SaladProvider
-from providers.shadeform import BoostRunProvider, CrusoeProvider, DenvrProvider, LatitudeProvider
+from providers.shadeform import (
+    BoostRunProvider,
+    CrusoeProvider,
+    DenvrProvider,
+    HorizonProvider,
+    LatitudeProvider,
+    PhyntecProvider,
+    ScalewayProvider,
+)
 from providers.together import TogetherProvider
 from providers.vast import VastProvider
 from providers.verda import VerdaProvider
@@ -56,6 +71,16 @@ PROVIDERS: dict[str, type[Provider]] = {
         JarvislabsProvider,
         HotAisleProvider,
         VultrProvider,
+        GcpProvider,
+        AzureProvider,
+        HorizonProvider,
+        PhyntecProvider,
+        LinodeProvider,
+        OvhCloudProvider,
+        ScalewayProvider,
+        KoyebProvider,
+        OracleProvider,
+        IbmProvider,
     )
 }
 
@@ -85,6 +110,16 @@ __all__ = [
     "JarvislabsProvider",
     "HotAisleProvider",
     "VultrProvider",
+    "GcpProvider",
+    "AzureProvider",
+    "HorizonProvider",
+    "PhyntecProvider",
+    "LinodeProvider",
+    "OvhCloudProvider",
+    "ScalewayProvider",
+    "KoyebProvider",
+    "OracleProvider",
+    "IbmProvider",
     "find_endpoint",
     "gather_limited",
     "to_decimal",

@@ -1,4 +1,4 @@
-"""CoreWeave, Together, Jarvislabs, Hot Aisle, Vultr and Boost Run (via Shadeform).
+"""CoreWeave, Together, Jarvislabs, Hot Aisle, Vultr, Boost Run (via Shadeform) and Nebius.
 
 Parsers run on trimmed copies of the REAL responses (tests/fixtures_providers/,
 fetched 2026-10-13 with unauthenticated GETs). The last test pushes all six
@@ -26,10 +26,11 @@ import httpx  # noqa: E402
 import mapping  # noqa: E402
 import provider_meta  # noqa: E402
 from providers import PROVIDERS  # noqa: E402
-from providers import coreweave, hotaisle, jarvislabs, together  # noqa: E402
+from providers import coreweave, hotaisle, jarvislabs, nebius, together  # noqa: E402
 from providers.coreweave import CoreWeaveProvider  # noqa: E402
 from providers.hotaisle import HotAisleProvider  # noqa: E402
 from providers.jarvislabs import JarvislabsProvider  # noqa: E402
+from providers.nebius import NebiusProvider  # noqa: E402
 from providers.shadeform import BoostRunProvider, ShadeformCloud  # noqa: E402
 from providers.together import TogetherProvider  # noqa: E402
 from providers.vultr import METAL_ENDPOINT, VM_ENDPOINT, VultrProvider  # noqa: E402
@@ -241,6 +242,78 @@ def test_boostrun():
 
 
 # --------------------------------------------------------------------------
+# Nebius (fixture trimmed to the page's __NEXT_DATA__ table blocks)
+# --------------------------------------------------------------------------
+
+
+def test_nebius():
+    page = text("nebius_prices.html")
+    payload = nebius.extract(page)
+    assert payload["header"] == ["Item", "vCPUs", "RAM, GB", "GPU-hour"]
+    assert len(payload["rows"]) == 9
+    out = by_id(NebiusProvider.normalize({"/prices": [snap(payload)]}))
+    assert len(out) == 7, sorted(out)
+
+    h100 = out["NVIDIA HGX H100"]
+    assert h100.canonical_gpu_name == "NVIDIA H100 80GB SXM5" and h100.price_per_gpu_hour == D("4.50")
+    assert h100.gpu_count == 1 and h100.price_per_instance_hour == D("4.50") and h100.market_type == "on_demand"
+    assert not h100.interruptible and h100.region is None and h100.provider_tier is None
+    assert h100.vcpu == 16 and h100.ram_gb == 200
+    assert out["NVIDIA HGX H200"].canonical_gpu_name == "NVIDIA H200 141GB SXM5"
+    assert out["NVIDIA HGX H200"].price_per_gpu_hour == D("5.40")
+    assert out["NVIDIA HGX B200"].canonical_gpu_name == "NVIDIA B200 180GB SXM"
+    assert out["NVIDIA HGX B200"].price_per_gpu_hour == D("8.50")
+    assert out["NVIDIA HGX B300"].canonical_gpu_name == "NVIDIA B300 288GB SXM"
+    assert out["NVIDIA HGX B300"].price_per_gpu_hour == D("9.50") and out["NVIDIA HGX B300"].ram_gb == 346
+    # Workstation or Server Edition is not stated: unmapped, never guessed.
+    rtx = out["NVIDIA RTX PRO 6000"]
+    assert rtx.canonical_gpu_name is None and rtx.price_per_gpu_hour == D("1.80")
+    l40s = out["NVIDIA L40S with Intel CPU"]
+    assert l40s.canonical_gpu_name == "NVIDIA L40S 48GB" and l40s.price_per_gpu_hour == D("1.55")
+    assert l40s.provider_tier == "from_price" and l40s.vcpu is None and l40s.ram_gb is None, "ranges have no value"
+    assert out["NVIDIA L40S with AMD CPU"].price_per_gpu_hour == D("1.82")
+    # "Contact us" rows (GB200/GB300 NVL72) give no listing.
+    assert not any("NVL72" in k for k in out)
+    # The preemptible table ($0.99 / $0.79 / $0.74 / $0.90) is never read.
+    assert {l.price_per_gpu_hour for l in out.values()}.isdisjoint({D("0.99"), D("0.79"), D("0.74"), D("0.90")})
+    assert all(l.market_type == "on_demand" and not l.interruptible for l in out.values())
+
+    # An announced price change: the dated column wins once its date arrives.
+    dated = {"header": payload["header"] + ["GPU-hour (Effective November 1, 2026)"],
+             "rows": [r + ["$4.95"] for r in payload["rows"]]}
+    before = by_id(NebiusProvider.normalize({"/prices": [snap(dated)]}))
+    after = by_id(NebiusProvider.normalize({"/prices": [snap(dated, datetime(2026, 11, 1, tzinfo=timezone.utc))]}))
+    assert before["NVIDIA HGX H100"].price_per_gpu_hour == D("4.50")
+    assert after["NVIDIA HGX H100"].price_per_gpu_hour == D("4.95") and "NVIDIA GB300 NVL72" in after
+    # The pre-October header ("On-demand" plus a dated column) still normalizes.
+    old = {"header": ["Item", "vCPUs", "RAM, GB", "On-demand", "GPU-hour (Effective October 1, 2026)"],
+           "rows": [["NVIDIA HGX H100", "16", "200", "$2.95", "$4.50"]]}
+    assert by_id(NebiusProvider.normalize({"/prices": [snap(old)]}))["NVIDIA HGX H100"].price_per_gpu_hour == D("4.50")
+
+    # Fail closed on a reshaped page. The blocks are a JSON string inside
+    # __NEXT_DATA__, so their quotes appear escaped in the HTML.
+    def edit(old, new):
+        q = lambda s: s.replace('"', '\\"')
+        assert q(old) in page, old
+        return page.replace(q(old), q(new))
+
+    assert raises(nebius.extract, "<html>redesigned</html>"), "no __NEXT_DATA__"
+    assert raises(nebius.extract, edit('"title":"NVIDIA GPU Instances"', '"title":"GPU Instances"')), "no table"
+    assert raises(nebius.extract, edit('"GPU-hour "]', '"Reserved, GPU-hour"]')), "not an on-demand column"
+    assert not raises(nebius.extract, edit('"Spot price, GPU-hour*"', '"x"')), "the spot table is not checked"
+    assert raises(nebius.extract, edit('"title":"Preemptible NVIDIA GPU Instances"',
+                                       '"title":"NVIDIA GPU Instances"')), "two candidate tables"
+    assert raises(nebius.extract, edit('"16","200","$4.50"]', '"16","200"]')), "a short row"
+    bad = nebius.extract(edit('"$4.50"', '"4.50 USD"'))
+    assert raises(NebiusProvider.normalize, {"/prices": [snap(bad)]}), "an unparseable price cell fails"
+
+    raw = asyncio.run(NebiusProvider(_client(nebius.BASE_URL, _serve({"/prices": page}, "text/html"))).fetch())[0]
+    assert raw.ok and raw.endpoint == "/prices" and raw.payload == payload
+    broken = asyncio.run(NebiusProvider(_client(nebius.BASE_URL, _serve({"/prices": "<html/>"}, "text/html"))).fetch())[0]
+    assert not broken.ok and "ValueError" in broken.error
+
+
+# --------------------------------------------------------------------------
 # Fetch: the page providers store what extract() returns
 # --------------------------------------------------------------------------
 
@@ -361,6 +434,6 @@ def test_pipeline():
 
 if __name__ == "__main__":
     for t in (test_coreweave, test_together, test_jarvislabs, test_hotaisle, test_vultr, test_boostrun,
-              test_fetch_pages, test_registry, test_pipeline):
+              test_nebius, test_fetch_pages, test_registry, test_pipeline):
         t()
         print(t.__name__, "ok")

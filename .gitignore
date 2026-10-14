@@ -4,3 +4,4 @@ __pycache__/
 deploy/opengrid.dump
 deploy/railway.env
 .DS_Store
+.claude/

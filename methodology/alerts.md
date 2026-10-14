@@ -23,7 +23,7 @@ A rule is `params` (a metric, its subject and a condition `op` / `value`), chann
 | `index_new_low` | index_id, window (e.g. `30d`) | 1 when the latest published level is below every earlier level in the window (default condition `== 1`) |
 
 "Now" follows market.py exactly: eligible listings only (canonical GPU, on-demand, not interruptible,
-not Vast's "cheapest" row, not "from" prices), a listing counts only until it was last seen plus a
+not Vast's "cheapest" row, not "from" prices, not GPU-only attachment prices), a listing counts only until it was last seen plus a
 few polls, sold-out listings are excluded from prices. Price-change windows up to 48 h replay
 `listing_observations` for one provider and GPU; longer windows read `market_hourly`.
 Availability is derived where the provider reports capacity rather than a flag (see data-kinds).

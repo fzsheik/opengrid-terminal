@@ -384,6 +384,8 @@ def _ineligible_reason(row) -> tuple[str, str]:
         return "single_host_ask", "Vast's cheapest single-host ask; the median row stands for Vast"
     if row["provider_tier"] == "from_price":
         return "floor_price", "a 'from $x' floor price, not a purchasable price"
+    if row["provider_tier"] == "gpu-attachment":
+        return "gpu_only_price", "the GPU's own rate; the host VM is billed on top"
     return "ineligible", "not eligible under market rules"
 
 

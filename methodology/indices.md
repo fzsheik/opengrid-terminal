@@ -36,7 +36,8 @@ Class slugs: `hyperscaler, neocloud, general-cloud, marketplace, decentralized`.
 The input is the hourly rollup `market_hourly` (see `analytics/rollups.py`): each provider's
 eligible listings sampled at the top of each hour with exactly the market view's rules
 (canonical GPU, on-demand and not interruptible for the on-demand segment, not Vast's
-"cheapest" row, not a "from $x" floor, not sold out, and only while the listing was still being
+"cheapest" row, not a "from $x" floor, not a GPU-only attachment price (Google Cloud T4/V100, host VM
+extra), not sold out, and only while the listing was still being
 seen — a listing that vanished stops counting after its provider's stale window).
 
 1. **One vote per provider.** A provider's vote is its *lowest* priced eligible listing for the

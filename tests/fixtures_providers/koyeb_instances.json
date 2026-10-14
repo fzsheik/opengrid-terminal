@@ -1,0 +1,1859 @@
+{
+ "instances": [
+  {
+   "id": "4-gpu-tenstorrent-n300s",
+   "description": "4x Tenstorrent Wormhole™ n300s",
+   "vcpu": 16,
+   "memory": "128GB",
+   "disk": "320GB",
+   "price_per_second": "0.0",
+   "price_hourly": "0.0",
+   "price_monthly": "0.0",
+   "regions": [
+    "rdu",
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 16,
+   "display_name": "4x N300s",
+   "aliases": [
+    "4-n300s",
+    "4-tenstorrent-n300s",
+    "4-gpu-tenstorrent-n300s"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 1,
+    "brand": "tenstorrent",
+    "memory": "96GB",
+    "name": "4-gpu-tenstorrent-n300s"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "free",
+   "description": "a special instance that does not bill",
+   "vcpu": 1,
+   "memory": "512MB",
+   "disk": "2000MB",
+   "price_per_second": "0.0",
+   "price_hourly": "0.0",
+   "price_monthly": "0.0",
+   "regions": [
+    "fra",
+    "was"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [],
+   "vcpu_shares": 0.1,
+   "display_name": "Free",
+   "aliases": [],
+   "type": "eco",
+   "gpu": null,
+   "service_types": [
+    "web"
+   ],
+   "volumes_enabled": false,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "gpu-tenstorrent-n300s",
+   "description": "Tenstorrent Wormhole™ n300s",
+   "vcpu": 4,
+   "memory": "32GB",
+   "disk": "320GB",
+   "price_per_second": "0.0",
+   "price_hourly": "0.0",
+   "price_monthly": "0.0",
+   "regions": [
+    "rdu",
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 4,
+   "display_name": "N300s",
+   "aliases": [
+    "n300s",
+    "tenstorrent-n300s",
+    "gpu-tenstorrent-n300s"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 1,
+    "brand": "tenstorrent",
+    "memory": "24GB",
+    "name": "gpu-tenstorrent-n300s"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "database-storage",
+   "description": "the amount of compute used for databases",
+   "vcpu": 1,
+   "memory": "",
+   "disk": "",
+   "price_per_second": "",
+   "price_hourly": "0.000000694444",
+   "price_monthly": "0.0005",
+   "regions": [
+    "ap",
+    "dal",
+    "dsm",
+    "eu",
+    "fra",
+    "mci",
+    "na",
+    "par",
+    "rdu",
+    "sfo",
+    "sin",
+    "tyo",
+    "was"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [],
+   "vcpu_shares": 0,
+   "display_name": "Database Storage Usage (megabytes)",
+   "aliases": [],
+   "type": "database",
+   "gpu": null,
+   "service_types": [
+    "database"
+   ],
+   "volumes_enabled": false,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "eco-nano",
+   "description": "a very small eco instance",
+   "vcpu": 1,
+   "memory": "256MB",
+   "disk": "2000MB",
+   "price_per_second": "0.0000006",
+   "price_hourly": "0.0022",
+   "price_monthly": "1.61",
+   "regions": [
+    "fra",
+    "was",
+    "sin"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 0.1,
+   "display_name": "eNano",
+   "aliases": [],
+   "type": "eco",
+   "gpu": null,
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": false,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "eco-micro",
+   "description": "a small eco instance",
+   "vcpu": 1,
+   "memory": "512MB",
+   "disk": "4GB",
+   "price_per_second": "0.000001",
+   "price_hourly": "0.0036",
+   "price_monthly": "2.68",
+   "regions": [
+    "fra",
+    "was",
+    "sin"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 0.25,
+   "display_name": "eMicro",
+   "aliases": [],
+   "type": "eco",
+   "gpu": null,
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": false,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "nano",
+   "description": "a very small instance",
+   "vcpu": 1,
+   "memory": "256MB",
+   "disk": "2000MB",
+   "price_per_second": "0.000001",
+   "price_hourly": "0.0036",
+   "price_monthly": "2.68",
+   "regions": [
+    "fra",
+    "par",
+    "was",
+    "sfo",
+    "na",
+    "sin",
+    "tyo",
+    "eu",
+    "ap",
+    "rl-infra",
+    "nl-north-1"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 0.25,
+   "display_name": "Nano",
+   "aliases": [],
+   "type": "standard",
+   "gpu": null,
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": true
+  },
+  {
+   "id": "eco-small",
+   "description": "a very small eco instance",
+   "vcpu": 1,
+   "memory": "1GB",
+   "disk": "8GB",
+   "price_per_second": "0.000002",
+   "price_hourly": "0.0072",
+   "price_monthly": "5.36",
+   "regions": [
+    "fra",
+    "was",
+    "sin"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 0.5,
+   "display_name": "eSmall",
+   "aliases": [],
+   "type": "eco",
+   "gpu": null,
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": false,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "micro",
+   "description": "a small instance",
+   "vcpu": 1,
+   "memory": "512MB",
+   "disk": "5GB",
+   "price_per_second": "0.000002",
+   "price_hourly": "0.0072",
+   "price_monthly": "5.36",
+   "regions": [
+    "fra",
+    "par",
+    "was",
+    "sfo",
+    "na",
+    "sin",
+    "tyo",
+    "eu",
+    "ap",
+    "rl-infra",
+    "nl-north-1"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 0.5,
+   "display_name": "Micro",
+   "aliases": [],
+   "type": "standard",
+   "gpu": null,
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": true
+  },
+  {
+   "id": "eco-medium",
+   "description": "a medium eco instance",
+   "vcpu": 1,
+   "memory": "2GB",
+   "disk": "16GB",
+   "price_per_second": "0.000004",
+   "price_hourly": "0.0144",
+   "price_monthly": "10.71",
+   "regions": [
+    "fra",
+    "was",
+    "sin"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 1,
+   "display_name": "eMedium",
+   "aliases": [],
+   "type": "eco",
+   "gpu": null,
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": false,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "small",
+   "description": "a very small instance",
+   "vcpu": 1,
+   "memory": "1GB",
+   "disk": "10GB",
+   "price_per_second": "0.000004",
+   "price_hourly": "0.0144",
+   "price_monthly": "10.71",
+   "regions": [
+    "fra",
+    "par",
+    "was",
+    "sfo",
+    "na",
+    "sin",
+    "tyo",
+    "eu",
+    "ap",
+    "rl-infra",
+    "nl-north-1"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 1,
+   "display_name": "Small",
+   "aliases": [],
+   "type": "standard",
+   "gpu": null,
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": true
+  },
+  {
+   "id": "eco-large",
+   "description": "a large eco instance",
+   "vcpu": 2,
+   "memory": "4GB",
+   "disk": "20GB",
+   "price_per_second": "0.000008",
+   "price_hourly": "0.0288",
+   "price_monthly": "21.43",
+   "regions": [
+    "fra",
+    "was",
+    "sin"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 2,
+   "display_name": "eLarge",
+   "aliases": [],
+   "type": "eco",
+   "gpu": null,
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": false,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "medium",
+   "description": "a medium instance",
+   "vcpu": 2,
+   "memory": "2GB",
+   "disk": "20GB",
+   "price_per_second": "0.000008",
+   "price_hourly": "0.0288",
+   "price_monthly": "21.43",
+   "regions": [
+    "fra",
+    "par",
+    "was",
+    "sfo",
+    "na",
+    "sin",
+    "tyo",
+    "eu",
+    "ap",
+    "rl-infra",
+    "nl-north-1"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 2,
+   "display_name": "Medium",
+   "aliases": [],
+   "type": "standard",
+   "gpu": null,
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": true
+  },
+  {
+   "id": "eco-xlarge",
+   "description": "an extra large eco instance",
+   "vcpu": 4,
+   "memory": "8GB",
+   "disk": "20GB",
+   "price_per_second": "0.000016",
+   "price_hourly": "0.0576",
+   "price_monthly": "42.85",
+   "regions": [
+    "fra",
+    "was",
+    "sin"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 4,
+   "display_name": "eXLarge",
+   "aliases": [],
+   "type": "eco",
+   "gpu": null,
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": false,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "large",
+   "description": "a large instance",
+   "vcpu": 4,
+   "memory": "4GB",
+   "disk": "40GB",
+   "price_per_second": "0.000016",
+   "price_hourly": "0.0576",
+   "price_monthly": "42.85",
+   "regions": [
+    "fra",
+    "par",
+    "was",
+    "sfo",
+    "na",
+    "sin",
+    "tyo",
+    "eu",
+    "ap",
+    "rl-infra",
+    "nl-north-1"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 4,
+   "display_name": "Large",
+   "aliases": [],
+   "type": "standard",
+   "gpu": null,
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": true
+  },
+  {
+   "id": "eco-2xlarge",
+   "description": "a 2x extra large eco instance",
+   "vcpu": 8,
+   "memory": "16GB",
+   "disk": "20GB",
+   "price_per_second": "0.000032",
+   "price_hourly": "0.1152",
+   "price_monthly": "85.71",
+   "regions": [
+    "fra",
+    "was",
+    "sin"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 8,
+   "display_name": "e2XLarge",
+   "aliases": [],
+   "type": "eco",
+   "gpu": null,
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": false,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "xlarge",
+   "description": "an extra large instance",
+   "vcpu": 8,
+   "memory": "8GB",
+   "disk": "80GB",
+   "price_per_second": "0.000032",
+   "price_hourly": "0.1152",
+   "price_monthly": "85.71",
+   "regions": [
+    "fra",
+    "par",
+    "was",
+    "sfo",
+    "na",
+    "sin",
+    "tyo",
+    "eu",
+    "ap",
+    "rl-infra",
+    "nl-north-1"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 8,
+   "display_name": "XLarge",
+   "aliases": [],
+   "type": "standard",
+   "gpu": null,
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": true
+  },
+  {
+   "id": "database-compute",
+   "description": "the amount of compute used for databases",
+   "vcpu": 1,
+   "memory": "",
+   "disk": "",
+   "price_per_second": "0.000044444444",
+   "price_hourly": "0.16",
+   "price_monthly": "119.04",
+   "regions": [
+    "ap",
+    "dal",
+    "dsm",
+    "eu",
+    "fra",
+    "mci",
+    "na",
+    "par",
+    "rdu",
+    "sfo",
+    "sin",
+    "tyo",
+    "was"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [],
+   "vcpu_shares": 0,
+   "display_name": "Database Compute Usage",
+   "aliases": [],
+   "type": "database",
+   "gpu": null,
+   "service_types": [
+    "database"
+   ],
+   "volumes_enabled": false,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "2xlarge",
+   "description": "an extra large instance",
+   "vcpu": 16,
+   "memory": "16GB",
+   "disk": "160GB",
+   "price_per_second": "0.000064",
+   "price_hourly": "0.2304",
+   "price_monthly": "172.00",
+   "regions": [
+    "fra",
+    "par",
+    "was",
+    "sfo",
+    "na",
+    "sin",
+    "tyo",
+    "eu",
+    "ap",
+    "rl-infra",
+    "nl-north-1"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 16,
+   "display_name": "2XLarge",
+   "aliases": [],
+   "type": "standard",
+   "gpu": null,
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": true
+  },
+  {
+   "id": "3xlarge",
+   "description": "an extra large instance",
+   "vcpu": 24,
+   "memory": "32GB",
+   "disk": "240GB",
+   "price_per_second": "0.000128",
+   "price_hourly": "0.4608",
+   "price_monthly": "343.00",
+   "regions": [
+    "fra",
+    "par",
+    "was",
+    "sfo",
+    "na",
+    "sin",
+    "tyo",
+    "eu",
+    "ap",
+    "rl-infra",
+    "nl-north-1"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 24,
+   "display_name": "3XLarge",
+   "aliases": [],
+   "type": "standard",
+   "gpu": null,
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": true
+  },
+  {
+   "id": "gpu-nvidia-rtx-4000-sff-ada",
+   "description": "Nvidia RTX 4000 SFF Ada Generation",
+   "vcpu": 6,
+   "memory": "44GB",
+   "disk": "240GB",
+   "price_per_second": "0.00014",
+   "price_hourly": "0.50",
+   "price_monthly": "375.00",
+   "regions": [
+    "fra",
+    "eu"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 6,
+   "display_name": "RTX-4000-SFF-ADA",
+   "aliases": [
+    "rtx-4000-sff-ada",
+    "nvidia-rtx-4000-sff-ada",
+    "gpu-nvidia-rtx-4000-sff-ada"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 1,
+    "brand": "nvidia",
+    "memory": "20GB",
+    "name": "gpu-nvidia-rtx-4000-sff-ada"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": false,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "gpu-nvidia-l4",
+   "description": "Nvidia L4",
+   "vcpu": 6,
+   "memory": "32GB",
+   "disk": "160GB",
+   "price_per_second": "0.000194",
+   "price_hourly": "0.70",
+   "price_monthly": "521.00",
+   "regions": [],
+   "status": "RESTRICTED",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 6,
+   "display_name": "L4",
+   "aliases": [
+    "l4",
+    "nvidia-l4",
+    "gpu-nvidia-l4"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 1,
+    "brand": "nvidia",
+    "memory": "24GB",
+    "name": "gpu-nvidia-l4"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "gpu-nvidia-rtx-a6000",
+   "description": "Nvidia RTX A6000",
+   "vcpu": 6,
+   "memory": "64GB",
+   "disk": "160GB",
+   "price_per_second": "0.000208",
+   "price_hourly": "0.75",
+   "price_monthly": "543.00",
+   "regions": [
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 6,
+   "display_name": "RTX-A6000",
+   "aliases": [
+    "rtx-a6000",
+    "nvidia-rtx-a6000",
+    "gpu-nvidia-rtx-a6000"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 1,
+    "brand": "nvidia",
+    "memory": "48GB",
+    "name": "gpu-nvidia-rtx-a6000"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "4xlarge",
+   "description": "an extra large instance",
+   "vcpu": 32,
+   "memory": "64GB",
+   "disk": "320GB",
+   "price_per_second": "0.000256",
+   "price_hourly": "0.9216",
+   "price_monthly": "686.00",
+   "regions": [
+    "fra",
+    "par",
+    "was",
+    "sfo",
+    "na",
+    "sin",
+    "tyo",
+    "eu",
+    "ap",
+    "rl-infra",
+    "nl-north-1"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 32,
+   "display_name": "4XLarge",
+   "aliases": [],
+   "type": "standard",
+   "gpu": null,
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": true
+  },
+  {
+   "id": "gpu-nvidia-l40s",
+   "description": "Nvidia L40S",
+   "vcpu": 15,
+   "memory": "64GB",
+   "disk": "160GB",
+   "price_per_second": "0.000333",
+   "price_hourly": "1.20",
+   "price_monthly": "892.80",
+   "regions": [
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 15,
+   "display_name": "L40S",
+   "aliases": [
+    "l40s",
+    "nvidia-l40s",
+    "gpu-nvidia-l40s"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 1,
+    "brand": "nvidia",
+    "memory": "48GB",
+    "name": "gpu-nvidia-l40s"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "gpu-nvidia-a100",
+   "description": "Nvidia A100",
+   "vcpu": 15,
+   "memory": "180GB",
+   "disk": "320GB",
+   "price_per_second": "0.000444",
+   "price_hourly": "1.60",
+   "price_monthly": "1190.40",
+   "regions": [
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 15,
+   "display_name": "A100",
+   "aliases": [
+    "a100",
+    "nvidia-a100",
+    "gpu-nvidia-a100"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 1,
+    "brand": "nvidia",
+    "memory": "80GB",
+    "name": "gpu-nvidia-a100"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "5xlarge",
+   "description": "an extra large instance",
+   "vcpu": 40,
+   "memory": "128GB",
+   "disk": "400GB",
+   "price_per_second": "0.000512",
+   "price_hourly": "1.8432",
+   "price_monthly": "1371.00",
+   "regions": [
+    "fra",
+    "par",
+    "was",
+    "sfo",
+    "na",
+    "sin",
+    "tyo",
+    "eu",
+    "ap",
+    "rl-infra",
+    "nl-north-1"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 40,
+   "display_name": "5XLarge",
+   "aliases": [],
+   "type": "standard",
+   "gpu": null,
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": true
+  },
+  {
+   "id": "gpu-nvidia-a100-sxm",
+   "description": "Nvidia A100 SXM",
+   "vcpu": 15,
+   "memory": "180GB",
+   "disk": "320GB",
+   "price_per_second": "0.000597",
+   "price_hourly": "2.15",
+   "price_monthly": "1599.60",
+   "regions": [
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 15,
+   "display_name": "A100 SXM",
+   "aliases": [
+    "a100-sxm",
+    "nvidia-a100-sxm",
+    "gpu-nvidia-a100-sxm"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 1,
+    "brand": "nvidia",
+    "memory": "80GB",
+    "name": "gpu-nvidia-a100-sxm"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "gpu-nvidia-rtx-pro-6000",
+   "description": "Nvidia RTX Pro 6000 Blackwell",
+   "vcpu": 15,
+   "memory": "220GB",
+   "disk": "240GB",
+   "price_per_second": "0.00061",
+   "price_hourly": "2.20",
+   "price_monthly": "1650.00",
+   "regions": [
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 15,
+   "display_name": "RTX-PRO-6000",
+   "aliases": [
+    "gpu-nvidia-rtx-pro-6000"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 1,
+    "brand": "nvidia",
+    "memory": "96GB",
+    "name": "gpu-nvidia-rtx-pro-6000"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "gpu-nvidia-h100",
+   "description": "Nvidia H100",
+   "vcpu": 15,
+   "memory": "180GB",
+   "disk": "320GB",
+   "price_per_second": "0.000694",
+   "price_hourly": "2.50",
+   "price_monthly": "1860.00",
+   "regions": [
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 15,
+   "display_name": "H100",
+   "aliases": [
+    "h100",
+    "nvidia-h100",
+    "gpu-nvidia-h100"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 1,
+    "brand": "nvidia",
+    "memory": "80GB",
+    "name": "gpu-nvidia-h100"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "gpu-nvidia-h200",
+   "description": "Nvidia H200",
+   "vcpu": 15,
+   "memory": "240GB",
+   "disk": "320GB",
+   "price_per_second": "0.000834",
+   "price_hourly": "3.00",
+   "price_monthly": "2232.00",
+   "regions": [
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 15,
+   "display_name": "H200",
+   "aliases": [
+    "h200",
+    "nvidia-h200",
+    "gpu-nvidia-h200"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 1,
+    "brand": "nvidia",
+    "memory": "141GB",
+    "name": "gpu-nvidia-h200"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "2-gpu-nvidia-a100",
+   "description": "2x Nvidia A100",
+   "vcpu": 30,
+   "memory": "360GB",
+   "disk": "640GB",
+   "price_per_second": "0.000889",
+   "price_hourly": "3.2",
+   "price_monthly": "2380.80",
+   "regions": [
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 30,
+   "display_name": "2x A100",
+   "aliases": [
+    "2-a100",
+    "2-nvidia-a100",
+    "2-gpu-nvidia-a100"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 2,
+    "brand": "nvidia",
+    "memory": "160GB",
+    "name": "gpu-nvidia-a100"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "2-gpu-nvidia-a100-sxm",
+   "description": "2x Nvidia A100 SXM",
+   "vcpu": 30,
+   "memory": "360GB",
+   "disk": "640GB",
+   "price_per_second": "0.001194",
+   "price_hourly": "4.30",
+   "price_monthly": "3199.2",
+   "regions": [
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 30,
+   "display_name": "2x A100 SXM",
+   "aliases": [
+    "2-a100-sxm",
+    "2-nvidia-a100-sxm",
+    "2-gpu-nvidia-a100-sxm"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 2,
+    "brand": "nvidia",
+    "memory": "160GB",
+    "name": "gpu-nvidia-a100-sxm"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "2-gpu-nvidia-h100",
+   "description": "2x Nvidia H100",
+   "vcpu": 30,
+   "memory": "360GB",
+   "disk": "640GB",
+   "price_per_second": "0.001389",
+   "price_hourly": "5.0",
+   "price_monthly": "3720.00",
+   "regions": [
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 30,
+   "display_name": "2x H100",
+   "aliases": [
+    "2-h100",
+    "2-nvidia-h100",
+    "2-gpu-nvidia-h100"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 2,
+    "brand": "nvidia",
+    "memory": "160GB",
+    "name": "gpu-nvidia-h100"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "gpu-nvidia-b200",
+   "description": "Nvidia B200",
+   "vcpu": 15,
+   "memory": "240GB",
+   "disk": "320GB",
+   "price_per_second": "0.001528",
+   "price_hourly": "5.50",
+   "price_monthly": "4092.00",
+   "regions": [],
+   "status": "RESTRICTED",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 15,
+   "display_name": "B200",
+   "aliases": [
+    "b200",
+    "nvidia-b200",
+    "gpu-nvidia-b200"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 1,
+    "brand": "nvidia",
+    "memory": "180GB",
+    "name": "gpu-nvidia-b200"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "2-gpu-nvidia-h200",
+   "description": "2x Nvidia H200",
+   "vcpu": 30,
+   "memory": "480GB",
+   "disk": "640GB",
+   "price_per_second": "0.001667",
+   "price_hourly": "6.0",
+   "price_monthly": "4464.00",
+   "regions": [
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 30,
+   "display_name": "2x H200",
+   "aliases": [
+    "2-h200",
+    "2-nvidia-h200",
+    "2-gpu-nvidia-h200"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 2,
+    "brand": "nvidia",
+    "memory": "282GB",
+    "name": "gpu-nvidia-h200"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "4-gpu-nvidia-a100",
+   "description": "4x Nvidia A100",
+   "vcpu": 60,
+   "memory": "720GB",
+   "disk": "1280GB",
+   "price_per_second": "0.001778",
+   "price_hourly": "6.4",
+   "price_monthly": "4761.60",
+   "regions": [
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 60,
+   "display_name": "4x A100",
+   "aliases": [
+    "4-a100",
+    "4-nvidia-a100",
+    "4-gpu-nvidia-a100"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 4,
+    "brand": "nvidia",
+    "memory": "320GB",
+    "name": "gpu-nvidia-a100"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "4-gpu-nvidia-a100-sxm",
+   "description": "4x Nvidia A100 SXM",
+   "vcpu": 60,
+   "memory": "720GB",
+   "disk": "1280GB",
+   "price_per_second": "0.002388",
+   "price_hourly": "8.6",
+   "price_monthly": "6398.4",
+   "regions": [
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 60,
+   "display_name": "4x A100 SXM",
+   "aliases": [
+    "4-a100-sxm",
+    "4-nvidia-a100-sxm",
+    "4-gpu-nvidia-a100-sxm"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 4,
+    "brand": "nvidia",
+    "memory": "320GB",
+    "name": "gpu-nvidia-a100-sxm"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "4-gpu-nvidia-h100",
+   "description": "4x Nvidia H100",
+   "vcpu": 60,
+   "memory": "720GB",
+   "disk": "1280GB",
+   "price_per_second": "0.002778",
+   "price_hourly": "10.0",
+   "price_monthly": "7440.00",
+   "regions": [
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 60,
+   "display_name": "4x H100",
+   "aliases": [
+    "4-h100",
+    "4-nvidia-h100",
+    "4-gpu-nvidia-h100"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 4,
+    "brand": "nvidia",
+    "memory": "320GB",
+    "name": "gpu-nvidia-h100"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "4-gpu-nvidia-h200",
+   "description": "4x Nvidia H200",
+   "vcpu": 60,
+   "memory": "960GB",
+   "disk": "1280GB",
+   "price_per_second": "0.003334",
+   "price_hourly": "12.0",
+   "price_monthly": "8928.00",
+   "regions": [],
+   "status": "RESTRICTED",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 60,
+   "display_name": "4x H200",
+   "aliases": [
+    "4-h200",
+    "4-nvidia-h200",
+    "4-gpu-nvidia-h200"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 4,
+    "brand": "nvidia",
+    "memory": "564GB",
+    "name": "gpu-nvidia-h200"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "8-gpu-nvidia-a100",
+   "description": "8x Nvidia A100",
+   "vcpu": 120,
+   "memory": "1440GB",
+   "disk": "2560GB",
+   "price_per_second": "0.003556",
+   "price_hourly": "12.8",
+   "price_monthly": "9523.20",
+   "regions": [],
+   "status": "RESTRICTED",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 120,
+   "display_name": "8x A100",
+   "aliases": [
+    "8-a100",
+    "8-nvidia-a100",
+    "8-gpu-nvidia-a100"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 8,
+    "brand": "nvidia",
+    "memory": "640GB",
+    "name": "gpu-nvidia-a100"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "8-gpu-nvidia-a100-sxm",
+   "description": "8x Nvidia A100 SXM",
+   "vcpu": 120,
+   "memory": "1440GB",
+   "disk": "2560GB",
+   "price_per_second": "0.004777",
+   "price_hourly": "17.2",
+   "price_monthly": "12796.80",
+   "regions": [],
+   "status": "RESTRICTED",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 120,
+   "display_name": "8x A100 SXM",
+   "aliases": [
+    "8-a100-sxm",
+    "8-nvidia-a100-sxm",
+    "8-gpu-nvidia-a100-sxm"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 8,
+    "brand": "nvidia",
+    "memory": "640GB",
+    "name": "gpu-nvidia-a100-sxm"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "8-gpu-nvidia-h100",
+   "description": "8x Nvidia H100",
+   "vcpu": 120,
+   "memory": "1440GB",
+   "disk": "2560GB",
+   "price_per_second": "0.005556",
+   "price_hourly": "20.0",
+   "price_monthly": "14880.00",
+   "regions": [],
+   "status": "RESTRICTED",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 120,
+   "display_name": "8x H100",
+   "aliases": [
+    "8-h100",
+    "8-nvidia-h100",
+    "8-gpu-nvidia-h100"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 8,
+    "brand": "nvidia",
+    "memory": "640GB",
+    "name": "gpu-nvidia-h100"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  },
+  {
+   "id": "8-gpu-nvidia-h200",
+   "description": "8x Nvidia H200",
+   "vcpu": 120,
+   "memory": "1920GB",
+   "disk": "2560GB",
+   "price_per_second": "0.006667",
+   "price_hourly": "24.0",
+   "price_monthly": "17856.00",
+   "regions": [],
+   "status": "RESTRICTED",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale",
+    "partner_csp_unit"
+   ],
+   "vcpu_shares": 120,
+   "display_name": "8x H200",
+   "aliases": [
+    "8-h200",
+    "8-nvidia-h200",
+    "8-gpu-nvidia-h200"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 8,
+    "brand": "nvidia",
+    "memory": "1128GB",
+    "name": "gpu-nvidia-h200"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true,
+   "light_sleep_enabled": false
+  }
+ ],
+ "limit": 100,
+ "offset": 0,
+ "count": 44
+}

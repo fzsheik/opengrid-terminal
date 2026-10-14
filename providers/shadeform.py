@@ -2,8 +2,9 @@
 
 Shadeform resells other clouds' capacity and publishes every instance type, with
 its real cloud named in `cloud`, from one anonymous endpoint. Crusoe, Latitude.sh,
-Denvr and Boost Run have no usable public price feed of their own, so each is
-read from here and labelled "via-shadeform". The prices are Shadeform's listing of them, not the
+Denvr, Boost Run, Horizon Compute and Phyntec have no usable public price feed of
+their own, and Scaleway's own catalogue prices in EUR only, so each is read from
+here and labelled "via-shadeform". The prices are Shadeform's listing of them, not the
 cloud's own page: where we can compare (Hyperstack, DigitalOcean, Voltage Park)
 they match, and where a cloud has just repriced Shadeform can lag.
 
@@ -93,12 +94,19 @@ class ShadeformCloud(Provider):
         if not rows:
             return []
         snapshot = rows[0]
+        types = snapshot.payload.get("instance_types") if isinstance(snapshot.payload, dict) else None
+        if not isinstance(types, list):
+            # A reshaped catalogue fails the normalize (previous listings are kept),
+            # never reads as a healthy cloud with nothing for sale.
+            raise ValueError(f"{cls.name}: Shadeform response has no instance_types list - reshaped")
         listings = []
-        for t in (snapshot.payload or {}).get("instance_types") or []:
+        for t in types:
             count = t.get("num_gpus") or 0
             cents = t.get("hourly_price")
             if t.get("cloud") != cls.cloud or not count or cents is None:
                 continue  # another cloud, a CPU-only type, or no price
+            if isinstance(cents, bool) or not isinstance(cents, int) or not isinstance(count, int):
+                raise ValueError(f"{cls.name}: hourly_price is no longer integer cents: {cents!r}")
             avail = t.get("availability") or []
             rentals = {a.get("rental_type") for a in avail}
             # A type offered only as spot is a spot listing.
@@ -154,3 +162,27 @@ class BoostRunProvider(ShadeformCloud):
     # ("Boost Run", boostrun.com, a GPU cloud selling its own NVIDIA servers).
     name = "boostrun"
     cloud = "boostrun"
+
+
+class HorizonProvider(ShadeformCloud):
+    # Horizon Compute (horizoncompute.com) owns its HGX H100 / H200 clusters in
+    # Iceland (65.7 N: Blonduos, the region Shadeform names) and sells hourly
+    # on-demand instances from them. Its site prints no prices.
+    name = "horizon"
+    cloud = "horizon"
+
+
+class PhyntecProvider(ShadeformCloud):
+    # Phyntec (phyntec.net, formerly Evergreen Compute; "evergreen" in Shadeform's
+    # cloud directory, "phyntec" on its instance types) runs its own 8x RTX 4090 /
+    # 5090 bare-metal servers in its WY-1 facility (Casper, WY). Its site prints
+    # monthly reservations only; the hourly rate is Shadeform's.
+    name = "phyntec"
+    cloud = "phyntec"
+
+
+class ScalewayProvider(ShadeformCloud):
+    # Scaleway's own product catalogue is keyless but prices only in EUR (per minute), and
+    # this app stores USD with no FX conversion; Shadeform lists Scaleway's GPU VMs in USD.
+    name = "scaleway"
+    cloud = "scaleway"

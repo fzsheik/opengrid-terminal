@@ -37,7 +37,7 @@ _ELIGIBLE = """
     c.canonical_gpu_name IS NOT NULL
     AND c.market_type = 'on_demand'
     AND COALESCE(c.interruptible, false) = false
-    AND COALESCE(c.provider_tier, '') NOT IN ('cheapest', 'from_price')
+    AND COALESCE(c.provider_tier, '') NOT IN ('cheapest', 'from_price', 'gpu-attachment')
 """
 
 _LISTINGS = text(

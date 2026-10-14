@@ -407,16 +407,16 @@ VAST = ProviderMapping(
 NEBIUS = ProviderMapping(
     provider="nebius",
     display_name="Nebius",
-    endpoints={"GET /prices": "the public price page; the GPU table is embedded escaped JSON"},
+    endpoints={"GET /prices": "the public price page; the GPU table is a block in its __NEXT_DATA__ JSON"},
     fields=_fields(
         "nebius",
-        sku=(RAW, "table row: Item"),
-        listing_id=(RAW, "table row: Item"),
-        raw_gpu_name=(RAW, "table row: Item", 'e.g. "NVIDIA HGX H100"'),
+        sku=(RAW, '"NVIDIA GPU Instances" table row: Item'),
+        listing_id=(RAW, '"NVIDIA GPU Instances" table row: Item'),
+        raw_gpu_name=(RAW, '"NVIDIA GPU Instances" table row: Item', 'e.g. "NVIDIA HGX H100"'),
         gpu_count=(CONSTANT, "1", "the table prices one GPU-hour"),
         region=(ABSENT, "-", "one price list with no region"),
         country=(ABSENT, "-"),
-        price_per_gpu_hour=(RAW, "the current On-demand GPU-hour column", "picked by date; see quirks"),
+        price_per_gpu_hour=(RAW, "the current GPU-hour column", "picked by date when a dated column is present; see quirks"),
         price_per_instance_hour=(DERIVED, "= price_per_gpu_hour", "single GPU"),
         provider_tier=(DERIVED, '"from_price" for "from $x" cells, else None', "a floor, not a quote"),
         available=(ABSENT, "-", "the page says nothing about stock"),
@@ -427,12 +427,14 @@ NEBIUS = ProviderMapping(
         storage_gb=(ABSENT, "-"),
     ),
     quirks=[
-        'Price change in flight: the page has "On-demand" and "GPU-hour (Effective October 1, 2026)" '
-        "columns. We use the dated column once its date has arrived, else the plain one. "
-        "On 2026-10-04 that is the higher price.",
+        'The GPU table is the block titled "NVIDIA GPU Instances" in the page\'s __NEXT_DATA__ JSON. '
+        'The "Preemptible NVIDIA GPU Instances" block (spot prices) is never read; there is no commitment table.',
+        'Since the Oct 2026 price change the table has one "GPU-hour" column. When a change is announced the page '
+        'adds a "GPU-hour (Effective <date>)" column; we use it once its date has arrived, else the plain one.',
         '"Contact us" rows (GB200/GB300 NVL72) have no price and are skipped.',
+        '"NVIDIA RTX PRO 6000" does not say Workstation or Server Edition and stays unmapped.',
         'L40S prices are "from $x": a floor over several CPU configs, tagged from_price.',
-        "Scraped from page HTML. A reshaped page fails the poll rather than recording nothing.",
+        "A reshaped page (no block, two blocks, an unexpected column) fails the poll rather than recording nothing.",
     ],
 )
 
@@ -599,6 +601,8 @@ def _shadeform(provider: str, display: str, extra_quirks: list[str]) -> Provider
             "Never read a cloud this way if it also has its own feed here: that double-counts its capacity.",
             "Shadeform's interconnect field is sometimes wrong (Crusoe's sxm-ib type is tagged pcie), "
             "so SXM in the instance name wins over the field.",
+            "A response without an instance_types list, or a price that is not integer cents, "
+            "fails the normalize (previous listings kept) rather than reading as nothing for sale.",
             *extra_quirks,
         ],
     )
@@ -610,6 +614,17 @@ DENVR = _shadeform("denvr", "Denvr", ["Includes Intel Gaudi 2, which has no NVID
 BOOSTRUN = _shadeform("boostrun", "Boost Run", [
     "Every type is an 8-GPU bare-metal node; the per-GPU rate is the node price / 8.",
     'Its RTX 6000 Ada type is tagged "sxm5" by Shadeform (a PCIe card), so "RTX6000Ada sxm5" stays unmapped.',
+])
+
+HORIZON = _shadeform("horizon", "Horizon Compute", [
+    "Both types are 8-GPU HGX nodes (H100, H200) in Iceland; the per-GPU rate is the node price / 8.",
+    "Shadeform tags them interconnect sxm5 with nvlink false; HGX is the SXM baseboard, so they map to the SXM5 parts.",
+    "Region is Icelandic, so country stays None (only all-US regions give a country).",
+])
+PHYNTEC = _shadeform("phyntec", "Phyntec", [
+    "Two 8-GPU bare-metal types (RTX 4090, RTX 5090) in Casper, WY; the per-GPU rate is the node price / 8.",
+    'Shadeform\'s cloud directory files it as "evergreen" (its former name); its instance types say "phyntec".',
+    "Its own site prints monthly reservations only (not converted); the hourly price is Shadeform's.",
 ])
 
 
@@ -776,14 +791,300 @@ VULTR = ProviderMapping(
 )
 
 
+GCP = ProviderMapping(
+    provider="gcp",
+    display_name="Google Cloud Compute Engine (hyperscaler list price)",
+    endpoints={"GET /products/compute/pricing/accelerator-optimized":
+               "the public price page, server-rendered for Iowa (us-central1); no key"},
+    fields=_fields(
+        "gcp",
+        sku=(RAW, "Machine type | attachable GPU model", 'e.g. "a3-highgpu-8g"; "nvidia-tesla-t4" via ATTACHABLE'),
+        listing_id=(DERIVED, "{sku}:us-central1"),
+        raw_gpu_name=(LOOKUP, "GPU_MACHINES / ATTACHABLE in providers/gcp.py",
+                      'the GCP accelerator type, e.g. "nvidia-h100-80gb"; the page prints only "Nvidia H100"'),
+        gpu_count=(LOOKUP, "GPU_MACHINES in providers/gcp.py",
+                   'checked against the printed "GPUs: n"; 1 for an attachable GPU'),
+        region=(CONSTANT, '"us-central1"', "the page's region picker must read Iowa (us-central1), else the poll fails"),
+        country=(CONSTANT, '"US"'),
+        price_per_gpu_hour=(DERIVED, "= machine Price (USD) / gpu_count | attachable GPU price (USD)"),
+        price_per_instance_hour=(RAW, "Price (USD) | GPU price (USD)",
+                                 "whole VM incl. vCPU, memory, bundled SSD | one GPU alone"),
+        provider_tier=(DERIVED, '"hyperscaler" (machine types) | "gpu-attachment" (GPU only, host VM extra)'),
+        available=(ABSENT, "-", "a price page says nothing about capacity"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, "Components: vCPUs", "machine types only"),
+        ram_gb=(RAW, "Components: Memory", 'printed "1,871GB" or "85GiB"; the number is kept as printed'),
+        storage_gb=(ABSENT, "-", "bundled Local SSD is not normalized"),
+    ),
+    quirks=[
+        "Machine-type prices (A3/A2/G4/G2) are for the whole VM: GPUs plus vCPUs, memory and bundled "
+        "Local SSD. The per-GPU rate divides by the GPU count, as for AWS.",
+        "Attachable GPUs (T4, P4, V100, P100 on N1) are priced per GPU for the GPU alone; the N1 host "
+        "VM is billed on top, so they are not like-for-like with the bundled machine types.",
+        "GPU model and count come from a hand-kept table. An unknown machine type is logged and "
+        "skipped; a row whose printed GPU or count disagrees with the table is skipped.",
+        "g4-standard-6/12/24 are fractional (1/8, 1/4, 1/2 of a card) and are left out.",
+        "a4-highgpu-8g (B200) prints N/A on demand today and gives no listing.",
+        "Only the on-demand column is read. DWS Flex-start / Calendar Mode, Spot (mixed live and "
+        "hand-typed cells, one holding stray text) and every committed-use column are ignored.",
+        "nvidia-tesla-p4 and nvidia-tesla-p100 have no canonical name yet; the V100 takes the "
+        "variant-less name because the page does not say SXM2 or PCIe.",
+        "Only us-central1. Scraped from page HTML (~6 MB); a reshaped page fails the poll. Polled hourly.",
+    ],
+)
+
+
+LINODE = ProviderMapping(
+    provider="linode",
+    display_name="Akamai Cloud (Linode)",
+    endpoints={"GET /v4/linode/types": "every plan; anonymous; GPU plans carry gpus > 0"},
+    fields=_fields(
+        "linode",
+        sku=(RAW, "data[].id", 'e.g. "g2-gpu-rtx4000a2-m"'),
+        listing_id=(DERIVED, "data[].id[:region_prices[].id]", "one more listing per region priced differently"),
+        raw_gpu_name=(DERIVED, 'the "RTX..." token of data[].label', '"RTX6000" | "RTX4000 Ada"; the whole label if none'),
+        gpu_count=(RAW, "data[].gpus"),
+        region=(DERIVED, "None for the base price, region_prices[].id otherwise", "the base price applies everywhere else"),
+        country=(ABSENT, "-"),
+        price_per_gpu_hour=(DERIVED, "= price.hourly / gpus"),
+        price_per_instance_hour=(RAW, "data[].price.hourly | region_prices[].hourly", "the whole plan"),
+        provider_tier=(CONSTANT, '"vm"'),
+        available=(ABSENT, "-", "a plan catalogue, not stock"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, "data[].vcpus"),
+        ram_gb=(DERIVED, "memory / 1024", "memory is in MB"),
+        storage_gb=(DERIVED, "disk / 1024", "disk is in MB"),
+    ),
+    quirks=[
+        "The GPU model is not a field; it is read from the plan label. GPU VRAM is not stated at all.",
+        '"RTX6000" (g1 plans) is the Turing Quadro RTX 6000 per Linode\'s docs, but the API name '
+        "alone does not say so, so it stays unmapped.",
+        "Paging: a response with more than one page fails the poll rather than missing types.",
+        "Monthly prices are null for GPU plans and are never converted to hourly.",
+        "A general-purpose cloud: never part of a neocloud index.",
+    ],
+)
+
+
+ORACLE = ProviderMapping(
+    provider="oracle",
+    display_name="Oracle Cloud (OCI, hyperscaler list price)",
+    endpoints={"GET /pls/apex/cetools/api/v1/products/?currencyCode=USD": "the whole OCI price list; anonymous, documented"},
+    fields=_fields(
+        "oracle",
+        sku=(LOOKUP, "SHAPES in providers/oracle.py", 'the OCI shape, e.g. "BM.GPU.H100.8"'),
+        listing_id=(LOOKUP, "SHAPES in providers/oracle.py", "the shape; one listing per shape"),
+        raw_gpu_name=(LOOKUP, "SHAPES in providers/oracle.py", "Oracle's pricing-page wording + printed VRAM"),
+        gpu_count=(LOOKUP, "SHAPES in providers/oracle.py", "the price list has no shapes or counts"),
+        region=(ABSENT, "-", "OCI list prices are global: one price in every commercial region"),
+        country=(ABSENT, "-"),
+        price_per_gpu_hour=(RAW, "items[].currencyCodeLocalizations[USD].prices[PAY_AS_YOU_GO].value",
+                            'metricName "GPU Per Hour": already per GPU'),
+        price_per_instance_hour=(DERIVED, "= price_per_gpu_hour x gpu_count", "Oracle's own rule for server price"),
+        provider_tier=(DERIVED, '"bare-metal" for BM.* shapes, "vm" for VM.*'),
+        available=(ABSENT, "-", "a price list says nothing about capacity"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(ABSENT, "-", "not in the price list"),
+        ram_gb=(ABSENT, "-", "not in the price list"),
+        storage_gb=(ABSENT, "-", "not in the price list"),
+    ),
+    quirks=[
+        'The price list prices a GPU PART ("Compute - GPU - H100"), not a shape. Which shapes bill '
+        "against which part is taken from Oracle's compute pricing page into a hand-kept table "
+        "(SHAPES); several shapes share one part (A10 x1/x2/x4, V100 x1/x2/x4/x8). A new GPU part is "
+        "logged and skipped, never guessed.",
+        "A part that stops being one flat pay-as-you-go 'GPU Per Hour' USD price fails the poll.",
+        "Not read: NVIDIA AI Enterprise (a software licence billed per GPU), Cloud@Customer, VMware "
+        "commits, Roving Edge, the P100 shapes Oracle lists as unavailable for new deployments, and "
+        "preemptible (a flat 50% discount, not priced per part).",
+        'H100 and A100 80GB/40GB (SXM or PCIe never stated), RTX PRO 6000 (edition not stated) and '
+        "GB200 (no canonical name) stay unmapped.",
+        "List prices: BM.GPU.H100.8 is $10.00 per GPU-hour, $80.00 per node.",
+    ],
+)
+
+
+AZURE = ProviderMapping(
+    provider="azure",
+    display_name="Microsoft Azure (hyperscaler list price)",
+    endpoints={
+        "GET prices.azure.com/api/retail/prices?$filter=...": "Consumption meters of every NC/ND/NV size in one "
+        "region, Windows excluded; anonymous; one call per region (eastus, eastus2), NextPageLink followed",
+    },
+    fields=_fields(
+        "azure",
+        sku=(RAW, "Items[].armSkuName", 'e.g. "Standard_ND96isr_H100_v5"'),
+        listing_id=(DERIVED, "{armSkuName}:{region}[:spot]", "one listing per size, region and market"),
+        raw_gpu_name=(LOOKUP, "GPU_SIZES in providers/azure.py", "the size page's accelerator string; the API has none"),
+        gpu_count=(LOOKUP, "GPU_SIZES in providers/azure.py", "the API has no GPU count either"),
+        region=(RAW, "Items[].armRegionName", "eastus | eastus2"),
+        country=(DERIVED, '"US" for eastus/eastus2', 'Azure labels them "US East" / "US East 2"'),
+        price_per_gpu_hour=(DERIVED, "= retailPrice / gpu_count"),
+        price_per_instance_hour=(RAW, "Items[].retailPrice", 'the whole VM, unitOfMeasure "1 Hour"'),
+        currency=(RAW, "Items[].currencyCode", "USD; a non-USD BillingCurrency fails the poll"),
+        market_type=(DERIVED, 'skuName ends " Spot" ? spot : on_demand', '"Low Priority" meters are dropped'),
+        provider_tier=(CONSTANT, '"hyperscaler"'),
+        interruptible=(DERIVED, "= (market_type == spot)"),
+        available=(ABSENT, "-", "a price list says nothing about capacity"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(ABSENT, "-", "not in the price rows"),
+        ram_gb=(ABSENT, "-", "not in the price rows"),
+        storage_gb=(ABSENT, "-"),
+    ),
+    quirks=[
+        "The GPU model and count are NOT in the API; they come from a hand-kept table (GPU_SIZES) copied "
+        "from learn.microsoft.com size pages. An unlisted size is logged and skipped, never guessed.",
+        "Fractional sizes (NVadsA10 v5 1/6-1/2 GPU, RTX PRO 6000 v6 1/4-1/2 GPU) and the Promo, NVv3/NVv4, "
+        "V710, GB200 and undocumented ND variants (is/flex/noIB/isrf) are not in the table.",
+        "Some Windows products are abbreviated \"... Srs Win\" and slip past the 'Windows' filter; "
+        "normalize() drops them too.",
+        "Spot prices sometimes equal pay-as-you-go (ND H200 v5 in eastus2); recorded as published.",
+        "The ND A100/H100/H200 sizes are 8-GPU NVLink (HGX) boards and map to the SXM parts, as AWS p4d/p5 do.",
+        "The 256-char endpoint column cannot hold the encoded filter: the endpoint is stored as "
+        "/api/retail/prices#<region> and the exact $filter in the snapshot's request.",
+    ],
+)
+
+
+OVHCLOUD = ProviderMapping(
+    provider="ovhcloud",
+    display_name="OVHcloud Public Cloud",
+    endpoints={
+        "GET api.us.ovhcloud.com/1.0/order/catalog/public/cloud?ovhSubsidiary=US": "OVHcloud US catalogue, USD",
+        "GET ca.api.ovh.com/1.0/order/catalog/public/cloud?ovhSubsidiary=WS": "OVHcloud World catalogue, USD",
+    },
+    fields=_fields(
+        "ovhcloud",
+        sku=(DERIVED, 'addons[].planCode minus ".consumption"', 'the flavor, e.g. "h100-380"'),
+        listing_id=(DERIVED, "{subsidiary}:{flavor}", 'e.g. "WS:l40s-90"'),
+        raw_gpu_name=(DERIVED, "blobs.technical.gpu.model + memory.size", 'e.g. "L40S 48GB"'),
+        gpu_count=(RAW, "blobs.technical.gpu.number"),
+        region=(ABSENT, "-", "a catalogue is per subsidiary, not per region"),
+        country=(DERIVED, '"US" for the US catalogue, None for World', "OVHcloud US regions are all in the US"),
+        price_per_gpu_hour=(DERIVED, "= instance price / gpu.number"),
+        price_per_instance_hour=(DERIVED, "pricings[consumption].price / 1e8", "checked against formattedPrice"),
+        currency=(RAW, "locale.currencyCode", "must be USD or the poll fails"),
+        provider_tier=(CONSTANT, '"vm"'),
+        available=(ABSENT, "-", "a catalogue says nothing about stock"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, "blobs.technical.cpu.cores"),
+        ram_gb=(RAW, "blobs.technical.memory.size"),
+        storage_gb=(DERIVED, "sum of blobs.technical.storage.disks capacity x number"),
+    ),
+    quirks=[
+        "Each subsidiary prices in its own currency; only the two USD catalogues are read (no FX). "
+        "The EU catalogues (EUR, GBP) are never converted.",
+        "Prices are integers in 1e-8 USD for the whole instance; a price that disagrees with its "
+        "printed formattedPrice fails the poll.",
+        'Only hourly ".consumption" addons are read; ".monthly" ones are never converted to hourly.',
+        'Windows flavors ("win-...", licence bundled) and AI Notebook/Training/Deploy are not read.',
+        'Only flavors tagged "active" and not "coming_soon" are read (RTX 5000 and A10 are coming soon; '
+        "GTX 10xx are legacy).",
+        '"H100 80GB" and "A100 80GB" do not say SXM or PCIe, "H200 141GB" not SXM or NVL: all unmapped. '
+        "No canonical V100S yet.",
+        "A general-purpose cloud: never part of a neocloud index.",
+    ],
+)
+
+
+SCALEWAY = _shadeform("scaleway", "Scaleway", [
+    "Scaleway does publish a keyless catalogue (api.scaleway.com product-catalog), but in EUR per "
+    "minute only; this app stores USD without FX, so Shadeform's USD listing is read instead.",
+    "Only Scaleway's PCIe H100 / L4 / L40S VMs and the B300-SXM node are in Shadeform's list; "
+    "its H100-SXM and GH200 types are not.",
+    "A general-purpose cloud: never part of a neocloud index.",
+])
+
+
+KOYEB = ProviderMapping(
+    provider="koyeb",
+    display_name="Koyeb (serverless GPU)",
+    endpoints={"GET /v1/catalog/instances": "every instance type; anonymous"},
+    fields=_fields(
+        "koyeb",
+        sku=(RAW, "instances[].id", 'e.g. "2-gpu-nvidia-h100"'),
+        listing_id=(RAW, "instances[].id"),
+        raw_gpu_name=(DERIVED, "gpu.name + per-GPU VRAM (gpu.memory / gpu.count)", 'e.g. "gpu-nvidia-l40s 48GB"'),
+        gpu_count=(RAW, "instances[].gpu.count", 'must agree with the display name\'s "Nx" prefix'),
+        region=(RAW, "instances[].regions joined"),
+        country=(ABSENT, "-", '"na" / "eu" are continents'),
+        price_per_gpu_hour=(DERIVED, "= price_hourly / gpu.count"),
+        price_per_instance_hour=(RAW, "instances[].price_hourly", "the whole instance; billed per second"),
+        provider_tier=(CONSTANT, '"serverless"'),
+        available=(ABSENT, "-", "status AVAILABLE is an offer status, not stock"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, "instances[].vcpu"),
+        ram_gb=(DERIVED, 'instances[].memory, "128GB" -> 128'),
+        storage_gb=(DERIVED, 'instances[].disk, "320GB" -> 320'),
+    ),
+    quirks=[
+        "RESTRICTED types (no regions: B200, 4x H200, 8x shapes) are sales-gated and give no listing.",
+        "Tenstorrent n300s types are listed at $0 (and the 4x one says gpu.count 1): no listing.",
+        '"gpu-nvidia-h100", "gpu-nvidia-a100", "gpu-nvidia-h200" do not state the variant and '
+        '"gpu-nvidia-rtx-pro-6000" not the edition: all unmapped.',
+        "Paging: a catalogue larger than the first page fails the poll.",
+        "A general-purpose (serverless) cloud: never part of a neocloud index.",
+    ],
+)
+
+
+IBM = ProviderMapping(
+    provider="ibm",
+    display_name="IBM Cloud (VPC GPU virtual servers)",
+    endpoints={"GET /api/v1/{plan id}/pricing/deployment": "Global Catalog: every regional deployment of one "
+                                                            "GPU profile plan; anonymous for public services"},
+    fields=_fields(
+        "ibm",
+        sku=(LOOKUP, "PROFILES in providers/ibm.py", 'the instance profile, e.g. "gx3d-160x1792x8h100"'),
+        listing_id=(DERIVED, "{profile}:{deployment_location}[:spot]", "one on-demand and one spot listing per region"),
+        raw_gpu_name=(LOOKUP, "PROFILES in providers/ibm.py", "IBM's profile docs; the pricing has no GPU model"),
+        gpu_count=(LOOKUP, "PROFILES in providers/ibm.py", "also the 'x8h100' part of the profile name"),
+        region=(RAW, "resources[].deployment_location", 'e.g. "us-south"'),
+        country=(ABSENT, "-", 'the "USA" amount is the billing country, not the data-centre country'),
+        price_per_gpu_hour=(DERIVED, "= price_per_instance_hour / gpu_count"),
+        price_per_instance_hour=(RAW, "metrics[INSTANCE_HOURS_MULTI_TENANT | INSTANCE_MULTI_TENANT_SPOT]"
+                                      ".amounts[USA].prices[0].price", "the whole virtual server, per hour"),
+        market_type=(DERIVED, "INSTANCE_HOURS_MULTI_TENANT -> on_demand, INSTANCE_MULTI_TENANT_SPOT -> spot"),
+        provider_tier=(CONSTANT, '"vm"', "VPC virtual servers only"),
+        interruptible=(DERIVED, "= (market_type == spot)"),
+        available=(ABSENT, "-", "a deployment is where a profile is sold, not live stock"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(DERIVED, "profile name {vcpu}x{GiB}x{gpus}{gpu}", "IBM's documented naming"),
+        ram_gb=(DERIVED, "profile name {vcpu}x{GiB}x{gpus}{gpu}", "GiB"),
+        storage_gb=(ABSENT, "-"),
+    ),
+    quirks=[
+        "The pricing carries no GPU model or count; both come from a hand-kept table (PROFILES) of "
+        "Global Catalog plan ids. A metric whose id does not name the profile fails the poll.",
+        "Amounts are per billing country; only the USA (USD) amount is read. A tiered or missing "
+        "USD amount fails the poll.",
+        "A region can list several deployments (zones). They must agree on price; if not the region is skipped.",
+        "Dedicated-host, reservation and OS-licence metrics are not read. The A100 profiles have no spot price.",
+        "On 2026-10-13 the 8x H100 and 8x H200 profiles carry the same price ($85.85/hr in us-south).",
+        "Intel Gaudi 3 has no canonical name yet and stays unmapped. A general-purpose cloud: never in a neocloud index.",
+    ],
+)
+
+
 PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
     m.provider: m
     for m in (
         SALAD, HYPERSTACK, LAMBDA, RUNPOD,
         HYPERBOLIC, VOLTAGEPARK, LIUM, VAST, NEBIUS, MASSEDCOMPUTE,
         DIGITALOCEAN, AWS,
-        VERDA, CRUSOE, LATITUDE, DENVR, BOOSTRUN,
+        VERDA, CRUSOE, LATITUDE, DENVR, BOOSTRUN, HORIZON, PHYNTEC,
         COREWEAVE, TOGETHER, JARVISLABS, HOTAISLE, VULTR,
+        GCP,
+        AZURE,
+        LINODE, OVHCLOUD, SCALEWAY, KOYEB,
+        ORACLE, IBM,
     )
 }  # fmt: skip
 

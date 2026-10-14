@@ -1,0 +1,88 @@
+{
+ "instance_types": [
+  {
+   "cloud": "phyntec",
+   "shade_instance_type": "RTX4090x8",
+   "cloud_instance_type": "RTX4090x8",
+   "configuration": {
+    "memory_in_gb": 256,
+    "storage_in_gb": 3000,
+    "vcpus": 48,
+    "num_gpus": 8,
+    "gpu_type": "RTX4090",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu22.04_cuda12.4_shade_os",
+     "ubuntu24.04_cuda12.4_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 24,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 256,
+   "storage_in_gb": 3000,
+   "vcpus": 48,
+   "num_gpus": 8,
+   "gpu_type": "RTX4090",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 320,
+   "availability": [
+    {
+     "region": "casper-usa-1",
+     "available": false,
+     "display_name": "US, Casper, WY",
+     "rental_type": "on_demand"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 600
+   },
+   "deployment_type": "baremetal",
+   "flex_vm": false
+  },
+  {
+   "cloud": "phyntec",
+   "shade_instance_type": "RTX5090x8",
+   "cloud_instance_type": "RTX5090x8",
+   "configuration": {
+    "memory_in_gb": 256,
+    "storage_in_gb": 7600,
+    "vcpus": 64,
+    "num_gpus": 8,
+    "gpu_type": "RTX5090",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu22.04_cuda12.4_shade_os",
+     "ubuntu24.04_cuda12.4_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 32,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 256,
+   "storage_in_gb": 7600,
+   "vcpus": 64,
+   "num_gpus": 8,
+   "gpu_type": "RTX5090",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 560,
+   "availability": [
+    {
+     "region": "casper-usa-1",
+     "available": false,
+     "display_name": "US, Casper, WY",
+     "rental_type": "on_demand"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 600
+   },
+   "deployment_type": "baremetal",
+   "flex_vm": false
+  }
+ ]
+}

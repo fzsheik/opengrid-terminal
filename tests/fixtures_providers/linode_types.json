@@ -1,0 +1,471 @@
+{
+ "data": [
+  {
+   "id": "g6-nanode-1",
+   "label": "Nanode 1GB",
+   "price": {
+    "hourly": 0.0075,
+    "monthly": 5.0
+   },
+   "region_prices": [
+    {
+     "id": "id-cgk",
+     "hourly": 0.009,
+     "monthly": 6.0
+    },
+    {
+     "id": "br-gru",
+     "hourly": 0.0105,
+     "monthly": 7.0
+    }
+   ],
+   "addons": {
+    "backups": {
+     "price": {
+      "hourly": 0.003,
+      "monthly": 2.0
+     },
+     "region_prices": [
+      {
+       "id": "id-cgk",
+       "hourly": 0.0036,
+       "monthly": 2.4
+      },
+      {
+       "id": "br-gru",
+       "hourly": 0.004,
+       "monthly": 2.8
+      }
+     ]
+    }
+   },
+   "memory": 1024,
+   "disk": 25600,
+   "transfer": 1000,
+   "vcpus": 1,
+   "gpus": 0,
+   "network_out": 1000,
+   "class": "nanode",
+   "successor": null,
+   "capabilities": [],
+   "accelerated_devices": 0
+  },
+  {
+   "id": "g6-standard-1",
+   "label": "Linode 2GB",
+   "price": {
+    "hourly": 0.018,
+    "monthly": 12.0
+   },
+   "region_prices": [
+    {
+     "id": "id-cgk",
+     "hourly": 0.022,
+     "monthly": 14.4
+    },
+    {
+     "id": "br-gru",
+     "hourly": 0.025,
+     "monthly": 16.8
+    }
+   ],
+   "addons": {
+    "backups": {
+     "price": {
+      "hourly": 0.004,
+      "monthly": 2.5
+     },
+     "region_prices": [
+      {
+       "id": "id-cgk",
+       "hourly": 0.0045,
+       "monthly": 3.0
+      },
+      {
+       "id": "br-gru",
+       "hourly": 0.005,
+       "monthly": 3.5
+      }
+     ]
+    }
+   },
+   "memory": 2048,
+   "disk": 51200,
+   "transfer": 2000,
+   "vcpus": 1,
+   "gpus": 0,
+   "network_out": 2000,
+   "class": "standard",
+   "successor": null,
+   "capabilities": [],
+   "accelerated_devices": 0
+  },
+  {
+   "id": "g1-gpu-rtx6000-1",
+   "label": "Dedicated 32GB + RTX6000 GPU x1",
+   "price": {
+    "hourly": 1.5,
+    "monthly": null
+   },
+   "region_prices": [],
+   "addons": {
+    "backups": {
+     "price": {
+      "hourly": 0.06,
+      "monthly": 40.0
+     },
+     "region_prices": []
+    }
+   },
+   "memory": 32768,
+   "disk": 655360,
+   "transfer": 16000,
+   "vcpus": 8,
+   "gpus": 1,
+   "network_out": 10000,
+   "class": "gpu",
+   "successor": null,
+   "capabilities": [],
+   "accelerated_devices": 0
+  },
+  {
+   "id": "g1-gpu-rtx6000-2",
+   "label": "Dedicated 64GB + RTX6000 GPU x2",
+   "price": {
+    "hourly": 3.0,
+    "monthly": null
+   },
+   "region_prices": [],
+   "addons": {
+    "backups": {
+     "price": {
+      "hourly": 0.12,
+      "monthly": 80.0
+     },
+     "region_prices": []
+    }
+   },
+   "memory": 65536,
+   "disk": 1310720,
+   "transfer": 20000,
+   "vcpus": 16,
+   "gpus": 2,
+   "network_out": 10000,
+   "class": "gpu",
+   "successor": null,
+   "capabilities": [],
+   "accelerated_devices": 0
+  },
+  {
+   "id": "g1-gpu-rtx6000-3",
+   "label": "Dedicated 96GB + RTX6000 GPU x3",
+   "price": {
+    "hourly": 4.5,
+    "monthly": null
+   },
+   "region_prices": [],
+   "addons": {
+    "backups": {
+     "price": {
+      "hourly": 0.18,
+      "monthly": 120.0
+     },
+     "region_prices": []
+    }
+   },
+   "memory": 98304,
+   "disk": 1966080,
+   "transfer": 20000,
+   "vcpus": 20,
+   "gpus": 3,
+   "network_out": 10000,
+   "class": "gpu",
+   "successor": null,
+   "capabilities": [],
+   "accelerated_devices": 0
+  },
+  {
+   "id": "g1-gpu-rtx6000-4",
+   "label": "Dedicated 128GB + RTX6000 GPU x4",
+   "price": {
+    "hourly": 6.0,
+    "monthly": null
+   },
+   "region_prices": [],
+   "addons": {
+    "backups": {
+     "price": {
+      "hourly": 0.24,
+      "monthly": 160.0
+     },
+     "region_prices": []
+    }
+   },
+   "memory": 131072,
+   "disk": 2621440,
+   "transfer": 20000,
+   "vcpus": 24,
+   "gpus": 4,
+   "network_out": 10000,
+   "class": "gpu",
+   "successor": null,
+   "capabilities": [],
+   "accelerated_devices": 0
+  },
+  {
+   "id": "g2-gpu-rtx4000a1-s",
+   "label": "RTX4000 Ada x1 Small",
+   "price": {
+    "hourly": 0.52,
+    "monthly": null
+   },
+   "region_prices": [],
+   "addons": {
+    "backups": {
+     "price": {
+      "hourly": 0.04,
+      "monthly": 30.0
+     },
+     "region_prices": []
+    }
+   },
+   "memory": 16384,
+   "disk": 524288,
+   "transfer": 0,
+   "vcpus": 4,
+   "gpus": 1,
+   "network_out": 16000,
+   "class": "gpu",
+   "successor": null,
+   "capabilities": [],
+   "accelerated_devices": 0
+  },
+  {
+   "id": "g2-gpu-rtx4000a1-m",
+   "label": "RTX4000 Ada x1 Medium",
+   "price": {
+    "hourly": 0.67,
+    "monthly": null
+   },
+   "region_prices": [],
+   "addons": {
+    "backups": {
+     "price": {
+      "hourly": 0.04,
+      "monthly": 30.0
+     },
+     "region_prices": []
+    }
+   },
+   "memory": 32768,
+   "disk": 524288,
+   "transfer": 0,
+   "vcpus": 8,
+   "gpus": 1,
+   "network_out": 16000,
+   "class": "gpu",
+   "successor": null,
+   "capabilities": [],
+   "accelerated_devices": 0
+  },
+  {
+   "id": "g2-gpu-rtx4000a1-l",
+   "label": "RTX4000 Ada x1 Large",
+   "price": {
+    "hourly": 0.96,
+    "monthly": null
+   },
+   "region_prices": [],
+   "addons": {
+    "backups": {
+     "price": {
+      "hourly": 0.04,
+      "monthly": 30.0
+     },
+     "region_prices": []
+    }
+   },
+   "memory": 65536,
+   "disk": 524288,
+   "transfer": 0,
+   "vcpus": 16,
+   "gpus": 1,
+   "network_out": 16000,
+   "class": "gpu",
+   "successor": null,
+   "capabilities": [],
+   "accelerated_devices": 0
+  },
+  {
+   "id": "g2-gpu-rtx4000a1-xl",
+   "label": "RTX4000 Ada x1 X-Large",
+   "price": {
+    "hourly": 1.53,
+    "monthly": null
+   },
+   "region_prices": [],
+   "addons": {
+    "backups": {
+     "price": {
+      "hourly": 0.04,
+      "monthly": 30.0
+     },
+     "region_prices": []
+    }
+   },
+   "memory": 131072,
+   "disk": 524288,
+   "transfer": 0,
+   "vcpus": 32,
+   "gpus": 1,
+   "network_out": 16000,
+   "class": "gpu",
+   "successor": null,
+   "capabilities": [],
+   "accelerated_devices": 0
+  },
+  {
+   "id": "g2-gpu-rtx4000a2-s",
+   "label": "RTX4000 Ada x2 Small",
+   "price": {
+    "hourly": 1.05,
+    "monthly": null
+   },
+   "region_prices": [],
+   "addons": {
+    "backups": {
+     "price": {
+      "hourly": 0.09,
+      "monthly": 60.0
+     },
+     "region_prices": []
+    }
+   },
+   "memory": 32768,
+   "disk": 1048576,
+   "transfer": 0,
+   "vcpus": 8,
+   "gpus": 2,
+   "network_out": 16000,
+   "class": "gpu",
+   "successor": null,
+   "capabilities": [],
+   "accelerated_devices": 0
+  },
+  {
+   "id": "g2-gpu-rtx4000a2-m",
+   "label": "RTX4000 Ada x2 Medium",
+   "price": {
+    "hourly": 1.34,
+    "monthly": null
+   },
+   "region_prices": [],
+   "addons": {
+    "backups": {
+     "price": {
+      "hourly": 0.09,
+      "monthly": 60.0
+     },
+     "region_prices": []
+    }
+   },
+   "memory": 65536,
+   "disk": 1048576,
+   "transfer": 0,
+   "vcpus": 16,
+   "gpus": 2,
+   "network_out": 16000,
+   "class": "gpu",
+   "successor": null,
+   "capabilities": [],
+   "accelerated_devices": 0
+  },
+  {
+   "id": "g2-gpu-rtx4000a2-hs",
+   "label": "RTX4000 Ada x2 Medium High Storage",
+   "price": {
+    "hourly": 1.49,
+    "monthly": null
+   },
+   "region_prices": [],
+   "addons": {
+    "backups": {
+     "price": {
+      "hourly": 0.18,
+      "monthly": 120.0
+     },
+     "region_prices": []
+    }
+   },
+   "memory": 65536,
+   "disk": 2097152,
+   "transfer": 0,
+   "vcpus": 16,
+   "gpus": 2,
+   "network_out": 16000,
+   "class": "gpu",
+   "successor": null,
+   "capabilities": [],
+   "accelerated_devices": 0
+  },
+  {
+   "id": "g2-gpu-rtx4000a4-s",
+   "label": "RTX4000 Ada x4 Small",
+   "price": {
+    "hourly": 2.96,
+    "monthly": null
+   },
+   "region_prices": [],
+   "addons": {
+    "backups": {
+     "price": {
+      "hourly": 0.18,
+      "monthly": 120.0
+     },
+     "region_prices": []
+    }
+   },
+   "memory": 131072,
+   "disk": 2097152,
+   "transfer": 0,
+   "vcpus": 32,
+   "gpus": 4,
+   "network_out": 16000,
+   "class": "gpu",
+   "successor": null,
+   "capabilities": [],
+   "accelerated_devices": 0
+  },
+  {
+   "id": "g2-gpu-rtx4000a4-m",
+   "label": "RTX4000 Ada x4 Medium",
+   "price": {
+    "hourly": 3.57,
+    "monthly": null
+   },
+   "region_prices": [],
+   "addons": {
+    "backups": {
+     "price": {
+      "hourly": 0.18,
+      "monthly": 120.0
+     },
+     "region_prices": []
+    }
+   },
+   "memory": 200704,
+   "disk": 2097152,
+   "transfer": 0,
+   "vcpus": 48,
+   "gpus": 4,
+   "network_out": 16000,
+   "class": "gpu",
+   "successor": null,
+   "capabilities": [],
+   "accelerated_devices": 0
+  }
+ ],
+ "page": 1,
+ "pages": 1,
+ "results": 75
+}

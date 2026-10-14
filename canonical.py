@@ -242,6 +242,11 @@ _add("Intel Gaudi 2 96GB", "GAUDI2 pcie")
 # Boost Run as listed by Shadeform: its H200/B200 types are named "..._sxm5x8"/"..._sxm6x8".
 _add("NVIDIA H200 141GB SXM5", "H200 sxm")
 _add("NVIDIA B200 180GB SXM", "B200 sxm")
+# Phyntec (and Boost Run) as listed by Shadeform: "{gpu_type} {interconnect}". The
+# GeForce cards have one variant each; Shadeform states 24GB / 32GB per GPU.
+# Horizon's "H100 sxm5" / "H200 sxm5" are already mapped above.
+_add("NVIDIA RTX 4090 24GB", "RTX4090 pcie")
+_add("NVIDIA RTX 5090 32GB", "RTX5090 pcie")
 
 # --------------------------------------------------------------------------
 # CoreWeave, Jarvislabs, Hot Aisle (public price pages). The normalizers append
@@ -265,6 +270,95 @@ _add("NVIDIA GH200 96GB", "NVIDIA GH200 96GB")
 _add("NVIDIA RTX PRO 6000 96GB SE", "NVIDIA RTX PRO 6000 Blackwell Server Edition 96GB")
 _add("NVIDIA L4 24GB", "NVIDIA L4 24GB")
 _add("AMD Instinct MI300X 192GB", "AMD MI300X")
+
+# --------------------------------------------------------------------------
+# Google Cloud: Compute Engine accelerator-type ids, from the hand table in
+# providers/gcp.py (the price page prints only "Nvidia H100", "NVIDIA L4", ...).
+# A3 High and A3 Mega carry the same H100 SXM card (Mega adds network
+# bandwidth), A3 Ultra the H200 SXM; A2 machines are HGX A100 boards (SXM4,
+# NVSwitch; A2 Standard 40GB, A2 Ultra 80GB); G4 is the RTX PRO 6000 Server
+# Edition. The V100 is printed as "16 GB HBM2" only, so it takes the
+# variant-less V100 name (as Lambda's does).
+# Left unmapped on purpose: nvidia-tesla-p4 and nvidia-tesla-p100 (no canonical
+# P4 / P100 yet).
+# --------------------------------------------------------------------------
+_add("NVIDIA H100 80GB SXM5", "nvidia-h100-80gb", "nvidia-h100-mega-80gb")
+_add("NVIDIA H200 141GB SXM5", "nvidia-h200-141gb")
+_add("NVIDIA B200 180GB SXM", "nvidia-b200")
+_add("NVIDIA A100 80GB SXM4", "nvidia-a100-80gb")
+_add("NVIDIA A100 40GB SXM4", "nvidia-tesla-a100")
+_add("NVIDIA L4 24GB", "nvidia-l4")
+_add("NVIDIA RTX PRO 6000 96GB SE", "nvidia-rtx-pro-6000")
+_add("NVIDIA T4 16GB", "nvidia-tesla-t4")
+_add("NVIDIA Tesla V100 16GB", "nvidia-tesla-v100")
+
+# --------------------------------------------------------------------------
+# Azure. The Retail Prices API names no GPU; providers/azure.py GPU_SIZES carries
+# the accelerator string of each size page on learn.microsoft.com, verbatim.
+# NCv3's "Tesla V100 (16GB)" names no board, so it takes the variant-less V100.
+# The only 94GB PCIe H100 is the H100 NVL. A10 and MI300X come in one form factor.
+# The ND flagships (ND96asr_v4, ND96amsr_A100_v4, ND96isr_H100_v5, ND96isr_H200_v5)
+# are only used for 8-GPU NVLink/NVSwitch sizes, i.e. NVIDIA HGX baseboards, which
+# carry SXM parts: mapped the way AWS p4d/p5 and GCP A2/A3 are. These names are
+# used by no other Azure size (the PCIe parts are named "PCIe" above).
+# Left unmapped on purpose: "Nvidia Tesla V100 GPU (32GB)" (no canonical V100 32GB yet).
+# --------------------------------------------------------------------------
+_add("NVIDIA T4 16GB", "Nvidia Tesla T4 GPU (16GB)")
+_add("NVIDIA Tesla V100 16GB", "Nvidia Tesla V100 GPU (16GB)")
+_add("NVIDIA A100 80GB PCIe", "Nvidia PCIe A100 GPU (80GB)")
+_add("NVIDIA H100 94GB NVL", "Nvidia PCIe H100 GPU (94GB)")
+_add("NVIDIA A10 24GB PCIe", "Nvidia A10 GPU (24GB)")
+_add("NVIDIA RTX PRO 6000 96GB SE", "Nvidia RTX PRO 6000 Blackwell Server Edition GPU (96 GB)")
+_add("AMD Instinct MI300X 192GB", "AMD Instinct MI300X GPU (192GB)")
+_add("NVIDIA A100 40GB SXM4", "Nvidia A100 GPU (40GB)")
+_add("NVIDIA A100 80GB SXM4", "Nvidia A100 GPU (80GB)")
+_add("NVIDIA H100 80GB SXM5", "Nvidia H100 GPU (80GB)")
+_add("NVIDIA H200 141GB SXM5", "Nvidia H200 GPU (141GB)")
+
+# --------------------------------------------------------------------------
+# Akamai/Linode (GPU token from the plan label), OVHcloud ("<model> <VRAM>GB"
+# from its catalogue), Scaleway as listed by Shadeform, Koyeb (gpu.name ids).
+# Linode's "RTX4000 Ada" is read like DigitalOcean's and RunPod's unqualified
+# RTX 4000 Ada (not the SFF card). Koyeb names append the per-GPU VRAM.
+# Left unmapped on purpose: Linode "RTX6000" (Quadro RTX 6000 per Linode's docs,
+# but the API name alone does not say Quadro or Ada); OVHcloud "H100 80GB" and
+# "A100 80GB" (SXM or PCIe not stated), "H200 141GB" (SXM or NVL not stated),
+# "Tesla V100S 32GB" (no canonical V100S yet); Koyeb "gpu-nvidia-h100 80GB",
+# "gpu-nvidia-a100 80GB", "gpu-nvidia-h200 141GB" (variant not stated) and
+# "gpu-nvidia-rtx-pro-6000 96GB" (Workstation, Max-Q or Server Edition not stated).
+# --------------------------------------------------------------------------
+_add("NVIDIA RTX 4000 Ada 20GB", "RTX4000 Ada")
+_add("NVIDIA L4 24GB", "L4 24GB", "L4 pcie", "gpu-nvidia-l4 24GB")
+_add("NVIDIA B300 288GB SXM", "B300 sxm")
+_add("NVIDIA L40S 48GB", "gpu-nvidia-l40s 48GB")
+_add("NVIDIA RTX A6000 48GB", "gpu-nvidia-rtx-a6000 48GB")
+_add("NVIDIA RTX 4000 SFF Ada 20GB", "gpu-nvidia-rtx-4000-sff-ada 20GB")
+_add("NVIDIA A100 80GB SXM4", "gpu-nvidia-a100-sxm 80GB")
+
+# --------------------------------------------------------------------------
+# Oracle Cloud (providers/oracle.py SHAPES): Oracle's pricing-page wording plus
+# its printed per-GPU VRAM. B200 and B300 exist only as SXM boards; B300 263GB and
+# GB300 279GB are usable figures for the 288GB parts (as CoreWeave's 270GB). The
+# bare "H200" is NVIDIA's SXM product; the PCIe card is always named "H200 NVL".
+# Left unmapped on purpose: "NVIDIA H100 80GB", "NVIDIA A100 80GB", "NVIDIA A100
+# 40GB" (Oracle never says SXM or PCIe; NVIDIA's blog calls OCI's H100 shape HGX,
+# but the source we read does not), "NVIDIA RTX PRO 6000 96GB" (edition not
+# stated) and "NVIDIA GB200 189GB (NVL72)" (no canonical GB200 yet).
+# --------------------------------------------------------------------------
+_add("NVIDIA H200 141GB SXM5", "NVIDIA H200 141GB")
+_add("NVIDIA B200 180GB SXM", "NVIDIA B200 180GB")
+_add("NVIDIA B300 288GB SXM", "NVIDIA B300 263GB")
+_add("NVIDIA GB300 288GB", "NVIDIA GB300 279GB (NVL72)")
+_add("AMD Instinct MI300X 192GB", "AMD MI300X 192GB")
+_add("AMD Instinct MI355X 288GB", "AMD MI355X 288GB")
+_add("NVIDIA A10 24GB PCIe", "NVIDIA A10 24GB")
+_add("NVIDIA Tesla V100 16GB", "NVIDIA Tesla V100 16GB")
+
+# IBM Cloud (providers/ibm.py PROFILES): IBM's VPC GPU profile docs say SXM5 for
+# the H100/H200 profiles and "A100 PCIe (80 GB)" for the a100p ones (already
+# mapped above). "Intel Gaudi 3 128GB" stays unmapped: no canonical Gaudi 3 yet.
+_add("NVIDIA H100 80GB SXM5", "NVIDIA H100 SXM5 80GB")
+_add("NVIDIA H200 141GB SXM5", "NVIDIA H200 SXM5 141GB")
 
 # --------------------------------------------------------------------------
 # Seen, deliberately not mapped

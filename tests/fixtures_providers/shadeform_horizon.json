@@ -1,0 +1,88 @@
+{
+ "instance_types": [
+  {
+   "cloud": "horizon",
+   "shade_instance_type": "H100x8",
+   "cloud_instance_type": "H100-8",
+   "configuration": {
+    "memory_in_gb": 1536,
+    "storage_in_gb": 17000,
+    "vcpus": 160,
+    "num_gpus": 8,
+    "gpu_type": "H100",
+    "interconnect": "sxm5",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu22.04",
+     "ubuntu24.04"
+    ],
+    "vram_per_gpu_in_gb": 80,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 1536,
+   "storage_in_gb": 17000,
+   "vcpus": 160,
+   "num_gpus": 8,
+   "gpu_type": "H100",
+   "interconnect": "sxm5",
+   "nvlink": false,
+   "hourly_price": 1560,
+   "availability": [
+    {
+     "region": "blonduos-iceland-2",
+     "available": false,
+     "display_name": "IS, Blonduos 2",
+     "rental_type": "on_demand"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 660,
+    "max_boot_in_sec": 1080
+   },
+   "deployment_type": "vm",
+   "flex_vm": false
+  },
+  {
+   "cloud": "horizon",
+   "shade_instance_type": "H200x8",
+   "cloud_instance_type": "H200-8",
+   "configuration": {
+    "memory_in_gb": 1536,
+    "storage_in_gb": 17000,
+    "vcpus": 160,
+    "num_gpus": 8,
+    "gpu_type": "H200",
+    "interconnect": "sxm5",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu22.04",
+     "ubuntu24.04"
+    ],
+    "vram_per_gpu_in_gb": 141,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 1536,
+   "storage_in_gb": 17000,
+   "vcpus": 160,
+   "num_gpus": 8,
+   "gpu_type": "H200",
+   "interconnect": "sxm5",
+   "nvlink": false,
+   "hourly_price": 2400,
+   "availability": [
+    {
+     "region": "blonduos-iceland-3",
+     "available": false,
+     "display_name": "IS, Blonduos 3",
+     "rental_type": "on_demand"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 780,
+    "max_boot_in_sec": 1380
+   },
+   "deployment_type": "vm",
+   "flex_vm": false
+  }
+ ]
+}

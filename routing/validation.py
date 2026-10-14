@@ -79,7 +79,7 @@ def pick_listing(provider: str, gpu: str | None = None) -> dict | None:
         if gpu:
             q = q.where(L.canonical_gpu_name == gpu)
         rows = [r for r in s.scalars(q.limit(50))
-                if not getattr(r, "interruptible", False) and (r.provider_tier or "") not in ("cheapest", "from_price")]
+                if not getattr(r, "interruptible", False) and (r.provider_tier or "") not in ("cheapest", "from_price", "gpu-attachment")]
     if not rows:
         return None
     r = rows[0]
