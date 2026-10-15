@@ -1000,7 +1000,8 @@
               h("button", { class: "btn pri", type: "button", onclick: () => submit(realMsg) }, "Run it…"),
               h("p", { class: "rt-h" }, "You confirm the maximum cost on the next screen. OpenGrid approves the exact price before anything launches.")));
           } else {
-            const first = vw.blockers[0];
+            // lead with the root cause: a platform setup blocker outranks "no listing fits" (it blocks every listing)
+            const first = vw.blockers.find(x => x && SETUP_CODES.includes(x.code)) || vw.blockers[0];
             const act = first ? blockerAction(first) : null;
             realMsg.replaceChildren(h("div", { class: "jb-real-no" },
               h("p", {}, h("b", {}, "Not available right now. "), plainBlocker(first)),
