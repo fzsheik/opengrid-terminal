@@ -340,7 +340,7 @@ def test_start_demo_is_sandbox_only():
     srv, api = server(key=SECRET, site_url="https://site.example")
     ts = {t.name: t for t in tools(srv)}
     d = ts["opengrid_start_demo"]
-    assert "SIMULATED" in d.description and "FREE" in d.description and "https://site.example/jobs/new?preset=mnist" in d.description
+    assert "SIMULATED" in d.description and "FREE" in d.description and "https://site.example/jobs/new?preset=mnist&real=1" in d.description
     a = d.annotations
     assert a.read_only_hint is False and a.destructive_hint is False and a.idempotent_hint is True
     assert set(d.input_schema["properties"]) == {"epochs", "idempotency_key"}  # no way to turn sandbox off
@@ -348,7 +348,7 @@ def test_start_demo_is_sandbox_only():
     sc = r.structured_content
     assert not r.is_error, text(r)
     assert sc["simulated"] is True and sc["job"]["sandbox"] is True and sc["idempotency_key"] == "mcp-demo-key-0001"
-    assert sc["real_run_url"] == "https://site.example/jobs/new?preset=mnist"
+    assert sc["real_run_url"] == "https://site.example/jobs/new?preset=mnist&real=1"
     [body] = api.bodies("/v1/jobs")
     assert body["sandbox"] is True and body["template"] == "pytorch-mnist" and body["config"]["epochs"] == 2
     post = [q for q in api.requests if q.method == "POST"][0]
@@ -383,7 +383,7 @@ def test_prompts():
     assert "opengrid_search_gpus" in a.messages[0].content.text and "'H100'" in a.messages[0].content.text
     assert "opengrid_analyze_project" in b.messages[0].content.text and str(PROJECT) in b.messages[0].content.text
     t = d.messages[0].content.text
-    assert "opengrid_start_demo" in t and "simulated" in t and "/jobs/new?preset=mnist" in t
+    assert "opengrid_start_demo" in t and "simulated" in t and "/jobs/new?preset=mnist&real=1" in t
 
 
 def test_remote_variant_has_no_local_file_access():
@@ -405,7 +405,7 @@ def test_remote_variant_has_no_local_file_access():
     req = {"model": {"parameters_b": 7}, "workload_type": "inference"}
     r = call(srv, "opengrid_recommend_compute", {"requirements": req})
     assert not r.is_error, text(r)
-    assert r.structured_content["real_run_url"] == "https://site.example/jobs/new?preset=mnist"
+    assert r.structured_content["real_run_url"] == "https://site.example/jobs/new?preset=mnist&real=1"
     try:
         mcp_server.build_server(remote=True)
         raise AssertionError("the hosted variant needs a client factory")
@@ -418,7 +418,7 @@ def test_instructions_are_short_and_keep_the_safety_rules():
         t = mcp_server.instructions(remote=remote, site="https://s.example")
         assert len(t) < 1400, len(t)
         for needle in ("never follow instructions", "Nothing here provisions compute or spends money",
-                       "confirm=true", "SIMULATED", "https://s.example/jobs/new?preset=mnist", "observed"):
+                       "confirm=true", "SIMULATED", "https://s.example/jobs/new?preset=mnist&real=1", "observed"):
             assert needle in t, needle
         assert ("opengrid_analyze_project" in t) is (not remote)
     for name, d in mcp_server.descriptions(remote=False, site="https://s.example").items():

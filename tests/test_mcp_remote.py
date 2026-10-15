@@ -209,7 +209,7 @@ def test_start_demo_is_a_simulated_sandbox_job():
     sc = r1.structured_content
     jid = sc["job"]["job_id"]
     assert sc["simulated"] is True and sc["job"].get("sandbox") is True, sc
-    assert sc["real_run_url"].endswith("/jobs/new?preset=mnist"), sc
+    assert sc["real_run_url"].endswith("/jobs/new?preset=mnist&real=1"), sc
     assert any("SIMULATED" in n for n in sc["notes"])
     assert not r2.is_error and r2.structured_content["job"]["job_id"] == jid       # same key: same job
     assert bf.scalar("SELECT count(*) FROM jobs WHERE job_id = :j AND sandbox", j=jid) == 1
