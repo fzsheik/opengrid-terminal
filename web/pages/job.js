@@ -88,22 +88,28 @@
         const canCancel = !J.isTerminal(job) && !J.CANCEL.includes(s) && !["terminating", "termination_confirmed", "reconciliation_pending", "reconciled"].includes(s);
         const acts = [
           canCancel ? h("button", { class: "btn w4-danger", type: "button", onclick: () => cancel() }, J.PRE_LAUNCH.includes(s) ? "Cancel job…" : "Cancel & terminate…") : null,
-          h("button", { class: "btn", type: "button", onclick: () => load() }, "Refresh"),
-          OG.copy(id, { title: "Copy the job id" }),
         ];
+        const where = sandbox() ? "Free simulation: no GPU, no provider, no spend"
+          : [sm.gpu ? `${sm.gpu_count}× ${OG.shortGpu(sm.gpu)}` : null, sm.provider ? "on " + OG.providerName(sm.provider) : null, sm.region || sm.region_group || null].filter(Boolean).join(" ") || "GPU not chosen yet";
         return [
-          OG.head(h("span", { class: "dep-title" }, job.name || "Job", " ", h("span", { class: "mono dim jb-id" }, job.job_id || id)),
-            h("span", {}, job.template || "", job.template_version ? h("span", { class: "dimmer" }, " v" + job.template_version) : null, " · ",
-              sm.provider ? OG.providerLink(sm.provider) : h("span", { class: "dim" }, sandbox() ? "sandbox (no provider)" : "not placed"),
-              " · ", `${sm.gpu_count}× `, sm.gpu ? OG.gpuLink(sm.gpu) : h("span", { class: "dim" }, "GPU auto"), sm.region ? " · " + sm.region : sm.region_group ? " · " + sm.region_group : "",
-              sm.deployment_id ? [" · ", h("a", { class: "lnk mono", href: "/deployments/" + encodeURIComponent(sm.deployment_id) }, sm.deployment_id)] : null,
-              sm.route_request_id ? [" · ", h("a", { class: "lnk mono", href: "/route?rr=" + encodeURIComponent(sm.route_request_id) }, sm.route_request_id)] : null),
-            J.sandboxBadge(sandbox()), J.stateBadge(s), o && o !== "simulated" ? J.outcomeBadge(o) : null, acts),
-          sandbox() ? h("div", { class: "jb-simban", role: "note" }, h("b", {}, "SIMULATED"), h("span", {}, "No GPU was used; numbers are synthetic."), h("span", { class: "dim" }, job.simulated_note || "No provider was called and nothing was charged.")) : null,
+          h("a", { class: "lnk jb-back", href: "/jobs" }, "← My Jobs"),
+          OG.head(h("span", { class: "dep-title" }, job.name || "Job"), h("span", {}, where),
+            acts),
+          h("div", { class: "jb-bigline" }, J.lineEl(job), sandbox() ? null : J.sandboxBadge(false)),
+          sandbox() ? h("div", { class: "jb-simban", role: "note" }, h("b", {}, "SIMULATED"), h("span", {}, "No GPU was used and nothing was charged. Every number on this page is synthetic.")) : null,
           flash,
           billingAlarm(),
           errorBlock(),
         ];
+      }
+      function metaLine() {
+        const sm = S();
+        return h("div", { class: "jb-meta dim" }, h("span", { class: "mono" }, job.job_id || id), " ", OG.copy(job.job_id || id, { title: "Copy the job id" }),
+          " · ", job.template || "", job.template_version ? " v" + job.template_version : "", " · state ", J.stateBadge(st()),
+          sm.provider ? [" · ", OG.providerLink(sm.provider)] : null, sm.gpu ? [" · ", OG.gpuLink(sm.gpu)] : null,
+          sm.deployment_id ? [" · ", h("a", { class: "lnk mono", href: "/deployments/" + encodeURIComponent(sm.deployment_id) }, sm.deployment_id)] : null,
+          sm.route_request_id ? [" · ", h("a", { class: "lnk mono", href: "/route?rr=" + encodeURIComponent(sm.route_request_id) }, sm.route_request_id)] : null,
+          " · ", h("button", { class: "btn sm", type: "button", onclick: () => load() }, "Refresh now"));
       }
       function statsStrip() {
         const s = st(), sm = S();
@@ -123,7 +129,7 @@
       // beginner asks, answered from the job / deployment / artifacts (OG.jobs.stages / plainStatus).
       function stageBlock() {
         const sg = J.stages(job);
-        const ps = J.plainStatus(job, dep, arts, { admin });
+        const ps = J.plainStatus(job, dep, arts, { admin }).filter(p => ["running", "money", "action", "cost"].includes(p.key));
         return h("section", { class: "jb-stage box", "aria-label": "Progress" },
           h("div", { class: "jb-stage-h" }, h("span", { class: "eyebrow" }, "Progress"),
             sg.mode === "sandbox" ? OG.badge("free simulation", "warn") : OG.badge("real GPU run"),
@@ -200,9 +206,9 @@
             { label: "Epoch", value: p.epoch != null ? `${p.epoch} / ${p.epochs ?? "?"}` : null, reason: metErr ? "metrics unavailable" : "no epoch reported yet" },
             { label: "Latest loss", value: p.loss != null ? p.loss.toFixed(4) : null, reason: "no loss reported yet" },
             { label: "Test accuracy", value: p.acc != null ? (p.acc * 100).toFixed(2) + "%" : null, reason: "no accuracy reported yet" },
-            { label: "Elapsed", value: p.elapsed != null ? J.duration(p.elapsed) : null, reason: "not reported", sub: "runner-reported" },
+            p.elapsed != null ? { label: "Elapsed", value: J.duration(p.elapsed), sub: "runner-reported" } : null,
             { label: "Progress", value: p.pct != null ? h("span", { class: "jb-pbar", title: Math.round(p.pct * 100) + "%" }, h("i", { style: { width: (p.pct * 100).toFixed(1) + "%" } })) : null, reason: "-" },
-            res ? { label: "Runner result", value: String(res.outcome || "reported"), sub: res.summary && typeof res.summary === "object" ? evText(res.summary).slice(0, 60) : res.summary ? String(res.summary).slice(0, 60) : null, title: evText(res) } : null,
+            res && res.outcome ? { label: "Runner result", value: String(res.outcome || "reported"), sub: res.summary && typeof res.summary === "object" ? evText(res.summary).slice(0, 60) : res.summary ? String(res.summary).slice(0, 60) : null, title: evText(res) } : null,
           ]),
           !metrics.length ? (metErr ? J.notYet("GET /v1/jobs/{id}/metrics", metErr) : h("p", { class: "note" }, s === "training" ? "Training started; the first epoch's metrics arrive when it ends." : "Metrics appear once training reports its first epoch. Only persisted runner metrics are shown; nothing is extrapolated."))
             : h("div", { class: "cols-2" }, h("div", {}, h("div", { class: "sec-h" }, "Train loss"), lossEl), h("div", {}, h("div", { class: "sec-h" }, "Test accuracy"), accEl)));
@@ -314,7 +320,7 @@
         if (!job) return;
         top.replaceChildren(...header().filter(Boolean), stageBlock(), approvalBlock());
         mid.replaceChildren(progressBlock(), artifactsBlock());
-        advTop.replaceChildren(statsStrip(), strips());
+        advTop.replaceChildren(metaLine(), statsStrip(), strips());
         bottom.replaceChildren(
           h("div", { class: "cols-2" }, checksBlock(), terminationBlock()),
           costBlock(),

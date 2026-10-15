@@ -108,11 +108,15 @@
 
       /* ----- create ----- */
       function drawCreate() {
-        const name = h("input", { class: "field", placeholder: "e.g. research-notebook", maxlength: 200, "aria-label": "Key name" });
+        // ?preset=assistant (from /developers): an AI-assistant key that reads prices and your jobs and can preview
+        // routes; route:execute (start the free demo, cancel) stays an explicit opt-in.
+        const asst = query.preset === "assistant";
+        const PRESET = asst ? ["data:read", "route:preview", "deployments:read"] : ["data:read"];
+        const name = h("input", { class: "field", placeholder: "e.g. research-notebook", maxlength: 200, "aria-label": "Key name", value: asst ? "ai-assistant" : null });
         const exp = h("select", { class: "field", "aria-label": "Expires" }, [["", "never expires"], ["30", "30 days"], ["90", "90 days"], ["365", "1 year"]].map(([v, l]) => h("option", { value: v }, l)));
         const rl = h("input", { class: "field num", type: "number", min: 1, max: 100000, placeholder: "default", "aria-label": "Rate limit per minute" });
         const boxes = SCOPES.map(([s, desc, tone]) => {
-          const cb = h("input", { type: "checkbox", value: s, checked: s === "data:read" ? true : null });
+          const cb = h("input", { type: "checkbox", value: s, checked: PRESET.includes(s) ? true : null });
           return h("label", { class: "ky-scope" + (tone ? " t-" + tone : "") }, cb, h("span", { class: "mono ky-sn" }, s), h("span", { class: "ky-sd" }, desc),
             tone === "money" ? OG.badge("spends money", "warn") : tone === "sensitive" ? OG.badge("sensitive", "bad") : null);
         });
@@ -142,6 +146,8 @@
           h("div", { class: "ky-row" }, h("label", { class: "ky-f" }, h("span", { class: "lbl" }, "Name"), name), h("label", { class: "ky-f" }, h("span", { class: "lbl" }, "Expires"), exp),
             h("label", { class: "ky-f" }, h("span", { class: "lbl" }, "Read limit / min"), rl), h("span", { class: "spacer" }), go),
           h("div", { class: "lbl", style: "margin-top:8px" }, "Scopes ", h("span", { class: "dimmer" }, "· data reads are separate from anything that spends money · from " + scopeSource)),
+          asst ? h("p", { class: "note ky-asst" }, h("b", {}, "Assistant key: "), "reads prices and your jobs and can preview routes. Tick ", h("span", { class: "mono" }, "route:execute"),
+            " too if you want your assistant to start the free demo or cancel a job. OpenGrid's assistant tools can't rent a paid GPU, but route:execute also allows real launches through the API, so keep that key private.") : null,
           h("div", { class: "ky-scopes-grid" }, boxes), err,
           h("p", { class: "note" }, "A key can never grant scopes its creator does not hold. A read-limit override replaces the read budget and can only lower the write and execute budgets."));
         createBox.replaceChildren(form);

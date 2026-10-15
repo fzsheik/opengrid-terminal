@@ -325,6 +325,17 @@
     credentials_unavailable: () => ({ label: "Provider credentials → Onboarding", href: "/onboarding" }),
     budget_exceeded: () => ({ label: "Raise max_total_cost_usd or lower the runtime ceiling", href: null }),
   };
+  // A blocker in plain words for the simple view (the technical message and admin action stay in Advanced).
+  const SETUP_CODES = ["env_ceiling", "env_live_provisioning", "mode_preview_only", "mode_disabled", "execution_mode", "adapter_not_validated", "supervised_not_enabled",
+    "provider_not_enabled", "provider_killed", "launch_not_permitted", "flags_unreadable", "no_credentials", "execution_disabled", "provider_unvalidated", "provider_ready",
+    "credentials_unavailable", "not_provisionable", "ssh_key_registration_unsupported", "forces_account_ssh_key", "no_startup_script", "missing_launch_parameters", "launch_spec_unchecked"];
+  function plainBlocker(b) {
+    const code = b && b.code;
+    if (SETUP_CODES.includes(code)) return "Real GPU runs aren't switched on for this OpenGrid yet. That's a setup step on OpenGrid's side, not something you did.";
+    if (code === "no_compatible_gpu" || code === "no_eligible_listing") return "No GPU fits the price cap right now. Prices change often, so try again later.";
+    if (code === "budget_exceeded") return "The cheapest GPU right now would cost more than the cap.";
+    return "No GPU is ready for a real run right now.";
+  }
   function blockerAction(b) {
     if (b.href) return { label: b.action_label || (typeof b.action === "string" ? b.action : "Open"), href: b.href };
     if (b.code && CODE_ACTION[b.code]) return CODE_ACTION[b.code](b);
@@ -606,11 +617,41 @@
   }
   const RUNNING = ["provisioning", "initializing", "training", "saving_artifacts"];
 
+  // One plain line per job for the simple list: {text, tone, icon, live}. Derived from the real state only.
+  const STAGE_TEXT = { preparing: "Getting ready", selecting: "Choosing a GPU", approval: "Waiting for OpenGrid approval", starting: "Starting the GPU",
+    running: "Training", saving: "Saving results", shutting_down: "Shutting down the GPU" };
+  function jobLine(job) {
+    const j = job || {}, s = stateOf(j), o = outcomeOf(j), sb = isSandbox(j), sm = summary(j);
+    const reason = j.failure && (j.failure.reason || j.failure.code);
+    if (UNCERTAIN.includes(s) || s === "termination_failed") return { text: "Needs attention: the GPU may still be billing", tone: "bad", icon: "!", live: true };
+    if (isTerminal(j)) {
+      if (o === "failed" || STAGE_FAILS.includes(s)) return { text: "Failed" + (reason ? ": " + String(reason).replace(/_/g, " ").slice(0, 90) : ""), tone: "bad", icon: "✗", live: false };
+      if (o === "cancelled" || s === "approval_rejected") return { text: "Cancelled", tone: "warn", icon: "-", live: false };
+      return { text: sb ? "Finished (simulated)" : "Finished", tone: "good", icon: "✓", live: false };
+    }
+    if (FAILED.includes(s) && sm.possibly_billing) return { text: "Failed: shutting down the GPU", tone: "bad", icon: "✗", live: true };
+    if (s === "quote_expired") return { text: "Price quote expired: needs a new quote", tone: "warn", icon: "!", live: false };
+    if (CANCEL.includes(s)) return { text: "Cancelling", tone: "warn", icon: "…", live: true };
+    const st = stages(j);
+    const text = STAGE_TEXT[st.current] || String(s || "unknown").replace(/_/g, " ");
+    return { text: sb && st.current === "running" ? "Training (simulated)" : text, tone: s === "pending_approval" ? "warn" : "busy", icon: "●", live: true };
+  }
+  // The free MNIST simulation, one click: the template's preset with sandbox forced on (validated like the form).
+  function demoBody(tpl, epochs) {
+    const f = preset(tpl);
+    const spec = configSpec(tpl);
+    f.name = "free-demo-mnist";
+    f.sandbox = true;
+    if (epochs != null && spec.epochs) f.config.epochs = Math.max(spec.epochs.min ?? 1, Math.min(spec.epochs.max ?? 10, Math.round(+epochs) || spec.epochs.default || 3));
+    const v = validate(f, spec, limitBounds(tpl));
+    return v.ok ? v.body : null;
+  }
+
   OG.jobs = { FLOW, SANDBOX_FLOW, FAILED, UNCERTAIN, CANCEL, PRE_LAUNCH, MAY_BILL, ENDED_BEFORE_LAUNCH, FINISHED, SANDBOX_FINISHED, REGIONS, STRATEGIES,
     DEFAULT_CONFIG, LIMIT_BOUNDS, CHECKS, CODE_ACTION, FOUNDER, STAGES, SANDBOX_STAGES, STAGE_OF,
     tone, strip, stateOf, isTerminal, outcomeOf, OUTCOME_TONE, isSandbox, usd, perGpuH, duration, bytes, configSpec, limitBounds, templateId, preset,
-    validate, views, candExecutable, normBlockers, groupBlockers, blockerAction, estimateLine, checks, metricPoints, progress, logPage, candKey, summary,
-    stages, plainStatus };
+    validate, views, candExecutable, normBlockers, groupBlockers, blockerAction, plainBlocker, estimateLine, checks, metricPoints, progress, logPage, candKey, summary,
+    stages, plainStatus, jobLine, demoBody };
 
   /* =============================== commands =============================== */
   OG.command(/^j\s+new$/i, () => OG.go("/jobs/new"), "j new            new training job (PyTorch MNIST)");
@@ -654,25 +695,74 @@
   };
   J.regionText = c => [c && c.region, c && c.country].filter(Boolean).join(", ") || "location not given";
 
+  // The template list, fetched once per page load (the server re-validates every body regardless).
+  let tplCache = null;
+  J.templates = async () => {
+    if (tplCache) return tplCache;
+    try { const d = await OG.api("/v1/jobs/templates"); tplCache = Array.isArray(d) ? d : (d && (d.templates || d.items)) || []; }
+    catch (e) { tplCache = []; }
+    return tplCache;
+  };
+  // Start the free MNIST simulation (SIMULATED: no provider, no GPU, no spend). One Idempotency-Key per click.
+  let demoIntent = null;
+  J.startDemo = async epochs => {
+    const tpls = await J.templates();
+    const body = demoBody(tpls.find(t => templateId(t) === "pytorch-mnist") || null, epochs);
+    if (!body || body.sandbox !== true) throw new Error("could not build the demo job");
+    demoIntent = OG.intentFor(demoIntent, "job:demo", body);
+    const r = await OG.api.intent(demoIntent, "/v1/jobs", { method: "POST", body });
+    const job = r && (r.job || r);
+    if (!job || !job.job_id) throw new Error("the server did not return a job id");
+    return job;
+  };
+  J.lineEl = job => { const l = jobLine(job); return h("span", { class: "jb-line t-" + l.tone + (l.live ? " live" : "") }, h("i", { "aria-hidden": "true" }, l.icon), l.text); };
+
   /* =============================== /jobs =============================== */
+  // My Jobs, simple first: a "what do you want to run?" box (the assistant, side-effect free; actions need a
+  // click and run through the normal APIs), then one card per job in plain words. The full table is folded.
+  const JOB_EXAMPLES = ["Try a free demo", "Train the MNIST example on a real GPU", "Find a GPU to fine-tune Llama 3 8B", "How are my jobs doing?", "Cancel my job"];
   OG.page("/jobs", {
-    title: "Jobs",
+    title: "My Jobs",
     nav: "jobs",
     mount(el, params, query, ctx) {
-      const root = h("div", { class: "pg-jobs pg-dep" });   // pg-dep: reuse the deployments table styles
+      const root = h("div", { class: "pg-jobs pg-dep pg-myjobs" });   // pg-dep: reuse the deployments table styles
       el.append(root);
-      const holder = h("div", {}, OG.loading("Loading jobs…")), stats = h("div");
+      const holder = h("div", { class: "jb-list" }, OG.loading("Loading your jobs…"));
+      const tableBox = h("div");
+      const demoMsg = h("div", { class: "jb-demo-msg", "aria-live": "polite" });
+      async function demo(btn) {
+        btn.disabled = true;
+        demoMsg.replaceChildren(OG.loading("Starting the free simulation…"));
+        try { const job = await J.startDemo(3); OG.go("/jobs/" + encodeURIComponent(job.job_id)); }
+        catch (e) { demoMsg.replaceChildren(apiErr(e, "POST /v1/jobs")); btn.disabled = false; }
+      }
+      const chatHost = h("div", { class: "jb-chat" });
       root.append(
-        OG.head("Jobs", "Training workloads OpenGrid routes, runs and verifies · job state and deployment state shown separately",
-          h("button", { class: "btn", type: "button", onclick: () => load() }, "Reload"),
-          h("a", { class: "btn pri", href: "/jobs/new" }, "New job →")),
-        OG.views && OG.views.startHere ? OG.views.startHere(null) : null,
-        h("a", { class: "jb-cta", href: "/jobs/new?preset=mnist" },
-          h("span", { class: "jb-cta-k" }, "TEMPLATE · pytorch-mnist"),
-          h("b", {}, "Train Your First AI Model: PyTorch MNIST"),
-          h("span", { class: "jb-cta-s" }, "A small CNN on MNIST, 1 GPU, ≤ 30 min, ≤ $2 total. Preview the route for free; nothing launches before OpenGrid approves the quote. No card needed: try the SIMULATED sandbox first."),
-          h("span", { class: "btn pri jb-cta-b" }, "Start →")),
-        stats, holder);
+        OG.head("My Jobs", "Tell OpenGrid what you want to run, or start the free demo",
+          h("a", { class: "btn", href: "/jobs/new" }, "New job")),
+        chatHost,
+        h("div", { class: "jb-list-h" }, h("h2", {}, "Your jobs"), h("span", { class: "spacer" }), h("button", { class: "btn sm", type: "button", onclick: () => load() }, "Refresh")),
+        holder,
+        h("details", { class: "jb-advd", ontoggle: e => { if (e.target.open && lastRows) drawTable(lastRows); } },
+          h("summary", {}, h("b", {}, "Show all details"), h("span", { class: "dim" }, " (every column: template, state, provider, GPU, cost estimate and actual)")), tableBox));
+      if (OG.views && OG.views.assistantPanel) {
+        OG.views.assistantPanel(chatHost, {
+          title: "What do you want to run?", placeholder: "e.g. try a free demo · fine-tune Llama 3 8B under $50 · how is my job doing?",
+          note: "It can start the free demo or cancel a job only when you click and confirm. It never launches a paid GPU on its own.",
+          examples: JOB_EXAMPLES, compact: true, onJobsChanged: () => load(),
+        });
+      }
+
+      const card = r => {
+        const sm = summary(r), sb = isSandbox(r);
+        const cost = sb ? "free (simulated)" : sm.actual != null ? usd(sm.actual) : sm.est_max != null ? "up to " + usd(sm.est_max) : null;
+        const where = sb ? "Simulation, no GPU" : [sm.gpu ? OG.shortGpu(sm.gpu) : null, sm.provider ? OG.providerName(sm.provider) : null].filter(Boolean).join(" on ") || "GPU not chosen yet";
+        return h("a", { class: "jb-card", href: "/jobs/" + encodeURIComponent(r.job_id) },
+          h("span", { class: "jb-card-n" }, h("b", {}, r.name || "unnamed job"), h("span", { class: "dim" }, fmt.age(r.created_at) + " ago")),
+          J.lineEl(r),
+          h("span", { class: "jb-card-m dim" }, where, cost ? " · " + cost : ""),
+          h("span", { class: "btn sm jb-card-b" }, "Open"));
+      };
       const tbl = OG.table({
         columns: [
           { key: "name", label: "Name", fmt: (v, r) => h("span", { class: "jb-nm" }, v || h("span", { class: "dim" }, "unnamed")) },
@@ -691,23 +781,36 @@
         rows: [], sort: { key: "created_at", dir: "desc" }, rowKey: r => r.job_id, rowHref: r => "/jobs/" + encodeURIComponent(r.job_id),
         rowClass: r => (UNCERTAIN.includes(stateOf(r)) || summary(r).possibly_billing && FAILED.includes(stateOf(r)) ? "dep-hot" : ""), csv: "opengrid-jobs.csv", compact: true, empty: "No jobs yet.",
       });
+      let lastRows = null;
+      function drawTable(rows) {
+        tbl.update(rows);
+        if (tableBox.firstChild !== tbl) tableBox.replaceChildren(tbl, h("p", { class: "note" }, "Est. max = the job's cost ceiling from the quote; actual = the reconciled provider cost (transaction). SIMULATED jobs never spend. ",
+          h("a", { class: "lnk", href: "/methodology/execution-safety" }, "Execution safety →")));
+      }
       async function load() {
         let rows;
         try { const d = await ctx.api("/v1/jobs", { nocache: true }); rows = Array.isArray(d) ? d : (d && (d.jobs || d.items)) || []; }
-        catch (e) { holder.replaceChildren(J.notYet("GET /v1/jobs", e)); return; }
-        stats.replaceChildren(OG.stats([
-          { label: "Jobs", value: fmt.num(rows.length) },
-          { label: "Active", value: fmt.num(rows.filter(r => !isTerminal(r)).length) },
-          { label: "Succeeded", value: fmt.num(rows.filter(r => outcomeOf(r) === "succeeded").length), sub: "real runs" },
-          { label: "Simulated", value: fmt.num(rows.filter(r => isSandbox(r)).length), sub: "sandbox: no spend" },
-          { label: "Pending approval", value: fmt.num(rows.filter(r => stateOf(r) === "pending_approval").length) },
-          { label: "Possibly billing", value: fmt.num(rows.filter(r => summary(r).possibly_billing).length), sub: "a GPU may exist" },
-          { label: "Est. max (real)", value: rows.some(r => !isSandbox(r) && summary(r).est_max != null) ? usd(rows.reduce((s, r) => s + (isSandbox(r) ? 0 : summary(r).est_max || 0), 0)) : null, reason: "no real job yet", kind: "estimated" },
-        ]));
-        if (!rows.length) { holder.replaceChildren(h("div", { class: "dep-empty" }, h("b", {}, "No jobs yet."), h("p", {}, "Start with the MNIST template above: preview is free, the sandbox is simulated, a real run waits for OpenGrid approval."))); return; }
-        tbl.update(rows);
-        if (holder.firstChild !== tbl) holder.replaceChildren(tbl, h("p", { class: "note" }, "Est. max = the job's cost ceiling from the quote; actual = the reconciled provider cost (transaction). SIMULATED jobs never spend. ",
-          h("a", { class: "lnk", href: "/methodology/execution-safety" }, "Execution safety →")));
+        catch (e) {
+          holder.replaceChildren(e && (e.status === 401 || e.status === 403) ? h("div", { class: "dep-empty" }, h("b", {}, "Sign in to see your jobs."),
+            h("p", {}, "Your jobs need an account or an API key with ", h("code", { class: "mono" }, "deployments:read"), ". ", h("a", { class: "lnk", href: "/keys" }, "API keys →"))) : J.notYet("GET /v1/jobs", e));
+          return;
+        }
+        lastRows = rows;
+        rows = rows.slice().sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+        if (!rows.length) {
+          const go = h("button", { class: "btn pri jb-easy-go", type: "button", onclick: () => demo(go) }, "Start the free demo");
+          holder.replaceChildren(h("div", { class: "jb-empty1 box" }, h("b", {}, "No jobs yet."),
+            h("p", {}, "Watch a small AI model learn to read handwritten digits. It's a free simulation, so no GPU is rented and nothing is charged. It takes about a minute."),
+            go, demoMsg));
+          tableBox.replaceChildren(h("p", { class: "note" }, "No jobs yet."));
+          return;
+        }
+        const active = rows.filter(r => !isTerminal(r)), done = rows.filter(r => isTerminal(r));
+        holder.replaceChildren(
+          active.length ? h("div", { class: "jb-group" }, h("div", { class: "jb-group-h" }, "Active", h("span", { class: "dim" }, " " + active.length)), active.map(card)) : null,
+          done.length ? h("div", { class: "jb-group" }, h("div", { class: "jb-group-h" }, "Finished", h("span", { class: "dim" }, " " + done.length)), done.slice(0, 20).map(card),
+            done.length > 20 ? h("p", { class: "note" }, `${done.length - 20} older jobs are in "Show all details" below.`) : null) : null);
+        if (tableBox.closest("details") && tableBox.closest("details").open) drawTable(lastRows);
       }
       load();
       ctx.every(15000, load);
@@ -721,23 +824,22 @@
     async mount(el, params, query, ctx) {
       const root = h("div", { class: "pg-jobs pg-jobnew pg-route" });   // pg-route: reuse the order-ticket field styles
       el.append(root);
-      // Journey B: /jobs/new?preset=mnist&sandbox=1 is the beginner's guided path (free simulation). The full form
-      // stays on the page, folded under "Advanced details" (?advanced=1 opens the classic view directly).
-      const beginner = query.sandbox === "1" && query.preset === "mnist" && query.advanced !== "1";
+      // Simple first: three plain choices (free simulation / the MNIST example on a real GPU / your own model).
+      // The full job form stays on the page, folded under "Advanced details" (?advanced=1 opens it directly).
+      const simple = query.advanced !== "1";
       const fullHead = OG.head("New training job", "Allowlisted templates only · preview is free and never calls a provider · a real run waits for OpenGrid approval",
-        h("a", { class: "btn", href: "/jobs" }, "← Jobs"), h("a", { class: "btn", href: "/methodology/execution-safety" }, "Execution safety"));
+        h("a", { class: "btn", href: "/jobs" }, "← My Jobs"), h("a", { class: "btn", href: "/methodology/execution-safety" }, "Execution safety"));
       const formBox = h("form", { class: "box jb-form", onsubmit: e => { e.preventDefault(); preview(); } });
       const out = h("div", { class: "jb-out" });
       const readiness = h("div", { class: "jb-ready" });
       const fullGrid = h("div", { class: "jb-grid" }, formBox, h("div", { class: "jb-main" }, readiness, out));
-      const easyBox = h("div", { class: "jb-easy-w" }, OG.loading("Loading the example…"));
-      if (beginner) {
-        root.append(OG.head("Train an example model", "Free simulation · PyTorch MNIST · no GPU, no spend, no card",
-            h("a", { class: "btn", href: "/jobs" }, "← Jobs"), h("a", { class: "btn", href: "/jobs/new?preset=mnist&sandbox=1&advanced=1" }, "Full job form")),
-          OG.views && OG.views.startHere ? OG.views.startHere("demo") : null,
-          easyBox,
-          h("details", { class: "jb-advd" }, h("summary", {}, h("b", {}, "Advanced details"), h("span", { class: "dim" }, " (the full job form: route preview, execution readiness, limits, SSH access, real-GPU submission)")),
-            fullHead, fullGrid));
+      const easyBox = h("div", { class: "jb-easy-w" }, OG.loading("Loading…"));
+      const advd = h("details", { class: "jb-advd" }, h("summary", {}, h("b", {}, "Advanced details"), h("span", { class: "dim" }, " (the full job form: route preview, execution readiness, limits, SSH access)")),
+        fullHead, fullGrid);
+      if (simple) {
+        root.append(OG.head("New job", "Pick one. Nothing is charged without your confirmation and OpenGrid's approval.",
+            h("a", { class: "btn", href: "/jobs" }, "← My Jobs")),
+          easyBox, advd);
       } else root.append(fullHead, fullGrid);
 
       const me = await OG.me();
@@ -866,41 +968,60 @@
         h("p", { class: "rt-h" }, "Preview writes an audit record but never calls a provider. Submit creates the job and a quote; under SUPERVISED execution an OpenGrid admin approves that exact quote before anything launches. Training failure also terminates the instance."));
       paint();
 
-      /* ----- Journey B: the guided free simulation (same job body as the full form, sandbox forced on) ----- */
-      if (beginner) {
+      /* ----- the simple view: three choices ----- */
+      if (simple) {
         const eb = spec.epochs || DEFAULT_CONFIG.epochs;
-        const epochsIn = h("input", { class: "field num", type: "number", min: eb.min, max: eb.max, step: 1, value: f.config.epochs ?? eb.default, inputmode: "numeric", "aria-label": "Epochs",
-          oninput: e => { f.config.epochs = e.target.value === "" ? null : +e.target.value; drawConfig(); changed(); } });
-        const easyMsg = h("div", { class: "jb-easy-msg", "aria-live": "polite" });
-        const startBtn = h("button", { class: "btn pri jb-easy-go", type: "button", onclick: () => startEasy() }, "Start free simulation");
-        async function startEasy() {
-          const v = validate(Object.assign({}, f, { sandbox: true }), spec, lb);
-          showErrors(v);
-          if (!v.ok) { easyMsg.replaceChildren(h("div", { class: "jb-ferr-b" }, Object.values(v.errors).join(" · "))); return; }
-          startBtn.disabled = true;
-          easyMsg.replaceChildren();
-          await doSubmit(v.body, easyMsg);
-          if (ctx.alive()) startBtn.disabled = false;
+        const epochsIn = h("input", { class: "field num", type: "number", min: eb.min, max: eb.max, step: 1, value: eb.default ?? 3, inputmode: "numeric", "aria-label": "Epochs" });
+        const demoMsg = h("div", { class: "jb-easy-msg", "aria-live": "polite" });
+        const demoBtn = h("button", { class: "btn pri jb-easy-go", type: "button", onclick: async () => {
+          demoBtn.disabled = true; demoMsg.replaceChildren(OG.loading("Starting…"));
+          try { const job = await J.startDemo(+epochsIn.value || eb.default || 3); OG.go("/jobs/" + encodeURIComponent(job.job_id)); }
+          catch (e) { demoMsg.replaceChildren(apiErr(e, "POST /v1/jobs")); if (ctx.alive()) demoBtn.disabled = false; }
+        } }, "Start free demo");
+
+        // the MNIST example on a real GPU: check the price (preview, free), then submit for approval (confirmed)
+        const realMsg = h("div", { class: "jb-easy-msg", "aria-live": "polite" });
+        const realBtn = h("button", { class: "btn jb-easy-go", type: "button", onclick: () => checkReal() }, "Check price");
+        const cap = `max ${usd(f.max_total_cost_usd)} total · stops after ${f.max_runtime_minutes} min`;
+        async function checkReal() {
+          f.sandbox = false; paint();
+          realBtn.disabled = true;
+          realMsg.replaceChildren(OG.loading("Finding the best GPU OpenGrid can run this on…"));
+          const sel = await preview();
+          if (!ctx.alive()) return;
+          realBtn.disabled = false;
+          if (!sel) { realMsg.replaceChildren(h("p", { class: "warn-t" }, "Could not check right now. Open Advanced details below for the full error.")); return; }
+          const vw = views(sel, { sandbox: false }), sub = sel.submission || {};
+          if (vw.executable && sub.can_submit !== false) {
+            const c = vw.exec.cand || {};
+            realMsg.replaceChildren(h("div", { class: "jb-real-ok" },
+              h("p", {}, h("b", {}, "Ready: "), `${c.gpu_count || 1}× ${OG.shortGpu(c.gpu || "GPU")} on ${OG.providerName(c.provider)}`,
+                c.price_per_gpu_hour != null ? h("span", { class: "mono" }, " · " + perGpuH(c.price_per_gpu_hour)) : null, h("span", { class: "dim" }, " · " + cap)),
+              h("button", { class: "btn pri", type: "button", onclick: () => submit(realMsg) }, "Run it…"),
+              h("p", { class: "rt-h" }, "You confirm the maximum cost on the next screen. OpenGrid approves the exact price before anything launches.")));
+          } else {
+            const first = vw.blockers[0];
+            const act = first ? blockerAction(first) : null;
+            realMsg.replaceChildren(h("div", { class: "jb-real-no" },
+              h("p", {}, h("b", {}, "Not available right now. "), plainBlocker(first)),
+              admin && first ? h("p", { class: "dim" }, "For admins: ", String(first.message || first.reason || first.code || ""), " ",
+                act && act.label ? (act.href ? h("a", { class: "lnk", href: act.href }, act.label + " →") : act.label) : null) : null,
+              h("p", { class: "dim" }, "Nothing was rented or charged. The free demo works any time. ",
+                h("button", { class: "btn sm", type: "button", onclick: () => { advd.open = true; advd.scrollIntoView({ behavior: "smooth" }); } }, "See every reason"))));
+          }
         }
-        easyBox.replaceChildren(h("section", { class: "jb-easy box", "aria-label": "Train an example model" },
-          h("div", { class: "jb-easy-ban", role: "note" }, h("b", {}, "FREE SIMULATION"), h("span", { class: "jb-sim" }, "SIMULATED: no GPU, no spend"),
-            h("span", { class: "dim" }, "Nothing is rented and nothing is charged. No card, no approval.")),
-          h("div", { class: "jb-easy-g" },
-            h("div", {},
-              h("h2", {}, "Teach a small network to read handwritten digits"),
-              h("p", {}, "This is OpenGrid's PyTorch MNIST example: a small convolutional network learns from 60,000 images of handwritten digits and is tested on 10,000 more. You'll see exactly what a real training job looks like, without renting a GPU."),
-              h("ol", { class: "jb-easy-steps" },
-                h("li", {}, h("b", {}, "Preparing"), ": OpenGrid creates and checks the job, exactly as for a real run."),
-                h("li", {}, h("b", {}, "Running"), ": a simulator plays the training epochs. Loss and accuracy are synthetic."),
-                h("li", {}, h("b", {}, "Saving results"), ": you get logs, metrics and output files, all labelled SIMULATED."),
-                h("li", {}, h("b", {}, "Complete"), ": usually within a minute. Cost: $0.00."))),
-            h("div", { class: "jb-easy-side" },
-              h("label", { class: "rt-f" }, h("span", { class: "rt-l" }, "Epochs (passes over the data)"), epochsIn, h("span", { class: "rt-h" }, `${eb.min}-${eb.max} · more epochs = a longer simulated run`)),
-              startBtn,
-              h("p", { class: "rt-h" }, "Starts at once and opens the job page."),
-              easyMsg)),
-          h("p", { class: "note jb-easy-real" }, "Ready for a real GPU? Real runs use the same job with a hard cost cap and an OpenGrid approval before anything launches. Open ",
-            h("b", {}, "Advanced details"), " below, untick Sandbox and preview the route. Want to size a GPU for your own model? ", h("a", { class: "lnk", href: "/find" }, "Find Compute →"))));
+        const choice = (cls, tag, title, text, ...kids) => h("section", { class: "jb-choice box " + cls }, h("span", { class: "jb-choice-k" }, tag), h("h2", {}, title), h("p", {}, text), kids);
+        easyBox.replaceChildren(h("div", { class: "jb-choices" },
+          choice("c-demo", "FREE · SIMULATED", "Try the demo",
+            "Watch a small network learn to read handwritten digits (PyTorch MNIST). No GPU is rented and nothing is charged. About a minute.",
+            h("label", { class: "rt-f jb-ep" }, h("span", { class: "rt-l" }, "Epochs"), epochsIn), demoBtn, demoMsg),
+          choice("c-real", "REAL GPU · " + usd(f.max_total_cost_usd) + " MAX", "Run the demo on a real GPU",
+            `The same MNIST job on a rented GPU, with a hard cap: ${cap}. OpenGrid approves the price before it launches.`,
+            realBtn, realMsg),
+          choice("c-own", "YOUR MODEL", "Run your own model",
+            "OpenGrid can't run your own code yet. It can tell you which GPU fits your model and where it's cheapest.",
+            h("a", { class: "btn", href: "/find" }, "Find a GPU for my model"))));
+        if (query.real === "1") { easyBox.querySelector(".c-real").classList.add("focus"); checkReal(); }
       }
 
       /* ----- readiness (what blocks a real run now) ----- */
@@ -929,7 +1050,7 @@
       }
 
       /* ----- submit: one Idempotency-Key per intent; confirmation states the exposure ----- */
-      async function submit() {
+      async function submit(where) {
         const v = validate(f, spec, lb);
         showErrors(v);
         if (!v.ok) return;
@@ -962,7 +1083,7 @@
               h("tr", {}, h("th", {}, "SSH"), h("td", {}, v.body.ssh_public_key ? "your public key only" : "ephemeral key, private half discarded: nobody can SSH in")))),
         });
         if (!ok) return;
-        await doSubmit(v.body);
+        await doSubmit(v.body, where);
       }
       async function doSubmit(body, where) {
         I.submit = OG.intentFor(I.submit, "job:create", body);
@@ -978,8 +1099,7 @@
             h("button", { class: "btn sm", type: "button", onclick: () => { msg.remove(); doSubmit(body, where); } }, "Retry (same Idempotency-Key)"), ": the server replays the first answer instead of creating a second job.") : null);
         }
       }
-      if (query.preset === "mnist" || !query.template) { /* defaults already applied */ }
-      if (query.preview === "1") preview();
+      if (query.preview === "1" && !simple) preview();
       else out.replaceChildren(h("div", { class: "jb-empty" }, h("p", {}, "The MNIST preset is filled in. ", h("b", {}, "Preview route"), " shows the market's best listing, the route OpenGrid can actually execute now and why, or exactly what blocks a real run."),
         h("p", { class: "dim" }, "Tick ", h("b", {}, "Sandbox"), " to walk the whole lifecycle with synthetic numbers first: no GPU, no spend.")));
     },

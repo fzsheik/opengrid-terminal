@@ -25,7 +25,12 @@
   ];
   const MAX_MESSAGE = 2000, MAX_CONTEXT = 8000;
   const PICKS = [["cheapest_market", "Cheapest that fits"], ["best_for_workload", "Best for this workload"], ["best_executable", "Launchable through OpenGrid"]];
-  const KINDS = { recommendation: "recommendation", gpu_prices: "prices", compare: "compare", specs: "specs", market_context: "context", questions: "questions", link: "link" };
+  const KINDS = { recommendation: "recommendation", gpu_prices: "prices", compare: "compare", specs: "specs", market_context: "context", questions: "questions", link: "link",
+    action: "action", jobs: "jobs", job: "job" };
+  // The only actions a card may offer. The browser performs one only when the user clicks (and, for cancel,
+  // confirms); the assistant endpoint itself never changes anything.
+  const ACTIONS = ["start_demo", "cancel_job"];
+  const JOB_ID = /^job-[0-9a-f]{8,32}$/;
 
   /* ============================ pure ============================ */
   // Only same-site relative links from the server are rendered as in-app links ("/gpu/x"), never "//host" or a scheme.
@@ -96,7 +101,28 @@
     if (!ctx || typeof ctx !== "object") return null;
     try { return JSON.stringify(ctx).length > MAX_CONTEXT ? null : ctx; } catch (e) { return null; }
   }
-  OG.assistant = { EXAMPLES, MAX_MESSAGE, PICKS, safeHref, cardKind, kindOf, findHref, optionLinks, recView, priceRows, compareRows, contextRows, questionButtons, boundContext };
+  // action card -> {action, label, jobId, epochs, confirm, note} or null when it is not an action this UI knows
+  function actionView(d) {
+    if (!d || typeof d !== "object" || !ACTIONS.includes(d.action)) return null;
+    const jobId = d.job_id == null ? null : String(d.job_id);
+    if (d.action === "cancel_job" && !JOB_ID.test(jobId || "")) return null;
+    const epochs = Number.isInteger(d.epochs) && d.epochs >= 1 && d.epochs <= 10 ? d.epochs : 3;
+    const label = String(d.label || (d.action === "start_demo" ? "Start free simulation" : "Cancel " + jobId)).slice(0, 80);
+    return { action: d.action, label, jobId, epochs, confirm: d.confirm ? String(d.confirm).slice(0, 600) : null, note: d.note ? String(d.note).slice(0, 300) : null };
+  }
+  // jobs / job card -> job items with only the fields the UI shows; hrefs are rebuilt from the id, never trusted
+  function jobItems(d, single) {
+    const list = single ? [d] : d && Array.isArray(d.items) ? d.items : [];
+    return list.filter(j => j && JOB_ID.test(String(j.job_id || ""))).slice(0, 20).map(j => {
+      const p = j.progress && typeof j.progress === "object" ? j.progress : null, c = j.cost && typeof j.cost === "object" ? j.cost : {};
+      return { job_id: String(j.job_id), name: j.name ? String(j.name) : null, status: j.status ? String(j.status) : null,
+        text: String(j.status_text || (j.status ? String(j.status).replace(/_/g, " ") : "unknown")), sandbox: j.sandbox === true,
+        progress: p && Number.isFinite(p.epoch) && Number.isFinite(p.epochs) ? { epoch: p.epoch, epochs: p.epochs } : null,
+        est_max_usd: Number.isFinite(c.est_max_usd) ? c.est_max_usd : null, actual_usd: Number.isFinite(c.actual_usd) ? c.actual_usd : null,
+        created_at: j.created_at || null, cancellable: j.cancellable === true, href: "/jobs/" + encodeURIComponent(String(j.job_id)) };
+    });
+  }
+  OG.assistant = { EXAMPLES, MAX_MESSAGE, PICKS, ACTIONS, safeHref, cardKind, kindOf, findHref, optionLinks, recView, priceRows, compareRows, contextRows, questionButtons, boundContext, actionView, jobItems };
 
   if (typeof OG.page !== "function" || typeof document === "undefined" || !OG.h) return;   // node tests: pure part only
 
@@ -169,9 +195,51 @@
       q.buttons.length ? h("div", { class: "ag-chips", role: "group", "aria-label": q.question },
         q.buttons.map(b => h("button", { type: "button", class: "chip", onclick: () => ask(b.message) }, b.label))) : null)));
   }
-  function renderCard(card, ask, ctx) {
+  function jobsCard(items, more) {
+    if (!items.length) return h("div", { class: "ag-card" }, h("span", { class: "dim" }, "No jobs."));
+    return h("div", { class: "ag-card" }, h("ul", { class: "ag-jobs" }, items.map(j => h("li", {},
+      h("a", { class: "lnk", href: j.href }, j.name || j.job_id), " ",
+      h("span", { class: "ag-jst" }, j.text), j.progress ? h("span", { class: "dim" }, ` · epoch ${j.progress.epoch} of ${j.progress.epochs}`) : null,
+      j.sandbox ? [" ", OG.badge("simulated", "warn")] : null,
+      j.actual_usd != null ? h("span", { class: "mono dim" }, " · " + money(j.actual_usd)) : j.est_max_usd != null && !j.sandbox ? h("span", { class: "mono dim" }, " · up to " + money(j.est_max_usd)) : null))),
+      more ? h("a", { class: "lnk", href: "/jobs" }, "All jobs →") : null);
+  }
+  // An action button. start_demo is free (SIMULATED) and runs on click; cancel_job asks for confirmation first.
+  function actionCard(a, hooks) {
+    const msgEl = h("div", { class: "ag-act-msg", "aria-live": "polite" });
+    const btn = h("button", { type: "button", class: "btn " + (a.action === "cancel_job" ? "w4-danger" : "pri") }, a.label);
+    btn.addEventListener("click", async () => {
+      if (a.action === "cancel_job") {
+        const ok = await OG.dialog({ title: "Cancel " + a.jobId + "?", danger: true, confirm: "Cancel job", cancel: "Keep it running",
+          body: h("p", {}, a.confirm || "Before launch the approval is rejected; after launch the GPU is terminated. This cannot be undone.") });
+        if (!ok) return;
+      }
+      btn.disabled = true;
+      msgEl.replaceChildren(OG.loading ? OG.loading(a.action === "start_demo" ? "Starting the free simulation…" : "Cancelling…") : "…");
+      try {
+        if (a.action === "start_demo") {
+          const job = await OG.jobs.startDemo(a.epochs);
+          msgEl.replaceChildren(h("span", { class: "up" }, "Started. "), h("a", { class: "btn sm pri", href: "/jobs/" + encodeURIComponent(job.job_id) }, "Watch it run →"));
+        } else {
+          hooks.cancelIntent[a.jobId] = OG.intentFor(hooks.cancelIntent[a.jobId], "cancel:" + a.jobId, {});
+          await OG.api.intent(hooks.cancelIntent[a.jobId], "/v1/jobs/" + encodeURIComponent(a.jobId) + "/cancel", { method: "POST", body: {} });
+          msgEl.replaceChildren(h("span", { class: "up" }, "Cancel requested. "), h("a", { class: "lnk", href: "/jobs/" + encodeURIComponent(a.jobId) }, "Open the job →"));
+        }
+        if (typeof hooks.onJobsChanged === "function") { try { hooks.onJobsChanged(); } catch (e) { console.error(e); } }
+      } catch (e) {
+        btn.disabled = false;
+        msgEl.replaceChildren(e && (e.status === 401 || e.status === 403) ? h("span", { class: "warn-t" }, "You need to be signed in with permission to run jobs (an API key with route:execute). ", h("a", { class: "lnk", href: "/keys" }, "API keys →"))
+          : OG.error ? OG.error(e) : h("span", {}, "Something went wrong."));
+      }
+    });
+    return h("div", { class: "ag-card ag-act" }, h("div", { class: "ag-act-r" }, btn, a.note ? h("span", { class: "dim" }, a.note) : null), msgEl);
+  }
+  function renderCard(card, ask, ctx, hooks) {
     const k = cardKind(card), d = card && card.data;
     try {
+      if (k === "action") { const a = actionView(d); return a ? actionCard(a, hooks || { cancelIntent: {} }) : null; }
+      if (k === "jobs") return jobsCard(jobItems(d), d && d.more === true);
+      if (k === "job") return jobsCard(jobItems(d, true), false);
       if (k === "recommendation") return recCard(d, ctx);
       if (k === "prices") return pricesCard(d);
       if (k === "compare" || k === "specs") return compareCard(d);
@@ -186,16 +254,18 @@
   OG.views.assistantPanel = (el, opts) => {
     opts = opts || {};
     let context = boundContext(opts.context || null), busy = false;
+    const hooks = { cancelIntent: {}, onJobsChanged: opts.onJobsChanged };
+    const examples = Array.isArray(opts.examples) && opts.examples.length ? opts.examples : EXAMPLES;
     const log = h("div", { class: "ag-log", role: "log", "aria-live": "polite", "aria-relevant": "additions", "aria-label": "Conversation" });
-    const input = h("textarea", { class: "field ag-in", rows: "2", maxlength: String(MAX_MESSAGE), placeholder: "Ask about GPU prices, which GPU fits your job, comparisons…", "aria-label": "Ask the OpenGrid Assistant" });
+    const input = h("textarea", { class: "field ag-in", rows: "2", maxlength: String(MAX_MESSAGE), placeholder: opts.placeholder || "Ask about GPU prices, which GPU fits your job, comparisons…", "aria-label": opts.title || "Ask the OpenGrid Assistant" });
     const sendBtn = h("button", { type: "submit", class: "btn pri" }, "Ask");
     const form = h("form", { class: "ag-form", onsubmit: e => { e.preventDefault(); ask(input.value); } }, input, sendBtn);
     input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); ask(input.value); } });
     const chips = h("div", { class: "ag-chips ag-examples", role: "group", "aria-label": "Example questions" },
-      EXAMPLES.map(x => h("button", { type: "button", class: "chip", onclick: () => ask(x) }, x)));
+      examples.map(x => h("button", { type: "button", class: "chip", onclick: () => ask(x) }, x)));
     const root = h("section", { class: "ag" + (opts.compact ? " ag-compact" : ""), "aria-label": "OpenGrid Assistant" },
-      h("div", { class: "ag-head" }, h("b", {}, "OpenGrid Assistant"),
-        h("span", { class: "ag-note" }, "Answers use OpenGrid's live market data; estimates are labelled. It cannot launch or buy anything."),
+      h("div", { class: "ag-head" }, h("b", {}, opts.title || "OpenGrid Assistant"),
+        h("span", { class: "ag-note" }, opts.note || "Answers use OpenGrid's live market data; estimates are labelled. It cannot launch or buy anything."),
         h("button", { type: "button", class: "btn sm", onclick: () => reset(), title: "Start a new conversation" }, "New")),
       log, chips, form);
     el.append(root);
@@ -213,13 +283,13 @@
       if (!text || busy) return;
       busy = true; sendBtn.disabled = true; input.value = ""; chips.hidden = true;
       msg("user", text);
-      const wait = msg("bot", OG.loading ? OG.loading("Looking at the market…") : "…");
+      const wait = msg("bot", OG.loading ? OG.loading("Thinking…") : "…");
       try {
         const r = await OG.api("/v1/assistant", { method: "POST", body: { message: text, context: boundContext(context) } });
         context = boundContext(r.context);
         const links = (r.cards || []).filter(c => cardKind(c) === "link").map(c => lnk(c.data || {}, "btn sm")).filter(Boolean);
         wait.replaceChildren(h("p", { class: "ag-reply" }, r.reply),
-          (r.cards || []).map(c => renderCard(c, ask, r.context)),
+          (r.cards || []).map(c => renderCard(c, ask, r.context, hooks)),
           links.length ? h("div", { class: "ag-links" }, links) : null,
           h("div", { class: "ag-meta dim" }, r.engine === "deterministic" ? "deterministic answer" : "phrased by " + String(r.engine).replace(/^llm:/, ""),
             r.grounded ? " · grounded in the cards above" : " · check the cards"));

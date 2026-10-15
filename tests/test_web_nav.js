@@ -86,7 +86,7 @@ eq(P(rows, 2).map(r => r.gpu), ["C", "B"], "popular: limited to n");
 eq(P(null), [], "popular: no board -> empty");
 ok(OG.home.DEMO === "/jobs/new?preset=mnist&sandbox=1", "demo link opens the MNIST preset in the sandbox");
 const jobs = fs.readFileSync(path.join(WEB, "pages", "jobs.js"), "utf8");
-ok(jobs.includes('query.sandbox === "1"') && jobs.includes('query.preset === "mnist"'), "jobs.js reads ?preset=mnist&sandbox=1");
+ok(jobs.includes('query.sandbox === "1"') && jobs.includes('const simple = query.advanced !== "1"'), "jobs.js: /jobs/new opens the simple three-choice view (the demo link lands there); ?advanced=1 opens the full form");
 
 // ---------- every page module parses (a syntax error blanks the whole SPA) ----------
 const vm = require("vm");
@@ -98,14 +98,26 @@ for (const f of fs.readdirSync(path.join(WEB, "pages")).filter(f => f.endsWith("
 
 // ---------- developers page: config snippets reference env vars / inputs, never a literal key ----------
 const dev = fs.readFileSync(path.join(WEB, "pages", "developers.js"), "utf8");
-ok(dev.includes("uv tool install ./cli") && /Not yet published to PyPI/.test(dev), "CLI installed from the repo, not PyPI");
-ok(dev.includes('"${" + KEY_VAR + "}"') && dev.includes('"${env:" + KEY_VAR + "}"') && dev.includes('"${input:opengrid-key}"') && dev.includes('env_vars = ["${KEY_VAR}"]'),
-  "Claude Code / Cursor / VS Code / Codex snippets reference the key indirectly");
-ok(!/opg_live_[A-Za-z0-9]/.test(dev), "no literal key in the page");
+require("../web/pages/developers.js");
+const S = OG.developers.snippets("https://og.example");
+ok(S.url === "https://og.example/mcp", "hosted MCP URL is <base>/mcp");
+ok(S.claude.includes("--transport http opengrid https://og.example/mcp") && S.claude.includes("'Authorization: Bearer ${OPENGRID_API_KEY}'"),
+  "Claude Code: http transport, key expanded at runtime from single-quoted ${OPENGRID_API_KEY}");
+ok(JSON.parse(S.cursorJson).mcpServers.opengrid.headers.Authorization === "Bearer ${env:OPENGRID_API_KEY}", "Cursor: ${env:} interpolation in headers");
+const link = new URL(S.cursorLink.replace("cursor://", "https://"));
+ok(link.searchParams.get("name") === "opengrid" && JSON.parse(Buffer.from(link.searchParams.get("config"), "base64").toString()).url === "https://og.example/mcp",
+  "Add to Cursor deeplink: base64 of the inner server object");
+const vs = JSON.parse(S.vscodeJson);
+ok(vs.servers.opengrid.type === "http" && vs.servers.opengrid.headers.Authorization === "Bearer ${input:opengrid-key}" && vs.inputs[0].password === true, "VS Code: secure promptString input");
+ok(S.codex === "codex mcp add opengrid --url https://og.example/mcp --bearer-token-env-var OPENGRID_API_KEY", "Codex: bearer token from env var");
+ok(S.localClaude.includes('uvx --from "git+https://github.com/fzsheik/opengrid-terminal#subdirectory=cli" opengrid mcp') && S.localClaude.includes("'OPENGRID_API_KEY=${OPENGRID_API_KEY}'"),
+  "local zero-install server via uvx + git URL, key indirect");
+ok(JSON.parse(S.localJson).mcpServers.opengrid.env.OPENGRID_URL === "https://og.example", "local server is told the OpenGrid URL");
+ok(Object.values(S).every(v => !/opg_[A-Za-z0-9]{6,}/.test(v)) && !/opg_live_[A-Za-z0-9]/.test(dev), "no literal key in any snippet or the page");
 ok(["opengrid_search_gpus", "opengrid_compare_gpus", "opengrid_get_gpu_specs", "opengrid_get_market_context", "opengrid_analyze_project", "opengrid_estimate_requirements",
-  "opengrid_recommend_compute", "opengrid_preview_route", "opengrid_list_jobs", "opengrid_get_job_status", "opengrid_cancel_job"].every(t => dev.includes(`"${t}"`)), "all eleven MCP tools listed");
-ok(dev.includes("Show me the cheapest available H100 options through OpenGrid"), "connectivity test prompt");
-ok(dev.includes("/v1/gpus") && dev.includes("/v1/best/h100-80gb-sxm5") && dev.includes("/v1/recommend") && dev.includes('href: "/api"'), "API examples + link to the full docs");
+  "opengrid_recommend_compute", "opengrid_preview_route", "opengrid_list_jobs", "opengrid_get_job_status", "opengrid_get_job_logs", "opengrid_start_demo", "opengrid_cancel_job"].every(t => dev.includes(`"${t}"`)), "every MCP tool listed");
+ok(dev.includes('href: "/keys?preset=assistant"'), "step 1 links to the assistant key preset");
+ok(S.curl.includes("/v1/gpus") && S.curlRec.includes("/v1/recommend") && dev.includes('href: "/api"'), "API examples + link to the full docs");
 
 if (failures) { console.log(`\n${failures} FAILED`); process.exit(1); }
 console.log("\nall nav tests passed");
