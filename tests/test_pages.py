@@ -258,6 +258,15 @@ def test_public_pages_through_the_middleware():
         assert client.get("/raw").status_code == 401, "raw provider data stays private"
         assert client.post("/fetch").status_code == 401
         assert client.get("/v1/keys").status_code in (401, 404), "keys never public"
+        # /login is never public: it always challenges, so a browser can sign in while the pages are open
+        r = client.get("/login?next=/jobs", follow_redirects=False)
+        assert r.status_code == 401 and r.headers.get("www-authenticate", "").startswith("Basic"), r.status_code
+        assert client.get("/login", auth=("opengrid", "wrong"), follow_redirects=False).status_code == 401
+        ok = dict(auth=("opengrid", "s3cret"), follow_redirects=False)
+        r = client.get("/login?next=/jobs", **ok)
+        assert r.status_code == 303 and r.headers["location"] == "/jobs", (r.status_code, r.headers.get("location"))
+        for evil in ("//evil.example", "https://evil.example", "/\\evil.example", "evil"):
+            assert client.get("/login", params={"next": evil}, **ok).headers["location"] == "/", evil
         settings.public_pages = False
         assert client.get("/gpus").status_code == 401, "off by default: pages need the password"
     finally:

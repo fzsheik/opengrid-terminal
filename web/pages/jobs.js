@@ -792,7 +792,7 @@
         try { const d = await ctx.api("/v1/jobs", { nocache: true }); rows = Array.isArray(d) ? d : (d && (d.jobs || d.items)) || []; }
         catch (e) {
           holder.replaceChildren(e && (e.status === 401 || e.status === 403) ? h("div", { class: "dep-empty" }, h("b", {}, "Sign in to see your jobs."),
-            h("p", {}, "Your jobs need an account or an API key with ", h("code", { class: "mono" }, "deployments:read"), ". ", h("a", { class: "lnk", href: "/keys" }, "API keys →"))) : J.notYet("GET /v1/jobs", e));
+            h("p", {}, h("a", { class: "btn sm pri", href: OG.loginHref() }, "Sign in"), " or use an API key with ", h("code", { class: "mono" }, "deployments:read"), ". ", h("a", { class: "lnk", href: "/keys" }, "API keys →"))): J.notYet("GET /v1/jobs", e));
           return;
         }
         lastRows = rows;

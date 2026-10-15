@@ -162,6 +162,16 @@ def classic():
     return FileResponse(WEB / "classic.html")
 
 
+@app.get("/login", include_in_schema=False)
+def login(next: str = "/"):
+    """Operator sign-in. Never public, so require_password always challenges here: with PUBLIC_PAGES on the pages
+    load without a password and the browser would otherwise never be asked for the site login. Reached only with a
+    valid login; `next` is a same-site path (no open redirect)."""
+    from fastapi.responses import RedirectResponse
+    safe = next if next.startswith("/") and not next.startswith("//") and "\\" not in next else "/"
+    return RedirectResponse(safe, status_code=303)
+
+
 @app.get("/market", summary="Every canonical GPU: current price, change, sparkline")
 def market_overview(hours: float = Query(24, ge=0, le=24 * 90)):
     """`hours=0` means all the history we have."""

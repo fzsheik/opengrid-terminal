@@ -639,11 +639,14 @@ Full docs: web/README.md.
     return h("span", { class: "chg " + d }, arrow ? arrow + " " : "", fmt.pct(v));
   };
 
+  // /login always asks the browser for the site login (main.py), then returns here.
+  OG.loginHref = () => "/login?next=" + encodeURIComponent((location.pathname || "/") + (location.search || ""));
   OG.loading = text => h("div", { class: "state loading", role: "status" }, h("i", { class: "spin" }), text || "Loading…");
   OG.empty = text => h("div", { class: "state empty" }, text || "Nothing to show.");
   OG.error = (err, retry) => h("div", { class: "state error", role: "alert" },
     h("b", {}, err && err.status === 404 ? "Not found" : err && err.status === 401 ? "Sign-in required" : err && err.status === 403 ? "Not allowed" : "Could not load"),
     h("span", {}, " " + ((err && err.message) || String(err || ""))),
+    err && err.status === 401 ? h("a", { class: "btn sm", href: OG.loginHref() }, "Sign in") : null,
     retry ? h("button", { class: "btn sm", onclick: retry }, "Retry") : null);
   // The API returns null + a reason when coverage is thin: show the reason, never a number.
   OG.insufficient = (reason, title) => h("div", { class: "state insufficient" },
