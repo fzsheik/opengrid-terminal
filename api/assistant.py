@@ -3,8 +3,11 @@
     POST /v1/assistant     {"message": str (<= 2000 chars), "context": {...previous context echo...}}   [data:read]
                            -> envelope({reply, cards, context, engine, grounded, intent, llm})
 
-Read-only: answers come from in-process market reads (assistant/tools.py); nothing is written, no quote or route
-request is created, no provider is called. Anonymous visitors may use it when PUBLIC_PAGES is on (api/pages.PUBLIC_POST
+Read-only: answers come from in-process market reads (assistant/tools.py) and, for a signed-in caller with
+deployments:read, reads of the caller's own jobs (assistant/jobtools.py, GET /v1/jobs ownership rules); nothing is
+written, no job, quote or route request is created, approved or cancelled, no provider is called. Job actions
+(start the free simulation, cancel a job) come back as ACTION cards that the browser performs only after the user
+clicks and confirms, through the existing POST /v1/jobs and POST /v1/jobs/{id}/cancel. Anonymous visitors may use it when PUBLIC_PAGES is on (api/pages.PUBLIC_POST
 lists this exact POST), under the per-IP public budget plus ASSISTANT_PUBLIC_RATE_LIMIT_PER_MINUTE. Never a 503:
 without an LLM (the default) or when the LLM fails, the deterministic engine answers. See docs/OPENGRID2_CONTRACTS.md §5.
 """

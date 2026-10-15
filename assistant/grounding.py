@@ -8,7 +8,10 @@ A reply number with d decimals is grounded when some allowed value rounds to it 
 $2.99 from 2.9900, 29.2 GB from 29.2), or, for a percentage, when value x 100 does (fractions shown as %).
 Bare integers 0..12 not followed by % and not money are allowed (counts such as "3 options", "top 5") -- a
 price, a percentage or any larger number must be backed by data. Links must be relative paths present in the
-cards, and the reply may not claim an action (there are no action tools).
+cards, and the reply may not claim an action (there are no action tools): neither "I launched / cancelled ..." nor
+"your job has been cancelled / was started / is now running". Job ids, epochs and costs are allowed like any other
+number: they are in the `job` / `jobs` / `action` card data. An ACTION card is a button the user still has to click
+and confirm, so a reply may describe it ("click Cancel ... and confirm") but never as done.
 """
 
 from __future__ import annotations
@@ -20,8 +23,16 @@ from dataclasses import dataclass, field
 _NUM_IN_REPLY = re.compile(r"(?<![A-Za-z0-9_.])(\$\s*)?([-−]?\d[\d,]*(?:\.\d+)?)(\s*%)?")
 _NUM_IN_STRING = re.compile(r"\d+(?:\.\d+)?")
 _ACTION = re.compile(r"\bI(?:'ve| have| just|'ll| will)?\s+(?:launched|routed|booked|reserved|purchased|bought|"
-                     r"started|deployed|provisioned|submitted|approved|placed|quoted|cancelled|terminated|"
-                     r"launch|route|book|reserve|purchase|buy|deploy|provision|submit|approve)\b", re.I)
+                     r"started|deployed|provisioned|submitted|approved|placed|quoted|cancelled|canceled|terminated|"
+                     r"stopped|killed|created|scheduled|queued|ran|"
+                     r"launch|route|book|reserve|purchase|buy|deploy|provision|submit|approve|cancel|terminate|stop|"
+                     r"kill|start|create|schedule|queue|run)\b", re.I)
+# "your job has been cancelled", "the simulation was started", "it is now running": a claim that something
+# happened. Deterministic job replies use the recorded state words instead ("Cancelled (the GPU was shut down)").
+_CLAIM = re.compile(r"\b(?:has|have|had|was|were|is|are|got)\s+(?:now\s+|just\s+|already\s+|successfully\s+)*"
+                    r"(?:been\s+)?(?:cancell?ed|started|launched|submitted|approved|terminated|stopped|killed|"
+                    r"created|deployed|queued|scheduled|provisioned|kicked off)\b|\bis now (?:running|training|live)\b",
+                    re.I)
 _URL = re.compile(r"(https?://|www\.)\S+", re.I)
 
 
@@ -97,4 +108,6 @@ def check(reply: str, ok: Allowed) -> list[str]:
             problems.append(f"link not in the cards: {m.group(0)!r}")
     if _ACTION.search(reply or ""):
         problems.append("claims an action (the assistant has no action tools)")
+    elif _CLAIM.search(reply or ""):
+        problems.append("claims that something happened (the assistant only offers actions for the user to confirm)")
     return problems

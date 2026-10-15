@@ -18,7 +18,10 @@ import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 
-INTENTS = ("cheapest", "recommend", "can_run", "compare", "price_change", "specs", "unknown")
+INTENTS = ("cheapest", "recommend", "can_run", "compare", "price_change", "specs", "demo", "real_run", "deploy_custom",
+           "jobs", "cancel", "unknown")
+# the job intents (My Jobs): the assistant only READS jobs and offers ACTION cards; it never acts itself
+JOB_INTENTS = ("demo", "real_run", "deploy_custom", "jobs", "cancel")
 
 EXAMPLES = [
     "Cheapest available H100",
@@ -28,6 +31,8 @@ EXAMPLES = [
     "Why did H200 prices change?",
     "Can I fine-tune a 13B model with QLoRA within $50?",
     "Specs of the L40S",
+    "Try a free training demo",
+    "How are my jobs doing?",
 ]
 
 
@@ -49,10 +54,13 @@ class Parsed:
     gpus: list[GpuRef]
     confidence: str
     signals: list[str] = field(default_factory=list)      # why: which rules fired (for tests / debugging)
+    job_id: str | None = None                             # a job id named in the message ("job-ab12cd34")
+    pronoun: bool = False                                 # "it" / "this job": may mean the previous turn's job
 
     def as_dict(self) -> dict:
         return {"intent": self.intent, "slots": self.slots, "gpus": [g.as_dict() for g in self.gpus],
-                "confidence": self.confidence, "signals": self.signals}
+                "confidence": self.confidence, "signals": self.signals, "job_id": self.job_id,
+                "pronoun": self.pronoun}
 
 
 # ---------------------------------------------------------------------------------------------------------
@@ -347,14 +355,154 @@ _CAN_RUN = re.compile(r"\b(can|could) i\b.*\b(run|train|fine[- ]?tune|finetune|s
                       r"\b(within|under|below|for less than|on a budget of|budget of|with)\s*\$")
 
 
+# ---------------------------------------------------------------------------------------------------------
+# Job intents (demo, real_run, deploy_custom, jobs, cancel). Checked before the market rules, but a message that
+# names a GPU together with a price / compare / specs word stays a market question ("cheapest h100").
+# ---------------------------------------------------------------------------------------------------------
+
+JOB_ID = re.compile(r"(?<![\w-])job[-_ ]?([0-9a-f]{8,32})(?![\w])", re.I)
+
+# Casual / mistyped words are corrected ONLY for the job-intent rules (GPU names and slots always come from the
+# original message): a fixed table of common typos, plus a close match (difflib, >= 0.85) for words of 5+ letters
+# that are not themselves ordinary words close to a keyword ("terminal" is not "terminate").
+_VOCAB = ("cancel", "status", "running", "simulate", "simulation", "simulated", "sandbox", "deploy", "training",
+          "mnist", "example", "progress", "custom", "script", "container", "docker", "finished", "terminate",
+          "tutorial", "demonstration", "abort", "happening", "really", "actual", "actually", "jobs", "model",
+          "models", "weights")
+_TYPOS = {"dmeo": "demo", "deom": "demo", "demoo": "demo", "dem0": "demo", "jbo": "job", "jbos": "jobs",
+          "ojb": "job", "joob": "job", "mnsit": "mnist", "minst": "mnist", "mnis": "mnist", "mnst": "mnist",
+          "canel": "cancel", "cancle": "cancel", "cancell": "cancel", "cancl": "cancel", "stauts": "status",
+          "staus": "status", "statu": "status", "runing": "running", "kil": "kill", "stp": "stop", "relly": "really",
+          "rael": "real", "reall": "real", "trian": "train", "trainig": "training", "traning": "training",
+          "simualte": "simulate", "simluate": "simulate", "simulaton": "simulation", "deplpoy": "deploy",
+          "depoly": "deploy", "deply": "deploy", "doker": "docker", "dokcer": "docker", "whats": "what is",
+          "u": "you", "pls": "please", "plz": "please", "modle": "model", "modl": "model", "scirpt": "script"}
+_KEEP = {"customer", "customers", "customize", "process", "processes", "terminal", "terminals", "exempla", "examine",
+         "statue", "states", "status", "running", "trainer", "trainers", "modes", "modal", "contain", "contained",
+         "actor", "actors", "simulator", "deployment", "deployments", "progressive", "abroad", "abort"}
+
+
+def _fix(word: str) -> str:
+    import difflib
+
+    if word in _TYPOS:
+        return _TYPOS[word]
+    if len(word) < 5 or word in _VOCAB or word in _KEEP or not word.isalpha():
+        return word
+    m = difflib.get_close_matches(word, _VOCAB, n=1, cutoff=0.85)
+    return m[0] if m else word
+
+
+def _jobtext(message: str) -> str:
+    """lowercase, apostrophes dropped, punctuation to spaces (job ids and file names kept), typos corrected."""
+    low = (message or "").lower().replace("'", "").replace("’", "")
+    low = re.sub(r"[^\w$.\- ]+", " ", low)
+    low = re.sub(r"(?<!\w)[.\-]+|[.\-]+(?!\w)", " ", low)
+    return " ".join(_fix(w) for w in low.split())
+
+
+def find_job_id(message: str) -> str | None:
+    """The first job id in the message, normalised to "job-<hex>" ("JOB-AB12CD34", "job ab12cd34" too)."""
+    m = JOB_ID.search(message or "")
+    return f"job-{m.group(1).lower()}" if m else None
+
+
+_CANCEL = re.compile(r"\b(cancel|cancell?ed|cancell?ing|abort|aborted|kill|killed|terminate|halt|stop|stopped|"
+                     r"shut (?:it |this |that |the job |my job )?(?:down|off)|shutdown|pull the plug)\b")
+_JOB_NOUN = re.compile(r"\b(jobs?|runs?|training|trainings|demo|simulation|mnist|it|this|that|everything|all|"
+                       r"instance|gpu|deployment|one)\b")
+_PRONOUN = re.compile(r"\b(it|this|that|this job|that job|the job|that one|this one|same job|the run|the training)\b")
+_STATUS = re.compile(
+    r"\b(my|our) (jobs?|runs?|trainings?|training runs?|training jobs?|demos?|simulations?)\b|"
+    r"\b(status|progress|state|update|eta)\b.*\b(jobs?|runs?|training|demo|simulation|it)\b|"
+    r"\bjobs?\b.*\b(status|progress|doing|going|running|done|finished|failed|look|state)\b|"
+    r"\bwhat is (running|happening|going on)\b|\b(anything|something) running\b|"
+    r"\bis (it|my job|the job|my training|the training|my run|the run|the demo|my demo) (still )?"
+    r"(done|finished|running|over|complete|completed|working|ready|stuck)\b|"
+    r"\bhow (is|are|s) (it|my|the|things|everything)\b.*\b(going|doing|coming along|looking|progressing)\b|"
+    r"\b(list|show|see|check)( me)? (all )?(my|the) (jobs?|runs?|trainings?)\b|"
+    r"\b(did|has) (it|my job|the job|my training|my run|the demo) "
+    r"(finish|finished|fail|failed|succeed|succeeded|complete|completed|work|start|started)\b|\bhow far along\b")
+_CUSTOM = re.compile(
+    r"\b(deploy|host|run|launch|serve|train|execute|upload|use|start|ship|bring|containerize|fine[- ]?tune|put)\b.*"
+    r"\b(my|our|mine|own|custom|personal|company|team|private)\b.*\b(models?|code|scripts?|containers?|docker|"
+    r"images?|apps?|application|project|repo|repository|llm|weights|checkpoint|notebook|workload|program|service|"
+    r"api|pipeline|training|bot|chatbot|python|pytorch|tensorflow|jax|llama|mistral|qwen|gemma|network|stuff)\b|"
+    r"\b(my|our|mine|own|custom)\b.*\b(models?|code|scripts?|containers?|docker|images?|weights|llm|"
+    r"workload|notebook|repo)\b.*\b(on opengrid|deploy|host|run|launch|serve|train)\b|"
+    r"\b(docker|dockerfile|container image|custom code|custom container|arbitrary code|bring your own|byo)\b|"
+    r"\b(run|execute|launch) (a |my |this |our )?([\w-]+\.py|python script|script|notebook|jupyter)\b")
+_REAL = re.compile(r"\b(real|actual|really|production|live|cloud|physical) (gpu|gpus|hardware|run|job|"
+                   r"training|machine|instance|cloud|thing|deal|one)\b|\bfor real\b|\bfor actual\b|"
+                   r"\b(not|no|without) (a )?(simulat\w*|sandbox|demo|fake)\b|"
+                   r"\bactually (run|train|launch|deploy)\b|\breal\b.*\bmnist\b|\bmnist\b.*\breal\b")
+_EXAMPLE = re.compile(r"\b(mnist|it|this|the demo|example|template|demo|test job|first (training|job|model)|"
+                      r"simulation|digits?|that|training job|one)\b")
+_DEPLOY_EXAMPLE = re.compile(r"\b(deploy|launch|ship)\b.*\b(mnist|example|template)\b")
+_DEMO = re.compile(
+    r"\b(demo|demos|demonstration|simulate|simulation|simulated|sandbox|tutorial|walkthrough|walk through)\b|"
+    r"\btry (it|this|opengrid|something|out|a job|a training|training|you out)\b|\b(test|example|sample|first|"
+    r"practice|dummy|toy|hello world|quick) (job|run|training|model|training run|workload)\b|"
+    r"\bshow me how (it|this|opengrid|jobs?|training|everything) works?\b|\bshow me how\b|"
+    r"\bhow (does|do) (it|this|opengrid|jobs?|a job|training jobs?|training) work\b|\bmnist\b|"
+    r"\b(see|watch) (a |an )?(job|training|run)\b|\bwhat can (i|you) run\b")
+
+
+def _job_intent(message: str, low: str, slots: dict, gpus) -> tuple[str, str, str] | None:
+    """(intent, confidence, rule) for a job-management message, else None (the market rules then apply)."""
+    t = _jobtext(message)
+    jid = find_job_id(message)
+    market = bool(gpus) and bool(_CHEAP.search(low) or _COMPARE.search(low) or _SPECS.search(low)
+                                 or _CHANGE.search(low))
+    if _CANCEL.search(t) and (jid or _JOB_NOUN.search(t) or len(t.split()) <= 3) and not market:
+        return "cancel", "high", "rule:cancel"
+    if jid:
+        return "jobs", "high", "rule:job_id"
+    if market:
+        return None
+    mnist = re.search(r"\bmnist\b", t)
+    if _CUSTOM.search(t) and not mnist:
+        return "deploy_custom", "high", "rule:deploy_custom"
+    if _REAL.search(t) and (_EXAMPLE.search(t) or re.search(r"\b(run|train|launch|deploy|start|try)\b", t)) \
+            and not _get_path(slots, "model.parameters_b") and not (_get_path(slots, "model.name") and not mnist):
+        return "real_run", "high", "rule:real_run"
+    if _DEPLOY_EXAMPLE.search(t):
+        return "real_run", "medium", "rule:deploy_example"
+    if _STATUS.search(t):
+        return "jobs", "high", "rule:jobs_status"
+    if _DEMO.search(t):
+        if re.search(r"\b(which|what|best|recommend\w*) (gpu|hardware|card)\b", low) and \
+                not re.search(r"\b(demo|simulat\w*|sandbox|try)\b", t):
+            return None      # "which GPU for MNIST?" stays a sizing question
+        return "demo", "high", "rule:demo"
+    if re.fullmatch(r"(my |show |list )?(jobs?|runs?)( please)?|status", t):
+        return "jobs", "medium", "rule:jobs_bare"
+    return None
+
+
+def _get_path(d: dict, path: str):
+    for k in path.split("."):
+        if not isinstance(d, dict):
+            return None
+        d = d.get(k)
+    return d
+
+
 def parse(message: str) -> Parsed:
     low = " ".join((message or "").lower().split())
     slots, sig = extract_slots(message or "")
     gpus = find_gpus(message or "")
     workloadish = bool(slots.get("workload_type") or slots.get("model") or slots.get("training"))
 
+    jid = find_job_id(message or "")
+    pron = bool(_PRONOUN.search(_jobtext(message or "")))
+
     def out(intent, conf, *why):
-        return Parsed(intent, slots, gpus, conf, sig + list(why))
+        return Parsed(intent, slots, gpus, conf, sig + list(why), job_id=jid, pronoun=pron)
+
+    job = _job_intent(message or "", low, slots, gpus)
+    if job:
+        return out(*job)
 
     if _CHANGE.search(low):
         return out("price_change", "high" if gpus else "medium", "rule:price_change")

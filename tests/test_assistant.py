@@ -11,6 +11,7 @@ Run:  .venv/bin/python tests/test_assistant.py
 """
 
 import base64
+import copy
 import json
 import os
 import sys
@@ -222,8 +223,14 @@ class FakeProvider(llm.ModelProvider):
         return llm.Completion(self.phrase(draft) if callable(self.phrase) else (self.phrase or draft), [], self.model)
 
 
+UNGROUNDED: list = []
+
+
 def ask(msg, ctx=None, who=PUBLIC, provider=None):
-    return engine.respond(msg, ctx, who, provider=provider)
+    r = engine.respond(msg, ctx, who, provider=provider)
+    if not r["grounded"]:
+        UNGROUNDED.append((msg, r["intent"], r["reply"][:200]))
+    return r
 
 
 def count(table):
@@ -679,6 +686,30 @@ def test_no_mutation_tools_exist():
                 assert node.func.attr not in risky_calls, (mod.__name__, node.func.attr)
     # the routing import in tools is the read-only ranking only
     assert "from routing import scoring" in inspect.getsource(tools)
+    # jobtools reads jobs: it may import the job models / states / orchestrator, and of the orchestrator it may
+    # touch ONLY the read functions with GET /v1/jobs ownership (list_for, _load, _dep): never cancel / submit /
+    # preview / get (get(sync_first=True) runs sync_job, which can transition a job), never sync, never a write
+    from assistant import jobtools
+    src = inspect.getsource(jobtools)
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            names = [a.name for a in node.names] if isinstance(node, ast.Import) else \
+                [f"{node.module}.{a.name}" for a in node.names]
+            for n in names:
+                assert n in ("jobs.models", "jobs.orchestrator", "jobs.states", "__future__.annotations", "re",
+                             "sqlalchemy.func", "sqlalchemy.select", "normalize", "store.jobs.JobMetric",
+                             "store.routing.Deployment"), n
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            assert node.func.attr not in risky_calls | {"cancel", "submit", "sync_job", "run_simulated", "transition",
+                                                        "note", "add", "delete", "update", "get"} \
+                or (node.func.attr == "get" and not (isinstance(node.func.value, ast.Name)
+                                                      and node.func.value.id in ("O", "s"))), node.func.attr
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "O":
+            assert node.attr in ("list_for", "_load", "_dep", "JobRefused"), node.attr
+    assert "SessionLocal.begin" not in src and "with_for_update" not in src
+    # the engine reaches jobs only through jobtools, and never imports a job module itself
+    assert "jobtools." in inspect.getsource(engine) and "import jobs" not in inspect.getsource(engine)
     assert [t["name"] for t in (llm.ROUTE_TOOL, llm.LOOKUP_TOOL)] == ["route_question", "opengrid_lookup"]
 
 
@@ -779,6 +810,384 @@ def test_operator_principal_passed_to_recommend():
     CALLS.clear()
     ask("fine-tune Llama 3 8B with LoRA", who=OPERATOR)
     assert CALLS[-1]["who"] == "operator" and CALLS[-1]["limit"] == tools.TOP
+
+
+# ------------------------------------------------------------------ job intents (My Jobs): read + ACTION cards only
+
+JOB_TABLE = [
+    # demo
+    ("try a demo", "demo"), ("train mnist", "demo"), ("run a test job", "demo"), ("show me how it works", "demo"),
+    ("simulate a training run", "demo"), ("trian mnsit", "demo"), ("try a dmeo", "demo"),
+    ("simualte a trainig run pls", "demo"), ("Can I see a demo?", "demo"), ("Try a free training demo", "demo"),
+    # real_run
+    ("train mnist on a real gpu", "real_run"), ("run it for real", "real_run"), ("deploy the mnist example", "real_run"),
+    ("can i run it on a real gpu?", "real_run"), ("train MNIST for reall", "real_run"),
+    ("i want to run the mnist example on an actual gpu", "real_run"),
+    # deploy_custom
+    ("deploy my model", "deploy_custom"), ("run my training script", "deploy_custom"),
+    ("host my llama model", "deploy_custom"), ("run my docker container", "deploy_custom"),
+    ("deplpoy my modle", "deploy_custom"), ("can I run my own code?", "deploy_custom"), ("run train.py", "deploy_custom"),
+    # jobs
+    ("how are my jobs", "jobs"), ("status of my job", "jobs"), ("what's running?", "jobs"), ("whats running", "jobs"),
+    ("job-ab12cd34 status", "jobs"), ("stauts of my jbo", "jobs"), ("how is my training going", "jobs"),
+    ("is it done?", "jobs"), ("show my jobs", "jobs"), ("How are my jobs doing?", "jobs"), ("JOB-AB12CD34", "jobs"),
+    # cancel
+    ("cancel my job", "cancel"), ("stop job-ab12cd34", "cancel"), ("kill it", "cancel"), ("canel it", "cancel"),
+    ("cancle the training", "cancel"), ("please cancel", "cancel"), ("abort the run", "cancel"),
+    # market intents are not stolen
+    ("cheapest h100", "cheapest"), ("Cheapest available H100", "cheapest"), ("can I run llama 70b", "recommend"),
+    ("can I run llama 70b within $50", "can_run"), ("what gpu for mnist", "recommend"),
+    ("train a 7b model", "recommend"), ("Compare H100 and H200", "compare"), ("Specs of the L40S", "specs"),
+    ("Why did H200 prices change?", "price_change"), ("H100?", "cheapest"), ("hello", "unknown"),
+    ("run a 13b model in production", "recommend"), ("which gpu to host a 7b model", "recommend"),
+    ("what is the opengrid terminal", "unknown"), ("what is the process for training a 7b model", "recommend"),
+    ("as a customer, what are H100 prices", "cheapest"), ("stop loss on H100 prices?", "cheapest"),
+]
+
+
+def test_job_intent_table():
+    bad = [(m, intents.parse(m).intent, want) for m, want in JOB_TABLE if intents.parse(m).intent != want]
+    assert not bad, bad
+    assert intents.parse("stop job-AB12CD34").job_id == "job-ab12cd34"
+    assert intents.parse("kill it").pronoun and not intents.parse("cancel my job").pronoun
+    assert set(intents.JOB_INTENTS) <= set(intents.INTENTS) and set(intents.JOB_INTENTS) <= set(
+        llm.ROUTE_TOOL["input_schema"]["properties"]["intent"]["enum"])
+
+
+# accounts A and B, a key without deployments:read, a read-only key, an account with one active job
+A_ID, B_ID, C_ID = 9101, 9102, 9103
+
+
+def P(aid, scopes=("data:read", "deployments:read", "route:execute")):
+    from accounts.auth import Principal
+    return Principal(kind="api_key", account_id=aid, key_id=aid * 10, scopes=frozenset(scopes))
+
+
+JOBS: dict = {}
+JOB_TABLES = ("jobs", "job_events", "job_logs", "job_metrics", "job_runner_events", "job_artifacts", "job_tokens",
+              "deployments", "deployment_events", "idempotency_keys", "route_requests", "quotes", "security_events")
+
+
+def job_snapshot():
+    return {t: count(t) for t in JOB_TABLES + WRITE_TABLES}
+
+
+def _mk_jobs():
+    """Real job rows in the scratch DB (the jobs tables), owned by two different accounts."""
+    if JOBS:
+        return JOBS
+    import secrets as _s
+
+    from store.jobs import Job, JobMetric
+    from store.routing import Deployment
+
+    def jid():
+        return "job-" + _s.token_hex(6)
+
+    rows = []
+
+    def mk(key, aid, name, status, *, minutes_ago, sandbox=False, outcome=None, finished=False, failure=None,
+           dep=None, epochs=3):
+        j = Job(job_id=jid(), account_id=aid, key_id=None, principal_kind="api_key", name=name, job_type="training",
+                template="pytorch-mnist", template_version="1.0.0", config={"epochs": epochs, "batch_size": 128},
+                spec={"name": name}, status=status, outcome=outcome, sandbox=sandbox, est_max_total_usd=None if sandbox
+                else 1.85, created_at=NOW - timedelta(minutes=minutes_ago), updated_at=NOW,
+                finished_at=NOW if finished else None, failure_code=failure, deployment_id=dep)
+        rows.append(j)
+        JOBS[key] = j.job_id
+        return j
+
+    mk("a_running", A_ID, "mnist-run", "training", minutes_ago=5)
+    mk("a_pending", A_ID, "mnist-wait", "pending_approval", minutes_ago=10)
+    mk("a_done", A_ID, "mnist-done", "reconciled", minutes_ago=30, outcome="succeeded", finished=True, dep="dep-aaaa0001")
+    mk("a_oom", A_ID, "mnist-oom", "reconciled", minutes_ago=40, outcome="failed", finished=True, failure="out_of_memory")
+    mk("a_sim", A_ID, "mnist-sim", "training_completed", minutes_ago=50, sandbox=True, outcome="simulated", finished=True)
+    for i in range(8):   # older history: 13 jobs in all, so the card shows 10 and says there are more
+        mk(f"a_old{i}", A_ID, f"old-{i}", "approval_rejected", minutes_ago=100 + i, outcome="cancelled", finished=True)
+    mk("b_running", B_ID, "b-secret-run", "training", minutes_ago=1)
+    mk("b_pending", B_ID, "b-secret-wait", "pending_approval", minutes_ago=2)
+    mk("c_running", C_ID, "c-only", "provisioning", minutes_ago=3)
+    with normalize.SessionLocal.begin() as s:
+        s.add(Deployment(deployment_id="dep-aaaa0001", account_id=A_ID, route_request_id="rr-aaaa0001", gpu="NVIDIA L4 24GB",
+                         gpu_count=1, status="terminated", created_at=NOW, effective_max_runtime_minutes=30,
+                         reconciliation={"opengrid_transaction_cost": {"amount_usd": 0.42}}))
+        s.add_all(rows)
+        s.flush()
+        for jkey in ("a_running", "b_running"):
+            for e in (1, 2):
+                s.add(JobMetric(job_id=JOBS[jkey], epoch=e, name="train_loss", value=1.0 / e, at=NOW, source="runner"))
+    return JOBS
+
+
+def _types(r):
+    return [c["type"] for c in r["cards"]]
+
+
+def _card(r, typ):
+    return next((c["data"] for c in r["cards"] if c["type"] == typ), None)
+
+
+def test_demo_and_real_run_cards():
+    from workloads import templates
+    t = templates.get_template("pytorch-mnist")
+    for msg in ("try a demo", "train mnist", "simulate a training run"):
+        r = ask(msg, who=P(A_ID))
+        assert r["intent"] == "demo" and r["grounded"], r
+        assert _card(r, "action") == {"action": "start_demo", "label": "Start free simulation",
+                                      "epochs": t["preset"]["config"]["epochs"],
+                                      "note": "Simulated: no GPU, no provider, no spend", "confirm": None}
+        assert "no GPU" in r["reply"] and "no spend" in r["reply"] and "about a minute" in r["reply"]
+        assert "/keys" not in json.dumps(r["cards"]), "signed in with route:execute: no sign-in link"
+    r = ask("try a demo")   # anonymous: the button is still offered, with an honest sign-in note
+    assert _card(r, "action")["action"] == "start_demo" and "signed in" in r["reply"] and r["grounded"]
+    r = ask("train mnist on a real gpu", who=P(A_ID))
+    assert r["intent"] == "real_run" and r["grounded"], r
+    links = [c["data"] for c in r["cards"] if c["type"] == "link"]
+    assert {"label": "Check price and run on a real GPU", "href": "/jobs/new?preset=mnist&real=1"} in links
+    assert _card(r, "action")["action"] == "start_demo", "the free alternative"
+    lb = t["limits_bounds"]
+    assert f"at most {lb['max_runtime_minutes']['max']} minutes" in r["reply"]
+    assert f"${lb['max_total_cost_usd']['max']:,.2f}" in r["reply"] and "approv" in r["reply"]
+    tc = _card(r, "template")
+    assert tc["limits_max"]["max_runtime_minutes"] == lb["max_runtime_minutes"]["max"]
+    assert tc["preset_limits"] == t["preset"]["limits"] and tc["approval_required"] is True
+    # the limits are READ from the template, never hardcoded: change the template, the answer follows
+    tpl = templates.TEMPLATES["pytorch-mnist"]
+    saved = copy.deepcopy(tpl["limits_bounds"]), copy.deepcopy(tpl["preset"]["limits"])
+    try:
+        tpl["limits_bounds"]["max_runtime_minutes"]["max"] = 47
+        tpl["limits_bounds"]["max_total_cost_usd"]["max"] = 77
+        tpl["preset"]["limits"]["max_total_cost_usd"] = 1.5
+        r = ask("run it for real", who=P(A_ID))
+        assert "at most 47 minutes" in r["reply"] and "$77.00" in r["reply"] and "$1.50 total" in r["reply"], r["reply"]
+        assert r["grounded"]
+    finally:
+        tpl["limits_bounds"], tpl["preset"]["limits"] = saved
+
+
+def test_deploy_custom_is_honest_and_hands_off():
+    CALLS.clear()
+    r = ask("run my docker container", who=P(A_ID))
+    assert r["intent"] == "deploy_custom" and r["reply"].startswith("OpenGrid cannot run your own code")
+    assert "questions" in _types(r) and "recommendation" not in _types(r) and not CALLS, "asks the blocking questions"
+    assert any(c["type"] == "link" and c["data"]["href"] == "/find" for c in r["cards"]) and r["grounded"]
+    assert r["context"]["pending"] == "recommend"
+    r2 = ask("inference of a 7B model", r["context"], who=P(A_ID))
+    assert r2["intent"] == "recommend" and _types(r2)[0] == "recommendation", "the follow-up continues the workload"
+    r = ask("host my llama 3 8b model for inference", who=P(A_ID))
+    assert r["intent"] == "deploy_custom" and _types(r)[0] == "recommendation" and CALLS, r
+    assert "cannot run your own code" in r["reply"] and r["grounded"]
+    assert any(c["type"] == "link" and c["data"]["href"] == "/find" for c in r["cards"])
+    assert not any(c["type"] == "action" for c in r["cards"])
+
+
+def test_jobs_need_sign_in_and_scope():
+    J = _mk_jobs()
+    no_read = P(A_ID, scopes=("data:read", "route:execute"))
+    for who in (PUBLIC, no_read):
+        for msg in ("how are my jobs", "what's running?", f"{J['a_running']} status", "cancel my job",
+                    f"stop {J['a_running']}", "kill it"):
+            r = ask(msg, {"job_id": J["a_running"]}, who=who)
+            assert r["intent"] in ("jobs", "cancel"), (msg, r["intent"])
+            assert "signed in" in r["reply"] and "deployments:read" in r["reply"] and r["grounded"], r["reply"]
+            assert _types(r) == ["link"] and r["cards"][0]["data"]["href"] == "/keys"
+            blob = json.dumps(r["cards"])
+            assert not any(v in blob for v in J.values()), "no job data at all"
+
+
+def test_jobs_ownership_and_status_text():
+    J = _mk_jobs()
+    a_ids = {v for k, v in J.items() if k.startswith("a_")}
+    b_ids = {J["b_running"], J["b_pending"]}
+    r = ask("how are my jobs", who=P(A_ID))
+    assert r["intent"] == "jobs" and r["grounded"], r
+    card = _card(r, "jobs")
+    ids = [it["job_id"] for it in card["items"]]
+    assert card["returned"] == 10 and len(ids) == 10 and card["more"] is True
+    assert set(ids) <= a_ids and not (set(ids) & b_ids), "only the caller's jobs"
+    blob = json.dumps(r)
+    assert not any(b in blob for b in b_ids) and "b-secret" not in blob
+    assert ids[:5] == [J["a_running"], J["a_pending"], J["a_done"], J["a_oom"], J["a_sim"]], "newest first"
+    by = {it["job_id"]: it for it in card["items"]}
+    run = by[J["a_running"]]
+    assert set(run) == {"job_id", "name", "template", "status", "status_text", "sandbox", "outcome", "progress", "cost",
+                        "created_at", "href", "cancellable"}
+    assert run["status_text"] == "Running, epoch 2 of 3" and run["progress"] == {"epoch": 2, "epochs": 3}
+    assert run["cancellable"] and run["href"] == f"/jobs/{J['a_running']}" and run["cost"]["est_max_usd"] == 1.85
+    assert by[J["a_pending"]]["status_text"] == "Waiting for OpenGrid approval" and by[J["a_pending"]]["cancellable"]
+    done = by[J["a_done"]]
+    assert done["status_text"] == "Finished" and not done["cancellable"] and done["cost"]["actual_usd"] == 0.42
+    assert by[J["a_oom"]]["status_text"] == "Failed: out of memory" and not by[J["a_oom"]]["cancellable"]
+    sim = by[J["a_sim"]]
+    assert sim["sandbox"] and sim["status_text"].startswith("Simulated") and not sim["cancellable"]
+    assert sim["cost"] is None, "a simulation has no cost (never invented)"
+    assert "Running, epoch 2 of 3" in r["reply"] and "Waiting for OpenGrid approval" in r["reply"]
+    # one job by id: the caller's own
+    r = ask(f"status of {J['a_done']}", who=P(A_ID))
+    assert _card(r, "job")["job_id"] == J["a_done"] and r["context"]["job_id"] == J["a_done"] and r["grounded"]
+    assert "Finished" in r["reply"] and "$0.42" in r["reply"]
+    # another account's job and a job that does not exist look exactly the same
+    other = ask(f"{J['b_running']} status", who=P(A_ID))
+    missing = ask("job-0123456789ab status", who=P(A_ID))
+    for x in (other, missing):
+        assert x["reply"].startswith("I can't find that job") and _types(x) == ["link"], x
+        assert "job_id" not in x["context"]
+    assert other["reply"] == missing["reply"] and J["b_running"] not in json.dumps(other["cards"])
+    # B sees only B's
+    r = ask("show my jobs", who=P(B_ID))
+    assert {it["job_id"] for it in _card(r, "jobs")["items"]} == b_ids
+    # the operator (site login) follows GET /v1/jobs: every job
+    r = ask(f"{J['b_running']} status", who=OPERATOR)
+    assert _card(r, "job")["job_id"] == J["b_running"]
+    # "is it done?" uses the previous turn's job
+    r = ask("is it done?", {"job_id": J["a_running"]}, who=P(A_ID))
+    assert _card(r, "job")["job_id"] == J["a_running"] and "Running" in r["reply"]
+    # a new account with no jobs: honest empty state + the free demo
+    r = ask("how are my jobs", who=P(9199))
+    assert _card(r, "jobs") == {"items": [], "returned": 0, "more": False} and "no jobs yet" in r["reply"]
+    assert _card(r, "action")["action"] == "start_demo"
+
+
+def test_cancel_offers_an_action_never_cancels():
+    J = _mk_jobs()
+    before = job_snapshot()
+    # a named, own, cancellable job (pre-launch): one cancel_job action with a confirm text
+    r = ask(f"cancel {J['a_pending']}", who=P(A_ID))
+    assert r["intent"] == "cancel" and r["grounded"] and r["engine"] == "deterministic", r
+    act = _card(r, "action")
+    assert set(act) == {"action", "job_id", "label", "confirm", "note"}
+    assert act["action"] == "cancel_job" and act["job_id"] == J["a_pending"] and act["label"] == f"Cancel {J['a_pending']}"
+    assert act["confirm"].startswith(f"Cancel mnist-wait ({J['a_pending']})?") and "approval request is rejected" in \
+        act["confirm"]
+    assert "until you confirm" in r["reply"] and r["context"]["job_id"] == J["a_pending"]
+    # after launch: the GPU is terminated
+    r = ask(f"stop {J['a_running']}", who=P(A_ID))
+    assert "terminates the GPU" in _card(r, "action")["confirm"] and r["grounded"]
+    # several active jobs and no id: list them and ask which (no action card)
+    r = ask("cancel my job", who=P(A_ID))
+    assert "action" not in _types(r) and {it["job_id"] for it in _card(r, "jobs")["items"]} == {J["a_running"],
+                                                                                              J["a_pending"]}
+    assert r["context"]["pending"] == "cancel" and "Which one" in r["reply"]
+    opts = _card(r, "questions")[0]["options"]
+    assert {o["message"] for o in opts} == {f"cancel {J['a_running']}", f"cancel {J['a_pending']}"}
+    r2 = ask(J["a_running"], r["context"], who=P(A_ID))   # the bare id answers "which one?"
+    assert r2["intent"] == "cancel" and _card(r2, "action")["job_id"] == J["a_running"]
+    # exactly one active job: that one
+    r = ask("cancel my job", who=P(C_ID))
+    assert _card(r, "action")["job_id"] == J["c_running"]
+    # "cancel it" / "kill it" use context.job_id from the previous turn
+    r1 = ask(f"how is {J['a_running']} doing", who=P(A_ID))
+    assert r1["context"]["job_id"] == J["a_running"]
+    r2 = ask("kill it", r1["context"], who=P(A_ID))
+    assert _card(r2, "action")["job_id"] == J["a_running"], r2
+    # terminal / simulated jobs: no action
+    for key in ("a_done", "a_oom", "a_sim", "a_old0"):
+        r = ask(f"cancel {J[key]}", who=P(A_ID))
+        assert "action" not in _types(r) and "cannot be cancelled" in r["reply"] and r["grounded"], (key, r["reply"])
+    r = ask("cancel it", {"job_id": J["a_done"]}, who=P(A_ID))
+    assert "action" not in _types(r)
+    # someone else's job: not found, no action, no leak
+    for msg, ctx in ((f"cancel {J['b_running']}", None), ("cancel it", {"job_id": J["b_running"]})):
+        r = ask(msg, ctx, who=P(A_ID))
+        assert r["reply"].startswith("I can't find that job") and "action" not in _types(r), r
+        assert "b-secret" not in json.dumps(r)
+    # can see but not act (no route:execute): no action card, an honest note
+    r = ask(f"cancel {J['a_pending']}", who=P(A_ID, scopes=("data:read", "deployments:read")))
+    assert "action" not in _types(r) and "route:execute" in r["reply"]
+    # an LLM never re-phrases a cancel
+    fake = FakeProvider(phrase=lambda d: "Done, your job has been cancelled.")
+    r = ask(f"cancel {J['a_pending']}", who=P(A_ID), provider=fake)
+    assert r["engine"] == "deterministic" and not [c for c in fake.calls if c["tool_choice"] == "none"]
+    assert job_snapshot() == before, "the assistant wrote nothing"
+    with normalize.SessionLocal() as s:
+        from store.jobs import Job
+        assert all(s.get(Job, v).cancel_requested_at is None for v in J.values()), "nothing was cancelled"
+
+
+def test_llm_cannot_claim_a_job_ran():
+    J = _mk_jobs()
+    for msg, lie in (("try a demo", "Your simulation has been started and is now running."),
+                     ("how are my jobs", "All done: your jobs were cancelled."),
+                     ("train mnist on a real gpu", "I started the MNIST run on an H100 for you.")):
+        fake = FakeProvider(phrase=lambda d, lie=lie: lie)
+        r = ask(msg, who=P(A_ID), provider=fake)
+        assert r["engine"] == "deterministic" and r["llm"].get("rejected"), (msg, r["llm"])
+    fake = FakeProvider(phrase=lambda d: "Here you go: " + d)
+    r = ask("try a demo", who=P(A_ID), provider=fake)
+    assert r["engine"] == "llm:fake-model", "honest phrasing is still allowed"
+    sent = json.dumps(fake.calls[-1]["messages"])
+    assert "start_demo" in sent and "nothing" in fake.calls[-1]["system"].lower()
+    # the classify path can route to a job intent; the job id still only comes from the message
+    fake = FakeProvider(route={"intent": "jobs"})
+    msg = "hmm what about the thing i kicked off earlier"
+    assert intents.parse(msg).confidence == "low"
+    r = ask(msg, who=P(A_ID), provider=fake)
+    assert r["intent"] == "jobs" and _card(r, "jobs") is not None and J["b_running"] not in json.dumps(r)
+
+
+def test_context_job_id_is_validated():
+    J = _mk_jobs()
+    for bad in ("job-XYZ", "../etc", 12, {"x": 1}, "job-12345678\n", J["a_running"] + "; drop table jobs"):
+        c = engine.sanitize_context({"job_id": bad})
+        assert c["job_id"] is None, bad
+    assert engine.sanitize_context({"job_id": J["a_running"]})["job_id"] == J["a_running"]
+    r = ask("kill it", {"job_id": "job-XYZ"}, who=P(A_ID))   # dropped -> falls back to "which active job?"
+    assert r["intent"] == "cancel" and "action" not in _types(r)
+    for bad_ctx in ({"evil": 1}, {"pending": "launch"}):
+        try:
+            engine.sanitize_context(bad_ctx)
+            raise AssertionError(bad_ctx)
+        except engine.ContextError:
+            pass
+    # a market turn keeps the job in the echo, so "cancel it" still works afterwards
+    r = ask("cheapest L40S", {"job_id": J["a_running"]}, who=P(A_ID))
+    assert r["context"]["job_id"] == J["a_running"]
+    assert "job_id" not in ask("cheapest L40S")["context"]
+
+
+def test_job_api_over_http_writes_nothing():
+    J = _mk_jobs()
+    from accounts import accounts as acc
+    from accounts import keys
+    from store.accounts import Account
+    with normalize.SessionLocal.begin() as s:
+        for aid in (A_ID, B_ID):
+            if s.get(Account, aid) is None:
+                s.add(Account(id=aid, name=f"acct{aid}", status="active", plan="free", settings={}, is_operator=False))
+    keys.reset_cache()
+    acc.reset_cache()
+    ka = keys.create_key(A_ID, "assistant-a", ["data:read", "deployments:read", "route:execute"],
+                         rate_limit_per_minute=1000)
+    saved = settings.app_password, settings.public_pages
+    try:
+        c = _client(public=True)
+        h = {"Authorization": f"Bearer {ka['secret']}"}
+        before = job_snapshot()
+        r = c.post("/v1/assistant", json={"message": "how are my jobs"}, headers=h)
+        assert r.status_code == 200, r.text
+        d = r.json()["data"]
+        assert d["intent"] == "jobs" and J["a_running"] in json.dumps(d["cards"]) and J["b_running"] not in r.text
+        r = c.post("/v1/assistant", json={"message": f"cancel {J['a_running']}", "context": d["context"]}, headers=h)
+        d = r.json()["data"]
+        assert _card(d, "action")["action"] == "cancel_job" and d["context"]["job_id"] == J["a_running"]
+        r = c.post("/v1/assistant", json={"message": "cancel it", "context": d["context"]}, headers=h)
+        assert _card(r.json()["data"], "action")["job_id"] == J["a_running"]
+        r = c.post("/v1/assistant", json={"message": "try a demo"}, headers=h)
+        assert _card(r.json()["data"], "action")["action"] == "start_demo"
+        # anonymous over HTTP: the sign-in answer
+        r = c.post("/v1/assistant", json={"message": "how are my jobs"})
+        assert r.status_code == 200 and "signed in" in r.json()["data"]["reply"] and J["a_running"] not in r.text
+        r = c.post("/v1/assistant", json={"message": "hi", "context": {"job_id": "not-a-job"}})
+        assert r.status_code == 200, "an invalid job_id hint is dropped, not an error"
+        assert job_snapshot() == before, "POST /v1/assistant created no rows"
+    finally:
+        settings.app_password, settings.public_pages = saved
+        ratelimit.reset()
+        keys.reset_cache()
+
+
+def test_zz_every_deterministic_reply_was_grounded():
+    assert not UNGROUNDED, UNGROUNDED
 
 
 def main_():
