@@ -755,7 +755,7 @@
 
       const card = r => {
         const sm = summary(r), sb = isSandbox(r);
-        const cost = sb ? "free (simulated)" : sm.actual != null ? usd(sm.actual) : sm.est_max != null ? "up to " + usd(sm.est_max) : null;
+        const cost = sb ? "free" : sm.actual != null ? usd(sm.actual) : sm.est_max != null ? "up to " + usd(sm.est_max) : null;
         const where = sb ? "Simulation, no GPU" : [sm.gpu ? OG.shortGpu(sm.gpu) : null, sm.provider ? OG.providerName(sm.provider) : null].filter(Boolean).join(" on ") || "GPU not chosen yet";
         return h("a", { class: "jb-card", href: "/jobs/" + encodeURIComponent(r.job_id) },
           h("span", { class: "jb-card-n" }, h("b", {}, r.name || "unnamed job"), h("span", { class: "dim" }, fmt.age(r.created_at) + " ago")),
