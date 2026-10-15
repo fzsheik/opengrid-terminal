@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import stat
 import sys
 import tempfile
@@ -316,22 +317,61 @@ def test_demo_train_is_sandbox_only():
 
 # ---------------------------------------------------------------- mcp config, doctor
 
+from opengrid_cli import hosts  # noqa: E402
+
+
 def test_mcp_config_snippets():
-    for host, needle in (("claude", "${OPENGRID_API_KEY:-}"), ("cursor", "${env:OPENGRID_API_KEY}"),
-                         ("codex", 'env_vars = ["OPENGRID_API_KEY"]'), ("vscode", "${input:opengrid-api-key}")):
+    for host, needles in (
+            ("claude", ("${OPENGRID_API_KEY:-}", "Bearer ${OPENGRID_API_KEY}", "--header 'Authorization: Bearer")),
+            ("cursor", ("${env:OPENGRID_API_KEY}", "Bearer ${env:OPENGRID_API_KEY}")),
+            ("codex", ('env_vars = ["OPENGRID_API_KEY"]', 'bearer_token_env_var = "OPENGRID_API_KEY"',
+                       "--bearer-token-env-var OPENGRID_API_KEY")),
+            ("vscode", ("${input:opengrid-api-key}", "Bearer ${input:opengrid-api-key}"))):
         code, out, err = run_cli(["mcp", "config", host], MockAPI(), key=SECRET)
-        assert code == 0 and needle in out and SECRET not in out, host
+        assert code == 0 and SECRET not in out + err, host
+        for n in needles:
+            assert n in out, (host, n)
+        assert "uvx --from" in out or '"uvx"' in out, host
         code, out, _ = run_cli(["mcp", "config", host, "--json"], MockAPI(), key=SECRET)
         d = js(out)["data"]
         assert d["config"] and SECRET not in out
-        if d["format"] == "json":
-            json.loads(d["config"])
-    code, out, _ = run_cli(["mcp", "config", "vscode", "--json"], MockAPI())
+        assert [o["mode"] for o in d["options"]] == ["hosted", "uvx", "installed"], host
+        assert d["mode"] == "hosted" and d["url"] == BASE  # OPENGRID_URL
+        for o in d["options"]:
+            if o["format"] == "json":
+                json.loads(o["config"])
+            assert not re.search(r"opg_live_[A-Za-z0-9]", o["config"] + (o["cli"] or ""))  # never a literal key
+        assert f"{BASE}/mcp" in d["options"][0]["config"], d["options"][0]
+    saved = os.environ.pop("OPENGRID_URL")
+    try:  # without --url / OPENGRID_URL the snippets point at production, not a local dev server
+        code, out, _ = run_cli(["mcp", "config", "codex", "--json"], MockAPI())
+        assert 'url = "https://opengrid-terminal-production.up.railway.app/mcp"' in js(out)["data"]["config"]
+    finally:
+        os.environ["OPENGRID_URL"] = saved
+    code, out, _ = run_cli(["mcp", "config", "vscode", "--json", "--mode", "installed"], MockAPI())
+    d = js(out)["data"]
+    cfg = json.loads(d["config"])
+    assert len(d["options"]) == 1 and cfg["inputs"][0]["password"] is True and cfg["servers"]["opengrid"]["type"] == "stdio"
+    code, out, _ = run_cli(["mcp", "config", "vscode", "--json", "--mode", "hosted"], MockAPI())
     cfg = json.loads(js(out)["data"]["config"])
-    assert cfg["inputs"][0]["password"] is True and cfg["servers"]["opengrid"]["type"] == "stdio"
-    code, out, _ = run_cli(["mcp", "config", "claude", "--from-repo", "--json"], MockAPI())
+    assert cfg["servers"]["opengrid"]["type"] == "http" and cfg["inputs"][0]["password"] is True
+    code, out, _ = run_cli(["mcp", "config", "claude", "--json", "--mode", "uvx", "--url", "http://localhost:8000"],
+                           MockAPI())
     cfg = json.loads(js(out)["data"]["config"])["mcpServers"]["opengrid"]
-    assert cfg["command"] == "uv" and cfg["args"][-2:] == ["opengrid", "mcp"]
+    assert cfg["command"] == "uvx" and cfg["args"] == ["--from", hosts.GIT_SPEC, "opengrid", "mcp"]
+    assert hosts.GIT_SPEC.endswith("github.com/fzsheik/opengrid-terminal#subdirectory=cli")
+    assert cfg["env"]["OPENGRID_URL"] == "http://localhost:8000"
+    code, out, _ = run_cli(["mcp", "config", "claude", "--from-repo", "--json"], MockAPI())
+    d = js(out)["data"]
+    cfg = json.loads(d["config"])["mcpServers"]["opengrid"]
+    assert d["mode"] == "installed" and cfg["command"] == "uv" and cfg["args"][-2:] == ["opengrid", "mcp"]
+    code, out, err = run_cli(["mcp", "config", "claude", "--mode", "nope"], MockAPI())
+    assert code == 2
+
+
+def test_version_flag():
+    code, out, err = run_cli(["--version"], MockAPI())
+    assert code == 0 and out.startswith("opengrid "), (code, out, err)
 
 
 def test_doctor():
@@ -340,7 +380,7 @@ def test_doctor():
     checks = {c["check"]: c for c in d["checks"]}
     assert checks["health"]["ok"] and checks["auth"]["scopes"] and checks["mcp"]["ok"], checks
     assert checks["capabilities"]["capabilities"]["route:preview"] is True
-    assert len(checks["mcp"]["tools"]) == 11
+    assert len(checks["mcp"]["tools"]) == 13
     code, out, err = run_cli(["doctor"], MockAPI())
     assert "anonymous" in out
     code, out, err = run_cli(["doctor"], MockAPI(), key=BAD_KEY)

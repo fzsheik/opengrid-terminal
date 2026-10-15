@@ -751,19 +751,24 @@ def cmd_demo(args) -> int:
 
 def cmd_mcp(args) -> int:
     if getattr(args, "mcp_cmd", None) == "config":
-        url = resolve_url(args.url)
+        # snippets are for end users: without --url / OPENGRID_URL they point at production, not local dev
+        url = (args.url or os.environ.get(ENV_URL) or PRODUCTION_URL).rstrip("/")
         try:
-            s = hosts.snippet(args.host, url=url, from_repo=args.from_repo)
+            s = hosts.snippet(args.host, url=url, from_repo=args.from_repo, mode=args.mode)
         except ValueError as e:
             raise RefusedError(str(e), code="mcp_config") from None
 
         def human(s):
-            print(f"# {s['host']}: {s['file']}")
-            print(s["config"])
-            if s["cli"]:
-                print(f"\n# or from the command line:\n{s['cli']}")
-            print()
-            bullet(s["notes"], "# ")
+            print(f"# OpenGrid MCP for {s['host']} ({s['url']}): {len(s['options'])} way"
+                  f"{'s' if len(s['options']) > 1 else ''} to connect, pick one")
+            for i, o in enumerate(s["options"], 1):
+                print(f"\n# ---- {i}. {o['title']}")
+                print(f"# {o['file']}:")
+                print(o["config"])
+                if o["cli"]:
+                    print(f"\n# or from the command line:\n{o['cli']}")
+                print()
+                bullet(o["notes"], "# ")
         Out(args).emit(s, human)
         return EXIT_OK
     from . import mcp_server
@@ -821,6 +826,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog="exit codes: 0 ok, 1 API error / failed check, 2 usage, 3 auth (key missing/invalid/scope), "
                "4 not found, 5 unreachable, 6 refused by a safety rule, 130 interrupted",
         formatter_class=argparse.RawDescriptionHelpFormatter)
+    top.add_argument("--version", "-V", action="version", version=f"opengrid {version()}")
     common = _common()
     sub = top.add_subparsers(dest="cmd", metavar="COMMAND")
 
@@ -926,6 +932,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = add("config", "print the MCP config snippet for a host (never contains a key)", cmd_mcp, msub)
     s.add_argument("host", choices=list(hosts.HOSTS))
     s.add_argument("--from-repo", action="store_true", help="launch via `uv run --project <this checkout>/cli`")
+    s.add_argument("--mode", choices=list(hosts.MODES), help="only one option: hosted (URL + key, nothing to "
+                   "install), uvx (zero-install local server) or installed (`opengrid mcp` on PATH)")
     return top
 
 

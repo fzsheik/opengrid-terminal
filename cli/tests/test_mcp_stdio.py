@@ -85,7 +85,7 @@ def check(result) -> None:
     version, info, tl, r, bad, unauth = result
     assert info is not None and info.name == "opengrid", info
     names = {t.name for t in tl}
-    assert len(names) == 11 and "opengrid_search_gpus" in names and "opengrid_cancel_job" in names, names
+    assert len(names) == 13 and "opengrid_search_gpus" in names and "opengrid_cancel_job" in names, names
     assert all(t.output_schema for t in tl)
     assert not r.is_error, r
     sc = r.structured_content

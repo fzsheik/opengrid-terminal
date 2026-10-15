@@ -40,6 +40,10 @@ _EXECUTE_PREFIXES = ("/v1/route", "/v1/deployments", "/v1/jobs", "/v1/admin/exec
 def request_class(method: str, path: str) -> str:
     if method.upper() in ("GET", "HEAD", "OPTIONS"):
         return "read"
+    # The hosted MCP envelope (api/mcp_remote.py) does nothing by itself: every tool reaches the API through
+    # its own /v1 requests, which are classified (and counted) here as usual. Listing tools is not a write.
+    if path == "/mcp":
+        return "read"
     # Stopping or terminating only ever reduces spend: never throttle an emergency shutdown as
     # tightly as a launch. They stay rate-limited (write class), and idempotency makes repeats free.
     if (path.startswith(("/v1/deployments/", "/v1/jobs/"))
