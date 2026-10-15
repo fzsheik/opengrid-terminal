@@ -170,3 +170,58 @@ for a recommendation).
 ```
 The deterministic engine (no LLM) must handle the core intents; an LLM, when configured, only phrases and
 routes; every number in a reply comes from a tool result in `cards`.
+
+### 5.1 Job intents (the My Jobs box)
+
+`intent` is one of `cheapest | recommend | can_run | compare | price_change | specs | demo | real_run |
+deploy_custom | jobs | cancel | unknown`.
+
+**`/v1/assistant` is side-effect free.** It never creates, approves, cancels or launches anything and writes no
+row. For anything that would change state it returns an ACTION card; the browser performs the action only when
+the user clicks and confirms, by calling the existing API (`POST /v1/jobs` with the MNIST preset and
+`"sandbox": true` for `start_demo`; `POST /v1/jobs/{job_id}/cancel` with an Idempotency-Key for `cancel_job`).
+The reply never says or implies that something ran, started or was cancelled when it did not (the grounding
+check rejects such claims), and never invents a price, runtime or job state.
+
+| intent | what it answers | cards |
+|---|---|---|
+| `demo` | "try a demo", "train mnist", "simulate a training run": a free simulation of the PyTorch MNIST example (no GPU, no provider, no spend, about a minute) | `action` start_demo, `link` /jobs/new?preset=mnist&sandbox=1 (+ `link` /keys when the caller cannot start jobs) |
+| `real_run` | "train mnist on a real gpu", "run it for real": the MNIST template is the only workload OpenGrid runs for real; its caps come from `workloads/templates.py`; nothing launches before OpenGrid approval | `template`, `link` {"label": "Check price and run on a real GPU", "href": "/jobs/new?preset=mnist&real=1"}, `action` start_demo |
+| `deploy_custom` | "deploy my model", "run my docker container": OpenGrid cannot run custom code yet; with enough workload detail the recommend flow answers, otherwise its clarifying questions | `recommendation` or `questions` (§3), always a `link` to `/find` |
+| `jobs` | "how are my jobs", "what's running", "job-ab12cd34 status" | `jobs` (newest first, max 10) or `job` (a named id, or "it" = `context.job_id`) |
+| `cancel` | "cancel my job", "stop job-ab12cd34", "kill it" | one `action` cancel_job + `job` when exactly one cancellable job matches; `jobs` + `questions` when several are active |
+
+`jobs` / `cancel` need a signed-in principal with `deployments:read` (or the operator). Anonymous or without the
+scope: a plain "sign in / use a key with deployments:read" reply with a `link` to `/keys`, and no job data. Jobs are
+read with the same ownership rule as `GET /v1/jobs` (a key sees its own account's jobs, the operator all; no sync on
+read). A job id that is not the caller's and one that does not exist get the same answer: "I can't find that job".
+A `cancel_job` action is offered only for the caller's own cancellable job (real, not finished, no cancel or
+shutdown already under way) and only with `route:execute` (or the operator).
+
+```jsonc
+{"type": "action", "data": {"action": "start_demo", "label": "Start free simulation", "epochs": 3,
+    "note": "Simulated: no GPU, no provider, no spend", "confirm": null}}
+{"type": "action", "data": {"action": "cancel_job", "job_id": "job-…", "label": "Cancel job-…",
+    "confirm": "Cancel <name> (job-…)? <what happens: before launch the approval is rejected; after launch the GPU is terminated>", "note": "..."}}
+{"type": "jobs", "data": {"items": [<job item>], "returned": n, "more": bool}}
+{"type": "job",  "data": <job item>}
+// job item
+{"job_id", "name", "template", "status", "status_text" /* plain language */, "sandbox" /* bool */,
+ "outcome", "progress": {"epoch", "epochs"} | null, "cost": {"est_max_usd", "actual_usd"} /* null when unknown */,
+ "created_at", "href": "/jobs/<id>", "cancellable" /* bool */}
+// real_run only: the template's own limits, read from workloads/templates.py (never hardcoded)
+{"type": "template", "data": {"template": "pytorch-mnist", "version", "title", "gpu_count", "vendor",
+    "on_demand_only", "epochs": {"min", "max", "default"},
+    "limits_max": {"max_runtime_minutes", "max_total_cost_usd", "max_price_per_gpu_hour_usd"},
+    "preset_limits": {...the preset's limits...}, "expected_runtime": {"kind": "estimated", "default_band_minutes", "note"},
+    "approval_required": true, "custom_code": false}}
+```
+`status_text` is derived only from the recorded state, outcome, failure code and reported epochs, e.g. "Running,
+epoch 2 of 3", "Finished", "Failed: out of memory", "Waiting for OpenGrid approval", "Simulated run finished (no
+GPU was used)". `cost.actual_usd` is the reconciled transaction cost (null until reconciled; always null for a
+simulation). `progress.epoch` is the last epoch the runner reported.
+
+The `context` echo gains an optional `"job_id"` (the last job referred to) so "cancel it" works on the next turn,
+and `pending` may be `"cancel"` (after "which job?", a bare job id answers it). `job_id` must match
+`^job-[0-9a-f]{8,32}$`; any other value is dropped (it is only a hint: each use re-reads the job through the
+caller's own ownership check). Unknown context keys are still a 422.
