@@ -56,8 +56,8 @@ important — what it deliberately does not claim.
 | Discord channels | **4** (ops, deployments, market, news) with OpenGrid-branded embeds |
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
-| Workload intelligence | GPU memory estimator, project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (11 tools), grounded assistant |
-| Automated tests | **58** Python test files + **9** JavaScript test files + **4** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team |
+| Workload intelligence | GPU memory estimator, project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (13 tools, 3 prompts; hosted at `/mcp` with an API key, or local via uvx), grounded assistant |
+| Automated tests | **59** Python test files + **9** JavaScript test files + **4** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team |
 
 ---
 
@@ -484,9 +484,22 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
 - **CLI** (`cli/`, `uv tool install ./cli`): doctor, gpu search/show/compare/market, providers, analyze,
   estimate, recommend, route preview, jobs list/status/logs/cancel, demo train (sandbox only), mcp; `--json`.
   No command can provision.
-- **MCP server** (`opengrid mcp`, stdio; optional loopback HTTP): 11 tools, read-only except a non-provisioning
-  route preview and a confirm-gated job cancel. Verified with MCP Inspector 2.10.1 (`--strict`), Claude Code
-  and Codex registration.
+- **MCP server**, one tool set (`cli/src/opengrid_cli/mcp_server.py`) in two deployments:
+  - **hosted** at `<server>/mcp` (`api/mcp_remote.py`): streamable HTTP, stateless, JSON responses; connect with
+    only the URL and `Authorization: Bearer opg_...` (never the site login, never anonymous, cross-site Origin
+    refused). Tools call `/v1` in-process with the caller's key, so scopes, ownership, rate limits and usage
+    logging are the API's own. 12 tools (no local-file access) and 2 prompts. `/mcp` answers 503 (the site
+    still starts) if the MCP SDK cannot be imported;
+  - **local** (`opengrid mcp`, stdio; optional loopback HTTP; zero-install via
+    `uvx --from 'git+https://github.com/fzsheik/opengrid-terminal#subdirectory=cli' opengrid mcp`): 13 tools
+    (adds the local project analyzer) and 3 prompts.
+  Tools are read-only except a non-provisioning route preview, the free MNIST sandbox demo
+  (`opengrid_start_demo`: simulated, no provider, no GPU, no spend) and a confirm-gated job cancel; no tool can
+  provision paid compute or submit a real job, and results link to `/jobs/new?preset=mnist` where a person
+  confirms a real run. Prompts: `cheapest_gpu`, `try_free_demo`, `size_my_project` (local). `opengrid mcp config
+  <host>` prints hosted / uvx / installed snippets for Claude Code, Cursor, Codex and VS Code (keys only by
+  env var or a password prompt). Verified with MCP Inspector (`--strict`, both protocol eras), Claude Code
+  (hosted: Connected) and Codex registration.
 - **Assistant** (`assistant/`, `POST /v1/assistant`, `/assistant`, panel on Find Compute): deterministic intents
   by default; optional vendor-neutral LLM (off unless configured) whose replies are post-checked so every
   number comes from tool results; no mutation tools.
@@ -647,6 +660,7 @@ Authentication: `Authorization: Bearer opg_…` (or the operator session). Highl
 | Trust | `/v1/trust/listings`, `/v1/trust/providers`, `/v1/capabilities` |
 | Routing | `/v1/best/{gpu}`, `/v1/route/preview`, `/v1/route`, `/v1/route/{id}`, `/v1/quotes/{id}` |
 | Deployments | `/v1/deployments`, `/v1/deployments/{id}`, `…/terminate`, `…/stop`, `…/feedback` |
+| MCP (hosted) | `/mcp`: the MCP tool set over streamable HTTP; Bearer API key only (section 6c) |
 | Training jobs | `/v1/jobs/templates`, `/v1/jobs/readiness`, `/v1/jobs/preview`, `/v1/jobs`, `/v1/jobs/{id}`, `…/logs`, `…/metrics`, `…/artifacts`, `…/artifacts/{name}`, `…/cancel`; runner callbacks (job token only) |
 | Reservations | `/v1/reservations/reference`, `/v1/reservations/requests`, `/v1/reservations`, `/v1/reservations/{id}`, `…/accept`, `…/withdraw` |
 | Accounts & billing | `/v1/me`, `/v1/keys`, `/v1/scopes`, `/v1/usage`, `/v1/credentials`, `/v1/billing/*` |
@@ -725,6 +739,10 @@ provider calls):
 - **training jobs**: GPU selection, the job state machine, API, security (token, quotas, injection), the
   runner and bootstrap, and an **end-to-end simulation** (real reporter + real CPU training over HTTP
   against a fake Lambda);
+- **hosted MCP** (`tests/test_mcp_remote.py`): the real app on uvicorn with real API keys and the official MCP
+  client: tool list, the sandbox demo, scopes through the caller's key, every 401/403 path, the key never
+  echoed, and a thread-starvation proof (48 concurrent calls on a 6-thread pool finish; without the gate's
+  admission limit they starve);
 - **settlement fixings**: finality, TWAP, hash-chain tamper detection, the immutability trigger,
   restatements, evidence retention;
 - **reservations**: state machine, supply-basis enforcement, tenant isolation, nothing launched or billed;

@@ -200,4 +200,5 @@ def demo_train(c: Client, *, epochs: int = 3, idempotency_key: str | None = None
         raise OpenGridError(f"the server did not confirm job {d.get('job_id')} as a SANDBOX run; check it now "
                             f"(`opengrid jobs status {d.get('job_id')}`) and cancel it if needed",
                             code="sandbox_not_confirmed", request_id=r.request_id)
-    return {"job": job_summary(d), "idempotency_key": key, "simulated": True, "request_id": r.request_id}
+    return {"job": job_summary(d), "idempotency_key": key, "simulated": True,
+            "replayed": (r.headers or {}).get("idempotent-replayed") == "true", "request_id": r.request_id}

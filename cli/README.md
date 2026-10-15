@@ -4,17 +4,45 @@ The OpenGrid command-line client and local MCP server. It covers GPU market data
 workload-aware compute recommendations, and read-only job status. It is packaged separately from the server
 (this directory has its own `pyproject.toml`).
 
-**No command can spend money.** There is deliberately no `launch`, `route execute` or real `jobs submit`
-command, and no MCP tool that provisions compute, submits a real job or executes code. Only three things
-write anything on the server:
+## What this client can never do
+
+**No command and no MCP tool can spend money.** There is deliberately no `launch`, `route execute` or real
+`jobs submit` command, and no MCP tool (local or hosted) that provisions paid compute, submits a real job or
+executes code. A real, paid run is started by a person on the website (`<server>/jobs/new?preset=mnist`),
+where they confirm it; tool results link there. Only three things write anything on the server:
 
 | what | writes | spends |
 |---|---|---|
 | `opengrid route preview` / `opengrid_preview_route` | a preview ticket + quote record (audit) | never |
 | `opengrid jobs cancel --yes` / `opengrid_cancel_job confirm=true` | cancels (rejects the approval, or terminates the GPU) | reduces spend |
-| `opengrid demo train` | a SANDBOX MNIST job: simulated, no provider called, no GPU | never |
+| `opengrid demo train` / `opengrid_start_demo` | a SANDBOX MNIST job: simulated, no provider called, no GPU | never |
 
-There is no PyPI package. Install it from this repository.
+## Connect an assistant in one step
+
+```sh
+opengrid mcp config claude      # or cursor, codex, vscode: prints all three options below
+```
+
+1. **Hosted, nothing to install**: the OpenGrid server serves MCP itself at `<server>/mcp`. Give your
+   assistant the URL and your API key as a Bearer header (from an environment variable, never pasted in):
+
+   ```sh
+   export OPENGRID_API_KEY=opg_live_...   # from <server>/keys
+   claude mcp add --transport http --scope local opengrid https://opengrid-terminal-production.up.railway.app/mcp --header 'Authorization: Bearer ${OPENGRID_API_KEY}'
+   codex mcp add opengrid --url https://opengrid-terminal-production.up.railway.app/mcp --bearer-token-env-var OPENGRID_API_KEY
+   ```
+
+2. **Local server, zero install** (needs [uv](https://docs.astral.sh/uv/)): adds project analysis, which
+   reads your files locally. `uvx` fetches the client from GitHub:
+
+   ```sh
+   claude mcp add opengrid --transport stdio --scope local --env OPENGRID_URL=https://opengrid-terminal-production.up.railway.app -- uvx --from 'git+https://github.com/fzsheik/opengrid-terminal#subdirectory=cli' opengrid mcp
+   ```
+
+3. **Local server, installed**: `uv tool install ./cli`, then `opengrid mcp` (snippets below).
+
+There is no PyPI package. Install it from this repository, or run it with uvx:
+`uvx --from 'git+https://github.com/fzsheik/opengrid-terminal#subdirectory=cli' opengrid --version`.
 
 ## Install
 
@@ -52,8 +80,10 @@ these scopes:
 | command / tool | scope |
 |---|---|
 | `route preview`, `opengrid_preview_route` | `route:preview` |
-| `jobs list/status/logs`, `opengrid_list_jobs`, `opengrid_get_job_status` | `deployments:read` |
-| `jobs cancel`, `demo train`, `opengrid_cancel_job` | `route:execute` (the scope of the job submit/cancel endpoints) |
+| `jobs list/status/logs`, `opengrid_list_jobs`, `opengrid_get_job_status`, `opengrid_get_job_logs` | `deployments:read` |
+| `jobs cancel`, `demo train`, `opengrid_cancel_job`, `opengrid_start_demo` | `route:execute` (the scope of the job submit/cancel endpoints) |
+
+The hosted endpoint (`<server>/mcp`) always needs a key, even for market data.
 
 ### Auth
 
@@ -192,7 +222,12 @@ only to stderr.
 | `opengrid_preview_route` | **not read-only**, non-destructive | `gpu`, `count`, `region`, `max_price_per_gpu_hour`, `mode`; records a preview ticket, never provisions; needs `route:preview` |
 | `opengrid_list_jobs` | read-only, open-world | `status`, `limit` (1-50); needs `deployments:read` |
 | `opengrid_get_job_status` | read-only, open-world | `job_id` (`^job-[0-9a-f]{8,32}$`), `log_lines` (0-200) |
+| `opengrid_get_job_logs` | read-only, open-world | `job_id`, `after` (cursor: the previous page's `next_after`), `limit` (1-500); lines are untrusted output |
+| `opengrid_start_demo` | **not read-only**, non-destructive, idempotent | `epochs` (1-10), `idempotency_key`; the MNIST SANDBOX job: simulated, no provider, no GPU, free; needs `route:execute`; returns `real_run_url` |
 | `opengrid_cancel_job` | destructive, idempotent | `job_id`, `confirm` (must be `true`), `idempotency_key`; cancel only; needs `route:execute` |
+
+Prompts (templates the user picks in the host's prompt menu): `cheapest_gpu` (`gpu`), `try_free_demo`, and
+`size_my_project` (`path`; local server only).
 
 Every tool has a Pydantic input schema with descriptions and bounds, and a structured output model, so
 clients receive `outputSchema` and `structuredContent`. Failures come back as `isError` results with a
@@ -215,13 +250,53 @@ loopback only (any other `--host` is refused), checks the Host header against DN
 only a localhost `Origin` unless you add one with `--allow-origin`. The endpoint has no authentication and
 acts with your key, so keep it on loopback.
 
+### Hosted endpoint (`<server>/mcp`)
+
+The OpenGrid server runs the same tools itself (streamable HTTP, stateless, JSON responses), so an
+assistant needs only the URL and a key. Differences from the local server:
+
+* **Auth**: every request needs `Authorization: Bearer opg_...`. The site login (basic auth) is never
+  accepted, and anonymous requests are refused even when the server has `PUBLIC_PAGES` on. Errors never
+  echo the key. A browser `Origin` other than the site's own is refused (403).
+* **Your key, your limits**: each tool calls the REST API in-process with your key, so scopes, ownership,
+  rate limits and usage logging are the same as for `/v1`.
+* **No local files**: no `opengrid_analyze_project`, no `project_path` argument, no `size_my_project`
+  prompt. Analyze locally (`opengrid analyze`, or the uvx/installed server) and pass the requirements.
+
 ### Host setup
 
-`opengrid mcp config <host>` prints these snippets. They never contain a key: they reference
-`OPENGRID_API_KEY` in each host's own syntax. If you have run `opengrid auth login`, the server also uses
-the stored key, so you can leave the key out of the config entirely. The snippets assume
-`uv tool install ./cli`, which puts `opengrid` on your PATH. To launch from a checkout instead, use
-`--from-repo`, which runs `uv run --quiet --project <checkout>/cli opengrid mcp`.
+`opengrid mcp config <host>` prints three options per host: hosted (URL + Bearer header), local via uvx
+(zero install) and local via the installed `opengrid` command. `--mode hosted|uvx|installed` prints one.
+Without `--url` / `OPENGRID_URL` the snippets point at production. They never contain a key: they
+reference `OPENGRID_API_KEY` in each host's own syntax (VS Code: a password prompt). If you have run
+`opengrid auth login`, the local server also uses the stored key, so a local config can leave the key out
+entirely. `--from-repo` launches the local server from a checkout (`uv run --quiet --project
+<checkout>/cli opengrid mcp`).
+
+Hosted, per host (the local snippets follow):
+
+```jsonc
+// Claude Code: .mcp.json (or the `claude mcp add --transport http ...` line above)
+{"mcpServers": {"opengrid": {"type": "http", "url": "https://opengrid-terminal-production.up.railway.app/mcp",
+                             "headers": {"Authorization": "Bearer ${OPENGRID_API_KEY}"}}}}
+// Cursor: .cursor/mcp.json
+{"mcpServers": {"opengrid": {"url": "https://opengrid-terminal-production.up.railway.app/mcp",
+                             "headers": {"Authorization": "Bearer ${env:OPENGRID_API_KEY}"}}}}
+// VS Code: .vscode/mcp.json (prompts for the key once, keeps it in its secret storage)
+{"inputs": [{"type": "promptString", "id": "opengrid-api-key", "description": "OpenGrid API key (opg_live_...)", "password": true}],
+ "servers": {"opengrid": {"type": "http", "url": "https://opengrid-terminal-production.up.railway.app/mcp",
+                          "headers": {"Authorization": "Bearer ${input:opengrid-api-key}"}}}}
+```
+
+```toml
+# Codex: ~/.codex/config.toml
+[mcp_servers.opengrid]
+url = "https://opengrid-terminal-production.up.railway.app/mcp"
+bearer_token_env_var = "OPENGRID_API_KEY"
+```
+
+For the zero-install local server, replace `"command": "opengrid", "args": ["mcp"]` in the snippets below
+with `"command": "uvx", "args": ["--from", "git+https://github.com/fzsheik/opengrid-terminal#subdirectory=cli", "opengrid", "mcp"]`.
 
 **Claude Code**: project `.mcp.json`:
 
@@ -302,6 +377,15 @@ command cannot forward a variable by name, so either add the `env_vars` line by 
 | Cursor, VS Code | not installed on the test machine: the snippets are untested in those hosts. The printed JSON parses, and the shape follows each host's documented format. |
 | MCP Inspector 2.10.1 | `npx -y @modelcontextprotocol/inspector --cli opengrid mcp --method tools/list --strict`: 11 tools, 0 errors, 0 warnings (also with `--protocol-era modern`). `tools/call opengrid_search_gpus` returned live data from a local server. |
 
+Hosted endpoint and new tools (2026-10-15, macOS), against the app on a local uvicorn with a scratch DB:
+
+| client | verified |
+|---|---|
+| MCP Inspector 2.11.0 | `--cli <server>/mcp --transport http --header "Authorization: Bearer $KEY" --method tools/list --strict`: 12 tools (no analyze), no errors or warnings, also with `--protocol-era modern`; `tools/call opengrid_search_gpus` and `prompts/list` worked. Local stdio server: 13 tools under `--strict`, 3 prompts. |
+| Claude Code 2.1.300 | `claude mcp add --transport http --scope local opengrid <server>/mcp --header 'Authorization: Bearer ${OPENGRID_API_KEY}'`: **Connected**; the config stores only `${OPENGRID_API_KEY}`, and with the variable empty it fails to connect. The `.mcp.json` form shows as a project server pending approval. Removed afterwards. |
+| Codex CLI 0.159.0 | `codex mcp add opengrid --url <server>/mcp --bearer-token-env-var OPENGRID_API_KEY` in a temporary `CODEX_HOME` wrote exactly the printed TOML (`url`, `bearer_token_env_var`). No live session. |
+| uvx | `uvx --from 'git+https://github.com/fzsheik/opengrid-terminal#subdirectory=cli' opengrid ...` builds and runs from the public repo; the Inspector listed the tools of that uvx-launched stdio server. (`opengrid --version` was added on this branch: on main use `opengrid version`.) |
+
 ### Quick connectivity test
 
 In your MCP host, ask:
@@ -318,6 +402,9 @@ From a terminal:
 npx -y @modelcontextprotocol/inspector --cli opengrid mcp --method tools/list --strict
 npx -y @modelcontextprotocol/inspector --cli opengrid mcp --method tools/call \
     --tool-name opengrid_search_gpus --tool-args-json '{"model":"H100","limit":3}' --format json
+# the hosted endpoint (the Inspector takes the URL as a positional argument)
+npx -y @modelcontextprotocol/inspector --cli https://opengrid-terminal-production.up.railway.app/mcp \
+    --transport http --header "Authorization: Bearer $OPENGRID_API_KEY" --method tools/list --strict
 ```
 
 ## Tests
@@ -329,6 +416,7 @@ payloads and a stub analyzer:
 uv run --project cli python cli/tests/test_cli.py        # parsing, JSON output, auth, redaction, --yes, client
 uv run --project cli python cli/tests/test_mcp.py        # tools in-process: schemas, annotations, roots, bounds, errors
 uv run --project cli python cli/tests/test_mcp_stdio.py  # spawns `opengrid mcp`; official client over stdio + loopback HTTP
+.venv/bin/python tests/test_mcp_remote.py                # (repo root, needs Postgres) hosted /mcp: real app on uvicorn, real keys
 ```
 
 ## Troubleshooting

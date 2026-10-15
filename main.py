@@ -27,6 +27,7 @@ from api import accounts as accounts_api
 from api import events as events_api
 from api import families as families_api
 from api import indices as indices_api
+from api import mcp_remote
 from api import news as news_api
 from api import ops as ops_api
 from api import pages as pages_api
@@ -48,7 +49,9 @@ async def lifespan(app: FastAPI):
     app.state.ingest = ingest
     if not os.environ.get("OPENGRID_NO_JOBS"):
         jobs.start()
+    await mcp_gate.startup()  # the hosted MCP endpoint's session manager (api/mcp_remote.py)
     yield
+    await mcp_gate.shutdown()
     await jobs.stop()
     await ingest.stop()
 
@@ -89,9 +92,12 @@ async def require_password(request, call_next):
     X-OpenGrid-Request: 1 and, when the browser states it, a same-origin Origin / Sec-Fetch-Site.
     Bearer-key requests are exempt: a cross-site page cannot make a browser attach a key.
     Failed basic-auth logins are throttled per client IP.
+
+    /mcp (the hosted MCP endpoint) passes through to its own gate (api/mcp_remote.py), which accepts ONLY a
+    Bearer API key: never the site login, never anonymous (not even with PUBLIC_PAGES), so no CSRF surface.
     """
     path = request.url.path
-    if path == "/health":
+    if path == "/health" or path == mcp_remote.PATH:
         return await call_next(request)
     auth = request.headers.get("authorization", "")
     if path.startswith("/v1/") and auth.lower().startswith("bearer "):
@@ -288,6 +294,9 @@ app.include_router(recommend_api.router)
 from api import assistant as assistant_api  # noqa: E402  (POST /v1/assistant: read-only, grounded)
 
 app.include_router(assistant_api.router)
+
+# The hosted MCP endpoint (/mcp; Bearer API key only). Before the page router; never fails startup (503 instead).
+mcp_gate = mcp_remote.install(app)
 
 # Last: the page router owns "/" and the catch-all page paths.
 app.include_router(pages_api.router)

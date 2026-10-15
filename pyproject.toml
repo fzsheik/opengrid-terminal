@@ -7,6 +7,7 @@ dependencies = [
     "cryptography>=50.0.2",
     "fastapi>=0.141.1",
     "httpx>=0.28.1",
+    "opengrid-cli",
     "psycopg[binary]>=3.3.6",
     "pydantic-settings>=2.15.0",
     "sqlalchemy>=2",
@@ -18,3 +19,10 @@ dependencies = [
 llm = [
     "anthropic>=1.13.0",
 ]
+
+# The CLI / MCP package (cli/) is also a server dependency: the hosted MCP endpoint at /mcp (api/mcp_remote.py)
+# serves the same tool implementations. A path source: Railpack copies the whole tree before `uv sync` when
+# pyproject.toml has a `path = ` entry, and its build step (`uv sync --locked --no-dev --no-editable`)
+# installs it as a regular, non-editable package.
+[tool.uv.sources]
+opengrid-cli = { path = "cli", editable = true }
