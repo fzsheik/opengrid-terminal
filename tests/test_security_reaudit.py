@@ -258,9 +258,19 @@ def test_safe_url_web_client():
     # every URL-valued attribute goes through safeUrl in OG.h and OG.s
     for attr in ("href", "src", "action", "formaction", "xlink:href", "srcdoc", "poster", "data"):
         assert f'"{attr}"' in src.split("const URL_ATTRS", 1)[1].split("\n", 1)[0], attr
-    # no server-side redirects exist that could be an open redirect
+    # no server-side redirects exist that could be an open redirect, except /login (main.py), whose target is
+    # an allowlisted same-site path: every off-site or browser-normalised trick lands on "/"
     for f in list(ROOT.glob("*.py")) + list((ROOT / "api").glob("*.py")) + list((ROOT / "accounts").glob("*.py")):
-        assert "RedirectResponse" not in f.read_text(encoding="utf-8"), f
+        n = f.read_text(encoding="utf-8").count("RedirectResponse(")
+        assert n == (1 if f.name == "main.py" else 0), (f, n)
+    setup()
+    for evil in ("//evil.example", "https://evil.example", "/\\evil.example", "\\\\evil.example", "/\t/evil.example",
+                 "/\n/evil.example", " //evil.example", "evil.example", "javascript:alert(1)", "/\r\n/evil", "///evil.example"):
+        r = client.get("/login", params={"next": evil}, headers=basic(), follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"] == "/", (evil, r.status_code, r.headers.get("location"))
+    r = client.get("/login", params={"next": "/jobs/new?preset=mnist&real=1"}, headers=basic(), follow_redirects=False)
+    assert r.headers["location"] == "/jobs/new?preset=mnist&real=1", r.headers.get("location")
+    assert client.get("/login", follow_redirects=False).status_code == 401, "/login always challenges"
 
 
 # ---------------------------------------------------------------- CSP

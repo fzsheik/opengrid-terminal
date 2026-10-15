@@ -493,6 +493,48 @@ def _route(job_id: str, who, v, sel, ready: dict, ssh: dict) -> tuple[int, dict]
 # Sandbox: the SIMULATED run (same ingestion code, source='simulated')
 # --------------------------------------------------------------------------
 
+def simulated_report(job_id: str, info: dict, epochs: int, note: str, took_seconds: float) -> dict:
+    """The sandbox artifact: what the job was, what the simulation stood in for, and what a real run would take.
+    Every number from the run itself is a placeholder; the real-run figures are the template's limits and the
+    measured typical MNIST timings (docs/FIRST_TRAINING_JOB.md), labelled as estimates."""
+    limits = info.get("limits") or {}
+    cfg = info.get("config") or {}
+    return {
+        "simulated": True,
+        "summary": (f"Free practice run of '{info.get('name')}' ({info.get('template')}): {epochs} epoch(s) simulated in "
+                    + ("under a second" if took_seconds < 1 else f"{took_seconds:.0f} seconds") + ". No GPU was rented, no provider was called and nothing was charged. "
+                    "The accuracy numbers below are placeholders, not a trained model."),
+        "job_id": job_id,
+        "job": {"name": info.get("name"), "template": info.get("template"),
+                "template_version": info.get("template_version"), "settings": cfg, "submitted_at": info.get("submitted_at")},
+        "duration": {"this_run_seconds": round(took_seconds, 2),
+                     "note": "a simulation finishes almost instantly because no machine is started"},
+        "steps": [
+            {"step": "rent a GPU", "real_run": "OpenGrid launches the cheapest approved GPU within your price cap",
+             "this_run": "skipped (simulated)"},
+            {"step": "set up the machine", "real_run": "installs PyTorch and checks the GPU works", "this_run": "skipped (simulated)"},
+            {"step": "train", "real_run": f"trains a small digit-recognition network on MNIST for {epochs} epoch(s)",
+             "this_run": "placeholder numbers written for each epoch"},
+            {"step": "save the model", "real_run": "uploads model.pt, config.json, metrics.json, env.json and manifest.json",
+             "this_run": "only this report is saved"},
+            {"step": "shut down and settle", "real_run": "terminates the GPU, confirms it is gone and reconciles the actual cost",
+             "this_run": "nothing to shut down; cost $0"},
+        ],
+        "placeholder_metrics": [{"epoch": e, "train_loss": round(1.0 / e, 4), "test_accuracy": round(min(0.5 + 0.1 * e, 0.9), 4)}
+                                for e in range(1, epochs + 1)],
+        "a_real_run_would": {
+            "take": "about 6 to 15 minutes in total (mostly setup; training itself about 1 minute), estimate",
+            "reach": "about 99% test accuracy after 3 epochs, estimate from a local run with the same code",
+            "cost_at_most_usd": limits.get("max_total_cost_usd"),
+            "price_cap_per_gpu_hour_usd": limits.get("max_price_per_gpu_hour_usd"),
+            "stop_after_minutes": limits.get("max_runtime_minutes"),
+            "produce": ["model.pt", "config.json", "metrics.json", "env.json", "manifest.json"],
+            "needs": "an admin to approve the price quote before any GPU launches",
+        },
+        "note": note,
+    }
+
+
 def run_simulated(job_id: str) -> None:
     import json
 
@@ -502,6 +544,9 @@ def run_simulated(job_id: str) -> None:
     with normalize.SessionLocal() as s:
         job = s.get(Job, job_id)
         epochs = int((job.config or {}).get("epochs") or 1)
+        info = {"name": job.name, "template": job.template, "template_version": job.template_version,
+                "config": dict(job.config or {}), "limits": dict((job.spec or {}).get("limits") or {}),
+                "submitted_at": job.created_at.isoformat() if job.created_at else None}
     t0 = _now()
     seq = [0]
 
@@ -523,9 +568,7 @@ def run_simulated(job_id: str) -> None:
     events += [ev("phase", phase="saving_artifacts"),
                ev("result", outcome="succeeded", params_changed=False, note=note)]
     sync.ingest(job_id, events, source="simulated")
-    report = json.dumps({"simulated": True, "job_id": job_id, "note": note,
-                         "what_a_real_run_produces": ["model.pt", "config.json", "metrics.json", "env.json"]},
-                        indent=2).encode()
+    report = json.dumps(simulated_report(job_id, info, epochs, note, (_now() - t0).total_seconds()), indent=2).encode()
     meta = A.store().put(job_id, "simulated-report.json", report, hashlib.sha256(report).hexdigest(),
                          content_type="application/json", source="simulated")
     sync.on_artifact(job_id, meta)

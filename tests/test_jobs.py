@@ -330,6 +330,15 @@ def test_sandbox_end_to_end():
     assert m["simulated"] and all(p["source"] == "simulated" for s in m["series"].values() for p in s)
     arts = O.artifacts_list(out["job_id"], OPERATOR)
     assert [a["name"] for a in arts] == ["simulated-report.json"] and arts[0]["simulated"]
+    import json as _json
+    rep = _json.loads(O.artifact(out["job_id"], "simulated-report.json", OPERATOR)[1])
+    assert rep["simulated"] and "No GPU was rented" in rep["summary"] and "placeholders" in rep["summary"]
+    assert rep["job"]["template"] == "pytorch-mnist" and rep["job"]["settings"].get("epochs"), rep["job"]
+    assert rep["duration"]["this_run_seconds"] >= 0 and len(rep["steps"]) == 5
+    assert len(rep["placeholder_metrics"]) == rep["job"]["settings"]["epochs"]
+    real = rep["a_real_run_would"]
+    assert real["cost_at_most_usd"] is not None and real["stop_after_minutes"] is not None, real
+    assert "estimate" in real["take"] and "approve" in real["needs"]
     lg = O.logs(out["job_id"], OPERATOR, after=None, limit=100)
     assert any("[SIMULATED]" in i["line"] for i in lg["items"])
     assert scalar("SELECT count(*) FROM deployments") == 0
