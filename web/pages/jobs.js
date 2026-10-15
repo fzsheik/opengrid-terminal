@@ -625,8 +625,8 @@
     const reason = j.failure && (j.failure.reason || j.failure.code);
     if (UNCERTAIN.includes(s) || s === "termination_failed") return { text: "Needs attention: the GPU may still be billing", tone: "bad", icon: "!", live: true };
     if (isTerminal(j)) {
+      if (o === "cancelled") return { text: "Cancelled", tone: "warn", icon: "-", live: false };
       if (o === "failed" || STAGE_FAILS.includes(s)) return { text: "Failed" + (reason ? ": " + String(reason).replace(/_/g, " ").slice(0, 90) : ""), tone: "bad", icon: "✗", live: false };
-      if (o === "cancelled" || s === "approval_rejected") return { text: "Cancelled", tone: "warn", icon: "-", live: false };
       return { text: sb ? "Finished (simulated)" : "Finished", tone: "good", icon: "✓", live: false };
     }
     if (FAILED.includes(s) && sm.possibly_billing) return { text: "Failed: shutting down the GPU", tone: "bad", icon: "✗", live: true };

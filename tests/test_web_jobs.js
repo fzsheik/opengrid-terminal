@@ -178,5 +178,21 @@ const hit = OG.findCommand("j new");
 ok(hit && /new training job/.test(hit.cmd.usage), "`j new` command");
 ok(OG.findCommand("j") && /jobs/.test(OG.findCommand("j").cmd.usage) && !/new/.test(OG.findCommand("j").cmd.usage), "`j` command");
 
+// ---------- simple My Jobs: one plain line per job, the one-click demo, plain blocker text ----------
+const L = j => J.jobLine(j);
+ok(L({ status: "training", sandbox: true, events: [{ to: "created" }, { to: "training" }] }).text === "Training (simulated)", "sandbox training -> Training (simulated)");
+ok(L({ status: "pending_approval" }).text === "Waiting for OpenGrid approval" && L({ status: "pending_approval" }).tone === "warn", "pending approval, amber");
+ok(L({ status: "training_completed", sandbox: true, finished: true, outcome: "simulated" }).text === "Finished (simulated)", "finished sandbox");
+ok(L({ status: "reconciled", finished: true, outcome: "succeeded" }).text === "Finished" && L({ status: "reconciled", finished: true, outcome: "succeeded" }).tone === "good", "reconciled real job -> Finished, green");
+ok(/^Failed: out of memory/.test(L({ status: "out_of_memory", finished: true, outcome: "failed", sandbox: true, failure: { code: "out_of_memory" } }).text), "failure reason in plain words");
+ok(L({ status: "provisioning_uncertain" }).tone === "bad" && /may still be billing/.test(L({ status: "provisioning_uncertain" }).text), "uncertain -> billing warning");
+ok(L({ status: "approval_rejected", finished: true, outcome: "cancelled" }).text === "Cancelled", "cancelled before launch");
+ok(L({ status: "quote_expired" }).text.startsWith("Price quote expired"), "expired quote");
+const db = J.demoBody(null, 99);
+ok(db && db.sandbox === true && db.template === "pytorch-mnist" && db.name === "free-demo-mnist" && db.config.epochs === J.DEFAULT_CONFIG.epochs.max, "demo body: sandbox forced on, MNIST, epochs clamped to the template bound");
+ok(J.demoBody(null).config.epochs === J.DEFAULT_CONFIG.epochs.default && J.demoBody(null).limits.max_total_cost_usd === 2, "demo body defaults from the preset");
+ok(/aren't switched on/.test(J.plainBlocker({ code: "env_ceiling" })) && /aren't switched on/.test(J.plainBlocker({ code: "adapter_not_validated" })), "platform blockers -> plain setup sentence");
+ok(/price cap/.test(J.plainBlocker({ code: "no_eligible_listing" })) && J.plainBlocker(null) === "No GPU is ready for a real run right now.", "listing blockers and fallback");
+
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);

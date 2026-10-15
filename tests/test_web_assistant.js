@@ -72,5 +72,17 @@ ok(A.boundContext(small) === small, "a normal context is echoed unchanged");
 ok(A.boundContext({ requirements: { model: { name: "x".repeat(9000) } } }) === null, "an oversized context is dropped (fresh start), never sent");
 ok(A.EXAMPLES.length >= 6 && A.EXAMPLES.includes("Why did H200 prices change?"), "example chips");
 
+// ---------- job actions: only known actions render; cancel needs a real job id; hrefs rebuilt from the id ----------
+eq(["action", "jobs", "job"].map(t => A.cardKind({ type: t, data: {} })), ["action", "jobs", "job"], "job card kinds");
+ok(A.actionView({ action: "start_demo", label: "Start free simulation", epochs: 3, note: "Simulated" }).action === "start_demo", "start_demo action");
+ok(A.actionView({ action: "start_demo", epochs: 500 }).epochs === 3 && A.actionView({ action: "start_demo", epochs: "2" }).epochs === 3, "bad epochs fall back to 3");
+ok(A.actionView({ action: "cancel_job", job_id: "job-abc12345" }).jobId === "job-abc12345", "cancel_job with a job id");
+ok(A.actionView({ action: "cancel_job", job_id: "../../v1/admin" }) === null && A.actionView({ action: "cancel_job" }) === null, "cancel_job without a valid id renders nothing");
+ok(A.actionView({ action: "launch_gpu" }) === null && A.actionView({ action: "approve" }) === null && A.actionView(null) === null, "unknown actions render nothing");
+const items = A.jobItems({ items: [{ job_id: "job-0123abcd", name: "a", status: "training", status_text: "Running, epoch 2 of 3", sandbox: true, progress: { epoch: 2, epochs: 3 }, cost: { est_max_usd: null, actual_usd: null }, href: "javascript:alert(1)", cancellable: true },
+  { job_id: "bad id", name: "x" }] });
+ok(items.length === 1 && items[0].href === "/jobs/job-0123abcd" && items[0].text === "Running, epoch 2 of 3" && items[0].progress.epoch === 2 && items[0].cancellable, "job items: invalid ids dropped, href rebuilt (never the server's)");
+ok(A.jobItems({ job_id: "job-0123abcd", status: "pending_approval" }, true)[0].text === "pending approval", "single job card; status text falls back to the state");
+
 if (failures) { console.log(`\n${failures} FAILED`); process.exit(1); }
 console.log("\nall assistant UI checks passed");
