@@ -1,5 +1,7 @@
-/* / (homepage) for a first-time visitor: what OpenGrid is (headline), three actions (Explore GPUs, Find Compute,
-   the sandbox training demo), a compact live board of the most-covered GPUs and how OpenGrid works.
+/* / (homepage) for a first-time visitor: what OpenGrid is (headline), what works today (and what does not), three
+   actions that each say what they need (free / needs an account / simulation), a compact live board of the
+   most-covered GPUs and how OpenGrid works. A visitor who picks the demo gets the account explanation in place,
+   never a sign-in error; a signed-in operator goes straight to /jobs/new.
 
    Data (all real, none invented): /v1/overview (board: lowest price, cheapest provider, provider count, matched
    24h change; capacity), /market?hours=24 (sparklines, shared with the tape), /v1/indices (soft), /polling (how
@@ -58,7 +60,7 @@
       const root = h("div", { class: "pg-home" });
       el.append(root);
 
-      const provN = h("span", {}, "cloud providers");
+      const provN = h("span", {}, "GPU cloud providers");
       const stats = h("div", { class: "hm-stats" }, OG.loading("Loading live market…"));
       const tbl = board();
       const boardBox = h("div", { class: "hm-board-b" }, OG.loading("Loading prices…"));
@@ -66,47 +68,77 @@
       const ixBox = h("div", { class: "hm-ixs" }, OG.loading("Loading indices…"));
       const observeN = h("span", {}, "every tracked provider");
 
-      const action = (href, title, line, tag, pri) => h("a", { class: "hm-act" + (pri ? " pri" : ""), href },
-        h("span", { class: "hm-act-t" }, title, h("span", { class: "hm-act-arr", "aria-hidden": "true" }, "→")),
-        h("span", { class: "hm-act-l" }, line), tag || null);
+      // Each action says up front what it needs: free and open, or an account / a simulation.
+      const tag = (cls, text, lock) => h("span", { class: "hm-tag " + cls }, lock ? h("i", { class: "lock", "aria-hidden": "true" }) : null, text);
+      const action = (el, title, line, tags, pri) => {
+        el.className = "hm-act" + (pri ? " pri" : "");
+        el.append(h("span", { class: "hm-act-t" }, title, h("span", { class: "hm-act-arr", "aria-hidden": "true" }, "→")),
+          h("span", { class: "hm-act-l" }, line), h("span", { class: "hm-tags" }, tags));
+        return el;
+      };
+      // The demo runs in a workspace, which needs an account: a visitor gets the explanation here instead of a
+      // sign-in error one click later; a signed-in operator goes straight to it.
+      const demoWhy = h("div", { class: "hm-why", id: "hm-demo-why", hidden: true },
+        h("b", {}, "The demo needs an OpenGrid account"),
+        h("p", {}, "It runs in your own workspace on OpenGrid, so it needs an account. Accounts are invite-only for now; there is no self-serve sign-up yet."),
+        h("p", {}, "What it does: a small PyTorch model learns to read handwritten digits (MNIST) for a few rounds. It is a simulation: no GPU is rented and nothing is charged."),
+        h("div", { class: "hm-why-a" },
+          h("a", { class: "lnk", href: "/methodology/jobs" }, "How jobs work →"),
+          h("a", { class: "lnk", href: "/developers" }, "Have an API key? Run it from your AI assistant →")));
+      const demoBtn = h("button", { type: "button", "aria-expanded": "false", "aria-controls": "hm-demo-why",
+        onclick: () => { demoWhy.hidden = !demoWhy.hidden; demoBtn.setAttribute("aria-expanded", String(!demoWhy.hidden)); } });
+      const demoTags = () => [tag("sim", "Simulation · free"), OG.signedIn() ? null : tag("acct", "Needs an account", true)];
+      const demoAct = action(demoBtn, "Try the Free Training Demo", "Watch a small AI model train, step by step.", demoTags());
+      OG.me().then(me => {
+        if (!me || !ctx.alive()) return;
+        const a = action(h("a", { href: DEMO }), "Try the Free Training Demo", "Watch a small AI model train, step by step.", demoTags());
+        demoAct.replaceWith(a); demoWhy.remove();
+      });
+      const today = (state, what, who) => h("li", { class: "hm-today-" + state }, h("span", { class: "hm-today-i", "aria-hidden": "true" }), h("span", {}, what), h("span", { class: "hm-today-w" }, who));
 
       root.append(
         h("section", { class: "hm-hero" },
           h("div", { class: "hm-hero-l" },
-            h("div", { class: "eyebrow" }, "OpenGrid · GPU compute market"),
-            h("h1", { class: "hm-h1" }, "The smartest way to find and run GPU compute."),
-            h("p", { class: "hm-sub" }, "Compare GPU prices across ", provN, ", find compute suited to your workload, and manage execution through one platform."),
-            h("p", { class: "hm-honest" },
-              "Prices are observed from provider price lists and APIs, labelled with their age. Real launches are supervised: each one waits for OpenGrid approval. The training demo is a free simulation: no GPU, no spend.")),
+            h("div", { class: "eyebrow" }, "OpenGrid · live GPU cloud prices"),
+            h("h1", { class: "hm-h1" }, "Compare GPU prices. Find the right compute. Run supported workloads."),
+            h("p", { class: "hm-sub" }, "OpenGrid reads the public price lists of ", provN, " every few minutes. See what an hour of GPU time costs everywhere, find the right GPU for your AI project, and run supported jobs safely."),
+            h("div", { class: "hm-today", "aria-label": "What works today" },
+              h("div", { class: "eyebrow" }, "What works today"),
+              h("ul", {},
+                today("yes", "Live GPU prices and comparisons", "free, no account"),
+                today("yes", "GPU recommendations for your project", "free, no account"),
+                today("part", "Training demo (a simulation, no charge)", "needs an account"),
+                today("part", "Real GPU runs, each approved by OpenGrid", "early access"),
+                today("no", "Running your own code", "not yet")))),
           h("div", { class: "hm-acts" },
-            action("/gpus", "Explore GPUs", "Live prices, availability and history for every GPU across providers.", null, true),
-            action("/find", "Find Compute", "Describe your workload; get GPUs that fit it, ranked by price and fit.", null),
-            action(DEMO, "Try a Training Demo", "Train PyTorch MNIST end to end in the sandbox.", h("span", { class: "badge warn hm-act-b" }, "Simulated · free")))),
+            action(h("a", { href: "/gpus" }), "Explore GPU Prices", "Every GPU, cheapest provider first, with price history.", [tag("free", "Free · no account")], true),
+            action(h("a", { href: "/find" }), "Find Compute for My Project", "Describe your model and job; get the GPUs that fit, ranked by price.", [tag("free", "Free · no account")]),
+            demoAct, demoWhy)),
         stats,
         h("div", { class: "hm-mkt" },
           h("section", { class: "hm-board" },
-            h("header", { class: "hm-sh" }, h("h2", { class: "sec-h" }, "Live market · most-covered GPUs"), OG.kindBadge("observed"), asof,
+            h("header", { class: "hm-sh" }, h("h2", { class: "hm-h2" }, "GPU prices right now"), OG.kindBadge("observed"), asof,
               h("span", { class: "spacer" }), h("a", { class: "lnk hm-more", href: "/gpus" }, "All GPUs →"), h("a", { class: "lnk hm-more", href: "/markets" }, "Market dashboard →")),
             boardBox),
           h("section", { class: "hm-side" },
-            h("header", { class: "hm-sh" }, h("h2", { class: "sec-h" }, "Price indices"), h("span", { class: "spacer" }), h("a", { class: "lnk hm-more", href: "/indices" }, "All →")),
+            h("header", { class: "hm-sh" }, h("h2", { class: "hm-h2" }, "Price indices"), h("span", { class: "spacer" }), h("a", { class: "lnk hm-more", href: "/indices" }, "All indices →")),
             ixBox,
-            h("p", { class: "note" }, "On-demand list prices per GPU-hour, not quotes. ", h("a", { class: "lnk", href: "/methodology/data-kinds" }, "Data kinds"), " · ", h("a", { class: "lnk", href: "/methodology/indices" }, "Index methodology")))),
+            h("p", { class: "note" }, "An index is one number for the price of a GPU type across providers, like a stock index. These are list prices per GPU-hour, not quotes. ", h("a", { class: "lnk", href: "/methodology/data-kinds" }, "Data kinds"), " · ", h("a", { class: "lnk", href: "/methodology/indices" }, "Index methodology")))),
         h("section", { class: "hm-how" },
-          h("h2", { class: "sec-h" }, "How OpenGrid works"),
+          h("h2", { class: "hm-h2" }, "How OpenGrid works"),
           h("ol", { class: "hm-steps" },
-            step("01", ["Observe ", observeN], OG.kindBadge("observed"),
-              "OpenGrid polls each provider's public prices and availability on a schedule. Every number shows where it came from and how old it is; a statistic it cannot compute honestly reads n/a with the reason.",
+            step("01", ["Watch ", observeN], OG.kindBadge("observed"),
+              "Every few minutes OpenGrid reads each provider's public prices and what is in stock. Every number shows where it came from and how old it is. When there is not enough data, it says n/a and why, instead of guessing.",
               ["/providers", "Providers and coverage"]),
-            step("02", "Recommend for your workload", OG.kindBadge("estimated"),
-              "Describe a model and job (or let the CLI read your project locally). OpenGrid estimates the GPU memory it needs and ranks listings that fit. Estimates are labelled as estimates; runtime is unknown unless it has been measured.",
+            step("02", "Recommend for your project", OG.kindBadge("estimated"),
+              "Tell it about your model and job. OpenGrid estimates how much GPU memory you need and lists the GPUs that fit, cheapest first. Estimates are always labelled as estimates.",
               ["/find", "Find Compute"]),
-            step("03", "Run safely", h("span", { class: "badge warn" }, "supervised"),
-              "Previewing a route is free and never calls a provider. A real launch runs only on a validated provider, after an OpenGrid admin approves the quote, with a cost ceiling and termination evidence. Today the runnable workload is the MNIST training template.",
-              ["/methodology/execution-safety", "Execution safety"]))),
+            step("03", "Run safely", h("span", { class: "badge warn" }, "approved"),
+              "A price check is free and never rents anything. A real run starts only after OpenGrid approves the price, with a spending cap and proof the GPU was shut down afterwards. Today the one supported job is a small training example.",
+              ["/methodology/execution-safety", "How runs are kept safe"]))),
         h("nav", { class: "hm-more-row", "aria-label": "More" },
           h("span", { class: "eyebrow" }, "Also"),
-          [["/developers", "Developers: CLI · MCP · API"], ["/compare", "Compare GPUs"], ["/reserve", "Reserve capacity"], ["/watchlists", "Watchlists & alerts"], ["/events", "Market events"], ["/methodology", "Methodology"]]
+          [["/developers", "Use OpenGrid from your AI assistant, CLI or API"], ["/compare", "Compare two GPUs"], ["/events", "Market events"], ["/methodology", "How every number is computed"]]
             .map(([href, label]) => h("a", { class: "lnk", href }, label))));
 
       let spark = new Map(), last = null, lastMeta = null, polled = null;
@@ -126,11 +158,11 @@
         const cheapest = priced.slice().sort((a, b) => a.lowest - b.lowest)[0];
         stats.replaceChildren(OG.stats([
           { label: "GPUs priced", value: priced.length ? fmt.num(priced.length) : null, reason: "no GPU is priced right now", sub: "on-demand, in stock or stock unknown" },
-          { label: "Listings available", value: c.available === false ? null : fmt.num(c.available_listings_now), reason: c.reason || "capacity unavailable", kind: "observed" },
+          { label: "Listings you can rent now", value: c.available === false ? null : fmt.num(c.available_listings_now), reason: c.reason || "capacity unavailable", kind: "observed" },
           { label: "Cheapest GPU-hour", value: cheapest ? fmt.price(cheapest.lowest) : null, reason: "no GPU is priced right now",
             sub: cheapest ? L.shortGpu(cheapest.gpu) + " at " + L.providerName(cheapest.lowest_provider) : null },
           { label: "Sold out everywhere", value: c.available === false ? null : fmt.num(c.gpus_sold_out_everywhere), reason: c.reason || "capacity unavailable", sub: "GPUs with listings, none purchasable" },
-          { label: "Providers polled", value: polled ? fmt.num(polled) : null, reason: "the poll schedule (/polling) did not answer", sub: "public prices and availability" },
+          { label: "Providers tracked", value: polled ? fmt.num(polled) : null, reason: "the provider list did not load", sub: "public prices and stock" },
         ]));
       }
       async function loadOverview() {
@@ -139,7 +171,7 @@
         catch (e) {
           boardBox.replaceChildren(OG.error(e, loadOverview));
           stats.replaceChildren();
-          OG.status.live(false, "api unreachable");
+          OG.status.live(false);
           return;
         }
         last = r.data || {};
@@ -158,7 +190,7 @@
       async function loadIndices() {
         const list = await OG.api.soft("/v1/indices", { nocache: true });
         if (!ctx.alive()) return;
-        if (!Array.isArray(list)) { ixBox.replaceChildren(OG.empty("The index service did not answer (/v1/indices).")); return; }
+        if (!Array.isArray(list)) { ixBox.replaceChildren(OG.empty("Indices did not load. Try again in a moment.")); return; }
         const byId = new Map(list.map(x => [x.id, x]));
         const rows = HOME_INDICES.map(id => byId.get(id)).filter(Boolean);
         ixBox.replaceChildren(rows.length ? h("div", { class: "hm-ixl" }, rows.map(indexRow)) : OG.empty(list.length ? "No benchmark index has data yet." : "No index has data yet."));
@@ -167,7 +199,7 @@
         if (!ctx.alive() || !m || !m.size) return;
         polled = m.size;
         if (last) drawStats(last, lastMeta);
-        provN.textContent = m.size + " cloud providers";
+        provN.textContent = m.size + " GPU cloud providers";
         observeN.textContent = m.size + " providers";
       });
       const all = () => { loadOverview(); loadSpark(); loadIndices(); };

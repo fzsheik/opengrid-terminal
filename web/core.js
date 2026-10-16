@@ -313,6 +313,69 @@ Full docs: web/README.md.
     return null;
   }
 
+  // A usage line "g <gpu>          open a GPU market" -> { syntax, desc, insert }: `insert` is what a click on the
+  // suggestion types into the bar (the text before the first <argument>); null when the command needs no argument.
+  function commandParts(usage) {
+    const [syntax, ...rest] = String(usage || "").split(/\s{2,}/);
+    const i = syntax.search(/[<[]/);
+    return { syntax: syntax.trim(), desc: rest.join(" ").trim(), insert: i > 0 ? syntax.slice(0, i) : null };
+  }
+
+  /* ================= pure: plain-language shell copy ================= */
+  // Who can use what. One vocabulary for the access indicator, nav locks and sign-in states (shared with the
+  // Jobs, Keys and Developers pages: OG.accessNote(kind)).
+  const ACCESS = {
+    public: { label: "Free, no account", text: "Anyone can use this. No account needed." },
+    account: { label: "Needs an account", text: "This needs an OpenGrid account. Accounts are invite-only for now; there is no self-serve sign-up yet." },
+    operator: { label: "OpenGrid staff only", text: "These are OpenGrid's internal operator tools." },
+    simulated: { label: "Simulation", text: "A simulation: no GPU is rented and nothing is charged." },
+  };
+  // An API error -> what to tell a person: a short title, one sentence, the next step, and the technical detail
+  // (kept for a "Technical details" fold, never the headline).
+  function explainError(err) {
+    const st = err && typeof err.status === "number" ? err.status : null;
+    const tech = [st ? "HTTP " + st : null, err && err.message, err && err.path ? String(err.path).replace(/^https?:\/\/[^/]+/, "") : null].filter(Boolean).join(" · ");
+    const base = { tech: tech || String(err || ""), action: "retry" };
+    if (st === 401) return Object.assign(base, { title: "Sign-in required", text: ACCESS.account.text, action: "signin" });
+    if (st === 403) return Object.assign(base, { title: "Not included in your access", text: "You are signed in, but your account or API key does not cover this. An OpenGrid admin can add it.", action: null });
+    if (st === 404) return Object.assign(base, { title: "Not found", text: "We could not find this. It may have been removed, or the link is wrong.", action: null });
+    if (st === 429) return Object.assign(base, { title: "Too many requests", text: "You are going a little fast. Wait a few seconds, then try again." });
+    if (st === 0 || st == null) return Object.assign(base, { title: "Could not reach OpenGrid", text: "Check your connection, then try again." });
+    if (st >= 500) return Object.assign(base, { title: "OpenGrid had a problem", text: "Something went wrong on our side. Try again in a moment." });
+    return Object.assign(base, { title: "Could not load this", text: (err && err.message) || "The request was not accepted." });
+  }
+  // The status bar's freshness line: when prices were last read, in words, with the exact time in `title`.
+  // Prices are read every few minutes, so older than 10 minutes is "may be out of date".
+  function ago(sec) {
+    if (sec < 45) return "just now";
+    if (sec < 90) return "1 min ago";
+    if (sec < 3600) return Math.round(sec / 60) + " min ago";
+    if (sec < 5400) return "1 hour ago";
+    if (sec < 86400) return Math.round(sec / 3600) + " hours ago";
+    return Math.round(sec / 86400) + " days ago";
+  }
+  function freshnessText(asOf, nowMs, ok, failText) {
+    if (ok === false) return { tone: "down", text: failText || "Can't reach OpenGrid", title: "The price service did not answer. Prices on this page may be out of date." };
+    const t = asOf ? Date.parse(asOf) : NaN;
+    if (!isFinite(t)) return { tone: "", text: "Connecting…", title: "" };
+    const sec = Math.max(0, ((nowMs == null ? Date.now() : nowMs) - t) / 1000);
+    const when = new Date(t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium" });
+    if (sec > 600) return { tone: "stale", text: "Prices may be out of date: last read " + ago(sec), title: "Prices were last read from providers at " + when + " (your time). They are normally refreshed every few minutes." };
+    return { tone: "live", text: "Prices updated " + ago(sec), title: "Prices were last read from providers at " + when + " (your time)." };
+  }
+  // How many tape items fit whole in `avail` px (gap between items; `more` px reserved for "+N more" when not all fit).
+  function tapeFit(widths, avail, gap, more) {
+    let used = 0;
+    const all = widths.reduce((a, w, i) => a + w + (i ? gap : 0), 0);
+    if (all <= avail) return widths.length;
+    for (let i = 0; i < widths.length; i++) {
+      const next = used + (i ? gap : 0) + widths[i];
+      if (next + gap + more > avail) return i;
+      used = next;
+    }
+    return widths.length;
+  }
+
   /* ================= pure: API envelope ================= */
   function unwrap(j) {
     if (j && typeof j === "object" && !Array.isArray(j) && "data" in j && j.meta && typeof j.meta === "object" &&
@@ -440,7 +503,7 @@ Full docs: web/README.md.
   }
 
   Object.assign(OG, { compile, matchRoute, legacyHash, navKeyFor, slug, fmt, freshness, freshLimits, cleanKids, familyTarget, shortReason, sortRows, csvCell, csvString,
-    fuzzy, fuzzyScore, parseCommand, command, findCommand, COMMANDS, unwrap, withParams, reasonOf,
+    fuzzy, fuzzyScore, parseCommand, command, findCommand, COMMANDS, commandParts, ACCESS, explainError, freshnessText, tapeFit, unwrap, withParams, reasonOf,
     randomId, stableJson, outcomeUnknown, intentFor, settleIntent, makeTracker, TRACK_EVENTS,
     dep: { FLOW: DEP_FLOW, UNCERTAIN: DEP_UNCERTAIN, FAILED: DEP_FAILED, LIVE: DEP_LIVE, tone: depTone, strip: depStrip },
     qs: { parse: qsParse, stringify: qsStringify } });
@@ -643,11 +706,31 @@ Full docs: web/README.md.
   OG.loginHref = () => "/login?next=" + encodeURIComponent((location.pathname || "/") + (location.search || ""));
   OG.loading = text => h("div", { class: "state loading", role: "status" }, h("i", { class: "spin" }), text || "Loading…");
   OG.empty = text => h("div", { class: "state empty" }, text || "Nothing to show.");
-  OG.error = (err, retry) => h("div", { class: "state error", role: "alert" },
-    h("b", {}, err && err.status === 404 ? "Not found" : err && err.status === 401 ? "Sign-in required" : err && err.status === 403 ? "Not allowed" : "Could not load"),
-    h("span", {}, " " + ((err && err.message) || String(err || ""))),
-    err && err.status === 401 ? h("a", { class: "btn sm", href: OG.loginHref() }, "Sign in") : null,
-    retry ? h("button", { class: "btn sm", onclick: retry }, "Retry") : null);
+  // Errors read as a sentence and a next step; the HTTP status and endpoint stay in "Technical details".
+  // A 401 is an access state, not a failure: it explains accounts and offers the operator sign-in (the only
+  // browser login that exists; customers use API keys).
+  OG.error = (err, retry) => {
+    const x = explainError(err);
+    const signin = x.action === "signin";
+    return h("div", { class: "state error" + (signin ? " gate" : ""), role: signin ? "status" : "alert" },
+      h("div", { class: "st-body" },
+        h("b", {}, signin ? [h("i", { class: "lock", "aria-hidden": "true" }), " ", x.title] : x.title),
+        h("p", {}, x.text),
+        h("div", { class: "st-acts" },
+          signin ? h("a", { class: "btn sm", href: "/" }, "Explore free pages") : null,
+          signin ? h("a", { class: "lnk st-op", href: OG.loginHref() }, "OpenGrid staff: operator sign-in") : null,
+          retry && x.action === "retry" ? h("button", { class: "btn sm", type: "button", onclick: retry }, "Try again") : null),
+        x.tech ? h("details", { class: "st-tech" }, h("summary", {}, "Technical details"), h("code", { class: "mono" }, x.tech)) : null));
+  };
+  // A standard access explanation for pages that need an account (Jobs, Keys, Watchlists...): call before the
+  // data loads so a visitor is never surprised by an error. kind: "account" | "operator" | "simulated" | "public".
+  OG.accessNote = (kind, extra) => {
+    const a = ACCESS[kind] || ACCESS.account;
+    return h("div", { class: "access-note k-" + (ACCESS[kind] ? kind : "account") },
+      h("b", {}, kind === "account" || kind === "operator" ? h("i", { class: "lock", "aria-hidden": "true" }) : null, a.label),
+      h("span", {}, " " + a.text + (extra ? " " + extra : "")));
+  };
+  OG.signedIn = () => document.body && document.body.classList.contains("og-signed-in");
   // The API returns null + a reason when coverage is thin: show the reason, never a number.
   OG.insufficient = (reason, title) => h("div", { class: "state insufficient" },
     h("b", {}, title || "Insufficient data"), h("span", {}, " " + (reason || "not enough observed history to compute this honestly")));
@@ -1095,11 +1178,15 @@ Full docs: web/README.md.
     render();
   };
 
-  // Highlight the current nav link and open its group (other groups stay as the user left them).
+  // Highlight the current nav link and open its group (other groups stay as the user left them). A link whose
+  // href is exactly this page wins over the page's nav key (/assistant sets nav "find" but has its own link).
   function markNav(nav) {
     let group = null;
-    document.querySelectorAll(".nav a[data-nav]").forEach(a => {
-      if (a.dataset.nav === nav) { a.setAttribute("aria-current", "page"); group = a.closest(".nav-sec"); }
+    const links = [...document.querySelectorAll(".nav a[data-nav]")];
+    const exact = links.find(a => a.getAttribute("href") === location.pathname);
+    const cur = exact || links.find(a => a.dataset.nav === nav) || null;
+    links.forEach(a => {
+      if (a === cur) { a.setAttribute("aria-current", "page"); group = a.closest(".nav-sec"); }
       else a.removeAttribute("aria-current");
     });
     document.querySelectorAll(".nav-sec").forEach(g => {
@@ -1155,7 +1242,14 @@ Full docs: web/README.md.
     current = { ctx, route: m && m.route };
     const nav = m ? (m.route.nav || navKeyFor(path)) : null;
     markNav(nav);
-    if (!m) { ctx.setTitle("Not found"); page.append(OG.head("Not found", path), OG.empty("No page at this address.")); return; }
+    if (!m) {
+      ctx.setTitle("Not found");
+      page.append(OG.head("Page not found", "There is no page at " + path),
+        h("div", { class: "state empty" }, h("div", { class: "st-body" },
+          h("p", {}, "The link may be old or mistyped. Try one of these, or press ", h("kbd", {}, "/"), " to search."),
+          h("div", { class: "st-acts" }, h("a", { class: "btn sm pri", href: "/" }, "Home"), h("a", { class: "btn sm", href: "/gpus" }, "GPU prices"), h("a", { class: "btn sm", href: "/find" }, "Find Compute")))));
+      return;
+    }
     const t = typeof m.route.title === "function" ? m.route.title(m.params, ctx.query) : m.route.title;
     ctx.setTitle(t);
     trackView(path, m.route.pattern, m.params);
@@ -1200,22 +1294,38 @@ Full docs: web/README.md.
   };
 
   /* ================= status bar ================= */
-  const statusState = { asOf: null, ok: null, text: "connecting" };
+  // "Prices updated 2 min ago" (exact time in the tooltip), redrawn every 30s so the words stay true.
+  const statusState = { asOf: null, ok: null, text: null };
   function drawStatus() {
-    const dot = $("#live-dot"), txt = $("#live-text"), asof = $("#asof");
+    const dot = $("#live-dot"), txt = $("#live-text"), wrap = $("#live");
     if (!dot) return;
-    const age = statusState.asOf ? (Date.now() - new Date(statusState.asOf)) / 1000 : null;
-    const stale = statusState.ok === false || (age != null && age > 600);
-    dot.className = "dot " + (statusState.ok == null ? "" : stale ? "stale" : "live");
-    txt.textContent = statusState.ok === false ? statusState.text : age != null && age > 600 ? "stale" : statusState.ok ? "live" : statusState.text;
-    asof.textContent = statusState.asOf ? fmt.time(statusState.asOf) : "-";
-    asof.title = statusState.asOf ? "data as of " + new Date(statusState.asOf).toString() : "";
+    const f = freshnessText(statusState.asOf, Date.now(), statusState.ok, statusState.text);
+    dot.className = "dot " + f.tone;
+    txt.textContent = f.text;
+    if (wrap) wrap.title = f.title || "When OpenGrid last read provider prices";
   }
   OG.status = {
-    asOf(iso) { if (iso) { statusState.asOf = iso; statusState.ok = true; } drawStatus(); },
-    live(ok, text) { statusState.ok = ok; statusState.text = text || (ok ? "live" : "offline"); drawStatus(); },
-    tape(items) { const el = $("#tape"); if (el) el.replaceChildren(...items); },
+    asOf(iso) { if (iso) { statusState.asOf = iso; statusState.ok = true; statusState.text = null; } drawStatus(); },
+    live(ok, text) { statusState.ok = ok; statusState.text = ok ? null : (text && !/unreachable|offline/i.test(text) ? text : null); drawStatus(); },
+    tape(items) { const el = $("#tape"); if (el) { el.replaceChildren(...items); fitTape(); } },
   };
+  // Only whole tape items are shown; the rest are counted in "+N more" (links to /gpus). Refits on resize.
+  function fitTape() {
+    const el = $("#tape");
+    if (!el || !el.clientWidth) return;
+    const items = [...el.querySelectorAll(".tk")];
+    let more = el.querySelector(".tk-more");
+    if (more) more.remove();
+    items.forEach(i => { i.hidden = false; });
+    const gap = parseFloat(getComputedStyle(el).columnGap) || 18;
+    const avail = el.clientWidth - (parseFloat(getComputedStyle(el).paddingLeft) || 0);
+    const n = tapeFit(items.map(i => i.getBoundingClientRect().width), avail, gap, 78);
+    items.forEach((i, k) => { i.hidden = k >= n; });
+    if (n < items.length) {
+      more = h("a", { class: "tk-more", href: "/gpus", title: "See every GPU price" }, "+" + (items.length - n) + " more");
+      el.append(more);
+    }
+  }
   let pollingP = null;
   // Poll intervals per provider: resolves to the Map used by freshBadge({provider}). Never rejects.
   OG.data.intervals = () => {
@@ -1231,18 +1341,18 @@ Full docs: web/README.md.
     const el = $("#polled");
     if (el && p && p.providers) {
       const mins = Math.round(Math.min(...p.providers.map(x => x.interval_seconds)) / 60);
-      el.textContent = `${p.providers.length} providers`;
-      el.title = `${p.providers.length} providers polled, fastest every ${mins}m${p.running ? "" : " (poller not running on this server)"}`;
+      el.replaceChildren(h("span", { class: "st-sep", "aria-hidden": "true" }, "·"), ` ${p.providers.length} providers tracked`);
+      el.title = `OpenGrid reads prices from ${p.providers.length} cloud providers, the busiest every ${mins} min${p.running ? "" : " (price checks are paused on this server)"}`;
     }
   }
   // Tape: GPU prices from /market (lowest on-demand $/GPU-hr), then the latest notable moves from
   // /v1/tape (events: title, pct, value). Real prices only; the two are never mixed in one item.
   async function loadTape() {
     const [m, v1] = await Promise.all([OG.data.market(24).catch(() => null), api.soft("/v1/tape")]);
-    if (!m) { OG.status.live(false, "api unreachable"); return; }
+    if (!m) { OG.status.live(false); return; }
     OG.status.asOf(m.t1);
     const top = m.gpus.filter(g => g.providers >= 2).slice(0, 16);
-    const prices = top.map(g => h("a", { class: "tk", href: "/gpu/" + slug(g.gpu), title: `${g.gpu}: lowest on-demand $/GPU-hr across ${g.providers} providers` },
+    const prices = top.map(g => h("a", { class: "tk", href: "/gpu/" + slug(g.gpu), title: `${g.gpu}: lowest on-demand price per GPU-hour across ${g.providers} providers, change over 24 hours` },
       h("b", {}, L.shortGpu(g.gpu)), " ", fmt.price(g.lowest), " ", OG.chg(g.change_pct)));
     const events = (Array.isArray(v1) ? v1 : []).slice(0, 12).map(e => h("a", {
       class: "tk tk-ev", href: e.gpu_slug ? "/gpu/" + e.gpu_slug : "/events", title: e.title || "",
@@ -1252,7 +1362,10 @@ Full docs: web/README.md.
 
   /* ================= command bar ================= */
   // Every nav link, primary or secondary (collapsed groups stay in the DOM), plus its search aliases.
-  function navItems() { return [...document.querySelectorAll(".nav a[data-nav]")].map(a => ({ label: a.textContent.trim(), href: a.getAttribute("href"), alias: a.dataset.alias || "" })); }
+  function navItems() {
+    return [...document.querySelectorAll(".nav a[data-nav]")].filter(a => !a.closest("[hidden]"))
+      .map(a => ({ label: a.textContent.trim(), href: a.getAttribute("href"), alias: a.dataset.alias || "", lock: !!a.dataset.access && !OG.signedIn() }));
+  }
   let gpuList = null;
   async function gpusForSearch() { if (!gpuList) gpuList = await OG.data.gpus().catch(() => []); return gpuList; }
   OG.resolveGpu = async q => {
@@ -1285,53 +1398,92 @@ Full docs: web/README.md.
     command(/^r\s+(\S+)(?:\s+(\d+))?(?:\s+(\S+))?$/i, async m => { const g = await OG.resolveGpu(m[1]); go("/route" + qsStringify({ gpu: g ? g.slug : m[1], count: m[2], region: m[3] })); }, "r <gpu> [n] [region]  route preview (r h100 8 us)");
     const single = { e: ["/events", "events"], n: ["/news", "news"], o: ["/opportunities", "opportunities"], x: ["/explorer", "explorer"], i: ["/indices", "indices"], h: ["/heatmaps", "heatmaps"], m: ["/methodology", "methodology"], d: ["/deployments", "deployments"] };
     for (const [k, [href, label]] of Object.entries(single)) command(new RegExp("^" + k + "$", "i"), () => go(href), `${k.padEnd(16)} ${label}`);
+    // the main places by name (also reachable by typing part of the name: page suggestions)
+    for (const [word, href, label] of [["home", "/", "home page"], ["gpus", "/gpus", "every GPU price"], ["find", "/find", "Find Compute for a project"],
+      ["markets", "/markets", "market overview"], ["developers", "/developers", "connect an AI assistant, CLI or API"]])
+      command(new RegExp("^" + word + "$", "i"), () => go(href), `${word.padEnd(16)} ${label}`);
+    command(/^ask\s+(.+)$/i, m => go("/assistant?q=" + encodeURIComponent(m[1].trim())), "ask <question>   ask the assistant in plain English");
     command(/^theme(?:\s+(light|dark))?$/i, m => OG.setTheme(m[1] ? m[1].toLowerCase() : OG.theme() === "light" ? "dark" : "light"), "theme [light|dark]  switch colour theme");
     command(/^\?$|^help$/i, () => showHelp(), "?                this help");
   }
 
+  // The places a first-time visitor needs, shown when the bar is empty (all clickable).
+  const START = [["Home", "/"], ["GPUs: every price", "/gpus"], ["Find Compute for my project", "/find"], ["Ask the assistant", "/assistant"],
+    ["Markets", "/markets"], ["Developers", "/developers"], ["My Jobs", "/jobs", true]];
+  const EXAMPLES = [["h100", "open the H100 market"], ["c h100 h200", "compare two GPUs"], ["ask cheapest gpu for fine-tuning llama 8b", "ask in plain English"]];
   async function suggestions(text) {
     const t = text.trim();
-    if (!t) return COMMANDS.map(c => ({ label: c.usage, hint: "command", run: null }));
+    if (!t) {
+      return [
+        ...START.map(([label, href, lock], i) => ({ group: i ? null : "Go to", label, hint: lock ? "needs an account" : "page", lock: !!lock, run: () => OG.go(href) })),
+        ...EXAMPLES.map(([q, hint], i) => ({ group: i ? null : "Try typing", label: q, hint, code: true, insert: q })),
+      ];
+    }
     const out = [];
     const hit = findCommand(t);
-    if (hit) out.push({ label: "↵ " + t, hint: hit.cmd.usage.split(/\s{2,}/)[1] || "command", run: () => hit.cmd.handler(hit.match, t) });
+    if (hit) out.push({ label: "↵ " + t, hint: commandParts(hit.cmd.usage).desc || "command", run: () => hit.cmd.handler(hit.match, t) });
     const q = t.replace(/^[gpc]\s+/i, "");
     const [gpus, provs, fams] = [await gpusForSearch(), OG.data.providers(), await OG.data.families()];
+    for (const n of fuzzy(t, navItems(), n => [n.label, n.alias].filter(Boolean)).slice(0, 3)) out.push({ label: n.label, hint: n.lock ? "page · needs an account" : "page", lock: n.lock, run: () => OG.go(n.href) });
     for (const f of fuzzy(q, fams, f => [f.slug, f.id, f.name].filter(Boolean)).slice(0, 2)) {
       const n = Array.isArray(f.variants) ? f.variants.length : Number(f.variant_count ?? f.variants_count) || null;
       out.push({ label: f.name || f.slug, hint: "GPU family" + (n ? ` · ${n} variant${n === 1 ? "" : "s"}` : ""), run: () => OG.go("/gpu/" + (f.slug || f.id)) });
     }
-    for (const g of fuzzy(q, gpus, g => [g.slug, g.short, g.name]).slice(0, 6)) out.push({ label: g.short, hint: g.live ? `GPU · ${g.weight} provider${g.weight === 1 ? "" : "s"}` : "GPU · none live", run: () => OG.go("/gpu/" + g.slug) });
+    for (const g of fuzzy(q, gpus, g => [g.slug, g.short, g.name]).slice(0, 6)) out.push({ label: g.short, hint: g.live ? `GPU · ${g.weight} provider${g.weight === 1 ? "" : "s"}` : "GPU · none priced now", run: () => OG.go("/gpu/" + g.slug) });
     for (const p of fuzzy(q, provs, p => [p.name, p.display_name]).slice(0, 4)) out.push({ label: p.display_name, hint: "provider", run: () => OG.go("/provider/" + p.name) });
-    for (const n of fuzzy(q, navItems(), n => [n.label, n.alias].filter(Boolean)).slice(0, 3)) out.push({ label: n.label, hint: "page", run: () => OG.go(n.href) });
+    // commands whose word starts with what was typed ("ma" -> markets); clicking one with an argument fills it in
+    if (!hit) for (const c of COMMANDS) {
+      const cp = commandParts(c.usage);
+      if (t.length >= 2 && cp.syntax.toLowerCase().startsWith(t.toLowerCase()) && out.length < 11)
+        out.push({ label: cp.syntax, hint: cp.desc, code: true, insert: cp.insert, run: cp.insert ? null : () => { const x = findCommand(cp.syntax); if (x) return x.cmd.handler(x.match, cp.syntax); } });
+    }
+    // more than one word and nothing exact: offer the assistant
+    if (!hit && /\s/.test(t) && !/^[a-z]\s/i.test(t)) out.push({ label: "Ask the assistant: \u201c" + t.slice(0, 60) + "\u201d", hint: "plain English", run: () => OG.go("/assistant?q=" + encodeURIComponent(t)) });
     return out.slice(0, 12);
   }
   function setupCommandBar() {
     const input = $("#cmd"), box = $("#cmd-sug");
     if (!input) return;
     let items = [], sel = 0, seq = 0;
-    const close = () => { box.hidden = true; items = []; };
+    const close = () => { box.hidden = true; items = []; input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant"); };
     const draw = () => {
-      box.replaceChildren(...items.map((it, i) => h("div", { class: "sug" + (i === sel ? " on" : ""), role: "option", onmousedown: e => { e.preventDefault(); exec(i); } },
-        h("span", { class: "sug-l" }, it.label), h("span", { class: "sug-h" }, it.hint))));
+      const rows = [];
+      items.forEach((it, i) => {
+        if (it.group) rows.push(h("div", { class: "sug-g", role: "presentation" }, it.group));
+        rows.push(h("div", { class: "sug" + (i === sel ? " on" : ""), id: "sug-" + i, role: "option", "aria-selected": String(i === sel), onmousedown: e => { e.preventDefault(); exec(i); } },
+          h("span", { class: "sug-l" }, it.lock ? h("i", { class: "lock", "aria-hidden": "true" }) : null, it.lock ? " " : null, it.code ? h("code", {}, it.label) : it.label),
+          h("span", { class: "sug-h" }, it.hint)));
+      });
+      if (items.length && !input.value.trim()) rows.push(h("div", { class: "sug-foot" }, "Type a GPU, provider or page. Press ", h("kbd", {}, "?"), " for every shortcut."));
+      box.replaceChildren(...rows);
       box.hidden = !items.length;
+      input.setAttribute("aria-expanded", String(!!items.length));
+      if (items.length) input.setAttribute("aria-activedescendant", "sug-" + sel); else input.removeAttribute("aria-activedescendant");
     };
-    const refresh = async () => { const my = ++seq; const r = await suggestions(input.value); if (my !== seq) return; items = r; sel = 0; draw(); };
+    let itemsFor = null;   // the text `items` were computed for: Enter on newer text recomputes first (no stale pick)
+    const refresh = async () => { const my = ++seq, text = input.value; const r = await suggestions(text); if (my !== seq) return; items = r; itemsFor = text; sel = 0; draw(); };
     async function exec(i) {
       const it = items[i];
       const q = input.value.trim();
+      if (it && !it.run && it.insert) { input.value = it.insert; input.focus(); refresh(); return; }   // fill in, let them finish typing
       if (q) tracker.track("search", { q: q.slice(0, 100) });
       if (it && it.run) { input.value = ""; close(); input.blur(); await it.run(); return; }
       const t = input.value.trim(), hit = findCommand(t);
       if (hit) { input.value = ""; close(); input.blur(); await hit.cmd.handler(hit.match, t); }
     }
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-expanded", "false");
     input.addEventListener("input", refresh);
     input.addEventListener("focus", refresh);
     input.addEventListener("blur", () => setTimeout(close, 100));
     input.addEventListener("keydown", e => {
       if (e.key === "ArrowDown") { e.preventDefault(); sel = Math.min(items.length - 1, sel + 1); draw(); }
       else if (e.key === "ArrowUp") { e.preventDefault(); sel = Math.max(0, sel - 1); draw(); }
-      else if (e.key === "Enter") { e.preventDefault(); exec(items.length ? sel : -1); }
+      else if (e.key === "Enter") {
+        e.preventDefault();
+        if (itemsFor !== input.value) refresh().then(() => exec(items.length ? sel : -1));
+        else exec(items.length ? sel : -1);
+      }
       else if (e.key === "Escape") { input.value = ""; close(); input.blur(); }
     });
     document.addEventListener("keydown", e => {
@@ -1344,12 +1496,23 @@ Full docs: web/README.md.
   }
   function showHelp() {
     let hp = $("#help");
-    if (!hp) { hp = h("div", { id: "help", class: "help", role: "dialog", "aria-label": "Keyboard commands", onclick: e => { if (e.target === hp) hp.hidden = true; } }); document.body.append(hp); }
+    if (!hp) { hp = h("div", { id: "help", class: "help", role: "dialog", "aria-modal": "true", "aria-label": "Keyboard shortcuts", onclick: e => { if (e.target === hp) hp.hidden = true; } }); document.body.append(hp); }
+    const row = (k, d) => h("tr", {}, h("td", {}, k), h("td", {}, d));
+    const close = h("button", { class: "btn sm", type: "button", onclick: () => { hp.hidden = true; } }, "Close");
+    const parts = COMMANDS.map(c => commandParts(c.usage));
+    const withArg = parts.filter(cp => /[<[]/.test(cp.syntax)), noArg = parts.filter(cp => !/[<[]/.test(cp.syntax) && cp.syntax !== "?").sort((a, b) => a.syntax.localeCompare(b.syntax));
     hp.replaceChildren(h("div", { class: "help-box" },
-      h("div", { class: "help-h" }, h("b", {}, "Commands"), h("span", { class: "dim" }, "press / to type · Esc to close")),
-      h("pre", { class: "help-pre" }, COMMANDS.map(c => c.usage).join("\n")),
-      h("button", { class: "btn sm", onclick: () => { hp.hidden = true; } }, "Close")));
+      h("div", { class: "help-h" }, h("b", {}, "Search and shortcuts"), h("span", { class: "dim" }, "Esc to close")),
+      h("table", { class: "help-t" }, h("tbody", {},
+        h("tr", { class: "hg" }, h("td", { colspan: "2" }, "Keys")),
+        row("/", "search: type a GPU, provider or page name"), row("?", "this list"), row("↑ ↓ ↵", "pick a suggestion"), row("Esc", "close"),
+        h("tr", { class: "hg" }, h("td", { colspan: "2" }, "Find something (type in the search box)")),
+        ...withArg.map(cp => row(cp.syntax, cp.desc)),
+        h("tr", { class: "hg" }, h("td", { colspan: "2" }, "Jump to a page")),
+        ...noArg.map(cp => row(cp.syntax, cp.desc)))),
+      close));
     hp.hidden = false;
+    close.focus({ preventScroll: true });
   }
 
   /* ================= theme ================= */
@@ -1366,6 +1529,46 @@ Full docs: web/README.md.
     if (!b) return;
     const label = OG.theme() === "light" ? "Switch to dark mode" : "Switch to light mode";
     b.setAttribute("aria-label", label); b.title = label;
+  }
+
+  /* ================= access indicator ================= */
+  // "Public access" for a visitor, "Operator" after the site login. The browser login is OpenGrid's operator
+  // login, not a customer account (customers use API keys), so the popover never offers a customer sign-in.
+  function drawAccess(me) {
+    const wrap = $("#acc"), btn = $("#acc-b"), t = $("#acc-t"), pop = $("#acc-p");
+    if (!wrap || !btn || !pop) return;
+    const op = OG.isAdmin(me), signed = !!me;
+    document.body.classList.toggle("og-signed-in", signed);
+    wrap.classList.toggle("op", op);
+    t.textContent = op ? "Operator" : signed ? "Signed in" : (root.matchMedia && root.matchMedia("(max-width: 560px)").matches ? "Public" : "Public access");
+    btn.title = op ? "Signed in with the OpenGrid site login" : signed ? "Signed in" : "You are browsing as a visitor: what you can use";
+    const li = (k, v) => h("li", {}, h("b", {}, k), h("span", {}, v));
+    pop.replaceChildren(...(op || signed ? [
+      h("h2", {}, op ? "Signed in as operator" : "Signed in"),
+      h("p", {}, op ? "You are using the OpenGrid site login: every page is open to you, including the Operator tools at the bottom of the menu." : "Your account's pages are open to you."),
+      h("p", { class: "dim" }, "To sign out, close this browser window: the site login is remembered until then."),
+    ] : [
+      h("h2", {}, "You are browsing as a visitor"),
+      h("p", {}, "Everything under Explore in the menu is free and needs no account."),
+      h("ul", {},
+        li("Free now", "GPU prices, comparisons, market data, Find Compute recommendations and the assistant."),
+        li("Account", "My Jobs (including the free simulated demo), API keys and watchlists. Accounts are invite-only for now."),
+        li("Real GPU runs", "Early access: each real launch waits for OpenGrid to approve the price.")),
+      h("div", { class: "acc-act" },
+        h("a", { class: "btn sm pri", href: "/gpus" }, "Explore GPU prices"),
+        h("a", { class: "btn sm", href: "/developers" }, "Use it from your AI assistant")),
+      h("p", { class: "note" }, "OpenGrid staff: ", h("a", { class: "lnk", href: OG.loginHref() }, "operator sign-in")),
+    ]));
+  }
+  function setupAccess() {
+    const btn = $("#acc-b"), pop = $("#acc-p");
+    if (!btn || !pop) return;
+    const set = open => { pop.hidden = !open; btn.setAttribute("aria-expanded", String(open)); };
+    btn.addEventListener("click", e => { e.stopPropagation(); set(pop.hidden); });
+    document.addEventListener("click", e => { if (!pop.hidden && !e.target.closest("#acc")) set(false); });
+    document.addEventListener("keydown", e => { if (e.key === "Escape" && !pop.hidden) { set(false); btn.focus(); } });
+    pop.addEventListener("click", e => { if (e.target.closest("a")) set(false); });
+    drawAccess(null);
   }
 
   /* ================= boot ================= */
@@ -1391,14 +1594,19 @@ Full docs: web/README.md.
     const tt = $("#theme-toggle");
     if (tt) tt.addEventListener("click", () => OG.setTheme(OG.theme() === "light" ? "dark" : "light"));
     drawThemeToggle();
+    setupAccess();
     OG.data.intervals();
     render();
     loadPolling(); loadTape();
-    setInterval(() => { if (!document.hidden) { loadTape(); drawStatus(); } }, 60000);
+    setInterval(() => { if (!document.hidden) loadTape(); }, 60000);
+    setInterval(() => { if (!document.hidden) drawStatus(); }, 30000);
+    let fitT = null;
+    root.addEventListener("resize", () => { clearTimeout(fitT); fitT = setTimeout(fitTape, 120); });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTape);
     setInterval(() => tracker.flush(), 10000);
     root.addEventListener("pagehide", () => tracker.flush({ keepalive: true }));
     // Admin nav section: only for the operator / admin-scoped principals (the API enforces it regardless)
-    OG.me().then(me => document.querySelectorAll(".nav-admin").forEach(n => { n.hidden = !OG.isAdmin(me); }));
+    OG.me().then(me => { document.querySelectorAll(".nav-admin").forEach(n => { n.hidden = !OG.isAdmin(me); }); drawAccess(me); });
   };
   return OG;
 });

@@ -89,7 +89,25 @@ OG.page("/gpu/:slug", {
 - `OG.chg(fraction, {invert, reason})` ▲/▼ span; `OG.logo(provider, size)`, `OG.providerLink(p)`, `OG.gpuLink(nameOrSlug)`.
 - `OG.fmt.price/pct/num(v, digits)/compact/age(isoOrSeconds)/time/date/dateTime/dir/cls(v, invert)`.
 - `OG.status.asOf(iso)`, `OG.status.live(ok, text)`, `OG.status.tape([nodes])` (top bar).
-- Shared interim views (pages/market.js): `OG.views.marketBoard(el, ctx)`, `OG.views.windowSeg(hours, onChange)`, `OG.views.hours()`.
+- Access and errors (one vocabulary for every page):
+  - `OG.error(err, retry)`: a title and one sentence in plain words, the next step, and the HTTP status / endpoint in a
+    folded "Technical details". A 401 renders as an access state ("Sign-in required": accounts are invite-only, plus
+    "Explore free pages" and a small "OpenGrid staff: operator sign-in"), never as a failure.
+  - `OG.accessNote(kind, extra)`: say who can use a page before its data loads. `kind`: `"account"` (needs an
+    account, invite-only), `"operator"`, `"simulated"` (no GPU, no charge), `"public"`. Wording lives in `OG.ACCESS`.
+  - `OG.signedIn()`: true after `/v1/me` answered (the operator's site login). The browser login is the operator
+    login only: never offer a customer "Sign in" or "Sign up" (customers use API keys).
+  - Nav links to account pages carry `data-access="account"` (a lock, hidden once signed in).
+- Pure helpers (Node-tested in tests/test_web_shell.js): `OG.explainError`, `OG.freshnessText`, `OG.tapeFit`, `OG.commandParts`.
+
+## Design tokens (web/app.css)
+- Type: only `--fs-2xs` 11 · `--fs-xs` 12 · `--fs-data` 12.5 (data-table cells) · `--fs-sm` 13 · `--fs-base` 14 (body) ·
+  `--fs-md` 15 · `--fs-lg` 17 · `--fs-xl` 21 (page titles) · `--fs-2xl` 24 · `--fs-3xl` 34. No raw px font sizes
+  (a test enforces it).
+- Controls: `--ctl-h` 32px (`.btn`, `.field`, search), `--ctl-h-sm` 26px (`.btn.sm`, `.chip`); 44px on touch screens.
+  Focus: 2px accent ring. `--radius` 4px.
+- Text colours `--text`, `--text-2`, `--muted`, `--dim` (and `--accent`, `--up`, `--down`, `--warn`) all meet WCAG AA
+  4.5:1 on `--bg` and `--surface` in both themes (tested). Use `--muted` for secondary text, never a custom grey.
 
 ## Execution (money-moving actions, state, analytics)
 

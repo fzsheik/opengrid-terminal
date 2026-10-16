@@ -1,4 +1,4 @@
-/* Superseded: the first web UI's market grid and GPU detail now live in web/pages/market.js and web/pages/gpu.js
+/* Superseded: the first web UI's market grid and GPU detail now live in web/pages/gpus.js and web/pages/gpu.js
    on the web/core.js framework. This file is kept so old bookmarks of /static/app.js still resolve; loaded
    on its own it sends old hash URLs (#/market, #/market/<gpu>) to their new paths. */
 (() => {
