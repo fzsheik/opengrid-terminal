@@ -1,35 +1,92 @@
-/* /onboarding: the design-partner path to a first real route, from GET /v1/onboarding (steps done, evidence,
-   next): 1 account, 2 API key (inline, secret shown once), 3 provider credentials (optional: managed vs BYO),
-   4 route preview prefilled from the partner profile, 5 why the provider won (the scoring explanation),
-   6 request a supervised deployment (on /route, the one place money moves). Plus the partner profile form
-   (GET/POST/PATCH /v1/partners/me). The operator can preview a partner: ?account=<id> reads that partner's
-   status from /v1/admin/partners (actions on this page still run as the signed-in principal).
-   /admin/partners: every partner with onboarding progress; create one (account + profile + first key in one
+/* /onboarding: the design-partner path to a first real route.
+   In a browser the only signed-in principal is the operator (site login); partners act with their API key. So:
+     signed out  a static explanation of how onboarding works today (keys are issued by the OpenGrid team; no
+                 self-service sign-up) with the access request link. No private call, no 401 stack.
+     operator    the operator account's own checklist, or ?account=<id> to preview a partner's progress (read from
+                 /v1/admin/partners; actions on this page still run as the operator, and say so).
+   Steps come from GET /v1/onboarding (computed from evidence, never edited): account, key, provider credentials
+   (optional), first route preview (with why the winner won), first supervised deployment, feedback. Keys are
+   created on /keys (one place), not here. The preview runs only when its button is pressed; saving the profile
+   never re-runs it (the old result is marked out of date instead).
+   Profile form (GET/POST/PATCH /v1/partners/me, PATCH /v1/admin/partners/<id>): GPUs are typed as names
+   ("H100 SXM5") and stored as canonical slugs.
+   /admin/partners: every partner with onboarding status; create one (account + profile + first key in one
    step, key shown once); per-partner deployments and feedback. */
 (() => {
   const { h, fmt } = OG;
   const PROFILE = [
-    ["company", "Company", "text"], ["technical_contact_name", "Technical contact", "text"], ["technical_contact_email", "Contact email", "text"],
-    ["preferred_gpus", "Preferred GPUs (slugs, comma-separated)", "list"], ["regions", "Regions (US, Europe, …)", "list"], ["workload_type", "Workload type", "text"],
-    ["normal_provider", "Normal provider", "text"], ["normal_price_per_gpu_hour", "Normal $/GPU·h (what you pay today)", "num"], ["max_price_per_gpu_hour", "Max $/GPU·h", "num"],
-    ["expected_gpu_count", "Expected GPU count", "int"], ["expected_duration_hours", "Expected duration (h)", "num"],
+    ["company", "Company (required)", "text"], ["technical_contact_name", "Technical contact", "text"], ["technical_contact_email", "Contact email", "text"],
+    ["preferred_gpus", "Preferred GPUs (comma-separated, e.g. H100 SXM5, L40S)", "gpus"], ["regions", "Regions (US, Europe, …)", "list"], ["workload_type", "Workload type (training, fine-tuning, inference…)", "text"],
+    ["normal_provider", "Provider you use today", "text"], ["normal_price_per_gpu_hour", "What you pay today ($/GPU·h)", "num"], ["max_price_per_gpu_hour", "Max price ($/GPU·h)", "num"],
+    ["expected_gpu_count", "Expected GPU count", "int"], ["expected_duration_hours", "Expected duration (hours)", "num"],
     ["latency_requirements", "Latency requirements", "area"], ["storage_requirements", "Storage requirements", "area"], ["network_requirements", "Network requirements", "area"],
   ];
   const show = v => (v == null ? "" : Array.isArray(v) ? v.join(", ") : String(v));
+  const norm = s => String(s || "").toLowerCase().replace(/^(nvidia|amd|intel)\s+/, "").replace(/[^a-z0-9]+/g, "");
+  const noMem = s => norm(String(s || "").replace(/\b\d+\s*gb\b/ig, ""));
+  // pure: typed GPU names -> {slugs, unknown, ambiguous}. A name matches a GPU's slug, full name or short name
+  // (case, vendor prefix and punctuation ignored); without the memory size ("H100 PCIe") it is accepted only when
+  // exactly one GPU fits. Nothing fuzzier: a typo is reported, never mapped to another GPU.
+  function resolveGpuNames(text, gpus) {
+    const slugs = [], unknown = [], ambiguous = [];
+    for (const raw of String(text || "").split(",").map(x => x.trim()).filter(Boolean)) {
+      const n = norm(raw), m = noMem(raw);
+      let g = (gpus || []).find(x => [x.slug, x.name, x.short].some(v => v && norm(v) === n));
+      if (!g) {
+        const hits = (gpus || []).filter(x => [x.name, x.short].some(v => v && noMem(v) === m));
+        if (hits.length === 1) g = hits[0];
+        else if (hits.length > 1) { ambiguous.push(raw + " (" + hits.map(x => x.short || x.name).join(" or ") + ")"); continue; }
+      }
+      if (g) { if (!slugs.includes(g.slug)) slugs.push(g.slug); } else unknown.push(raw);
+    }
+    return { slugs, unknown, ambiguous };
+  }
+  const gpuLabel = (sl, gpus) => { const g = (gpus || []).find(x => x.slug === sl); return g ? (g.short || g.name) : sl; };
+  // pure: the onboarding steps as this page shows them ([server step, title, optional]); "why the provider won"
+  // is part of the preview step (the server has no separate step for it, so it could never show as done)
+  const STEPS = [
+    ["account_created", "Account created", false],
+    ["key_created", "API key", false],
+    ["credentials_connected", "Provider credentials", true],
+    ["first_preview", "First route preview", false],
+    ["first_supervised_deployment", "First supervised deployment", false],
+    ["feedback_given", "Feedback on the deployment", false],
+  ];
+  OG.onboarding = { resolveGpuNames, gpuLabel, STEPS };
+  if (typeof OG.page !== "function" || typeof document === "undefined") return;
+
   function profileForm(profile, onSave, opts) {
     opts = opts || {};
     const inputs = {};
+    let gpus = [];
+    const listId = "ob-gpu-names-" + Math.random().toString(36).slice(2, 8);
+    const gpuList = h("datalist", { id: listId });
     const grid = h("div", { class: "ob-grid" }, PROFILE.map(([k, label, t]) => {
-      const i = t === "area" ? h("textarea", { class: "field og-ask-ta", rows: 2 }) : h("input", { class: "field" + (t === "num" || t === "int" ? " num" : ""), type: t === "num" || t === "int" ? "number" : "text", step: t === "num" ? "0.01" : null, min: t === "num" || t === "int" ? 0 : null });
+      const num = t === "num" || t === "int";
+      const i = t === "area" ? h("textarea", { class: "field og-ask-ta", rows: 2 }) : h("input", { class: "field" + (num ? " num" : ""), type: num ? "number" : "text", step: t === "num" ? "0.01" : null, min: num ? 0 : null, list: t === "gpus" ? listId : null });
       i.value = show(profile && profile[k]);
       inputs[k] = i;
       return h("label", { class: "og-ask-f" + (t === "area" ? " wide" : "") }, h("span", { class: "og-ask-l" }, label), i);
     }));
+    const shownGpus = () => ((profile && profile.preferred_gpus) || []).map(sl => gpuLabel(sl, gpus)).join(", ");
+    OG.data.gpus().then(list => {
+      gpus = list || [];
+      gpuList.replaceChildren(...gpus.filter(g => g.live).sort((a, b) => b.weight - a.weight).map(g => h("option", { value: g.short || g.name })));
+      if (inputs.preferred_gpus.value === show(profile && profile.preferred_gpus)) inputs.preferred_gpus.value = shownGpus();
+    }).catch(() => {});
     const msg = h("span", { class: "dim" });
     const read = () => {
       const out = {};
       for (const [k, , t] of PROFILE) {
         const raw = inputs[k].value.trim();
+        if (t === "gpus") {
+          if (raw === shownGpus() || raw === show(profile && profile[k])) continue;
+          const r = resolveGpuNames(raw, gpus);
+          if (r.unknown.length) throw new Error("unknown GPU: " + r.unknown.join(", ") + " (pick a name from the suggestions)");
+          if (r.ambiguous.length) throw new Error("more than one GPU matches: " + r.ambiguous.join("; "));
+          out[k] = r.slugs.length ? r.slugs : null;
+          continue;
+        }
         if (raw === show(profile && profile[k])) continue;
         out[k] = raw === "" ? null : t === "list" ? raw.split(",").map(x => x.trim()).filter(Boolean) : t === "int" ? parseInt(raw, 10) : t === "num" ? Number(raw) : raw;
       }
@@ -38,13 +95,15 @@
     const extra = opts.extra || [];
     return h("form", { class: "ob-form", onsubmit: async e => {
       e.preventDefault();
-      const body = read();
+      msg.className = "dim";
+      let body;
+      try { body = read(); } catch (err) { msg.replaceChildren(OG.error({ message: err.message })); return; }
       for (const x of extra) Object.assign(body, x.read());
       if (!Object.keys(body).length && profile) { msg.textContent = "nothing changed"; return; }
       msg.textContent = "saving…";
       try { await onSave(body); msg.textContent = "saved"; msg.className = "up"; } catch (err) { msg.replaceChildren(OG.error(err)); }
-    } }, grid, extra.map(x => x.el), h("div", { class: "bar" }, h("button", { class: "btn pri", type: "submit" }, opts.submit || (profile ? "Save profile" : "Create profile")), msg),
-      h("p", { class: "note" }, "Normal price is partner-reported, never shown as an OpenGrid observation. Used to prefill routes and to compare savings honestly."));
+    } }, gpuList, grid, extra.map(x => x.el), h("div", { class: "bar" }, h("button", { class: "btn pri", type: "submit" }, opts.submit || (profile ? "Save profile" : "Create profile")), msg),
+      h("p", { class: "note" }, "What you pay today is partner-reported and never shown as an OpenGrid observation. The profile prefills the route preview and keeps savings comparisons honest."));
   }
   function keyReveal(k) {
     return h("div", { class: "ob-key" }, h("div", { class: "ky-warn" }, h("b", {}, "Copy this key now. "), "OpenGrid stores only a hash and cannot show it again."),
@@ -57,27 +116,42 @@
     title: "Onboarding",
     async mount(el, params, query, ctx) {
       const root = h("div", { class: "pg-ob" });
-      el.append(root, OG.loading("Loading onboarding…"));
+      el.append(root);
+      root.append(OG.loading("Loading onboarding…"));
       const me = await OG.me();
       if (!ctx.alive()) return;
       const admin = OG.isAdmin(me);
+      const D = OG.dx;
+
+      /* ----- signed out: how onboarding works, no private calls ----- */
+      if (!me) {
+        root.replaceChildren(OG.head("Onboarding", "How a team gets from first look to a first supervised GPU run with OpenGrid"),
+          D.accessCall(null, { title: "Onboarding is run with the OpenGrid team today." }),
+          h("ol", { class: "ob-steps" }, [
+            ["Explore with no key", "Public market data, project analysis and GPU recommendations work today from the API, the CLI and your AI assistant.", h("a", { class: "lnk", href: "/developers#quickstart" }, "Developer quickstart →")],
+            ["Get an account and a key", "The OpenGrid team creates your account and first API key (design partners). There is no self-service sign-up or payment yet.", h("a", { class: "lnk", href: D.ACCESS_URL, target: "_blank", rel: "noopener noreferrer external" }, "Request API access ↗")],
+            ["Preview routes", "With a route:preview key, see which listing OpenGrid would pick for your workload and why. Free; never calls a provider.", h("a", { class: "lnk", href: "/api#private" }, "Route preview API →")],
+            ["A first supervised run", "Not available yet: every provider adapter is still simulated. When it opens, the OpenGrid operator approves each launch.", null],
+          ].map(([t, d, a], i) => h("li", { class: "ob-step" }, h("div", { class: "ob-n" }, String(i + 1)), h("div", { class: "ob-b" }, h("div", { class: "ob-t" }, h("b", {}, t)), h("p", { class: "dim", style: "margin:2px 0" }, d), a)))));
+        return;
+      }
+
       let status = null, profile = null, partners = null, previewing = null;
       async function load() {
         if (admin && query.account) {
           partners = partners || (await OG.api.soft("/v1/admin/partners", { nocache: true })) || [];
-          const p = partners.find(x => String(x.account_id) === String(query.account));
-          if (p) { previewing = p; status = p.onboarding; profile = p; return; }
+          const pp = partners.find(x => String(x.account_id) === String(query.account));
+          if (pp) { previewing = pp; status = pp.onboarding; profile = pp; return; }
         }
         previewing = null;
         try { status = await ctx.api("/v1/onboarding", { nocache: true }); } catch (e) { root.replaceChildren(OG.head("Onboarding"), OG.error(e, () => load().then(draw))); throw e; }
         profile = status.profile || null;
         if (admin && !partners) partners = (await OG.api.soft("/v1/admin/partners", { nocache: true })) || [];
       }
-      const done = k => !!((status && status.steps) || []).find(s => s.step === k && s.done);
       const stepOf = k => ((status && status.steps) || []).find(s => s.step === k) || {};
 
       function stepBox(n, key, title, body, opt) {
-        const s = stepOf(key), ok = key ? s.done : false, next = status && status.next_step && status.next_step.step === key;
+        const s = stepOf(key), ok = !!s.done, next = status && status.next_step && status.next_step.step === key;
         return h("li", { class: "ob-step" + (ok ? " done" : "") + (next ? " next" : "") },
           h("div", { class: "ob-n" }, ok ? "✓" : n),
           h("div", { class: "ob-b" },
@@ -86,77 +160,75 @@
             body));
       }
 
-      // step 2: create a key inline
-      const keyBox = h("div");
-      function keyForm() {
-        if (previewing) return h("p", { class: "note" }, "A partner's first key is created with the partner (", h("a", { class: "lnk", href: "/admin/partners" }, "/admin/partners"), ") and shown once there.");
-        const name = h("input", { class: "field", value: "first-route", "aria-label": "Key name" });
-        const exec = h("input", { type: "checkbox" });
-        return h("div", {}, h("div", { class: "bar" }, name, h("label", { class: "rt-chk" }, exec, "route:execute (request routes; launches still need OpenGrid approval)"),
-          h("button", { class: "btn pri", type: "button", onclick: async () => {
-            const scopes = ["data:read", "route:preview", "deployments:read", "deployments:write"].concat(exec.checked ? ["route:execute"] : []);
-            try { const k = await ctx.api("/v1/keys", { method: "POST", body: { name: name.value.trim() || "first-route", scopes } }); keyBox.replaceChildren(keyReveal(k)); OG.api.soft("/v1/onboarding", { nocache: true }).then(s => { if (s && !previewing) { status = s; } }); }
-            catch (e) { keyBox.replaceChildren(OG.error(e)); }
-          } }, "Create API key")), keyBox);
-      }
-
-      // steps 4-5: a preview prefilled from the profile, and why the winner won
+      // the route preview (step 4): prefilled from the profile, run only on click
       const pvBox = h("div"), whyBox = h("div");
-      let pvBody = null;
+      let lastBody = null;
       function prefill() {
-        const p = profile || {};
-        const b = { gpu: (p.preferred_gpus || [])[0] || "h100-80gb-sxm5", count: Math.min(64, p.expected_gpu_count || 1), mode: "BALANCED" };
-        if ((p.regions || [])[0]) b.region = p.regions[0];
-        if (p.max_price_per_gpu_hour) b.max_price_per_gpu_hour = p.max_price_per_gpu_hour;
-        if (p.expected_duration_hours) b.duration_hours = p.expected_duration_hours;
+        const pf = profile || {};
+        const b = { gpu: (pf.preferred_gpus || [])[0] || "h100-80gb-sxm5", count: Math.min(64, pf.expected_gpu_count || 1), mode: "BALANCED" };
+        if ((pf.regions || [])[0]) b.region = pf.regions[0];
+        if (pf.max_price_per_gpu_hour) b.max_price_per_gpu_hour = pf.max_price_per_gpu_hour;
+        if (pf.expected_duration_hours) b.duration_hours = pf.expected_duration_hours;
         return b;
       }
       const routeHref = b => "/route" + OG.qs.stringify({ gpu: b.gpu, count: b.count > 1 ? b.count : null, region: b.region, max: b.max_price_per_gpu_hour, dur: b.duration_hours });
+      const describe = b => `${b.count}× ${OG.data.gpuName(b.gpu) ? OG.shortGpu(OG.data.gpuName(b.gpu)) : b.gpu}${b.region ? " · " + b.region : ""}${b.max_price_per_gpu_hour ? " · ≤ $" + b.max_price_per_gpu_hour + "/GPU·h" : ""}${b.duration_hours ? " · " + b.duration_hours + " h" : ""}`;
       async function runPreview() {
-        pvBody = prefill();
+        const body = prefill();
+        lastBody = body;
         pvBox.replaceChildren(OG.loading("Ranking every eligible listing…"));
+        whyBox.replaceChildren();
         try {
-          const d = await ctx.api("/v1/route/preview", { method: "POST", body: pvBody });
-          const c = d.selected;
-          if (!c) { pvBox.replaceChildren(OG.insufficient(d.reason || "no eligible listing", "No route")); whyBox.replaceChildren(); return; }
+          const d = await ctx.api("/v1/route/preview", { method: "POST", body });
+          const cc = d.selected;
+          if (!cc) { pvBox.replaceChildren(OG.insufficient(d.reason || "no eligible listing", "No route")); return; }
           const q = d.quote || {}, m = d.market || {}, sv = q.savings_vs_median;
           pvBox.replaceChildren(h("div", { class: "ob-pv" },
-            h("span", { class: "eyebrow" }, "Winner"), OG.providerLink(c.provider), h("span", { class: "mono" }, `${c.gpu_count}× ${OG.shortGpu(c.gpu)}`),
-            h("span", { class: "mono" }, fmt.price(c.price_per_gpu_hour), "/GPU·h "), OG.conceptBadge("observed"),
-            c.provisionable ? OG.badge("OpenGrid can provision", "good") : OG.badge("market data only", "bad"),
+            h("span", { class: "eyebrow" }, "Selected"), OG.providerLink(cc.provider), h("span", { class: "mono" }, `${cc.gpu_count}× ${OG.shortGpu(cc.gpu)}`),
+            h("span", { class: "mono" }, fmt.price(cc.price_per_gpu_hour), "/GPU·h "), OG.conceptBadge("observed"),
+            cc.provisionable ? OG.badge("OpenGrid can provision", "good") : OG.badge("market data only", "bad"),
             h("span", { class: "dim" }, m.median != null ? `market median ${fmt.price(m.median)} (${m.providers} providers)` : "no market median"),
             sv ? h("span", { class: sv.pct >= 0 ? "up" : "down" }, `${fmt.num(Math.abs(sv.pct) * 100, 1)}% ${sv.pct >= 0 ? "below" : "above"} median`) : null,
             h("a", { class: "lnk mono", href: "/v1/route/" + d.route_request_id, target: "_blank", rel: "external noopener" }, d.route_request_id, " ↗")));
-          const factors = Object.entries(c.factors || {}).filter(([, x]) => x && x.weight).sort((a, b) => (b[1].contribution || 0) - (a[1].contribution || 0));
-          whyBox.replaceChildren(h("ul", { class: "rt-why" }, factors.map(([k, x]) => h("li", { class: x.imputed ? "imp" : null }, h("b", {}, k.replace(/_/g, " ")), " ",
-            x.note || "", x.imputed ? OG.badge("imputed 0.5", "warn") : null, h("span", { class: "rt-contrib mono" }, `${(x.weight * 100).toFixed(0)}% × ${x.value != null ? x.value.toFixed(2) : "-"} = +${(x.contribution || 0).toFixed(3)}`)))),
-            (d.alternatives || []).length ? h("p", { class: "note" }, "Runner-up: ", OG.providerName(d.alternatives[0].provider), " at ", fmt.price(d.alternatives[0].price_per_gpu_hour), "/GPU·h, score ", (d.alternatives[0].score || 0).toFixed(3), " vs ", c.score.toFixed(3), ".") : null,
-            h("p", { class: "note" }, "Reliability and performance carry no weight until OpenGrid has real execution records; nothing is invented. ", h("a", { class: "lnk", href: routeHref(pvBody) }, "Full breakdown on /route →")));
+          const factors = Object.entries(cc.factors || {}).filter(([, x]) => x && x.weight).sort((a, b) => (b[1].contribution || 0) - (a[1].contribution || 0));
+          whyBox.replaceChildren(h("div", { class: "dx-ob-why" }, h("div", { class: "lbl" }, "Why this provider won"),
+            h("ul", { class: "rt-why" }, factors.map(([k, x]) => h("li", { class: x.imputed ? "imp" : null }, h("b", {}, k.replace(/_/g, " ")), " ",
+              x.note || "", x.imputed ? OG.badge("imputed 0.5", "warn") : null, h("span", { class: "rt-contrib mono" }, `${(x.weight * 100).toFixed(0)}% × ${x.value != null ? x.value.toFixed(2) : "-"} = +${(x.contribution || 0).toFixed(3)}`)))),
+            (d.alternatives || []).length ? h("p", { class: "note" }, "Runner-up: ", OG.providerName(d.alternatives[0].provider), " at ", fmt.price(d.alternatives[0].price_per_gpu_hour), "/GPU·h, score ", (d.alternatives[0].score || 0).toFixed(3), " vs ", cc.score.toFixed(3), ".") : null,
+            h("p", { class: "note" }, "Reliability and performance carry no weight until OpenGrid has real execution records; nothing is invented. ", h("a", { class: "lnk", href: routeHref(body) }, "Full breakdown on Route →"))));
+          if (!previewing) OG.api.soft("/v1/onboarding", { nocache: true }).then(s => { if (s && !previewing && ctx.alive()) { status = s; profile = s.profile || profile; draw(); } });
         } catch (e) { pvBox.replaceChildren(OG.error(e, runPreview)); }
       }
 
       function draw() {
         const b = prefill();
-        const pickP = admin && partners && partners.length ? h("select", { class: "field", onchange: e => OG.go("/onboarding" + (e.target.value ? "?account=" + e.target.value : "")) },
-          h("option", { value: "" }, "Signed-in account"), partners.map(p => h("option", { value: p.account_id, selected: previewing && previewing.account_id === p.account_id ? true : null }, "Preview: " + p.company))) : null;
+        const stale = lastBody && JSON.stringify(lastBody) !== JSON.stringify(b);
+        const pickP = admin && partners && partners.length ? h("select", { class: "field", "aria-label": "Whose onboarding", onchange: e => OG.go("/onboarding" + (e.target.value ? "?account=" + e.target.value : "")) },
+          h("option", { value: "" }, "Operator account"), partners.map(pp => h("option", { value: pp.account_id, selected: previewing && previewing.account_id === pp.account_id ? true : null }, "Partner: " + pp.company))) : null;
         root.replaceChildren(
-          OG.head("Onboarding", previewing ? `Previewing ${previewing.company} (account #${previewing.account_id}) · actions on this page run as you, not as the partner` : "From account to a first supervised route",
+          OG.head("Onboarding", previewing ? `Progress of ${previewing.company} (account #${previewing.account_id})` : "From an account to a first supervised route",
             pickP, h("span", { class: "mono dim" }, status.progress || ""), status.complete ? OG.badge("complete", "good") : null),
+          previewing ? D.call("warn", h("b", {}, "Previewing a partner. "), "The steps show their progress. Buttons on this page still act as you, the operator: a preview you run here is recorded on the operator account and does not complete their step.")
+            : admin ? D.call("info", h("b", {}, "This is the operator account's own checklist. "), "Design partners act with their API key, not this website. To follow a partner, pick them above; to onboard a new one, use ", h("a", { class: "lnk", href: "/admin/partners" }, "Design partners"), ".") : null,
           h("ol", { class: "ob-steps" },
-            stepBox(1, "account_created", "Account created", h("p", { class: "dim" }, "Your OpenGrid account holds keys, limits, deployments and invoices.")),
-            stepBox(2, "key_created", "Create an API key", keyForm()),
-            stepBox(3, "credentials_connected", "Connect provider credentials", h("div", {},
-              h("p", {}, h("b", {}, "Managed (default): "), "OpenGrid launches on its own provider accounts and bills you the provider cost plus the published fee. ",
-                h("b", {}, "BYO: "), "add your own provider API key; launches run on your account and the provider bills you directly. Keys are encrypted; a key that cannot be decrypted fails closed (never a fallback to OpenGrid's)."),
-              h("a", { class: "btn", href: "/keys" }, "Manage credentials →")), true),
-            stepBox(4, "first_preview", "Run a route preview", h("div", {},
-              h("p", { class: "dim" }, "Prefilled from the profile: ", h("span", { class: "mono" }, `${b.count}× ${b.gpu}${b.region ? " · " + b.region : ""}${b.max_price_per_gpu_hour ? " · ≤ $" + b.max_price_per_gpu_hour : ""}${b.duration_hours ? " · " + b.duration_hours + " h" : ""}`)),
-              h("div", { class: "bar" }, h("button", { class: "btn pri", type: "button", onclick: runPreview }, "Run preview"), h("span", { class: "dim" }, "free · never calls a provider")), pvBox)),
-            stepBox(5, null, "Understand why the provider won", whyBox.childNodes.length ? whyBox : h("div", {}, whyBox, h("p", { class: "dim" }, "Run the preview: each factor's weight × value is shown, imputed factors flagged."))),
-            stepBox(6, "first_supervised_deployment", "Request a supervised deployment", h("div", {},
-              h("p", {}, "On /route, ", h("b", {}, "Request route"), " issues a quote. An OpenGrid admin reviews provider, price, fees and limits, then approves; only then is ONE instance launched (with an auto-terminate cap)."),
-              h("a", { class: "btn pri", href: routeHref(b) }, "Open the order ticket →"))),
-            stepBox(7, "feedback_given", "Tell us how it went", h("p", { class: "dim" }, "After termination, the deployment page asks five questions: provider choice, price, setup, next workload, what broke."))),
+            stepBox(1, "account_created", "Account created", h("p", { class: "dim" }, previewing ? "Created with the partner on Design partners." : "The operator account exists from the first sign-in. It holds keys, limits, deployments and invoices.")),
+            stepBox(2, "key_created", "API key", previewing
+              ? h("p", { class: "dim" }, "A partner's first key is created with the partner on ", h("a", { class: "lnk", href: "/admin/partners" }, "Design partners"), " (shown once there). Their key can create narrower keys itself.")
+              : h("div", {}, h("p", { class: "dim" }, "Create keys in one place, with presets for assistants and scripts."), h("a", { class: "btn", href: "/keys" }, "API keys →"))),
+            stepBox(3, "credentials_connected", "Provider credentials", h("div", {},
+              h("p", {}, h("b", {}, "Managed (default): "), "OpenGrid launches on its own provider accounts and bills provider cost plus the published fee. ",
+                h("b", {}, "Bring your own: "), "store your own provider key; the provider bills you directly. Stored keys are encrypted; one that cannot be decrypted fails closed (never a fallback to OpenGrid's)."),
+              h("a", { class: "btn", href: "/keys#credentials" }, "Provider credentials →")), true),
+            stepBox(4, "first_preview", "First route preview", h("div", {},
+              h("p", { class: "dim" }, "From ", previewing ? previewing.company + "'s" : "the", " profile: ", h("span", { class: "mono" }, describe(b)), profile && (profile.preferred_gpus || []).length ? null : h("span", {}, " (no preferred GPU in the profile yet)")),
+              h("div", { class: "bar" }, h("button", { class: "btn pri", type: "button", onclick: runPreview }, lastBody ? "Run again" : "Run preview"), h("span", { class: "dim" }, "free · never calls a provider · records an audit ticket"),
+                stale ? h("span", { class: "dx-stale" }, "The profile changed since this result; run again to update it.") : null),
+              pvBox, whyBox)),
+            stepBox(5, "first_supervised_deployment", "First supervised deployment", h("div", {},
+              h("p", {}, "On Route, ", h("b", {}, "Request route"), " issues a quote; the OpenGrid operator reviews provider, price, fees and limits and approves before ONE instance is launched, with an auto-terminate cap."),
+              D.call("warn", h("b", {}, "Not available yet. "), "Every provider adapter is still simulated, so no real deployment can run today."),
+              h("a", { class: "btn", href: routeHref(b) }, "Open the Route page →"))),
+            stepBox(6, "feedback_given", "Feedback on the deployment", h("p", { class: "dim" }, "After a deployment ends, its page asks four yes/no questions (provider choice, price, setup, next workload) plus what broke and free notes."))),
           OG.section(previewing ? `Design-partner profile · ${previewing.company}` : "Design-partner profile",
             profileForm(profile, async body => {
               if (previewing) await ctx.api("/v1/admin/partners/" + previewing.account_id, { method: "PATCH", body });
@@ -164,7 +236,6 @@
               else await ctx.api("/v1/partners/me", { method: "POST", body });
               partners = null; await load(); draw();
             })));
-        if (pvBody) runPreview();
       }
       try { await load(); } catch (e) { return; }
       if (ctx.alive()) draw();

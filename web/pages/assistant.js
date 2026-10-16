@@ -9,8 +9,14 @@
    data. Every number shown comes from the response cards; prices are observed (not quotes), memory / cost are
    estimated, and each is badged as such. The panel never builds a number itself.
 
-   Pure helpers on OG.assistant (tested by tests/test_web_assistant.js): cardKind, recView, optionLinks, findHref,
-   priceRows, compareRows, contextRows, questionButtons, safeHref, boundContext, kindOf. */
+   The engine (deterministic, or a model when one is configured) is not shown to people; it stays on the reply's
+   data-engine attribute for debugging. A reply the server did not understand brings the example questions back.
+   Actions and route previews say when they need sign-in (the only browser sign-in is the operator's).
+
+   Pure helpers on OG.assistant (tested by tests/test_web_assistant.js and tests/test_web_developers.js): cardKind,
+   recView, optionLinks, findHref, priceRows, compareRows, contextRows, questionButtons, safeHref, boundContext,
+   kindOf, isUnknown, CAPABILITIES (the /assistant "what it answers" list; tests/test_developer_docs.py checks each
+   example reaches a real intent). */
 (() => {
   const { h } = OG;
   const fmt = OG.fmt || {};
@@ -26,7 +32,19 @@
   const MAX_MESSAGE = 2000, MAX_CONTEXT = 8000;
   const PICKS = [["cheapest_market", "Cheapest that fits"], ["best_for_workload", "Best for this workload"], ["best_executable", "Launchable through OpenGrid"]];
   const KINDS = { recommendation: "recommendation", gpu_prices: "prices", compare: "compare", specs: "specs", market_context: "context", questions: "questions", link: "link",
-    action: "action", jobs: "jobs", job: "job" };
+    action: "action", jobs: "jobs", job: "job", template: "template" };
+  // What the assistant answers (assistant/intents.py INTENTS), as shown on /assistant: [title, what, example]
+  const CAPABILITIES = [
+    ["Cheapest GPU", "the cheapest fresh, in-stock listing of a GPU, per variant", "Cheapest available H100"],
+    ["Which GPU fits", "memory, GPU count and three picks for a training, fine-tuning or inference job", "What GPU should I use to fine-tune Llama 3 8B with LoRA?"],
+    ["Within a budget", "whether a workload fits a budget, with cost scenarios", "Can I fine-tune a 13B model with QLoRA within $50?"],
+    ["Compare GPUs", "specs and current prices side by side", "Compare H100 SXM and H200"],
+    ["Specs", "vendor peak specs and the current market of one GPU", "Specs of the L40S"],
+    ["Price moves", "recent moves and news in the same window (correlation, not causation)", "Why did H200 prices change?"],
+    ["Free demo and your jobs", "the simulated MNIST demo, your jobs, a cancel for you to confirm (needs sign-in)", "Try a free training demo"],
+  ];
+  // Replies the server marks as not understood: show the examples again instead of a dead end.
+  const isUnknown = r => !!r && (r.intent === "unknown" || r.intent == null && !(r.cards || []).length);
   // The only actions a card may offer. The browser performs one only when the user clicks (and, for cancel,
   // confirms); the assistant endpoint itself never changes anything.
   const ACTIONS = ["start_demo", "cancel_job"];
@@ -122,7 +140,7 @@
         created_at: j.created_at || null, cancellable: j.cancellable === true, href: "/jobs/" + encodeURIComponent(String(j.job_id)) };
     });
   }
-  OG.assistant = { EXAMPLES, MAX_MESSAGE, PICKS, ACTIONS, safeHref, cardKind, kindOf, findHref, optionLinks, recView, priceRows, compareRows, contextRows, questionButtons, boundContext, actionView, jobItems };
+  OG.assistant = { EXAMPLES, MAX_MESSAGE, PICKS, ACTIONS, CAPABILITIES, isUnknown, safeHref, cardKind, kindOf, findHref, optionLinks, recView, priceRows, compareRows, contextRows, questionButtons, boundContext, actionView, jobItems };
 
   if (typeof OG.page !== "function" || typeof document === "undefined" || !OG.h) return;   // node tests: pure part only
 
@@ -134,31 +152,50 @@
   const gpuA = (name, slug) => (slug ? h("a", { class: "lnk", href: "/gpu/" + slug }, OG.shortGpu ? OG.shortGpu(name) : name) : h("span", {}, name || "-"));
   const tbl = (columns, rows, empty) => (OG.table ? OG.table({ columns, rows, compact: true, autoHide: false, empty: empty || "No rows." }) : h("div"));
 
-  function recCard(data, ctx) {
+  function recCard(data, ctx, hooks) {
     const v = recView(data);
     if (v.needsGpu === false) return h("div", { class: "ag-card" }, h("b", {}, "No GPU needed"), " ", v.needsGpuReason || "", " ", badge("estimated"));
-    const picks = v.picks.map(p => h("li", { class: "ag-pick" },
-      h("span", { class: "ag-pick-l" }, p.label),
-      p.option ? [h("span", {}, p.option.gpu_count > 1 ? p.option.gpu_count + "× " : "", gpuA(p.option.gpu, p.option.gpu_slug), " · ", p.option.provider_display || p.option.provider),
-        h("span", { class: "mono" }, money(p.option.price_per_gpu_hour), "/GPU-h "), badge(p.option.price_kind),
-        p.option.fresh === false ? OG.badge("stale", "warn") : null,
+    const signedIn = !!(hooks && hooks.signedIn);
+    const pick = p => h("div", { class: "dx-ag-pc" },
+      h("span", { class: "dx-ag-pc-l" }, p.label),
+      p.option ? [
+        h("span", { class: "dx-ag-pc-g" }, p.option.gpu_count > 1 ? p.option.gpu_count + "× " : "", gpuA(p.option.gpu, p.option.gpu_slug)),
+        h("span", { class: "dim" }, p.option.provider_display || p.option.provider, p.option.region ? " · " + p.option.region : ""),
+        h("span", {}, h("span", { class: "dx-ag-pc-p" }, money(p.option.price_per_gpu_hour)), h("span", { class: "dim" }, " per GPU-hour "), badge(p.option.price_kind),
+          p.option.fresh === false ? [" ", OG.badge("stale", "warn")] : null),
+        p.option.memory_fit && p.option.memory_fit.headroom_pct != null ? h("span", { class: "dim" }, `fits in memory · ${num(Math.round(p.option.memory_fit.headroom_pct))}% headroom`) : null,
         p.reason ? h("span", { class: "dim ag-why" }, p.reason) : null,
-        h("span", { class: "ag-links" }, optionLinks(p.option).map(l => lnk(l, "btn sm")))]
-        : h("span", { class: "dim" }, p.key === "best_executable" ? "none for you right now" : "none available right now")));
+        h("span", { class: "ag-links" }, optionLinks(p.option).map(l => l.label === "Route preview" && !signedIn
+          ? h("a", { class: "btn sm", href: safeHref(l.href), title: "Route previews need the operator sign-in on this site, or an API key with route:preview" }, "Route preview (sign-in)")
+          : lnk(l, "btn sm")))]
+        : h("span", { class: "dim" }, p.key === "best_executable" ? "Nothing OpenGrid can launch for this workload today." : "Nothing available right now."));
     const top = v.top.length ? tbl([
       { key: "gpu", label: "GPU", fmt: (x, r) => gpuA(r.gpu, r.gpu_slug) },
       { key: "provider_display", label: "Provider", fmt: (x, r) => x || r.provider },
       { key: "region", label: "Region" },
-      { key: "price_per_gpu_hour", label: "$/GPU-h", num: true, fmt: (x, r) => h("span", {}, money(x), " ", badge(r.price_kind)) },
-      { key: "fit", label: "Fits", value: r => r.memory_fit ? (r.memory_fit.fits ? "yes" : "no") : null },
-      { key: "exec", label: "OpenGrid", value: r => r.execution ? (r.execution.executable ? "launchable" : "preview only") : null },
+      { key: "price_per_gpu_hour", label: "$ per GPU-hour", num: true, fmt: (x, r) => h("span", {}, money(x), " ", badge(r.price_kind)) },
+      { key: "fit", label: "Fits in memory", value: r => r.memory_fit ? (r.memory_fit.fits ? "yes" : "no") : null },
+      { key: "exec", label: "Launch via OpenGrid", value: r => r.execution ? (r.execution.executable ? "yes" : "not yet") : null },
     ], v.top) : null;
     return h("div", { class: "ag-card" },
-      v.memory ? h("div", { class: "ag-mem" }, "Memory ≈ ", h("b", {}, num(v.memory.gb), " GB"), v.gpuCount > 1 ? ` · ${v.gpuCount} GPUs` : "",
+      v.memory ? h("div", { class: "ag-mem" }, "Needs about ", h("b", {}, num(v.memory.gb), " GB"), " of GPU memory", v.gpuCount > 1 ? ` across ${v.gpuCount} GPUs` : "",
         v.memory.confidence ? h("span", { class: "dim" }, ` · ${v.memory.confidence} confidence `) : " ", badge("estimated")) : null,
-      h("ul", { class: "ag-picks" }, picks), top,
+      h("div", { class: "dx-ag-pick" }, v.picks.map(pick)), top,
       v.notes.length ? h("ul", { class: "ag-notes" }, v.notes.map(n => h("li", {}, String(n)))) : null,
-      h("div", { class: "ag-links" }, h("a", { class: "btn sm", href: findHref(ctx && ctx.requirements) }, "Refine in Find Compute →")));
+      h("div", { class: "dx-ag-legend" }, "Memory and cost are estimates; prices are observed provider listings, not quotes; runtime is unknown without a benchmark."),
+      hooks && hooks.fillsForm ? null : h("div", { class: "ag-links" }, h("a", { class: "btn sm pri", href: findHref(ctx && ctx.requirements) }, "Open in Find Compute →")));
+  }
+  // template card ("run on a real GPU"): what the one allowlisted template is and its hard limits
+  function templateCard(d) {
+    if (!d || typeof d !== "object") return null;
+    const lim = d.limits_max || {}, rt = d.expected_runtime || {};
+    return h("div", { class: "ag-card" },
+      h("div", {}, h("b", {}, String(d.title || d.template || "Template")), d.gpu_count ? h("span", { class: "dim" }, ` · ${d.gpu_count} ${d.vendor || ""} GPU`) : null),
+      h("ul", { class: "ag-notes" },
+        h("li", {}, "Only this allowlisted template runs; your own code, containers and datasets are not accepted."),
+        h("li", {}, "Every launch is approved by the OpenGrid operator first."),
+        Number.isFinite(lim.max_total_cost_usd) ? h("li", {}, `Hard caps: at most ${money(lim.max_total_cost_usd)} in total, ${num(lim.max_runtime_minutes)} minutes, ${money(lim.max_price_per_gpu_hour_usd)} per GPU-hour.`) : null,
+        Array.isArray(rt.default_band_minutes) && rt.default_band_minutes.length === 2 ? h("li", {}, `Expected runtime ${rt.default_band_minutes[0]}–${rt.default_band_minutes[1]} minutes `, badge("estimated")) : null));
   }
   function pricesCard(data) {
     const rows = priceRows(data);
@@ -169,10 +206,10 @@
   }
   function compareCard(data) {
     return h("div", { class: "ag-card" }, tbl([
-      { key: "gpu", label: "GPU", fmt: (x, r) => gpuA(r.gpu, r.slug) }, { key: "vram", label: "VRAM GB", num: true }, { key: "bw", label: "TB/s", num: true },
-      { key: "bf16", label: "BF16 TFLOPS", num: true }, { key: "fp8", label: "FP8 TFLOPS", num: true },
-      { key: "low", label: "Low $/GPU-h", num: true, fmt: x => (x == null ? "-" : h("span", {}, money(x), " ", badge("observed"))) },
-      { key: "median", label: "Median", num: true, fmt: x => money(x) }, { key: "providers", label: "Providers", num: true },
+      { key: "gpu", label: "GPU", fmt: (x, r) => gpuA(r.gpu, r.slug) }, { key: "vram", label: "Memory (GB)", num: true }, { key: "bw", label: "Memory bandwidth (TB/s)", num: true },
+      { key: "bf16", label: "BF16 peak (TFLOPS)", num: true }, { key: "fp8", label: "FP8 peak (TFLOPS)", num: true },
+      { key: "low", label: "Lowest $ per GPU-hour", num: true, fmt: x => (x == null ? "-" : h("span", {}, money(x), " ", badge("observed"))) },
+      { key: "median", label: "Median $", num: true, fmt: x => money(x) }, { key: "providers", label: "Providers", num: true },
     ], compareRows(data)), data.note ? h("div", { class: "dim ag-foot" }, data.note) : null);
   }
   function contextCard(data) {
@@ -228,11 +265,13 @@
         if (typeof hooks.onJobsChanged === "function") { try { hooks.onJobsChanged(); } catch (e) { console.error(e); } }
       } catch (e) {
         btn.disabled = false;
-        msgEl.replaceChildren(e && (e.status === 401 || e.status === 403) ? h("span", { class: "warn-t" }, "You need to be signed in with permission to run jobs (an API key with route:execute). ", h("a", { class: "lnk", href: "/keys" }, "API keys →"))
+        msgEl.replaceChildren(e && (e.status === 401 || e.status === 403) ? h("span", { class: "warn-t" }, "Starting or cancelling jobs on this website needs the operator sign-in. From your terminal or AI assistant it needs an API key with route:execute. ",
+            h("a", { class: "btn sm", href: OG.loginHref ? OG.loginHref() : "/login" }, "Sign in"), " ", h("a", { class: "lnk", href: "/developers#access" }, "How keys work →"))
           : OG.error ? OG.error(e) : h("span", {}, "Something went wrong."));
       }
     });
-    return h("div", { class: "ag-card ag-act" }, h("div", { class: "ag-act-r" }, btn, a.note ? h("span", { class: "dim" }, a.note) : null), msgEl);
+    return h("div", { class: "ag-card ag-act" }, h("div", { class: "ag-act-r" }, btn, a.note ? h("span", { class: "dim" }, a.note) : null,
+      hooks.signedIn === false ? h("span", { class: "dx-ag-auth" }, "Needs sign-in") : null), msgEl);
   }
   function renderCard(card, ask, ctx, hooks) {
     const k = cardKind(card), d = card && card.data;
@@ -240,7 +279,8 @@
       if (k === "action") { const a = actionView(d); return a ? actionCard(a, hooks || { cancelIntent: {} }) : null; }
       if (k === "jobs") return jobsCard(jobItems(d), d && d.more === true);
       if (k === "job") return jobsCard(jobItems(d, true), false);
-      if (k === "recommendation") return recCard(d, ctx);
+      if (k === "recommendation") return recCard(d, ctx, hooks);
+      if (k === "template") return templateCard(d);
       if (k === "prices") return pricesCard(d);
       if (k === "compare" || k === "specs") return compareCard(d);
       if (k === "context") return contextCard(d);
@@ -254,7 +294,9 @@
   OG.views.assistantPanel = (el, opts) => {
     opts = opts || {};
     let context = boundContext(opts.context || null), busy = false;
-    const hooks = { cancelIntent: {}, onJobsChanged: opts.onJobsChanged };
+    // signedIn: null until known; false makes action cards and route-preview links say they need sign-in
+    const hooks = { cancelIntent: {}, onJobsChanged: opts.onJobsChanged, signedIn: null, fillsForm: typeof opts.onRequirements === "function" };
+    if (typeof OG.me === "function") OG.me().then(me => { hooks.signedIn = !!me; }).catch(() => { hooks.signedIn = false; });
     const examples = Array.isArray(opts.examples) && opts.examples.length ? opts.examples : EXAMPLES;
     const log = h("div", { class: "ag-log", role: "log", "aria-live": "polite", "aria-relevant": "additions", "aria-label": "Conversation" });
     const input = h("textarea", { class: "field ag-in", rows: "2", maxlength: String(MAX_MESSAGE), placeholder: opts.placeholder || "Ask about GPU prices, which GPU fits your job, comparisons…", "aria-label": opts.title || "Ask the OpenGrid Assistant" });
@@ -263,10 +305,11 @@
     input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); ask(input.value); } });
     const chips = h("div", { class: "ag-chips ag-examples", role: "group", "aria-label": "Example questions" },
       examples.map(x => h("button", { type: "button", class: "chip", onclick: () => ask(x) }, x)));
+    const showEx = h("button", { type: "button", class: "btn sm", hidden: true, onclick: () => { chips.hidden = false; showEx.hidden = true; } }, "Examples");
     const root = h("section", { class: "ag" + (opts.compact ? " ag-compact" : ""), "aria-label": "OpenGrid Assistant" },
-      h("div", { class: "ag-head" }, h("b", {}, opts.title || "OpenGrid Assistant"),
-        h("span", { class: "ag-note" }, opts.note || "Answers use OpenGrid's live market data; estimates are labelled. It cannot launch or buy anything."),
-        h("button", { type: "button", class: "btn sm", onclick: () => reset(), title: "Start a new conversation" }, "New")),
+      h("div", { class: "ag-head" }, opts.title === false ? null : h("b", {}, opts.title || "OpenGrid Assistant"),
+        h("span", { class: "ag-note" }, opts.note || "Answers come from OpenGrid's live market data; estimates are labelled. It never rents a paid GPU: it can only start the free simulated demo or cancel a job, when you click."),
+        showEx, h("button", { type: "button", class: "btn sm", onclick: () => reset(), title: "Start a new conversation" }, "New")),
       log, chips, form);
     el.append(root);
 
@@ -277,22 +320,24 @@
       log.scrollTop = log.scrollHeight;
       return m;
     }
-    function reset() { context = null; log.textContent = ""; chips.hidden = false; input.focus(); }
+    function reset() { context = null; log.textContent = ""; chips.hidden = false; showEx.hidden = true; input.focus(); }
     async function ask(text) {
       text = String(text || "").trim().slice(0, MAX_MESSAGE);
       if (!text || busy) return;
-      busy = true; sendBtn.disabled = true; input.value = ""; chips.hidden = true;
+      busy = true; sendBtn.disabled = true; input.value = ""; chips.hidden = true; showEx.hidden = false;
       msg("user", text);
       const wait = msg("bot", OG.loading ? OG.loading("Thinking…") : "…");
       try {
         const r = await OG.api("/v1/assistant", { method: "POST", body: { message: text, context: boundContext(context) } });
         context = boundContext(r.context);
         const links = (r.cards || []).filter(c => cardKind(c) === "link").map(c => lnk(c.data || {}, "btn sm")).filter(Boolean);
+        // the engine (deterministic or a model) is kept as a data attribute for debugging, not shown to people
+        wait.dataset.engine = String(r.engine || "");
         wait.replaceChildren(h("p", { class: "ag-reply" }, r.reply),
           (r.cards || []).map(c => renderCard(c, ask, r.context, hooks)),
           links.length ? h("div", { class: "ag-links" }, links) : null,
-          h("div", { class: "ag-meta dim" }, r.engine === "deterministic" ? "deterministic answer" : "phrased by " + String(r.engine).replace(/^llm:/, ""),
-            r.grounded ? " · grounded in the cards above" : " · check the cards"));
+          r.grounded === false ? h("div", { class: "ag-meta dim" }, "Some wording above could not be matched to the data; rely on the figures in the cards.") : null);
+        if (isUnknown(r)) { chips.hidden = false; showEx.hidden = true; }
         const rec = (r.cards || []).find(c => cardKind(c) === "recommendation");
         if (rec && typeof opts.onRequirements === "function" && r.context && r.context.requirements) {
           try { opts.onRequirements(r.context.requirements, r); } catch (e) { console.error(e); }
@@ -315,8 +360,24 @@
     nav: "find",  // the assistant is the plain-English way into Find Compute
     mount(el, params, query) {
       const host = h("div", { class: "ag-page" });
-      el.append(OG.head("Assistant", "Ask about live GPU prices, which GPU fits a training, fine-tuning or inference job, comparisons and price moves"), host);
-      OG.views.assistantPanel(host, { initial: query && query.q ? String(query.q) : null });
+      const side = h("aside", { class: "dx-ag-side", "aria-label": "About the assistant" });
+      el.append(OG.head("OpenGrid Assistant", "Plain-English questions about live GPU prices and which GPU fits your job. No sign-up needed.",
+        h("a", { class: "btn", href: "/find" }, "Find Compute"), h("a", { class: "btn", href: "/developers#assistant" }, "Use it from your editor")),
+        h("div", { class: "dx-ag-page" }, host, side));
+      const panel = OG.views.assistantPanel(host, { title: false, initial: query && query.q ? String(query.q) : null });
+      side.append(
+        h("div", { class: "box" }, h("h2", {}, "What it answers"),
+          h("div", { class: "dx-ag-cap" }, CAPABILITIES.map(([t, d, ex]) => h("div", {}, h("b", {}, t), h("span", { class: "dim" }, " · " + d), h("div", {},
+            h("button", { type: "button", class: "chip", onclick: () => panel.send(ex) }, ex)))))),
+        h("div", { class: "box" }, h("h2", {}, "What it doesn't do"), h("ul", {},
+          h("li", {}, "It is not a general chatbot: it understands the question types above and says so when it doesn't."),
+          h("li", {}, "It never rents a paid GPU or runs your code."),
+          h("li", {}, "It can't read your files here. To size a project from its code, use the CLI or the local MCP server (", h("a", { class: "lnk", href: "/developers#quickstart" }, "how"), ")."))),
+        h("div", { class: "box" }, h("h2", {}, "Reading the answers"), h("ul", {},
+          h("li", {}, badge("observed"), " prices are what providers list now, not quotes."),
+          h("li", {}, badge("estimated"), " memory, GPU count and cost scenarios come with their assumptions."),
+          h("li", {}, "Runtime is never guessed without a benchmark."),
+          h("li", {}, "Buttons that start or cancel jobs, and route previews, need sign-in."))));
     },
   });
 })();
