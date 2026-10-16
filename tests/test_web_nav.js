@@ -41,7 +41,11 @@ eq(K("/watchlists"), "watchlists", "other first segments map to themselves");
 const keys = [...navHtml.matchAll(/data-nav="([^"]+)"/g)].map(m => m[1]);
 eq(keys.length, new Set(keys).size, "every data-nav is unique (one link per key)");
 const primary = [...navHtml.matchAll(/<a href="([^"]+)" data-nav="[^"]+" class="nav-p"[^>]*>([^<]+)<\/a>/g)].map(m => [m[1], m[2]]);
-eq(primary, [["/gpus", "GPUs"], ["/find", "Find Compute"], ["/jobs", "My Jobs"], ["/markets", "Markets"], ["/developers", "Developers"]], "five primary destinations, in order");
+eq(primary, [["/", "Home"], ["/gpus", "GPUs"], ["/find", "Find Compute"], ["/markets", "Markets"], ["/developers", "Developers"], ["/jobs", "My Jobs"]],
+  "Home, the four public destinations, then My Jobs (the workspace that needs an account)");
+const iExplore = navHtml.indexOf(">Explore</div>"), iWork = navHtml.indexOf("Your workspace</div>");
+ok(iExplore > 0 && iWork > iExplore && navHtml.indexOf('data-group="gpus"') > iExplore && navHtml.indexOf('data-group="developers"') < iWork && navHtml.indexOf('data-group="jobs"') > iWork,
+  "nav sections: Explore (public) holds GPUs..Developers; Your workspace holds My Jobs");
 const group = g => {
   const i = navHtml.indexOf(`data-group="${g}"`);
   const ends = ["nav-sec", "nav-util"].map(t => navHtml.indexOf(t, i + 20)).filter(x => x > 0);
@@ -50,13 +54,22 @@ const group = g => {
 };
 const hrefs = s => [...s.matchAll(/href="([^"]+)"/g)].map(m => m[1]);
 eq(hrefs(group("gpus")), ["/gpus", "/compare", "/explorer", "/heatmaps", "/providers"], "GPUs group: Compare, Explorer, Heatmaps, Providers");
-eq(hrefs(group("jobs")), ["/jobs", "/deployments", "/reserve", "/watchlists", "/route"], "My Jobs group: Deployments, Reserve, Watchlists, Route");
-eq(hrefs(group("markets")), ["/markets", "/indices", "/opportunities", "/events", "/news"], "Markets group: Indices, Opportunities, Events, News");
+eq(hrefs(group("jobs")), ["/jobs", "/deployments", "/reserve", "/route"], "My Jobs group: Deployments, Reserve, Route (Watchlists moved to Markets)");
+eq(hrefs(group("find")), ["/find", "/assistant"], "Find Compute group: the assistant is reachable here (no extra top-level item)");
+eq(hrefs(group("markets")), ["/markets", "/indices", "/opportunities", "/events", "/news", "/watchlists"], "Markets group: Indices, Opportunities, Events, News, Watchlists (market alerts)");
 eq(hrefs(group("developers")), ["/developers", "/api", "/keys", "/onboarding"], "Developers group: API docs, API keys, Onboarding");
-ok(/<div class="nav-util">[\s\S]*href="\/methodology"[\s\S]*href="\/ops"/.test(navHtml), "utility links: Methodology, Ops");
-ok(/class="nav-sec nav-admin"[^>]*hidden/.test(navHtml) && ["/admin/execution", "/admin/checklist", "/admin/partners", "/admin/value"].every(h => hrefs(group("admin")).includes(h)), "admin group: hidden until /v1/me says admin");
+ok(/<div class="nav-util">\s*<a href="\/methodology"[^>]*>Methodology<\/a>\s*<\/div>/.test(navHtml), "utility links: Methodology only (Ops is an operator tool)");
+ok(/class="nav-sec nav-admin"[^>]*hidden/.test(navHtml) && ["/admin/execution", "/admin/checklist", "/admin/partners", "/admin/value", "/ops"].every(h => hrefs(group("admin")).includes(h)), "operator group (Admin + Ops): hidden until /v1/me says admin");
+// access: every link to a page whose data needs an account carries data-access (a lock), and no public page does
+const ACCOUNT_PAGES = ["/jobs", "/deployments", "/reserve", "/route", "/watchlists", "/keys", "/onboarding"];
+const linkTag = href => (navHtml.match(new RegExp(`<a href="${href.replace(/\//g, "\\/")}"[^>]*>`)) || [""])[0];
+for (const href of ACCOUNT_PAGES) ok(/data-access="account"/.test(linkTag(href)), `${href}: nav link marked as needing an account`);
+for (const href of ["/", "/gpus", "/compare", "/explorer", "/heatmaps", "/providers", "/find", "/assistant", "/markets", "/indices", "/opportunities", "/events", "/news", "/developers", "/api", "/methodology"])
+  ok(linkTag(href) && !/data-access/.test(linkTag(href)), `${href}: public, no lock`);
 ok(html.includes('href="/reserve"') && html.includes("/static/pages/reserve.js"), "reserve link + script (test_reservations relies on it)");
 ok(/id="nav-toggle"[^>]*aria-controls="main-nav"/.test(html) && html.includes('id="main-nav"'), "mobile menu button controls the nav");
+ok(/id="acc-b"[^>]*aria-controls="acc-p"/.test(html) && html.includes('id="acc-t">Public access<'), "access indicator in the top bar, 'Public access' until /v1/me answers");
+ok(!/sign up|create (an )?account|register/i.test(html), "no customer sign-up offered (it does not exist)");
 // every page module has its script tag
 for (const f of fs.readdirSync(path.join(WEB, "pages")).filter(f => f.endsWith(".js")))
   ok(html.includes(`/static/pages/${f}"`), `index.html loads pages/${f}`);
