@@ -22,6 +22,7 @@
     title: p => "Job " + p.id,
     nav: "jobs",
     async mount(el, params, query, ctx) {
+      if (OG.computeStyles) OG.computeStyles();
       const id = params.id;
       const enc = encodeURIComponent(id);
       const root = h("div", { class: "pg-jobs pg-job pg-route pg-dep pg-depd" });   // reuse ticket + deployment-detail styles
@@ -46,7 +47,15 @@
         let j;
         try { j = await ctx.api("/v1/jobs/" + enc, { nocache: true }); }
         catch (e) {
-          if (!job) { root.replaceChildren(OG.head("Job " + id, null, h("a", { class: "btn", href: "/jobs" }, "← Jobs")), J.notYet("GET /v1/jobs/{id}", e)); stopped = true; return; }
+          if (!job) {
+            const p = J.plainError(e);
+            root.replaceChildren(h("a", { class: "lnk jb-back", href: "/jobs" }, "← My Jobs"), OG.head("Job " + id, null),
+              e && (e.status === 401 || e.status === 403 || e.status === 404) ? h("section", { class: "cx-access" }, h("h2", {}, e.status === 404 ? "Job not found" : p.title),
+                h("p", {}, e.status === 404 ? "This job doesn't exist, or it belongs to another account." : e.status === 401 ? "Jobs are private to your OpenGrid account. Sign in to see this one." : p.text),
+                h("div", { class: "cx-acts" }, e.status === 401 ? h("a", { class: "btn pri", href: OG.loginHref() }, "Sign in") : null, h("a", { class: "btn", href: "/jobs" }, "My Jobs"), h("a", { class: "btn", href: J.DEMO_HREF }, "See the example job")))
+                : J.notYet("GET /v1/jobs/{id}", e));
+            stopped = true; return;
+          }
           flash.replaceChildren(h("div", { class: "og-alarm t-warn" }, h("b", {}, "Refresh failed"), h("span", {}, e.message || "network error"), h("span", { class: "dim" }, "showing the last answer; retrying")));
           return;
         }
@@ -84,23 +93,49 @@
       const S = () => J.summary(job, dep);
 
       function header() {
-        const s = st(), o = J.outcomeOf(job), sm = S();
-        const canCancel = !J.isTerminal(job) && !J.CANCEL.includes(s) && !["terminating", "termination_confirmed", "reconciliation_pending", "reconciled"].includes(s);
-        const acts = [
-          canCancel ? h("button", { class: "btn w4-danger", type: "button", onclick: () => cancel() }, J.PRE_LAUNCH.includes(s) ? "Cancel job…" : "Cancel & terminate…") : null,
-        ];
-        const where = sandbox() ? "Free simulation: no GPU, no provider, no spend"
+        const sm = S();
+        // The control matches the real operation: none for a simulation (the server never cancels one; it finishes
+        // on its own), "Cancel job" before launch, "Terminate GPU" once a GPU may exist.
+        const ca = J.cancelAction(job);
+        const where = sandbox() ? "Free simulation: no GPU, no provider, no charge"
           : [sm.gpu ? `${sm.gpu_count}× ${OG.shortGpu(sm.gpu)}` : null, sm.provider ? "on " + OG.providerName(sm.provider) : null, sm.region || sm.region_group || null].filter(Boolean).join(" ") || "GPU not chosen yet";
         return [
           h("a", { class: "lnk jb-back", href: "/jobs" }, "← My Jobs"),
           OG.head(h("span", { class: "dep-title" }, job.name || "Job"), h("span", {}, where),
-            acts),
-          h("div", { class: "jb-bigline" }, J.lineEl(job), sandbox() ? null : J.sandboxBadge(false)),
+            ca ? h("button", { class: "btn w4-danger", type: "button", onclick: () => cancel(ca) }, ca.button) : null),
+          h("div", { class: "jb-bigline" }, J.lineEl(job), J.modeTag(sandbox())),
           sandbox() ? h("div", { class: "jb-simban", role: "note" }, h("b", {}, "SIMULATED"), h("span", {}, "No GPU was used and nothing was charged. Every number on this page is synthetic.")) : null,
           flash,
           billingAlarm(),
           errorBlock(),
+          glanceBlock(),
         ];
+      }
+      // At a glance: simulation or real, status, result, GPU, cost, outputs; then the one next step.
+      function glanceBlock() {
+        const ps = Object.fromEntries(J.plainStatus(job, dep, arts, { admin }).map(p => [p.key, p]));
+        const line = J.jobLine(job);
+        const cell = (label, a, sub, tone) => h("div", { class: tone ? "t-" + tone : null }, h("div", { class: "cx-fact-k" }, label), h("div", { class: "cx-g-v" }, a), sub ? h("div", { class: "cx-g-s" }, sub) : null);
+        const ns = J.nextStep(job, dep, { admin });
+        const arr = Array.isArray(arts) ? arts : [];
+        return [
+          h("div", { class: "cx-glance", "aria-label": "At a glance" },
+            cell("Run", sandbox() ? "Simulation" : "Real GPU", sandbox() ? "no GPU, no provider, no charge" : "on a rented GPU", sandbox() ? "warn" : ""),
+            cell("Status", line.text, J.isTerminal(job) ? "finished" : "updates every few seconds", line.tone === "bad" ? "bad" : line.tone === "warn" ? "warn" : ""),
+            cell("Result", ps.success.a, ps.success.detail, ps.success.tone),
+            cell("GPU", ps.gpu.a, ps.gpu.detail, ps.gpu.tone),
+            cell("Cost", ps.cost.a, ps.cost.detail, ps.cost.tone),
+            cell("Outputs", arr.length ? `${arr.length} file${arr.length === 1 ? "" : "s"}` : "None yet", arr.length ? arr.map(a => a && a.name).filter(Boolean).join(", ") : ps.outputs.detail, arr.length ? "good" : "")),
+          h("div", { class: "cx-next", role: "status" }, h("b", {}, "Next: "), h("span", {}, ns.text), ns.href ? h("a", { class: "btn sm pri", href: ns.href }, ns.label) : null,
+            sandbox() && !J.isTerminal(job) ? h("span", { class: "dim" }, "Simulations finish on their own; there's nothing to stop.") : null),
+        ];
+      }
+      // What happened, oldest first, from the job's recorded events (the raw state and reason are in the tooltip).
+      function timelineBlock() {
+        const tl = J.timeline(job);
+        if (!tl.length) return null;
+        return OG.section("What happened", h("ol", { class: "cx-tl" }, tl.map(x => h("li", { class: "t-" + (x.tone || "plain"), title: [x.state, x.reason].filter(Boolean).join(": ") },
+          h("span", { class: "cx-tl-t" }, x.at ? fmt.time(x.at) : ""), h("i", { class: "cx-tl-d", "aria-hidden": "true" }), h("span", { class: "cx-tl-x" }, x.text)))));
       }
       function metaLine() {
         const sm = S();
@@ -129,7 +164,8 @@
       // beginner asks, answered from the job / deployment / artifacts (OG.jobs.stages / plainStatus).
       function stageBlock() {
         const sg = J.stages(job);
-        const ps = J.plainStatus(job, dep, arts, { admin }).filter(p => ["running", "money", "action", "cost"].includes(p.key));
+        // the glance above answers status, result, GPU, cost and outputs; here only money and action, for real runs
+        const ps = sandbox() ? [] : J.plainStatus(job, dep, arts, { admin }).filter(p => ["money", "action"].includes(p.key));
         return h("section", { class: "jb-stage box", "aria-label": "Progress" },
           h("div", { class: "jb-stage-h" }, h("span", { class: "eyebrow" }, "Progress"),
             sg.mode === "sandbox" ? OG.badge("free simulation", "warn") : OG.badge("real GPU run"),
@@ -138,8 +174,8 @@
             title: x.state ? "job state: " + String(x.state).replace(/_/g, " ") : x.mark === "skipped" ? "not passed through" : null },
             h("span", { class: "jb-sn", "aria-hidden": "true" }, x.mark === "done" ? "✓" : x.mark === "failed" ? "✗" : String(i + 1)),
             h("span", { class: "jb-sl" }, x.label),
-            x.mark === "current" ? h("span", { class: "jb-sx" }, x.state ? String(x.state).replace(/_/g, " ") : "now") : x.mark === "skipped" ? h("span", { class: "jb-sx" }, "skipped") : x.mark === "failed" ? h("span", { class: "jb-sx" }, "failed") : null))),
-          h("dl", { class: "jb-plain" }, ps.map(p => h("div", { class: "jb-pq t-" + (p.tone || "plain") }, h("dt", {}, p.q), h("dd", {}, h("b", {}, p.a), p.detail ? h("span", { class: "dim" }, p.detail) : null)))));
+            x.mark === "current" ? h("span", { class: "jb-sx" }, "now") : x.mark === "skipped" ? h("span", { class: "jb-sx" }, "skipped") : x.mark === "failed" ? h("span", { class: "jb-sx" }, "failed") : null))),
+          ps.length ? h("dl", { class: "jb-plain" }, ps.map(p => h("div", { class: "jb-pq t-" + (p.tone || "plain") }, h("dt", {}, p.q), h("dd", {}, h("b", {}, p.a), p.detail ? h("span", { class: "dim" }, p.detail) : null)))) : null);
       }
       function billingAlarm() {
         if (sandbox()) return null;
@@ -152,12 +188,17 @@
           return h("div", { class: "og-alarm t-warn" }, h("b", {}, "Job failed: instance not yet terminated"), h("span", {}, "A failed job does not mean the GPU stopped billing. OpenGrid terminates it via the provider API; watch the deployment state."));
         return null;
       }
+      // What went wrong in plain words; the failure code, the server's reason and (for admins) the fix link folded.
       function errorBlock() {
         const f = job.failure;
         if (!f) return null;
         const a = J.blockerAction({ code: f.code, message: f.reason });
-        return h("div", { class: "og-alarm" + (J.FAILED.includes(st()) || J.outcomeOf(job) === "failed" ? "" : " t-warn") }, h("b", {}, String(f.code || "error").replace(/_/g, " ")), h("span", {}, f.reason || ""),
-          a.label ? (a.href ? h("a", { class: "lnk", href: a.href }, a.label + " →") : h("span", { class: "dim" }, "→ " + a.label)) : null);
+        const failState = (job.events || []).map(e => e && (e.to || e.to_status)).filter(s => s && J.FAILED.includes(s)).pop() || (J.FAILED.includes(st()) ? st() : null);
+        const title = failState ? J.plainState(failState, sandbox()) : "Something went wrong";
+        return h("div", { class: "og-alarm" + (J.FAILED.includes(st()) || J.outcomeOf(job) === "failed" ? "" : " t-warn") }, h("b", {}, title),
+          h("span", {}, sandbox() ? "Nothing was charged: this was a simulation." : J.summary(job, dep).possibly_billing ? "OpenGrid is shutting the GPU down; see the GPU status above." : "The GPU and cost status are shown above."),
+          h("details", { class: "cx-tech" }, h("summary", {}, "Technical details"), h("span", { class: "mono" }, String(f.code || "error")), " · ", f.reason || "",
+            admin && a.label ? h("div", {}, "For admins: ", a.href ? h("a", { class: "lnk", href: a.href }, a.label + " →") : a.label) : null));
       }
 
       function strips() {
@@ -288,7 +329,7 @@
               : typeof sel.market_best === "string" ? sel.market_best : null],
             ["Execution mode", sel.execution_mode || null],
           ]),
-          full ? J.previewPanel(sel, { title: "Decision", sandbox: sandbox() }) : null);
+          full ? J.previewPanel(sel, { title: "Decision", sandbox: sandbox(), admin }) : null);
       }
 
       function eventsBlock() {
@@ -318,7 +359,7 @@
 
       function draw() {
         if (!job) return;
-        top.replaceChildren(...header().filter(Boolean), stageBlock(), approvalBlock());
+        top.replaceChildren(...header().filter(Boolean), stageBlock(), approvalBlock(), timelineBlock());
         mid.replaceChildren(progressBlock(), artifactsBlock());
         advTop.replaceChildren(metaLine(), statsStrip(), strips());
         bottom.replaceChildren(
@@ -332,24 +373,23 @@
       }
 
       /* ---------------- cancel ---------------- */
-      async function cancel() {
-        const s = st();
-        const pre = J.PRE_LAUNCH.includes(s);
+      async function cancel(ca) {
+        ca = ca || J.cancelAction(job);
+        if (!ca) return;
         const ok = await OG.dialog({
-          title: pre ? "Cancel this job before launch?" : "Cancel the job and terminate its instance?", danger: true, confirm: pre ? "Cancel job" : "Cancel & terminate",
-          ack: !pre && !sandbox() ? "I understand the instance and its local data are destroyed; artifacts not yet uploaded are lost" : null,
-          body: h("div", {}, h("p", {}, pre ? "Nothing has launched: the route is rejected and the job ends. Records are kept." : sandbox() ? "Stops the simulated run." : "OpenGrid requests termination through the provider API and marks it confirmed only when the provider confirms. Records, logs and uploaded artifacts are kept."),
-            h("p", { class: "dim" }, "One Idempotency-Key per click: a retry after a network error cannot act twice.")),
+          title: ca.title, danger: true, confirm: ca.confirm, cancel: ca.keep, ack: ca.ack,
+          body: h("div", {}, h("p", {}, ca.body), h("p", { class: "dim" }, "Safe to retry: a second click after a network error can't act twice.")),
         });
         if (!ok) return;
         I.cancel = OG.intentFor(I.cancel, "cancel:" + id, {});
-        flash.replaceChildren(OG.loading("Cancelling…"));
+        flash.replaceChildren(OG.loading(ca.kind === "terminate" ? "Asking the provider to terminate the GPU…" : "Cancelling…"));
         try {
           await OG.api.intent(I.cancel, `/v1/jobs/${enc}/cancel`, { method: "POST", body: {} });
-          flash.replaceChildren(h("div", { class: "og-ok" }, h("b", {}, "Cancel requested")));
+          flash.replaceChildren(h("div", { class: "og-ok" }, h("b", {}, ca.kind === "terminate" ? "Termination requested" : "Cancel requested"),
+            ca.kind === "terminate" ? h("span", { class: "dim" }, " The GPU counts as running until the provider confirms it is gone.") : null));
           stopped = false; await load(); schedule();
         } catch (e) {
-          flash.replaceChildren(J.apiErr(e, "POST /v1/jobs/{id}/cancel"), I.cancel.state === "unknown" ? h("p", { class: "warn-t" }, "Outcome unknown. Cancel again: it reuses the same Idempotency-Key (" + I.cancel.key.slice(0, 12) + "…).") : null);
+          flash.replaceChildren(J.apiErr(e, "POST /v1/jobs/{id}/cancel", { admin }), I.cancel.state === "unknown" ? h("p", { class: "warn-t" }, "Outcome unknown. Press the button again: it reuses the same request key (" + I.cancel.key.slice(0, 12) + "…), so it can't act twice.") : null);
         }
       }
 

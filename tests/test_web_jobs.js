@@ -194,5 +194,49 @@ ok(J.demoBody(null).config.epochs === J.DEFAULT_CONFIG.epochs.default && J.demoB
 ok(/aren't switched on/.test(J.plainBlocker({ code: "env_ceiling" })) && /aren't switched on/.test(J.plainBlocker({ code: "adapter_not_validated" })), "platform blockers -> plain setup sentence");
 ok(/price cap/.test(J.plainBlocker({ code: "no_eligible_listing" })) && J.plainBlocker(null) === "No GPU is ready for a real run right now.", "listing blockers and fallback");
 
+// ---------- the beginner layer (plain words over the same states) ----------
+ok(J.isDemoLink({ preset: "mnist" }) && J.isDemoLink({ sandbox: "1" }) && J.isDemoLink({ preset: "mnist", sandbox: "1" }) && !J.isDemoLink({}) && !J.isDemoLink({ preset: "other" }), "demo deep links: ?preset=mnist or ?sandbox=1");
+const rOff = { ready: false, blockers: [{ code: "env_live_provisioning", reason: "ROUTING_LIVE_PROVISIONING is off" }, { code: "execution_mode", reason: "PREVIEW_ONLY" }, { code: "provider_ready", reason: "none" }, { code: "worker_reconcile", reason: "x" }, { code: "worker_job_sync", reason: "y" }] };
+const lsOff = J.liveStatus(rOff, null);
+eq([lsOff.state, lsOff.title], ["off", "Live GPU execution is not enabled yet"], "readiness off -> not enabled yet");
+eq(lsOff.steps.length, 4, "what needs to happen: one plain step per distinct need (workers merged)");
+ok(!lsOff.steps.join(" ").match(/ROUTING_LIVE_PROVISIONING|Railway|admin\/|PREVIEW_ONLY/), "steps never name deployment variables, modes or operator pages");
+eq(J.liveStatus({ ready: true, blockers: [] }, null).state, "enabled", "readiness ready -> enabled");
+eq(J.liveStatus(null, { live_provisioning_enabled: false }).state, "off", "anonymous: the public capabilities flag says off");
+eq(J.liveStatus(null, { live_provisioning_enabled: true }).state, "unknown", "anonymous + flag on: unknown (sign in), never 'enabled'");
+eq(J.liveStatus(null, null).state, "unknown", "nothing known: unknown");
+eq(J.walkthrough(3), [{ epoch: 1, train_loss: 1, test_accuracy: 0.6 }, { epoch: 2, train_loss: 0.5, test_accuracy: 0.7 }, { epoch: 3, train_loss: 0.3333, test_accuracy: 0.8 }],
+  "walkthrough = the simulation's own placeholder numbers (jobs/orchestrator.run_simulated)");
+eq([J.walkthrough(99).length, J.walkthrough(0).length, J.walkthrough(6)[5].test_accuracy], [10, 3, 0.9], "walkthrough bounds (1-10 epochs; accuracy capped at 0.9)");
+const gj = J.jobGroups([
+  { job_id: "a", created_at: "2026-10-01", status: "reconciled", finished: true, outcome: "succeeded" },
+  { job_id: "b", created_at: "2026-10-03", status: "training" },
+  { job_id: "c", created_at: "2026-10-02", status: "orphan_suspected" },
+  { job_id: "d", created_at: "2026-10-04", status: "training_completed", finished: true, sandbox: true, outcome: "simulated" },
+  { job_id: "e", created_at: "2026-10-05", status: "quote_expired" },
+]);
+eq([gj.attention.map(j => j.job_id), gj.active.map(j => j.job_id), gj.completed.map(j => j.job_id)], [["e", "c"], ["b"], ["d", "a"]], "My Jobs groups: attention, active, completed (newest first)");
+ok(J.cancelAction({ status: "training_completed", finished: true, sandbox: true }) === null && J.cancelAction({ status: "training", sandbox: true }) === null, "simulation: no cancel control (the server never cancels one)");
+const cPre = J.cancelAction({ status: "pending_approval" });
+eq([cPre.kind, cPre.button, cPre.confirm, cPre.keep, cPre.ack], ["cancel", "Cancel job…", "Cancel job", "Keep job", null], "before launch: Cancel job vs Keep job");
+const cRun = J.cancelAction({ status: "training" });
+eq([cRun.kind, cRun.button, cRun.confirm, cRun.keep], ["terminate", "Terminate GPU…", "Terminate GPU", "Keep running"], "running on a GPU: Terminate GPU vs Keep running");
+ok(!!cRun.ack && cRun.confirm !== cRun.keep && !/^Cancel$/.test(cRun.keep) && !/^Cancel$/.test(cPre.keep), "never 'Cancel' as both dismiss and destroy; terminating needs an acknowledgement");
+ok(J.cancelAction({ status: "cancelling" }) === null && J.cancelAction({ status: "reconciled", finished: true }) === null && J.cancelAction({ status: "terminating" }) === null, "no control while cancelling, terminating or finished");
+const tl = J.timeline({ sandbox: true, events: [{ at: "2026-10-01T00:00:02Z", from: "validating", to: "initializing" }, { at: "2026-10-01T00:00:01Z", from: null, to: "created" },
+  { at: "2026-10-01T00:00:03Z", from: "initializing", to: "initializing", reason: "note" }, { at: "2026-10-01T00:00:04Z", from: "saving_artifacts", to: "training_completed" }] });
+eq(tl.map(x => x.text), ["Job created", "Setting up (simulated)", "Simulation finished"], "timeline: oldest first, plain words, notes skipped, sandbox wording");
+eq(J.plainState("pending_approval"), "Waiting for OpenGrid to approve the price", "plain state words");
+eq(J.nextStep({ status: "training_completed", finished: true, sandbox: true, outcome: "simulated" }).href, "/find", "after the simulation: find a GPU for my model");
+eq(J.nextStep({ status: "orphan_suspected", resource: { deployment_id: "dep_1" } }).href, "/deployments/dep_1", "possibly billing: open the deployment");
+eq(J.nextStep({ status: "pending_approval", route_request_id: "rr_1" }, null, { admin: true }).href, "/route?rr=rr_1", "admin + pending approval: the approval ticket");
+eq(J.nextStep({ status: "pending_approval" }, null, {}).href, null, "customer + pending approval: nothing to do");
+const pe = (status, detail) => J.plainError({ status, body: detail ? { detail } : null, message: "raw" });
+ok(pe(401).signIn === true && /Sign in/.test(pe(401).title), "401 -> sign in");
+ok(/isn't allowed/.test(pe(403).title) && !/scope/.test(pe(403).text), "403 -> plain, no scope jargon");
+ok(/aren't switched on/.test(pe(422, { code: "execution_disabled", message: "real execution is disabled in this environment" }).text), "refusal codes -> plain sentences");
+ok(!/Railway|ROUTING_LIVE|admin\//.test(Object.values(J.PLAIN_STATE).join(" ") + ["execution_disabled", "provider_unvalidated", "credentials_unavailable"].map(c => pe(422, { code: c }).text).join(" ")), "plain errors never send a user to a deployment variable or an operator page");
+ok(/Couldn't reach/.test(pe(0).title) && pe(0).retry === true, "network error -> check My Jobs before retrying");
+
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);

@@ -77,13 +77,48 @@ ok(F.checkRequirements({ workload_type: null, model: null, training: { method: n
 
 // ---------- picks ----------
 const picks = F.pickCards(REC);
-eq(picks.map(p => p.label), ["Cheapest advertised option", "Best for your workload", "Best OpenGrid can run"], "three distinct pick labels, in order");
+eq(picks.map(p => p.label), ["Lowest advertised price", "Best fit for your workload", "Execution-ready through OpenGrid"], "three distinct pick labels, in order");
 eq([picks[0].option && picks[0].option.option_id, picks[1].option && picks[1].option.option_id, picks[2].option], ["l40s-48gb:runpod:us-ks-2:1", "a100-80gb-sxm4:lambda:us-east-1:1", null], "picks resolve option refs");
 ok(picks[2].empty && /MNIST/.test(picks[2].empty.text) && picks[2].empty.href === F.DEMO_HREF, "no executable pick explained: only the MNIST demo runs (links the demo)");
 const anon = clone(REC); anon.options.forEach(o => { o.execution.workload_supported = true; o.execution.reasons = [{ code: "auth_required", reason: "sign in / API key required" }]; });
-ok(/Sign in or use an API key/.test(F.pickCards(anon)[2].empty.text), "anonymous caller: sign in / API key, never assumed executable");
+ok(/Sign in/.test(F.pickCards(anon)[2].empty.text) && /^\/login\?next=/.test(F.pickCards(anon)[2].empty.href), "anonymous caller: a sign-in prompt, never assumed executable");
 const none = clone(REC); none.picks = { cheapest_market: null, best_for_workload: null, best_executable: null }; none.options = [];
 ok(F.pickCards(none).every(p => !p.option && p.empty && p.empty.text), "every empty pick carries an explanation");
+
+// ---------- the simple view: one recommendation, a few alternatives, the three concepts kept apart ----------
+eq(F.TASKS.map(t => t[0]), ["finetune", "train", "infer", "unsure"], "step 1 order: fine-tune, train, inference, explore");
+eq(F.TASKS.map(t => t[1]), ["Fine-tune a model", "Train a model", "Run inference", "Explore options"], "step 1 labels");
+ok(!F.TIERS.some(t => /fast/i.test(t[1] + " " + t[2]) && !/not benchmarked/i.test(t[2])), "no tier calls a GPU faster without a benchmark");
+const hero = F.heroOf(REC);
+eq([hero.key, hero.option.option_id, hero.label], ["best_for_workload", "a100-80gb-sxm4:lambda:us-east-1:1", "Best fit for your workload"], "the best fit leads");
+const noFit = clone(REC); noFit.picks.best_for_workload = null;
+eq(F.heroOf(noFit).key, "cheapest_market", "no best fit: the lowest advertised price leads");
+const noPick = clone(REC); noPick.picks = {};
+eq([F.heroOf(noPick).key, F.heroOf(noPick).option.option_id], ["first", REC.options[0].option_id], "no pick at all: the server's first option");
+ok(F.heroOf(none) === null, "no option: no hero (never invented)");
+const alts1 = F.alternativesOf(REC, 3);
+ok(alts1.length <= 3 && alts1.length >= 1, "at most three alternatives -> " + alts1.length);
+ok(!alts1.some(a => a.option.option_id === hero.option.option_id), "the hero is not repeated as an alternative");
+eq(new Set(alts1.map(a => a.option.option_id)).size, alts1.length, "alternatives are distinct");
+eq(alts1[0].label, "Lowest advertised price", "the other pick comes first, with its meaning");
+ok(F.budgetHelp(REC) === null, "options exist: no budget help");
+const broke = clone(REC); broke.options = []; broke.picks = {};
+broke.excluded = [{ gpu: "NVIDIA A100 80GB", gpu_slug: "a100-80gb-sxm4", provider: "lambda", code: "over_max_price", reason: "over", price_per_gpu_hour: 1.291 },
+  { gpu: "NVIDIA L40S 48GB", gpu_slug: "l40s-48gb", provider: "runpod", code: "over_max_price", reason: "over", price_per_gpu_hour: 0.86 },
+  { gpu: "NVIDIA L40S 48GB", gpu_slug: "l40s-48gb", provider: "runpod", code: "over_max_price", reason: "over", price_per_gpu_hour: 0.9 },
+  { gpu: "NVIDIA L4 24GB", code: "insufficient_vram", reason: "too small" }];
+const bh = F.budgetHelp(broke);
+eq([bh.cheapest.map(x => x.price_per_gpu_hour), bh.suggest_maxp, bh.by_price, bh.by_budget, bh.count], [[0.86, 1.291], 0.86, true, false, 3], "insufficient budget: closest options over the limit, cheapest first, one per GPU+provider");
+const broke2 = clone(broke); broke2.excluded = [{ gpu: "x", code: "insufficient_vram", reason: "small" }];
+ok(F.budgetHelp(broke2) === null, "nothing excluded for price: no budget help (the plain empty state instead)");
+eq(F.runStatus(REC.options[0]).label, "Not yet: recommendation only", "recommendation-only option: plain status");
+const exe1 = clone(REC.options[0]); exe1.execution = { executable: true, workload_supported: true, reasons: [] };
+eq([F.runStatus(exe1).label, F.runStatus(exe1).tone], ["Yes: OpenGrid can run this", "good"], "executable: yes, after a preview and approval");
+const so = clone(exe1); so.available = false;
+eq(F.runStatus(so).tone, "warn", "sold out is never 'can run'");
+const cl3 = F.conceptLines(REC);
+eq(cl3.map(c => c.key), ["cheapest_market", "best_for_workload", "best_executable"], "the three concepts, in order");
+eq(cl3[2].text, "None for this workload today", "no execution-ready option is said plainly");
 const dangling = clone(REC); dangling.picks.best_for_workload = { option_id: "missing", reason: "x" };
 ok(F.pickCards(dangling)[1].option === null && F.pickCards(dangling)[1].empty, "a pick pointing at no option renders as empty, not broken");
 

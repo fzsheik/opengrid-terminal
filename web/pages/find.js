@@ -134,11 +134,12 @@
   }
 
   /* =============================== pure: the guided form =============================== */
+  // Step 1 "What are you trying to do?" (order = how often people ask; the value is what the URL keeps)
   const TASKS = [
-    ["train", "Train a model from scratch", "Pre-training or training your own architecture", "training"],
-    ["finetune", "Fine-tune an existing model", "Adapt Llama, Mistral, Qwen… to your data", "fine_tuning"],
-    ["infer", "Run inference", "Serve or batch-run a model", "inference"],
-    ["unsure", "Not sure yet", "We'll ask what matters", null],
+    ["finetune", "Fine-tune a model", "Adapt Llama, Mistral, Qwen… to your data", "fine_tuning"],
+    ["train", "Train a model", "From scratch, or your own architecture", "training"],
+    ["infer", "Run inference", "Serve a model or batch-run it", "inference"],
+    ["unsure", "Explore options", "Not sure yet: OpenGrid asks what matters", null],
   ];
   const METHODS = [["full", "Full", "All weights train: needs the most memory"], ["lora", "LoRA", "Small adapters on top of frozen weights"], ["qlora", "QLoRA", "LoRA on a 4-bit quantized base: least memory"]];
   const PRECISIONS = ["fp32", "bf16", "fp16", "fp8", "int8", "int4"];
@@ -301,12 +302,15 @@
   }
 
   /* =============================== pure: reading a Recommendation =============================== */
+  // The three picks keep three different meanings: the market's lowest advertised price, the best fit for the
+  // workload, and what OpenGrid can actually execute. Never merged.
   const PICKS = [
-    ["cheapest_market", "Cheapest advertised option", "The lowest observed price that fits the memory estimate. The market's answer. OpenGrid may not be able to run it for you."],
-    ["best_for_workload", "Best for your workload", "Fits with headroom at a balanced price, fresh data. What we'd rent for this job."],
-    ["best_executable", "Best OpenGrid can run", "The best option OpenGrid can actually launch for you today, after approval."],
+    ["cheapest_market", "Lowest advertised price", "The lowest observed price that fits the memory estimate. OpenGrid may not be able to run it for you."],
+    ["best_for_workload", "Best fit for your workload", "Fits with headroom at a balanced price, on fresh data. What OpenGrid would rent for this job."],
+    ["best_executable", "Execution-ready through OpenGrid", "The best option OpenGrid can actually launch for you today, after approval."],
   ];
-  const TIERS = [["lower_cost", "Lower cost", "Cheapest options that still fit"], ["balanced", "Balanced", "Headroom and price in balance"], ["higher_performance", "Higher performance", "Faster or larger GPUs for more money"]];
+  // No tier is called "faster": runtime is never claimed without a benchmark.
+  const TIERS = [["lower_cost", "Lower cost", "Cheapest options that still fit"], ["balanced", "Balanced", "Headroom and price in balance"], ["higher_performance", "Higher spec", "Larger or higher-spec GPUs for more money (speed is not benchmarked)"]];
   const DEMO_HREF = "/jobs/new?preset=mnist&sandbox=1";
   const COMPONENT_LABEL = { weights: "Model weights", gradients: "Gradients", optimizer: "Optimizer state", activations: "Activations", kv_cache: "KV cache", framework_overhead: "Framework overhead" };
   const arr = v => (Array.isArray(v) ? v : []);
@@ -320,7 +324,7 @@
     const opts = arr(rec && rec.options);
     if (!opts.length) return { text: "No option to run: nothing fits the estimate right now.", href: null };
     const reasons = opts.flatMap(o => arr(o.execution && o.execution.reasons));
-    if (reasons.some(r => AUTH_CODES.test(String(r.code || "")))) return { text: "Sign in or use an API key: what OpenGrid can launch depends on your account.", href: "/keys", hrefLabel: "API keys" };
+    if (reasons.some(r => AUTH_CODES.test(String(r.code || "")))) return { text: "Sign in to see what OpenGrid can run for your account.", href: "/login?next=%2Ffind", hrefLabel: "Sign in" };
     if (opts.every(o => o.execution && o.execution.workload_supported === false))
       return { text: "OpenGrid can only launch its PyTorch MNIST training demo today. For this workload the options above are a recommendation: you rent the GPU from the provider directly.", href: DEMO_HREF, hrefLabel: "Try the training demo (free simulation)" };
     const counts = new Map();
@@ -435,29 +439,90 @@
   const usd = v => (finite(v) ? (v > 0 && v < 0.01 ? "<$0.01" : "$" + v.toFixed(2)) : "-");
   const perH = v => (finite(v) ? "$" + v.toFixed(2) + "/GPU·h" : "-");
 
+  /* ---- the simple view: one recommendation first, a few alternatives, everything else in Advanced ---- */
+  // rec -> {option, key, label, reason} | null. The best fit leads; else the lowest advertised price; else the
+  // first option the server ranked. Never an option the server did not return.
+  function heroOf(rec) {
+    const picks = (rec && rec.picks) || {};
+    for (const key of ["best_for_workload", "cheapest_market", "best_executable"]) {
+      const ref = picks[key];
+      const o = ref && ref.option_id ? optionById(rec, ref.option_id) : null;
+      if (o) return { option: o, key, label: PICKS.find(p => p[0] === key)[1], reason: ref.reason ? String(ref.reason) : null };
+    }
+    const o = arr(rec && rec.options)[0];
+    return o ? { option: o, key: "first", label: "Top match", reason: null } : null;
+  }
+  // rec -> up to `max` other options, each {option, label, note}: the other picks first (they carry a meaning),
+  // then the best of each tier not shown yet. Distinct by option_id; the hero is excluded.
+  function alternativesOf(rec, max) {
+    max = max == null ? 3 : max;
+    const hero = heroOf(rec);
+    const seen = new Set(hero ? [hero.option.option_id] : []);
+    const out = [];
+    const push = (o, label, note) => { if (o && !seen.has(o.option_id) && out.length < max) { seen.add(o.option_id); out.push({ option: o, label, note: note || null }); } };
+    const picks = (rec && rec.picks) || {};
+    for (const [key, label] of PICKS) { const ref = picks[key]; if (ref && ref.option_id) push(optionById(rec, ref.option_id), label, ref.reason ? String(ref.reason) : null); }
+    for (const t of tiersOf(rec && rec.options)) push(t.options.slice().sort((a, b) => (a.price_per_gpu_hour ?? 1e9) - (b.price_per_gpu_hour ?? 1e9)).find(o => !seen.has(o.option_id)), t.label, t.blurb);
+    return out;
+  }
+  const OVER = ["over_max_price", "over_budget"];
+  // No option left, and price limits excluded GPUs that fit -> {cheapest: [{gpu, gpu_slug, provider, price_per_gpu_hour, code, reason}],
+  // suggest_maxp} (the lowest excluded price, rounded up to the cent), else null. Uses only the server's exclusions.
+  function budgetHelp(rec) {
+    if (arr(rec && rec.options).length) return null;
+    const over = arr(rec && rec.excluded).filter(x => x && OVER.includes(x.code));
+    if (!over.length) return null;
+    const priced = over.filter(x => finite(x.price_per_gpu_hour) && x.price_per_gpu_hour > 0).sort((a, b) => a.price_per_gpu_hour - b.price_per_gpu_hour);
+    const seen = new Set(), cheapest = [];
+    for (const x of priced) { const k = (x.gpu || "") + "|" + (x.provider || ""); if (seen.has(k)) continue; seen.add(k); cheapest.push(x); if (cheapest.length === 3) break; }
+    return { cheapest, suggest_maxp: cheapest.length ? Math.ceil(cheapest[0].price_per_gpu_hour * 100) / 100 : null,
+      by_budget: over.some(x => x.code === "over_budget"), by_price: over.some(x => x.code === "over_max_price"), count: over.length };
+  }
+  // "Can OpenGrid run it?" in one plain sentence per option -> {label, detail, tone}
+  function runStatus(o) {
+    const r = readiness(o);
+    if (r.code === "executable") return { label: "Yes: OpenGrid can run this", detail: "After a free route preview and OpenGrid's approval of the exact price.", tone: "good" };
+    if (r.code === "sold_out") return { label: "Not right now: sold out", detail: "The provider reported no capacity at the last check.", tone: "warn" };
+    if (r.code === "stale") return { label: "Not right now: the price is out of date", detail: "Not observed recently, so it is not offered as deployable.", tone: "warn" };
+    if (r.code === "recommendation_only") return { label: "Not yet: recommendation only", detail: `Rent it from ${o.provider_display || (OG.providerName ? OG.providerName(o.provider) : o.provider)} directly. OpenGrid only runs its PyTorch MNIST example today.`, tone: "" };
+    return { label: "Not yet: recommendation only", detail: r.detail, tone: "" };
+  }
+  // The three concepts in one line each, for the summary strip -> [{key, label, text, option}]
+  function conceptLines(rec) {
+    return pickCards(rec).map(p => ({ key: p.key, label: p.label, option: p.option,
+      text: p.option ? `${p.option.gpu_count > 1 ? p.option.gpu_count + "× " : ""}${OG.shortGpu ? OG.shortGpu(p.option.gpu || "") : p.option.gpu} · ${p.option.provider_display || p.option.provider} · ${perH(p.option.price_per_gpu_hour)}`
+        : p.key === "best_executable" ? "None for this workload today" : "Nothing fits right now",
+      empty: p.empty }));
+  }
+
   OG.find = { SCHEMA, TASKS, METHODS, MODELS, PICKS, TIERS, FORM_KEYS, MAX_PASTE, DEMO_HREF, ANALYZER_KEYS,
     checkRequirements, validatePaste, prune, modelFromText, formErrors, requirementsFromForm, stateFromQuery, queryFromState,
     applyAnswers, answersFromQuery, answersToQuery, controlFor, leafSpec,
     pickCards, readiness, availability, memoryFit, fmtGb, runtimeInfo, componentRows, tiersOf, noGpu, costLines, gpuHref, routeHref,
-    questionsOf, noExecutableReason, optionById };
+    questionsOf, noExecutableReason, optionById, heroOf, alternativesOf, budgetHelp, runStatus, conceptLines };
 
   if (typeof OG.page !== "function" || typeof document === "undefined") return;   // node tests: pure part only
 
   /* =============================== views =============================== */
   OG.views = OG.views || {};
   const F = OG.find;
+  // The compute pages' own stylesheet (/static/compute.css): one <link>, added once, by whichever page mounts first.
+  OG.computeStyles = OG.computeStyles || (() => {
+    if (document.getElementById("cx-css")) return;
+    document.head.append(h("link", { id: "cx-css", rel: "stylesheet", href: "/static/compute.css" }));
+  });
   const JOURNEYS = [
     { key: "find", n: "A", title: "Find the right GPU", sub: "Describe your model: get a memory estimate and the GPUs that fit, with observed prices.", href: "/find" },
-    { key: "demo", n: "B", title: "Train an example model", sub: "Walk a real training job end to end on the PyTorch MNIST demo.", href: DEMO_HREF, badge: ["free simulation", "warn"] },
+    { key: "demo", n: "B", title: "See an example job", sub: "How OpenGrid runs a training job, on the PyTorch MNIST example. Simulated: no GPU, no charge.", href: DEMO_HREF, badge: ["free simulation", "warn"] },
     { key: "byo", n: "C", title: "Bring your own project", sub: "Run opengrid analyze . on your code and paste the result here. Recommendation only.", href: "/find?mode=paste", badge: ["recommendation only", ""] },
   ];
+  // Kept for other pages; /find itself leads with its numbered steps instead.
   OG.views.startHere = active => h("nav", { class: "og-start", "aria-label": "Start here" },
     h("span", { class: "og-start-k" }, "START HERE"),
     h("div", { class: "og-start-cs" }, JOURNEYS.map(j => h("a", { class: "og-start-c" + (j.key === active ? " on" : ""), href: j.href, "aria-current": j.key === active ? "page" : null },
       h("span", { class: "og-start-n", "aria-hidden": "true" }, j.n),
       h("span", { class: "og-start-t" }, h("b", {}, j.title), j.badge ? OG.badge(j.badge[0], j.badge[1]) : null),
       h("span", { class: "og-start-s" }, j.sub)))));
-
   /* ---- one option ---- */
   function fitBar(o, e) {
     const f = memoryFit(o, e);
@@ -486,12 +551,13 @@
       c.unknown_costs.length ? h("div", { class: "fd-unk dim" }, "Not included: ", c.unknown_costs.join(", ")) : null,
       c.billing_unit ? h("div", { class: "fd-unk dimmer" }, "billed " + String(c.billing_unit).replace(/_/g, " ")) : null);
   }
-  function actions(o, compact) {
+  function actions(o, compact, signedIn) {
     const r = readiness(o);
     return h("div", { class: "fd-acts" },
       o.gpu_slug || o.gpu ? h("a", { class: "btn", href: gpuHref(o) }, "View GPU") : null,
-      h("a", { class: "btn", href: routeHref(o), title: "The order ticket: compare executable routes for this GPU (advanced)" }, "Preview route"),
-      r.code !== "executable" && !compact ? h("a", { class: "btn fd-demo", href: DEMO_HREF, title: "A free simulation of the full training-job flow on PyTorch MNIST" }, "Try the training demo") : null);
+      h("a", { class: "btn", href: routeHref(o), title: "Estimates which provider OpenGrid would select for this GPU. Free: it spends nothing." + (signedIn === false ? " Needs sign-in." : "") },
+        "Preview a route", signedIn === false ? h("span", { class: "dimmer", style: "margin-left:4px" }, "· sign-in") : null),
+      r.code !== "executable" && !compact ? h("a", { class: "btn fd-demo", href: DEMO_HREF, title: "A simulated example of how OpenGrid runs a training job: no GPU, no charge" }, "See an example job") : null);
   }
   function optionCard(o, e, opts) {
     opts = opts || {};
@@ -519,7 +585,7 @@
       fitBar(o, e),
       opts.compact ? h("details", { class: "fd-more" }, h("summary", {}, "Cost, why and limitations"), costBlock(o), lists) : [costBlock(o), lists],
       readyBlock(o, opts.compact),
-      actions(o, opts.compact));
+      actions(o, opts.compact, opts.signedIn));
   }
 
   /* ---- the estimate ---- */
@@ -561,30 +627,100 @@
     }
   }
 
-  /* ---- questions with inline answers ---- */
+  /* ---- questions with inline answers (optional; the raw field name stays in the tooltip) ---- */
   function questionsBlock(qs, answers, onAnswer) {
     if (!qs.length) return null;
-    return h("section", { class: "fd-qs box", "aria-label": "Questions that sharpen the estimate" },
-      h("div", { class: "fd-qs-h" }, h("span", { class: "eyebrow" }, "Sharpen the estimate"), h("span", { class: "dim" }, "Optional. Answer any of these and the recommendation updates.")),
-      h("ul", {}, qs.map(q => {
-        const c = controlFor(q.field);
-        const id = "fdq-" + q.field.replace(/[^a-z0-9]/gi, "-");
-        const cur = answers[q.field] != null ? String(answers[q.field]) : "";
-        let ctl;
-        if (!c) ctl = h("span", { class: "dim" }, "Answer by editing your input.");
-        else if (c.options) ctl = h("div", { class: "fd-qopts", role: "group", "aria-labelledby": id }, c.options.map(([v, l]) => h("button", { type: "button", class: "btn sm", "aria-pressed": String(cur === v), onclick: () => onAnswer(q.field, cur === v ? null : v) }, l)));
-        else {
-          const inp = h("input", { class: "field num", type: c.type === "text" ? "text" : "number", min: c.min, step: c.step, value: cur, "aria-labelledby": id, inputmode: c.type === "int" ? "numeric" : c.type === "num" ? "decimal" : null,
-            onkeydown: ev => { if (ev.key === "Enter") { ev.preventDefault(); onAnswer(q.field, inp.value); } } });
-          ctl = h("span", { class: "fd-qin" }, inp, h("button", { type: "button", class: "btn sm", onclick: () => onAnswer(q.field, inp.value) }, "Update"));
-        }
-        return h("li", {}, h("div", {}, h("b", { id }, q.question || q.field), q.why ? h("span", { class: "dim" }, " (" + q.why + ")") : null, h("span", { class: "mono dimmer fd-qf" }, q.field)), ctl);
-      })));
+    const item = q => {
+      const c = controlFor(q.field);
+      const id = "fdq-" + q.field.replace(/[^a-z0-9]/gi, "-");
+      const cur = answers[q.field] != null ? String(answers[q.field]) : "";
+      let ctl;
+      if (!c) ctl = h("span", { class: "dim" }, "Answer by editing your input.");
+      else if (c.options) ctl = h("div", { class: "fd-qopts", role: "group", "aria-labelledby": id }, c.options.map(([v, l]) => h("button", { type: "button", class: "btn sm", "aria-pressed": String(cur === v), onclick: () => onAnswer(q.field, cur === v ? null : v) }, l)));
+      else {
+        const inp = h("input", { class: "field num", type: c.type === "text" ? "text" : "number", min: c.min, step: c.step, value: cur, "aria-labelledby": id, inputmode: c.type === "int" ? "numeric" : c.type === "num" ? "decimal" : null,
+          onkeydown: ev => { if (ev.key === "Enter") { ev.preventDefault(); onAnswer(q.field, inp.value); } } });
+        ctl = h("span", { class: "fd-qin" }, inp, h("button", { type: "button", class: "btn sm", onclick: () => onAnswer(q.field, inp.value) }, "Update"));
+      }
+      return h("li", {}, h("div", { title: q.field }, h("b", { id }, q.question || q.field), q.why ? h("span", { class: "dim" }, " (" + q.why + ")") : null), ctl);
+    };
+    return h("section", { class: "cx-qs", "aria-label": "Optional questions that sharpen the estimate" },
+      h("div", { class: "cx-qs-h" }, h("b", {}, "Improve the estimate"), h("span", { class: "dim" }, "Optional. Answer any of these and the recommendation updates.")),
+      h("ul", {}, qs.slice(0, 3).map(item)),
+      qs.length > 3 ? h("details", { class: "cx-tech" }, h("summary", {}, `${qs.length - 3} more question${qs.length - 3 === 1 ? "" : "s"}`), h("ul", {}, qs.slice(3).map(item))) : null);
   }
 
-  /* ---- the recommendation screen ---- */
+  /* ---- the simple recommendation: one pick, why, price, memory, availability, can OpenGrid run it ---- */
+  function fact(label, value, sub, badge) {
+    return h("div", { class: "cx-fact" }, h("div", { class: "cx-fact-k" }, label, badge || null), h("div", { class: "cx-fact-v" }, value), sub ? h("div", { class: "cx-fact-s" }, sub) : null);
+  }
+  function previewLink(o, signedIn, cls) {
+    return h("a", { class: cls || "btn", href: routeHref(o), title: "Estimates which provider OpenGrid would select for this GPU. Free: it spends nothing." + (signedIn === false ? " Needs sign-in." : "") },
+      "Preview a route", signedIn === false ? h("span", { class: "dimmer", style: "margin-left:4px" }, "· sign-in") : null);
+  }
+  function heroCard(hero, e, opts) {
+    const o = hero.option, f = memoryFit(o, e), rs = runStatus(o), m = (e && e.memory) || {}, av = availability(o), c = costLines(o);
+    const why = [hero.reason].concat(arr(o.why).map(String)).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).slice(0, 3);
+    const name = o.provider_display || OG.providerName(o.provider);
+    const seen = o.age_seconds != null || o.observed_at ? OG.freshBadge(o.age_seconds != null ? o.age_seconds : o.observed_at, { provider: o.provider }) : null;
+    return h("section", { class: "cx-hero", "aria-label": "Recommended GPU" },
+      h("div", { class: "cx-hero-h" }, h("span", { class: "eyebrow" }, "Recommended"), OG.badge(hero.label, hero.key === "best_executable" ? "good" : ""),
+        h("span", { class: "spacer" }), h("a", { class: "lnk dim", href: gpuHref(o) }, "Full market for this GPU →")),
+      h("div", {},
+        h("h2", { class: "cx-hero-t" }, h("a", { href: gpuHref(o) }, `${o.gpu_count > 1 ? o.gpu_count : 1}× ${OG.shortGpu(o.gpu || o.gpu_slug || "?")}`)),
+        h("div", { class: "cx-hero-sub" }, OG.logo(o.provider, 16), h("a", { class: "lnk", href: "/provider/" + encodeURIComponent(o.provider || "") }, name),
+          o.region ? h("span", { class: "dim" }, "· " + o.region) : null, finite(o.vram_gb) ? h("span", { class: "dim" }, `· ${fmtGb(o.vram_gb)} per GPU`) : null)),
+      h("div", { class: "cx-facts" },
+        fact("Price", perH(o.price_per_gpu_hour), o.gpu_count > 1 && finite(o.price_per_instance_hour) ? `${usd(o.price_per_instance_hour)}/h for ${o.gpu_count} GPUs` : "per GPU-hour, observed list price", OG.kindBadge("observed")),
+        fact("Memory needed", finite(m.recommended_gb) ? fmtGb(m.recommended_gb) : OG.na("not enough information yet"),
+          f.known ? (f.over ? h("span", { class: "down" }, `does not fit ${fmtGb(f.vram)}`) : `fits ${fmtGb(f.vram)} per GPU · ${Math.round(f.headroom_pct)}% headroom`) : m.confidence ? "confidence " + m.confidence : null, OG.kindBadge("estimated")),
+        fact("Availability", av.label, seen ? h("span", {}, "price seen ", seen) : "freshness not reported"),
+        c.budget_hours != null ? fact("Your budget", "≈ " + fmt.num(c.budget_hours, 1) + " h", "of runtime at this price", OG.kindBadge("estimated"))
+          : fact("Runtime", runtimeInfo(e).known ? runtimeInfo(e).text : "Unknown", runtimeInfo(e).known ? runtimeInfo(e).reason : "not benchmarked: cost is per hour")),
+      why.length ? h("div", {}, h("div", { class: "cx-fact-k" }, "Why it fits"), h("ul", { class: "cx-why" }, why.map(x => h("li", {}, x)))) : null,
+      h("div", { class: "cx-run t-" + (rs.tone || "plain") }, h("b", {}, "Can OpenGrid run it? ", rs.label), h("span", { class: "dim" }, rs.detail)),
+      h("div", { class: "cx-acts" },
+        h("a", { class: "btn pri", href: gpuHref(o) }, "View prices for this GPU"),
+        previewLink(o, opts.signedIn),
+        readiness(o).code !== "executable" ? h("a", { class: "btn", href: DEMO_HREF, title: "A simulated example of how OpenGrid runs a training job: no GPU, no charge" }, "See an example job") : null));
+  }
+  function altRow(a, e) {
+    const o = a.option, f = memoryFit(o, e), rs = runStatus(o), av = availability(o);
+    return h("div", { class: "cx-alt" },
+      h("div", {}, h("div", { class: "cx-alt-l" }, a.label),
+        h("div", { class: "cx-alt-g" }, h("a", { href: gpuHref(o) }, `${o.gpu_count > 1 ? o.gpu_count + "× " : ""}${OG.shortGpu(o.gpu || o.gpu_slug || "?")}`)),
+        h("div", { class: "cx-alt-p" }, OG.logo(o.provider, 14), o.provider_display || OG.providerName(o.provider), o.region ? h("span", { class: "dim" }, o.region) : null)),
+      h("div", { class: "cx-alt-p" }, OG.badge(av.label.replace("Availability not reported", "availability not reported"), av.tone),
+        f.known ? h("span", { class: f.over ? "down" : "dim" }, f.over ? "does not fit" : `${Math.round(f.headroom_pct)}% memory headroom`) : null,
+        h("span", { class: "dim", title: rs.detail }, rs.tone === "good" ? "OpenGrid can run this" : "recommendation only")),
+      h("div", { class: "cx-alt-r" }, h("b", {}, perH(o.price_per_gpu_hour)), h("div", { class: "dim" }, o.gpu_count > 1 && finite(o.price_per_instance_hour) ? `${usd(o.price_per_instance_hour)}/h total` : "observed")),
+      a.note ? h("div", { class: "cx-alt-x" }, a.note) : null);
+  }
+  function conceptStrip(rec) {
+    return h("div", { class: "cx-three", "aria-label": "Three different answers, never merged" }, conceptLines(rec).map(c => h("div", {},
+      h("div", { class: "cx-fact-k" }, c.label),
+      h("div", { class: "cx-3v" }, c.option ? h("a", { class: "lnk", href: gpuHref(c.option) }, c.text) : c.text),
+      !c.option && c.empty && c.key === "best_executable" ? h("div", { class: "cx-3s" }, c.empty.text, c.empty.href ? [" ", h("a", { class: "lnk", href: c.empty.href }, (c.empty.hrefLabel || "Open") + " →")] : null) : null)));
+  }
+  function budgetBlock(bh, opts) {
+    const limit = bh.by_price && bh.by_budget ? "your max price and budget" : bh.by_price ? "your max price per GPU-hour" : "your budget";
+    return h("section", { class: "cx-budget", role: "status" },
+      h("h2", {}, "Nothing fits " + limit),
+      h("p", {}, `GPUs with enough memory exist, but ${bh.count} listing${bh.count === 1 ? " was" : "s were"} left out because of ${limit}.`),
+      bh.cheapest.length ? h("div", {}, h("div", { class: "cx-fact-k" }, "Closest options above your limit"),
+        h("ul", { class: "cx-why" }, bh.cheapest.map(x => h("li", {}, h("a", { class: "lnk", href: "/gpu/" + encodeURIComponent(x.gpu_slug || (OG.slug ? OG.slug(x.gpu || "") : "")) }, OG.shortGpu(x.gpu || "")),
+          x.provider ? " at " + OG.providerName(x.provider) : "", ": ", h("b", { class: "mono" }, perH(x.price_per_gpu_hour)))))) : null,
+      opts.onRelax ? h("div", { class: "cx-acts" },
+        bh.suggest_maxp != null && bh.by_price ? h("button", { class: "btn pri", type: "button", onclick: () => opts.onRelax({ maxp: String(bh.suggest_maxp) }) }, `Show options up to ${perH(bh.suggest_maxp)}`) : null,
+        h("button", { class: "btn", type: "button", onclick: () => opts.onRelax({ maxp: "", budget: "" }) }, "Remove my price limits"))
+        : h("p", { class: "dim" }, "Raise the limit in your requirements (constraints) and run it again."));
+  }
+
+  /* ---- the recommendation screen (any Recommendation payload) ---- */
+  // opts: {answers, onAnswer, view, onView, estimateOnly, signedIn, onRelax, advancedOpen, onAdvanced}
   OG.views.recommendation = (rec, opts) => {
     opts = opts || {};
+    if (OG.computeStyles) OG.computeStyles();
     const e = est(rec);
     const kids = [];
     kids.push(h("div", { class: "fd-res-h" }, h("span", { class: "eyebrow" }, "Recommendation"),
@@ -596,43 +732,65 @@
     if (ng) {
       kids.push(h("section", { class: "fd-nogpu box", role: "status" }, h("h2", {}, "You probably don't need a GPU"), h("p", {}, ng.reason),
         h("p", { class: "dim" }, "Run it on your laptop or a regular CPU server. If you add a model or an ML framework (PyTorch, TensorFlow, JAX…), check again."),
-        h("div", { class: "fd-acts" }, h("a", { class: "btn", href: "/find" }, "Describe a different workload"), h("a", { class: "btn", href: DEMO_HREF }, "Try the training demo"))));
+        h("div", { class: "fd-acts" }, h("a", { class: "btn", href: "/find" }, "Describe a different workload"), h("a", { class: "btn", href: DEMO_HREF }, "See an example job"))));
       if (arr(rec && rec.notes).length) kids.push(h("ul", { class: "note fd-notes" }, arr(rec.notes).map(n => h("li", {}, String(n)))));
       return h("div", { class: "fd-res" }, kids);
     }
-    if (e) kids.push(estimateBlock(e));
-    if (opts.onAnswer) kids.push(questionsBlock(questionsOf(rec), opts.answers || {}, opts.onAnswer));
     if (opts.estimateOnly) {
+      if (e) kids.push(estimateBlock(e));
+      if (opts.onAnswer) kids.push(questionsBlock(questionsOf(rec), opts.answers || {}, opts.onAnswer));
       kids.push(OG.insufficient(opts.estimateOnly, "Market options not available"));
       return h("div", { class: "fd-res" }, kids);
     }
-    const picks = pickCards(rec);
-    kids.push(h("section", { class: "fd-picks", "aria-label": "Three picks" }, picks.map(p => h("div", { class: "fd-pick p-" + p.key + (p.option ? "" : " empty") },
-      h("div", { class: "fd-pick-h" }, h("h3", {}, p.label), h("p", { class: "dim" }, p.blurb)),
-      p.option ? [p.reason ? h("div", { class: "fd-pick-r" }, p.reason) : null, optionCard(p.option, e, { hideTier: false })]
-        : h("div", { class: "fd-pick-e" }, h("b", {}, "Nothing here"), h("p", {}, p.empty.text), p.empty.href ? h("a", { class: "btn", href: p.empty.href }, p.empty.hrefLabel || "Open") : null)))));
-    const tiers = tiersOf(rec && rec.options);
+    const hero = heroOf(rec);
     const total = arr(rec && rec.options).length;
+    if (hero) {
+      kids.push(heroCard(hero, e, opts));
+      const alts = alternativesOf(rec, 3);
+      if (alts.length) kids.push(h("section", { class: "cx-alts", "aria-label": "Alternatives" },
+        h("div", { class: "cx-alts-h" }, h("h3", {}, "Other good options"), h("span", { class: "dim" }, total > alts.length + 1 ? `${alts.length} of ${total - 1} · all in Advanced details` : "")),
+        alts.map(a => altRow(a, e))));
+      kids.push(conceptStrip(rec));
+    } else {
+      const bh = budgetHelp(rec);
+      kids.push(bh ? budgetBlock(bh, opts) : OG.empty("No GPU listing fits this workload right now. Advanced details lists what was left out and why; relaxing the price or region usually helps."));
+      if (e) kids.push(estimateBlock(e));
+    }
+    if (opts.onAnswer) kids.push(questionsBlock(questionsOf(rec), opts.answers || {}, opts.onAnswer));
+    kids.push(h("p", { class: "cx-explain" }, "Prices are observed list prices, not quotes. Memory, cost and fit are estimates. Runtime is never guessed, so no GPU is called faster without a benchmark."));
+
+    // Advanced: the full estimate, the three picks as cards, every option (cards / table), exclusions, notes.
+    const adv = h("details", { class: "cx-adv", open: opts.advancedOpen || opts.view === "table" ? true : null, ontoggle: ev => opts.onAdvanced && opts.onAdvanced(ev.target.open) },
+      h("summary", {}, h("b", {}, "Advanced details"), h("span", { class: "dim" }, ` (memory breakdown and assumptions, the three picks, all ${total} option${total === 1 ? "" : "s"}, excluded listings)`)));
+    if (hero && e) adv.append(estimateBlock(e));
+    const picks = pickCards(rec);
+    adv.append(h("section", { class: "fd-picks", "aria-label": "Three picks" }, picks.map(p => h("div", { class: "fd-pick p-" + p.key + (p.option ? "" : " empty") },
+      h("div", { class: "fd-pick-h" }, h("h3", {}, p.label), h("p", { class: "dim" }, p.blurb)),
+      p.option ? [p.reason ? h("div", { class: "fd-pick-r" }, p.reason) : null, optionCard(p.option, e, { hideTier: false, signedIn: opts.signedIn })]
+        : h("div", { class: "fd-pick-e" }, h("b", {}, "Nothing here"), h("p", {}, p.empty.text), p.empty.href ? h("a", { class: "btn", href: p.empty.href }, p.empty.hrefLabel || "Open") : null)))));
     if (total) {
+      const tiers = tiersOf(rec && rec.options);
       const body = h("div");
       const view = OG.seg([["cards", "Cards"], ["table", "Table"]], opts.view || "cards", v => { draw(v); opts.onView && opts.onView(v); });
       const draw = v => body.replaceChildren(v === "table" ? optionTable(rec, e) : h("div", {}, tiers.map(t => h("div", { class: "fd-tier" },
         h("div", { class: "fd-tier-h" }, h("h3", {}, t.label), h("span", { class: "dim" }, t.blurb), h("span", { class: "dimmer" }, `${t.options.length} option${t.options.length === 1 ? "" : "s"}`)),
-        h("div", { class: "fd-cards" }, t.options.map(o => optionCard(o, e, { compact: true, hideTier: true })))))));
+        h("div", { class: "fd-cards" }, t.options.map(o => optionCard(o, e, { compact: true, hideTier: true, signedIn: opts.signedIn })))))));
       draw(opts.view || "cards");
-      kids.push(h("section", { class: "sec fd-alts" }, h("div", { class: "fd-alts-h" }, h("h2", { class: "sec-h" }, `All options · ${total}`), view), body));
-    } else kids.push(OG.empty("No GPU listing fits this workload right now. See what was excluded below, or relax your budget / max price."));
+      adv.append(h("section", { class: "sec fd-alts" }, h("div", { class: "fd-alts-h" }, h("h2", { class: "sec-h" }, `All options · ${total}`), view), body));
+    }
     const ex = arr(rec && rec.excluded);
-    if (ex.length) kids.push(h("details", { class: "sec fd-excl" }, h("summary", { class: "sec-h" }, `Excluded · ${ex.length}`),
+    if (ex.length) adv.append(h("details", { class: "sec fd-excl" }, h("summary", { class: "sec-h" }, `Excluded · ${ex.length}`),
       OG.table({ columns: [
         { key: "gpu", label: "GPU", fmt: v => v ? OG.shortGpu(v) : "-" },
         { key: "provider", label: "Provider", fmt: v => v ? OG.providerName(v) : h("span", { class: "dim" }, "all") },
+        { key: "price_per_gpu_hour", label: "$/GPU·h", num: true, fmt: v => finite(v) ? perH(v).replace("/GPU·h", "") : "" },
         { key: "code", label: "Why", fmt: v => v ? OG.badge(String(v).replace(/_/g, " ")) : "" },
         { key: "reason", label: "Detail", cls: "dim" },
       ], rows: ex, compact: true, csv: false })));
-    if (arr(rec && rec.notes).length) kids.push(h("ul", { class: "note fd-notes" }, arr(rec.notes).map(n => h("li", {}, String(n)))));
-    kids.push(h("p", { class: "note" }, "Prices are ", h("b", {}, "observed"), " list prices from provider data, not quotes. Memory, cost and fit are ", h("b", {}, "estimates"),
+    if (arr(rec && rec.notes).length) adv.append(h("ul", { class: "note fd-notes" }, arr(rec.notes).map(n => h("li", {}, String(n)))));
+    adv.append(h("p", { class: "note" }, "Prices are ", h("b", {}, "observed"), " list prices from provider data, not quotes. Memory, cost and fit are ", h("b", {}, "estimates"),
       " with the assumptions shown. Runtime is never guessed. Stale or sold-out listings are never shown as deployable."));
+    kids.push(adv);
     return h("div", { class: "fd-res" }, kids);
   };
   function optionTable(rec, e) {
@@ -648,16 +806,19 @@
         { key: "available", label: "Available", value: o => availability(o).label, fmt: (v, o) => OG.badge(availability(o).label.replace("Availability not reported", "not reported"), availability(o).tone) },
         { key: "age_seconds", label: "Seen", num: true, fmt: (v, o) => v != null || o.observed_at ? OG.freshBadge(v != null ? v : o.observed_at, { provider: o.provider }) : "-" },
         { key: "ready", label: "OpenGrid", value: o => readiness(o).code, fmt: (v, o) => { const r = readiness(o); return h("span", { class: "fd-tr t-" + (r.tone || "plain"), title: r.detail }, r.code === "executable" ? "can run" : r.code === "stale" ? "stale" : r.code === "sold_out" ? "sold out" : "recommendation only"); } },
-        { key: "acts", label: "", sort: false, csv: false, fmt: (v, o) => h("span", { class: "fd-tacts" }, h("a", { class: "btn sm", href: gpuHref(o) }, "GPU"), h("a", { class: "btn sm", href: routeHref(o) }, "Route")) },
+        { key: "acts", label: "", sort: false, csv: false, fmt: (v, o) => h("span", { class: "fd-tacts" }, h("a", { class: "btn sm", href: gpuHref(o) }, "GPU"), h("a", { class: "btn sm", href: routeHref(o), title: "Preview a route (needs sign-in; spends nothing)" }, "Route")) },
       ], rows: arr(rec.options), compact: true, csv: "opengrid-find-options.csv", rowKey: o => o.option_id, sort: { key: "price_per_gpu_hour", dir: "asc" },
     });
   }
 
   /* =============================== /find =============================== */
+  // Four steps: 1 what you are doing, 2 which model (or your project's analysis), 3 what matters (budget, region,
+  // serving needs), 4 the recommendation. Advanced inputs (precision, quantization, batch) stay folded until needed.
   OG.page("/find", {
     title: "Find Compute",
     nav: "find",
     mount(el, params, query, ctx) {
+      OG.computeStyles();
       const root = h("div", { class: "pg-find" });
       el.append(root);
       let st = stateFromQuery(query);
@@ -666,7 +827,10 @@
       let pasteText = "";
       if (typeof query.req === "string" && query.req) { try { pasteText = JSON.stringify(JSON.parse(query.req), null, 2); } catch (e) { pasteText = query.req; } }
       let view = query.view === "table" ? "table" : "cards";
-      let lastRec = null;
+      let lastRec = null, lastExtra = null, advOpen = view === "table";
+      let signedIn = null;   // unknown until /v1/me answers (null: anonymous)
+      let handoff = null;    // {from: mode} while the assistant's requirements replace the guided answers
+      OG.me().then(me => { if (!ctx.alive()) return; signedIn = !!me; if (lastRec) drawResult(lastRec, lastExtra); });
 
       const hasAssistant = typeof OG.views.assistantPanel === "function";
       const askBox = h("div", { class: "fd-ask box", hidden: true });
@@ -682,27 +846,23 @@
           askMounted = true;
           try {
             OG.views.assistantPanel(askBox, { ctx, requirements: () => currentRequirements().requirements,
-              onRequirements: req => { const c = checkRequirements(req); if (!c.ok) return c; mode = "paste"; pasteText = JSON.stringify(req, null, 2); drawInput(); run(); return c; },
+              // The assistant's requirements replace the input visibly: a notice says where they came from and
+              // "Back to my answers" restores the guided form, which is kept untouched.
+              onRequirements: req => { const c = checkRequirements(req); if (!c.ok) return c; handoff = { from: handoff ? handoff.from : mode }; mode = "paste"; pasteText = JSON.stringify(req, null, 2); drawInput(); run(); return c; },
               onRecommendation: rec => { lastRec = rec; drawResult(rec); } });
           } catch (e) { askBox.replaceChildren(OG.error(e)); }
         }
       }
 
       root.append(
-        OG.head("Find Compute", "Describe your workload. OpenGrid estimates the GPU memory it needs and ranks the GPUs that fit, priced from observed market data. Free, no sign-in.",
-          askBtn, h("a", { class: "btn", href: "/methodology" }, "Methodology")),
-        OG.views.startHere(mode === "paste" ? "byo" : "find"),
+        OG.head("Find Compute", "Tell OpenGrid what you want to run. It estimates the GPU memory you need and recommends GPUs that fit, priced from live market data. Free, no sign-in.",
+          askBtn, h("a", { class: "btn", href: "/methodology/recommendations" }, "How it works")),
         askBox);
       const inBox = h("div", { class: "fd-in box" });
       const out = h("div", { class: "fd-out", "aria-live": "polite" });
       root.append(h("div", { class: "fd-grid" }, inBox, out));
-
-      /* ----- the input: guided form or paste ----- */
-      const tabs = OG.tabs([["form", "Guided"], ["paste", "Paste from the CLI"]], mode, v => { mode = v; drawInput(); syncUrl(); });
-      const inBody = h("div", { class: "fd-in-b" });
-      inBox.append(h("div", { class: "fd-in-h" }, tabs), inBody);
       const sentPre = h("pre", { class: "fd-sent mono", tabindex: "0", "aria-label": "Request body that will be sent" });
-      const sent = h("details", { class: "fd-sent-d" }, h("summary", {}, "What will be sent"), h("p", { class: "dim" }, "POST /v1/recommend. Only this JSON leaves your browser."), sentPre);
+      const sent = h("details", { class: "fd-sent-d" }, h("summary", {}, "Exactly what is sent"), h("p", { class: "dim" }, "Only this JSON leaves your browser (POST /v1/recommend)."), sentPre);
 
       function currentRequirements() {
         if (mode === "paste") {
@@ -728,22 +888,33 @@
         }
         OG.qs.set(patch);
       }
+      const setMode = m => { if (m === mode) return; mode = m; if (m === "form") handoff = null; drawInput(); syncUrl(); };
 
       function drawInput() {
-        tabs.set(mode);
-        inBody.replaceChildren(mode === "paste" ? pasteForm() : guidedForm());
+        inBody.replaceChildren(handoffNotice(), mode === "paste" ? pasteForm() : guidedForm());
         refreshSent();
       }
+      const inBody = h("div", { class: "fd-in-b" });
+      inBox.append(inBody);
+      function handoffNotice() {
+        if (!handoff || mode !== "paste") return null;
+        return h("div", { class: "cx-notice", role: "status" }, h("b", {}, "Filled in by the assistant."),
+          h("span", {}, "It turned your chat into the requirements below and ran them. Your own answers are kept."),
+          handoff.from === "form" ? h("button", { class: "btn sm", type: "button", onclick: () => { setMode("form"); run(); } }, "Back to my answers") : null);
+      }
+      const step = (n, title, hint, ...kids) => h("fieldset", { class: "cx-step" }, h("legend", {}, h("span", { class: "cx-step-n", "aria-hidden": "true" }, n), title),
+        hint ? h("p", { class: "cx-step-hint" }, hint) : null, h("div", { class: "cx-step-b" }, kids));
+      const sourceSwitch = () => h("div", { class: "cx-switch", role: "group", "aria-label": "Model or project" },
+        [["form", "Name a model"], ["paste", "Analyze my project"]].map(([v, l]) => h("button", { type: "button", "aria-pressed": String(mode === v), onclick: () => setMode(v) }, l)));
 
       function guidedForm() {
         const errEls = {};
         const err = k => (errEls[k] = h("span", { class: "fd-err", "aria-live": "polite" }));
-        const upd = (k, v) => { st[k] = v; showErr(); refreshSent(); };
+        const upd = (k, v) => { st[k] = v; showErr(); refreshSent(); syncUrl(); };
         function showErr() { const e = formErrors(st); for (const [k, x] of Object.entries(errEls)) x.textContent = e[k] || ""; }
-        const q = (n, title, hint, ...kids) => h("fieldset", { class: "fd-q" }, h("legend", {}, h("span", { class: "fd-qn" }, n), title), hint ? h("p", { class: "fd-hint" }, hint) : null, kids);
         const numIn = (k, label, attrs) => h("label", { class: "fd-f" }, h("span", { class: "fd-l" }, label),
           h("input", Object.assign({ class: "field", type: "number", min: 0, value: st[k], inputmode: "decimal", oninput: ev => upd(k, ev.target.value.trim()) }, attrs || {})), err(k));
-        const taskCards = h("div", { class: "fd-tasks", role: "radiogroup", "aria-label": "What are you doing?" }, TASKS.map(([v, l, s]) => h("label", { class: "fd-task" + (st.task === v ? " on" : "") },
+        const taskCards = h("div", { class: "fd-tasks", role: "radiogroup", "aria-label": "What are you trying to do?" }, TASKS.map(([v, l, s]) => h("label", { class: "fd-task" + (st.task === v ? " on" : "") },
           h("input", { type: "radio", name: "fd-task", value: v, checked: st.task === v ? true : null, onchange: () => { st.task = v; drawInput(); syncUrl(); } }),
           h("b", {}, l), h("span", { class: "dim" }, s))));
         const wt = taskType(st.task);
@@ -752,32 +923,33 @@
         const modelNote = h("span", { class: "fd-hint fd-mnote" });
         function drawModelNote() {
           const m = modelFromText(st.model);
-          modelNote.textContent = !m ? "Leave blank if you don't know yet." : m.parameters_b != null && m.name ? `${m.name} · ${m.parameters_b}B parameters` : m.parameters_b != null ? `${m.parameters_b}B parameters (no specific model)` : "Sent as the model name; OpenGrid looks it up.";
+          modelNote.textContent = !m ? "Leave blank if you don't know yet." : m.parameters_b != null && m.name ? `${m.name} · ${m.parameters_b}B parameters` : m.parameters_b != null ? `${m.parameters_b}B parameters (no specific model)` : "OpenGrid looks this name up.";
         }
         drawModelNote();
         const chips = h("div", { class: "fd-chips" }, MODELS.slice(0, 5).map(m => h("button", { type: "button", class: "btn sm", "aria-pressed": String(normKey(st.model) === normKey(m.label)),
-          onclick: () => { st.model = m.label; modelIn.value = m.label; drawModelNote(); refreshSent(); chips.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.textContent === m.label))); } }, m.label)));
+          onclick: () => { st.model = m.label; modelIn.value = m.label; drawModelNote(); refreshSent(); syncUrl(); chips.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.textContent === m.label))); } }, m.label)));
         const methodSeg = OG.seg([["", "Not sure"]].concat(METHODS.map(m => [m[0], m[1], m[2]])), st.method, v => { upd("method", v); methodHint.textContent = (METHODS.find(m => m[0] === v) || [, , "LoRA and QLoRA need far less memory than full fine-tuning."])[2]; });
         const methodHint = h("p", { class: "fd-hint" }, (METHODS.find(m => m[0] === st.method) || [, , "LoRA and QLoRA need far less memory than full fine-tuning."])[2]);
         const regionSel = h("select", { class: "field", "aria-label": "Region", onchange: ev => upd("region", ev.target.value) }, REGIONS.map(([v, l]) => h("option", { value: v, selected: st.region === v ? true : null }, l)));
         const precSel = h("select", { class: "field", "aria-label": "Precision", onchange: ev => upd("prec", ev.target.value) }, h("option", { value: "" }, "Not sure"), PRECISIONS.map(p => h("option", { value: p, selected: st.prec === p ? true : null }, p)));
         const quantSel = h("select", { class: "field", "aria-label": "Quantization", onchange: ev => upd("quant", ev.target.value) }, h("option", { value: "" }, "Not sure"), QUANTS.map(([v, l]) => h("option", { value: v, selected: st.quant === v ? true : null }, l)));
-        const advOpen = !!(st.prec || st.quant || st.seq || st.mbs);
-        const form = h("form", { class: "fd-form", novalidate: true, onsubmit: ev => { ev.preventDefault(); run(); } },
-          q("1", "What are you doing?", null, taskCards),
-          q("2", "Which model?", "A name, a Hugging Face id, or just its size.", modelIn, h("datalist", { id: "fd-models" }, MODELS.map(m => h("option", { value: m.label }))), chips, modelNote, err("model")),
-          wt === "fine_tuning" ? q("3", "How will you fine-tune?", null, methodSeg, methodHint) : null,
-          wt === "inference" ? q("3", "How will you serve it?", "Longer context and more parallel requests need more memory (KV cache).",
-            h("div", { class: "fd-row2" }, numIn("ctx", "Context length (tokens)", { step: 1, placeholder: "e.g. 8192", inputmode: "numeric" }), numIn("conc", "Concurrent requests", { step: 1, placeholder: "e.g. 8", inputmode: "numeric" }))) : null,
-          q(wt === "fine_tuning" || wt === "inference" ? "4" : "3", "Budget and location", "All optional. Options over your max price are left out.",
+        const advOpenF = !!(st.prec || st.quant || st.seq || st.mbs);
+        const form = h("form", { class: "fd-form cx-steps", novalidate: true, onsubmit: ev => { ev.preventDefault(); run(); } },
+          step("1", "What are you trying to do?", null, taskCards),
+          step("2", "What model or project?", "A model name, a Hugging Face id or just its size. Or analyze your project with the CLI.",
+            sourceSwitch(), modelIn, h("datalist", { id: "fd-models" }, MODELS.map(m => h("option", { value: m.label }))), chips, modelNote, err("model"),
+            wt === "fine_tuning" ? h("div", { class: "fd-f" }, h("span", { class: "fd-l" }, "How will you fine-tune?"), methodSeg, methodHint) : null),
+          step("3", "What matters?", "All optional. Options over your max price are left out.",
             h("div", { class: "fd-row2" }, numIn("budget", "Total budget ($)", { step: "any", placeholder: "e.g. 50" }), numIn("maxp", "Max $ per GPU-hour", { step: "any", placeholder: "e.g. 3" })),
-            h("label", { class: "fd-f" }, h("span", { class: "fd-l" }, "Region"), regionSel)),
-          h("details", { class: "fd-adv", open: advOpen ? true : null }, h("summary", {}, "Advanced: precision, quantization", wt === "training" || wt === "fine_tuning" ? ", batch" : ""),
-            h("div", { class: "fd-row2" }, h("label", { class: "fd-f" }, h("span", { class: "fd-l" }, "Precision"), precSel), h("label", { class: "fd-f" }, h("span", { class: "fd-l" }, "Quantization"), quantSel)),
-            wt === "training" || wt === "fine_tuning" ? h("div", { class: "fd-row2" }, numIn("seq", "Sequence length", { step: 1, placeholder: "e.g. 2048", inputmode: "numeric" }), numIn("mbs", "Micro batch size", { step: 1, placeholder: "e.g. 4", inputmode: "numeric" })) : null,
-            h("p", { class: "fd-hint" }, "Unknown is fine: OpenGrid states what it assumed.")),
-          h("div", { class: "fd-go" }, h("button", { class: "btn pri", type: "submit" }, "Find GPUs"),
-            h("button", { class: "btn", type: "button", onclick: () => { st = blankState(); answers = {}; drawInput(); syncUrl(); drawIntro(); } }, "Reset")),
+            h("label", { class: "fd-f" }, h("span", { class: "fd-l" }, "Preferred region"), regionSel),
+            wt === "inference" ? h("div", {}, h("p", { class: "fd-hint" }, "Serving needs: longer context and more parallel requests need more GPU memory."),
+              h("div", { class: "fd-row2" }, numIn("ctx", "Context length (tokens)", { step: 1, placeholder: "e.g. 8192", inputmode: "numeric" }), numIn("conc", "Concurrent requests", { step: 1, placeholder: "e.g. 8", inputmode: "numeric" }))) : null,
+            h("details", { class: "fd-adv", open: advOpenF ? true : null }, h("summary", {}, "Advanced: precision, quantization", wt === "training" || wt === "fine_tuning" ? ", batch" : ""),
+              h("div", { class: "fd-row2" }, h("label", { class: "fd-f" }, h("span", { class: "fd-l" }, "Precision"), precSel), h("label", { class: "fd-f" }, h("span", { class: "fd-l" }, "Quantization"), quantSel)),
+              wt === "training" || wt === "fine_tuning" ? h("div", { class: "fd-row2" }, numIn("seq", "Sequence length", { step: 1, placeholder: "e.g. 2048", inputmode: "numeric" }), numIn("mbs", "Micro batch size", { step: 1, placeholder: "e.g. 4", inputmode: "numeric" })) : null,
+              h("p", { class: "fd-hint" }, "Unknown is fine: OpenGrid states what it assumed."))),
+          h("div", { class: "fd-go" }, h("button", { class: "btn pri", type: "submit" }, "Show recommendations"),
+            h("button", { class: "btn", type: "button", onclick: () => { st = blankState(); answers = {}; drawInput(); syncUrl(); drawIntro(); } }, "Start over")),
           sent);
         showErr();
         return form;
@@ -788,37 +960,39 @@
           placeholder: '{ "requirements": { "workload_type": "fine_tuning", … } }' });
         ta.value = pasteText;
         const status = h("div", { id: "fd-pv", class: "fd-pv", "aria-live": "polite" });
-        const go = h("button", { class: "btn pri", type: "submit" }, "Get recommendation");
+        const go = h("button", { class: "btn pri", type: "submit" }, "Show recommendations");
         function check() {
           pasteText = ta.value;
           const v = validatePaste(pasteText);
           go.disabled = !v.ok;
           if (!pasteText.trim()) status.replaceChildren(h("span", { class: "dim" }, "Paste the JSON to check it. Nothing is sent until you press the button."));
-          else if (!v.ok) status.replaceChildren(h("div", { class: "fd-bad" }, h("b", {}, `Can't use this yet: ${v.errors.length} problem${v.errors.length === 1 ? "" : "s"}`), h("ul", {}, v.errors.map(x => h("li", { class: "mono" }, x)))));
+          else if (!v.ok) status.replaceChildren(h("div", { class: "fd-bad" }, h("b", {}, `This doesn't look like analyzer output yet: ${v.errors.length} problem${v.errors.length === 1 ? "" : "s"}`),
+            h("p", { class: "dim" }, "Paste the whole output of the command above, unchanged."),
+            h("details", { class: "cx-tech" }, h("summary", {}, "Technical details"), h("ul", {}, v.errors.map(x => h("li", { class: "mono" }, x))))));
           else {
             const a = v.analyzer;
             status.replaceChildren(h("div", { class: "fd-good" }, h("b", {}, "Looks good"),
               h("span", {}, a ? `From opengrid analyze${a.version ? " v" + a.version : ""} · ${a.files_inspected.length} file${a.files_inspected.length === 1 ? "" : "s"} inspected · ${a.files_skipped.length} skipped. Only the requirements are sent; file names and paths stay in your browser.`
-                : "A WorkloadRequirements object."),
+                : "A requirements object."),
               a && a.files_skipped.length ? h("span", { class: "dim" }, "Skipped: " + a.files_skipped.slice(0, 5).map(f => `${f.path} (${f.reason})`).join(", ")) : null,
               a && a.warnings.length ? h("span", { class: "warn-t" }, a.warnings.slice(0, 3).map(String).join(" · ")) : null));
           }
           refreshSent();
         }
         let t = null;
-        ta.addEventListener("input", () => { clearTimeout(t); t = setTimeout(check, 150); });
+        ta.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => { check(); syncUrl(); }, 150); });
         check();
-        return h("form", { class: "fd-form", onsubmit: ev => { ev.preventDefault(); check(); if (validatePaste(pasteText).ok) run(); } },
-          h("div", { class: "fd-byo" },
-            h("b", {}, "Bring your own project"),
-            h("ol", {},
+        return h("form", { class: "fd-form cx-steps", onsubmit: ev => { ev.preventDefault(); check(); if (validatePaste(pasteText).ok) run(); } },
+          step("1", "Your project", "The analysis says what the workload is (model, training or inference, and any limits it found).",
+            sourceSwitch(),
+            h("ol", { class: "fd-byo" },
               h("li", {}, "In your project folder, run ", h("code", {}, "opengrid analyze . --json"), OG.copy("opengrid analyze . --json", { label: "copy", title: "Copy the command" }),
                 h("div", { class: "fd-hint" }, "It reads only allowlisted files (dependencies, configs, scripts) on your machine. It never runs your code, never reads secrets, weights or datasets.")),
               h("li", {}, "Paste its output below. Only the ", h("code", {}, "requirements"), " part is sent."),
               h("li", {}, "Using a coding assistant? The OpenGrid MCP server runs the same analysis. ", h("a", { class: "lnk fd-a", href: "/developers" }, "Developer docs →"))),
-            h("p", { class: "fd-hint" }, "OpenGrid recommends GPUs for any workload but only launches its PyTorch MNIST demo today: your own project gets a recommendation, not a launch.")),
-          h("label", { class: "fd-f" }, h("span", { class: "fd-l" }, "Analyzer output (JSON, up to 64 KB)"), ta),
-          status,
+            h("label", { class: "fd-f" }, h("span", { class: "fd-l" }, "Analyzer output (JSON, up to 64 KB)"), ta),
+            status,
+            h("p", { class: "fd-hint" }, "Your project gets a recommendation, not a launch: OpenGrid only runs its PyTorch MNIST example today.")),
           h("div", { class: "fd-go" }, go, h("button", { class: "btn", type: "button", onclick: () => { ta.value = ""; check(); syncUrl(); } }, "Clear")),
           sent);
       }
@@ -828,14 +1002,17 @@
         out.replaceChildren(h("div", { class: "fd-intro" },
           h("h2", {}, "What you'll get"),
           h("ol", {},
-            h("li", {}, h("b", {}, "A memory estimate"), ": how much GPU memory your workload needs, what it's made of, and every assumption."),
-            h("li", {}, h("b", {}, "Three picks"), ": the cheapest advertised option, the best for your workload, and the best OpenGrid can actually run."),
-            h("li", {}, h("b", {}, "Alternatives"), ": lower cost, balanced and higher performance, each with observed price, memory fit and cost per hour of runtime.")),
-          h("p", { class: "dim" }, "Unknowns are fine: answer what you know, and OpenGrid tells you what it assumed and what to ask next."),
-          h("p", { class: "dim" }, "Just want to see a training job end to end? ", h("a", { class: "lnk fd-a", href: DEMO_HREF }, "Train the example model (free simulation) →"))));
+            h("li", {}, h("b", {}, "One recommendation"), ": a GPU, a provider and its observed price, with the memory your workload needs and why it fits."),
+            h("li", {}, h("b", {}, "A few alternatives"), ": the lowest advertised price and other good options, if they differ."),
+            h("li", {}, h("b", {}, "Whether OpenGrid can run it"), ": today OpenGrid recommends GPUs for any workload and runs its PyTorch MNIST example.")),
+          h("p", { class: "dim" }, "Unknowns are fine: answer what you know, and OpenGrid tells you what it assumed."),
+          h("p", { class: "dim" }, "Want to see how a job runs first? ", h("a", { class: "lnk fd-a", href: DEMO_HREF }, "See an example job (simulated, free) →"))));
       }
       function drawResult(rec, extra) {
-        out.replaceChildren(OG.views.recommendation(rec, Object.assign({ answers, view, onView: v => { view = v; syncUrl(); },
+        lastExtra = extra || null;
+        out.replaceChildren(OG.views.recommendation(rec, Object.assign({ answers, view, signedIn, advancedOpen: advOpen,
+          onView: v => { view = v; syncUrl(); }, onAdvanced: o => { advOpen = o; },
+          onRelax: mode === "form" ? patch => { Object.assign(st, patch); drawInput(); syncUrl(); run(); } : null,
           onAnswer: (field, value) => { if (value == null || value === "") delete answers[field]; else answers[field] = value; syncUrl(); refreshSent(); run(); } }, extra || {})));
       }
       async function run() {
@@ -857,24 +1034,29 @@
           if (e.status === 404 || e.status === 405) {
             try {
               const est1 = await ctx.api("/v1/recommend/estimate", { method: "POST", body: c.requirements, slot: "find-recommend" });
-              drawResult({ estimate: est1, questions: est1 && est1.questions }, { estimateOnly: "POST /v1/recommend is not available on this server yet: this is the memory estimate only, without market options." });
+              drawResult({ estimate: est1, questions: est1 && est1.questions }, { estimateOnly: "Live market options are not available on this server yet: this is the memory estimate only." });
             } catch (e2) {
               if (e2.stale) return;
-              out.replaceChildren(e2.status === 404 || e2.status === 405 ? OG.insufficient("The recommendation engine (POST /v1/recommend) is not available on this server yet.", "Not available yet") : errBox(e2));
+              out.replaceChildren(e2.status === 404 || e2.status === 405 ? OG.insufficient("Recommendations are not available on this server yet.", "Not available yet") : errBox(e2));
             }
             return;
           }
           out.replaceChildren(errBox(e));
         }
       }
+      // Plain words first; the server's own message and field errors stay one click away.
       function errBox(e) {
         const d = e && e.body && e.body.detail;
         const list = Array.isArray(d) ? d.map(x => `${(x.loc || []).filter(p => p !== "body").join(".")}: ${x.msg}`) : null;
-        return h("div", { class: "og-alarm" + (e && e.status >= 500 ? "" : " t-warn"), role: "alert" },
-          h("b", {}, e && e.status === 422 ? "The server could not use this input" : e && e.status ? "Request failed (HTTP " + e.status + ")" : "Network error"),
-          h("span", {}, d && typeof d === "object" && !Array.isArray(d) ? d.message || d.code : (e && e.message) || ""),
-          list ? h("ul", { class: "fd-errl" }, list.slice(0, 10).map(x => h("li", { class: "mono" }, x))) : null,
-          h("button", { class: "btn sm", type: "button", onclick: () => run() }, "Try again"));
+        const s = e && e.status;
+        const title = s === 422 ? "OpenGrid couldn't use this input" : s === 429 ? "Too many requests in a short time" : s >= 500 ? "OpenGrid had a problem answering" : s ? "The request didn't go through" : "Couldn't reach OpenGrid";
+        const help = s === 422 ? "Check the values you entered, or start over with fewer details: unknowns are fine." : s === 429 ? "Wait a minute and try again." : s >= 500 ? "This is on OpenGrid's side. Try again in a moment." : s ? "Try again." : "Check your connection and try again.";
+        const tech = [s ? "HTTP " + s : "network error", d && typeof d === "object" && !Array.isArray(d) ? d.message || d.code : (e && e.message) || null].filter(Boolean).join(" · ");
+        return h("div", { class: "og-alarm" + (s >= 500 ? "" : " t-warn"), role: "alert" },
+          h("b", {}, title), h("span", {}, help),
+          h("button", { class: "btn sm", type: "button", onclick: () => run() }, "Try again"),
+          h("details", { class: "cx-tech" }, h("summary", {}, "Technical details"), h("div", { class: "mono" }, tech),
+            list ? h("ul", { class: "fd-errl" }, list.slice(0, 10).map(x => h("li", { class: "mono" }, x))) : null));
       }
 
       drawInput();
