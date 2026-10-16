@@ -48,7 +48,7 @@ Rules, thresholds and the market change; verify each point with counsel and the 
 
 ## 3. The five paths, cheapest first
 
-### Path A — License the OpenGrid index to an existing exchange (recommended)
+### Path A: License the OpenGrid index to an existing exchange (recommended)
 
 OpenGrid is a **benchmark administrator**. The exchange (CME, ICE, Cboe Futures Exchange, Coinbase Derivatives, or another DCM) designs the
 contract and takes on all exchange, clearing and broker obligations. OpenGrid never touches customer money or
@@ -101,7 +101,7 @@ See 17 CFR Part 38, Core Principle 3, and Appendix C. In practice the exchange w
 **Other jurisdictions:** if EU or UK users will use the index, the EU Benchmarks Regulation and the UK BMR
 apply. Ask counsel whether third-country or recognition rules apply.
 
-### Path B — Physical "price-lock" reservations (built as requests only)
+### Path B: Physical "price-lock" reservations (built as requests only)
 
 Here OpenGrid sells reserved compute at a fixed price: a commercial order for real GPU-hours, delivered through
 OpenGrid. This is the product behind `/reserve` (methodology/reservations.md).
@@ -128,7 +128,7 @@ OpenGrid. This is the product behind `/reserve` (methodology/reservations.md).
 **Who you deal with:** your customers and providers (commercial contracts) and counsel. No CFTC registration if
 the exclusion applies.
 
-### Path C — Bilateral OTC swaps with large counterparties
+### Path C: Bilateral OTC swaps with large counterparties
 
 Cash-settled swaps on the OpenGrid index, entered into directly with sophisticated counterparties, for example
 a neocloud hedging its rental revenue, or a lab hedging its compute costs.
@@ -150,7 +150,7 @@ a neocloud hedging its rental revenue, or a lab hedging its compute costs.
 **Who you deal with:** counsel, the ISDA documentation of each counterparty, a swap data repository, and possibly
 the NFA.
 
-### Path D — Become a futures exchange (DCM) yourself
+### Path D: Become a futures exchange (DCM) yourself
 
 - **Exchange.** Apply for designation as a contract market (17 CFR Part 38, **Form DCM**). You must demonstrate
   all **23 core principles** (CEA §5(d)):
@@ -172,7 +172,7 @@ the NFA.
 - **Reality:** years and many millions of dollars of legal, compliance, technology and capital. Only worth it
   with a large, proven, liquid product, and incumbents already exist. **Not recommended.**
 
-### Path E — Offshore or crypto "perps" offered to US users — don't
+### Path E: Offshore or crypto "perps" offered to US users (don't)
 
 Offering leveraged or perpetual GPU-price contracts to US persons from an unregistered venue is the classic
 pattern the CFTC brings enforcement actions against: an unregistered DCM or FCM, and illegal off-exchange retail
@@ -227,16 +227,16 @@ and keep true:
 1. **Now (no regulatory exposure):**
    - Run the settlement fixings in production and let history accumulate. Every clean month is evidence.
    - Publish methodology/settlement.md publicly.
-2. **Weeks 1–4:** hire **CFTC derivatives counsel** for a scoping call. Bring this document and
+2. **Weeks 1-4:** hire **CFTC derivatives counsel** for a scoping call. Bring this document and
    methodology/settlement.md. Ask:
    - (a) Path A requirements;
    - (b) whether Path B reservations fall under the forward exclusion, and what the volumetric-optionality risk
      is;
    - (c) what the provider terms of service allow for price redistribution.
-3. **Months 1–3:**
+3. **Months 1-3:**
    - Form an **index oversight committee** with at least one independent member.
    - Adopt conflicts, complaints and change-control policies. Close the gaps in the IOSCO self-assessment.
-4. **Months 2–4:** commission **independent limited assurance** on IOSCO compliance from an audit firm.
+4. **Months 2-4:** commission **independent limited assurance** on IOSCO compliance from an audit firm.
 5. **Then:** approach exchanges. The pitch:
    - breadth (many providers, hourly);
    - reproducibility (every fixing verifiable down to provider bytes, with a hash-chained ledger);

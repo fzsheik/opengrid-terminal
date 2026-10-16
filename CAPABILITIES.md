@@ -1,15 +1,15 @@
-# OpenGrid Terminal — Capabilities & Features
+# OpenGrid Terminal: Capabilities & Features
 
 **OpenGrid Terminal is a market-intelligence and execution terminal for GPU compute.**
 It watches 32 GPU clouds, turns their prices into one trustworthy market, explains what is moving
-and why, and routes a workload to the best provider through one OpenGrid API key — with every
+and why, and routes a workload to the best provider through one OpenGrid API key, with every
 decision audited and every dollar reconciled.
 
 > Think: Bloomberg Terminal + CoinMarketCap + Kayak + OpenRouter + smart order routing, for GPU
 > infrastructure.
 
-This document describes everything the system does today, how it does it, and — just as
-important — what it deliberately does not claim.
+This document describes everything the system does today, how it does it, and (just as
+important) what it deliberately does not claim.
 
 ---
 
@@ -171,7 +171,7 @@ publishes on-demand prices that can be read without an account and its terms all
 - **Field provenance** (`mapping.py`): for every provider, how each field is obtained (raw,
   derived, constant, lookup, absent) and the provider's quirks.
 - **Regions** (`regions.py`): provider region strings mapped deterministically to US, Canada,
-  Europe, UK, APAC, Middle East, LATAM, Africa — unknown stays unknown.
+  Europe, UK, APAC, Middle East, LATAM, Africa. Unknown stays unknown.
 
 ### 3.3 Raw storage & retention
 - Every fetch is recorded (`raw_snapshots`: time, provider, endpoint, request, status, latency,
@@ -266,17 +266,17 @@ has enough samples. Generated sentences like *"H100 is in the 18th percentile of
 ### 4.4 Market structure
 - **Dispersion** per GPU: low / median / high, absolute and % spread, IQR, standard deviation,
   coefficient of variation, providers, available listings.
-- **Market Efficiency / Fragmentation score** (0–100) with transparent components.
+- **Market Efficiency / Fragmentation score** (0-100) with transparent components.
 - **Provider relative value**: average premium/discount to market, by GPU, % of time cheapest,
   % of time top-3, rank distribution, availability frequency, listing lifetime, price volatility,
-  GPU coverage, regional coverage, feed health — each gated by minimum sample sizes. Generated
+  GPU coverage, regional coverage, feed health, each gated by minimum sample sizes. Generated
   facts like *"RunPod has been the cheapest H100 provider 37% of the last 30 days"*.
 - **Hardware metadata** for all 91 GPUs (architecture, VRAM, memory bandwidth, dense
   FP16/BF16/FP8, interconnect, form factor, TDP, workload class, sources).
 - **Price per capability** (labelled theoretical): $/GB-VRAM-hour, $/PFLOP-hour (BF16, FP8),
   $/TB/s-hour.
 - **Alternatives**: similar VRAM, same architecture, training/inference-oriented, similar
-  price-performance — never called "equivalent".
+  price-performance, never called "equivalent".
 - **Heatmaps**: GPU × provider (premium, availability, 24h change), GPU × region (cheapest,
   premium, availability), GPU × day (volatility, availability, change).
 - **Comparisons**: GPU vs GPU, variant vs variant, provider vs provider, region vs region, with
@@ -292,7 +292,7 @@ Structured events detected every hour, idempotent, with severities and the numbe
 | `new_all_time_low` / `high` | beats everything since tracking began (≥ 14 days of history) |
 | `new_cheapest_provider` | the cheapest provider changes on the same provider set |
 | `sold_out` / `capacity_returned` | a provider or the whole market sells out / restocks |
-| `provider_added_gpu` / `provider_removed_gpu` | real catalogue changes — never coverage artefacts |
+| `provider_added_gpu` / `provider_removed_gpu` | real catalogue changes, never coverage artefacts |
 | `provider_feed_down` / `recovered` | a feed fails 3 consecutive rounds / recovers |
 | `spread_anomaly` | spread exceeds its own 30-day p95 (or 300%) |
 | `regional_dislocation` | a region is ≥ 20% from the global median |
@@ -305,7 +305,7 @@ Structured events detected every hour, idempotent, with severities and the numbe
   provider price changes, notable events, headlines, market board, ticker tape.
 - **Opportunities monitor**: unusually wide spreads, sudden price cuts, new cheap inventory,
   regional dislocations, providers far below their usual premium, temporary scarcity, sudden new
-  cheapest provider — each with a score, explanation and observed/inferred label.
+  cheapest provider, each with a score, explanation and observed/inferred label.
 
 ---
 
@@ -321,11 +321,11 @@ Structured events detected every hour, idempotent, with severities and the numbe
 - **Classification** (deterministic, re-runnable): providers (with aliases), GPUs ("H100" → the
   family; "H100 SXM" → that variant), regions, topics (price change, capacity, outage, GPU launch,
   funding, capex, export controls, power, contracts, futures, neocloud expansion…).
-- **Relevance score** 0–100 with stored components (source tier, entities, topics, recency).
+- **Relevance score** 0-100 with stored components (source tier, entities, topics, recency).
 - Feeds that stamp every item with one date are detected; those dates are never treated as
   publish times.
 - **Timeline**: price moves, availability changes, market events and news on one axis, and
-  *"Related news and events around this move (not necessarily causal)"* — OpenGrid never claims
+  *"Related news and events around this move (not necessarily causal)"*. OpenGrid never claims
   news caused a move.
 
 ---
@@ -340,10 +340,10 @@ reconciles.
 - **Modes**: `DISABLED` · `PREVIEW_ONLY` (default) · `SUPERVISED` (every launch approved by an
   admin) · `LIVE` (validated, live-enabled providers launch within cost guards).
 - **Env ceiling**: unless `ROUTING_LIVE_PROVISIONING=true`, the effective mode can never exceed
-  PREVIEW_ONLY — whatever the database says.
+  PREVIEW_ONLY, whatever the database says.
 - **Per-provider flags**: adapter status (simulated → validated only by a complete, evidenced
   validation cycle), supervised-enabled, live-enabled.
-- **Kill switches**: global *STOP ALL LIVE PROVISIONING* and per-provider kill/unkill — they stop
+- **Kill switches**: global *STOP ALL LIVE PROVISIONING* and per-provider kill/unkill. They stop
   new launches without stopping monitoring, reconciliation or termination. Every change needs a
   reason and is logged.
 
@@ -365,10 +365,10 @@ known before launch, billing unit, minimum commitment, interruptible, name/tag a
 instances, idempotency token, stopped-time billing, forced account SSH keys, and risks.
 
 ### 6.3 Best execution scoring
-Transparent weighted scoring — never just "cheapest wins". Factors (each 0–1, with raw value and
+Transparent weighted scoring, never just "cheapest wins". Factors (each 0-1, with raw value and
 data kind): price vs market median, availability now, region match, data freshness, availability
 persistence, price stability, integration level. **Reliability and performance appear with weight
-0 and "no data — not used"** until real execution data exists.
+0 and "no data, not used"** until real execution data exists.
 
 Modes: **CHEAPEST**, **FASTEST_AVAILABLE**, **BALANCED**, **MOST_STABLE**, **USER_DEFINED**
 (validated custom weights). Every result explains itself (*"9% below market median; available now;
@@ -410,23 +410,23 @@ POST /v1/deployments/{id}/terminate | /stop
   that may inject account keys (RunPod, Vast, unknown) require an explicit admin override. The
   approval screen shows *"Customer supplied key: SHA256:… · OpenGrid operator access: NONE"*.
 - **Pinned credentials**: each deployment is bound to the credential (and its fingerprint) that
-  launched it; a different key can never manage — or "confirm termination" of — the instance.
+  launched it; a different key can never manage (or "confirm termination" of) the instance.
   Customer (BYO) credentials fail closed if they can't be decrypted.
 
 ### 6.6 Provider validation
 A provider moves from *simulated* to *validated* only through a real, supervised validation run:
 1 GPU, ≤ $3/hour, ≤ 30 minutes, one at a time, with every precondition checked (kill-switch drills
 in the last 7 days, healthy reconciliation and tracker jobs, a delivered ops test alert). The full
-cycle — launch, observed running, found by name, terminated with two-signal confirmation, cost
-reconciled — must have evidence before the provider is marked validated.
+cycle (launch, observed running, found by name, terminated with two-signal confirmation, cost
+reconciled) must have evidence before the provider is marked validated.
 
 ## 6a. Training jobs (OpenGrid Jobs)
 
-One real workload end to end: **"Train Your First AI Model — PyTorch MNIST"** (allowlisted template
+One real workload end to end: **"Train Your First AI Model: PyTorch MNIST"** (allowlisted template
 `pytorch-mnist`; no arbitrary commands, code or dataset URLs). Runbook: `docs/FIRST_TRAINING_JOB.md`.
 
 - **Workload-aware selection** (`workloads/`): the template declares requirements (NVIDIA CUDA, ≥ 8 GB VRAM,
-  sm 7.0–9.0 for the pinned torch 2.4.1 / CUDA 12.1 build, 1 GPU, on-demand only). `gpu: auto` ranks every
+  sm 7.0-9.0 for the pinned torch 2.4.1 / CUDA 12.1 build, 1 GPU, on-demand only). `gpu: auto` ranks every
   eligible GPU with the existing scorer and shows two views: **market best** (best observed listing) and
   **execution-ready** (what OpenGrid can really run now), with alternatives, exclusions and exact blockers.
 - **Jobs** (`jobs/`, `api/jobs.py`, migration `0017_jobs`): a job is the workload and its outcome; the deployment
@@ -438,16 +438,29 @@ One real workload end to end: **"Train Your First AI Model — PyTorch MNIST"** 
   nvidia-smi and CUDA, trains a small CNN, uploads `model.pt`, `config.json`, `metrics.json`, `env.json`,
   `manifest.json` (sha256-verified) and calls back with a per-job HMAC-derived token (never stored).
   OpenGrid, not the instance, terminates the GPU.
-- **Results**: website `/jobs`, `/jobs/new`, `/jobs/{id}` (lifecycle + deployment strips, live loss / accuracy,
-  logs, 12 evidence-backed verification checks, artifacts download, four cost numbers); API logs / metrics /
-  artifacts; Discord `#opengrid-deployments`. Artifacts live in Postgres (optional S3 backend).
-- **Sandbox**: `sandbox: true` runs a fully SIMULATED lifecycle (no provider, no spend), labelled everywhere.
+- **Results**: website `/jobs`, `/jobs/new`, `/jobs/{id}`; API logs / metrics / artifacts; Discord
+  `#opengrid-deployments`. Artifacts live in Postgres (optional S3 backend).
+  - **My Jobs** (`/jobs`) leads with a plain-English box ("What do you want to run?", see Assistant in 6c), then
+    one card per job (Active / Finished) with a one-line status in plain words ("Training", "Waiting for OpenGrid
+    approval", "Needs attention: the GPU may still be billing"); the full table is folded under "Show all details".
+  - **New job** (`/jobs/new`) opens on three choices: the free demo (one click), the MNIST template on a real GPU
+    ("Check price", then "Run it" with confirmation; when it cannot run, the root-cause reason in plain words, with
+    the technical detail for admins) and "Run your own model" (Find Compute). The full form is under Advanced
+    (`?advanced=1`).
+  - **Job page** (`/jobs/{id}`): one status line, the cancel button and four plain questions; lifecycle and
+    deployment strips, live loss / accuracy, logs, the 12 evidence-backed verification checks, artifacts and the
+    four cost numbers are under Advanced.
+- **Sandbox**: `sandbox: true` runs a fully SIMULATED lifecycle (no provider, no spend), labelled everywhere. Its
+  one artifact, `simulated-report.json`, says in plain words what the job was (name, template, settings), how long
+  the simulation took, the five steps a real run performs next to what the simulation did, placeholder metrics
+  (labelled), and what a real run would take, cost at most, produce and need (an approved quote). The real-run
+  timings are estimates and are labelled so.
 - **Status**: built and tested against a fake Lambda API and a real local GPU; **no real Lambda job has run
   yet**. A real job needs the Lambda validation run, then `supervised_enabled` on Lambda.
 
 ## 6b. Reserved compute: price-lock requests (`reservations/`, methodology/reservations.md)
 
-Customers ask for a locked price ("8× H100 SXM5, 5,376 GPU-hours, starting Oct 20–27, ≤ $2.25/GPU-h") at
+Customers ask for a locked price ("8× H100 SXM5, 5,376 GPU-hours, starting Oct 20-27, ≤ $2.25/GPU-h") at
 `/reserve` or `POST /v1/reservations/requests`.
 - **Indicative reference.** Each request shows the index level, the raw level, the best on-demand listings, the
   market median and the latest settlement fixing. All of it is labelled `indicative`: it is never a quote and
@@ -500,9 +513,13 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
   <host>` prints hosted / uvx / installed snippets for Claude Code, Cursor, Codex and VS Code (keys only by
   env var or a password prompt). Verified with MCP Inspector (`--strict`, both protocol eras), Claude Code
   (hosted: Connected) and Codex registration.
-- **Assistant** (`assistant/`, `POST /v1/assistant`, `/assistant`, panel on Find Compute): deterministic intents
-  by default; optional vendor-neutral LLM (off unless configured) whose replies are post-checked so every
-  number comes from tool results; no mutation tools.
+- **Assistant** (`assistant/`, `POST /v1/assistant`, `/assistant`, panels on Find Compute and My Jobs): deterministic
+  intents by default; optional vendor-neutral LLM (off unless configured; off in production today) whose replies
+  are post-checked so every number comes from tool results; no mutation tools. Job intents (demo, real run, deploy
+  your own model, my jobs, cancel) answer with **action cards**: the browser starts the free demo or cancels a job
+  only when the user clicks (cancel asks for confirmation first), with the user's own login. A request to run your
+  own code gets an honest "not yet" and the cheapest place to rent a GPU for it. Grounding rejects any reply that
+  claims an action happened.
 
 ## 7. Reconciliation, billing & cost accounting
 
@@ -521,7 +538,7 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
   available (e.g. Lambda's `first_healthy`). A terminate requested mid-launch still bills the real
   runtime.
 - **Billing models** (no payments processed): usage records, versioned and composable fee policies
-  (buyer fee %, flat per GPU-hour, spread, subscription, data API — nothing hardcoded), credits,
+  (buyer fee %, flat per GPU-hour, spread, subscription, data API; nothing hardcoded), credits,
   draft invoices.
 - **Cost reconciliation** after termination keeps four numbers separate: **quote**, **expected
   cost**, **provider-reported cost**, **OpenGrid transaction cost**, plus quote error, effective
@@ -536,9 +553,9 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
   option, strategy, expected vs realized savings, provisioning success and latency, actual price,
   interruptions, uptime. Aggregates: routing/provisioning success rates, savings, quote accuracy.
 - **Provider reliability from real transactions only**: launches, failures by kind, provisioning
-  latency p50/p95, unexpected terminations, API error rate, termination success, quote accuracy —
+  latency p50/p95, unexpected terminations, API error rate, termination success, quote accuracy,
   **with sample sizes; no score below 10 launches**. Validation runs are reported separately.
-- **Economic value**: per deployment market median vs selected price vs savings — only when a
+- **Economic value**: per deployment market median vs selected price vs savings, only when a
   valid comparison exists (same GPU, on-demand, ≥ 3 providers); totals by GPU, provider and
   strategy.
 
@@ -582,7 +599,7 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
 ### 10.2 Watchlists & user alerts
 Watchlists of GPUs, providers, GPU+provider, regions and indices with live values. Alert rules such
 as *H100 below $2/hr*, *B200 becomes available*, *Lambda H100 drops 10%*, *US availability falls
-20%*, *H100 Index hits a new 30-day low* — edge-triggered with cooldowns, never firing on unknown
+20%*, *H100 Index hits a new 30-day low*: edge-triggered with cooldowns, never firing on unknown
 data. Delivery: in-app feed and signed webhooks (email not implemented).
 
 ---
@@ -605,19 +622,24 @@ data. Delivery: in-app feed and signed webhooks (email not implemented).
   isolation on every resource.
 - **Public pages** (optional, `PUBLIC_PAGES=true`) expose only read-only market data; anything that
   spends money or reads private data still requires a key.
+- **Operator sign-in** (`/login`): never public, always asks the browser for the site login, then returns to a
+  same-site page. Needed because with public pages on the browser is otherwise never asked. The return path must
+  match an allowlist of URL-safe characters (no open redirect: browsers drop tabs and newlines and read `\` as
+  `/`); it is the only server-side redirect, enforced by the security re-audit test. Sign-in-required states link
+  to it.
 
 ---
 
 ## 12. Web terminal (UI)
 
-A dense, dark, data-first market terminal — no hero sections, no decorative dashboards.
+A dense, dark, data-first market terminal: no hero sections, no decorative dashboards.
 
 | Area | Pages |
 |---|---|
 | Market | Overview · Indices · Index detail · GPUs · GPU detail · GPU family · Providers · Provider detail · Compare · Explorer · Heatmaps |
 | Signals | Opportunities · Events · News (feed + timeline) |
 | Execute | Jobs · New training job · Job detail · Reserve (price-lock requests) · Request detail · Route (order ticket, approval ticket) · Deployments · Deployment detail · Onboarding · Watchlists · API keys |
-| Reference | API docs (with try-it) · Methodology · Ops (data quality) |
+| Reference | Developers (three steps: create a key, connect your app over MCP, ask) · API docs (with try-it) · Methodology · Ops (data quality) |
 | Admin | Execution control (modes, kill switches, flags, orphans, resources, validation) · First-route checklist · Partners · Value (economics, quality, reliability, funnel) |
 
 - **GPU pages** feel like stock pages: index level, low/median/high, spread, providers,
@@ -638,7 +660,7 @@ A dense, dark, data-first market terminal — no hero sections, no decorative da
 
 ## 13. Text terminal (TUI)
 
-`python terminal.py` — a Textual app with a command bar:
+`python terminal.py` is a Textual app with a command bar:
 `listings`, `avail`, `history`, `mapping`, `indices`, `idx <id>`, `ctx <gpu>`, `mkt <gpu>`,
 `best <gpu> [count] [region] [mode]`, `preview <gpu> <count> [region] [max]` (never provisions),
 `ev`, `opp`, `news`, `prov <name>`, `ops`, `caps`, `fam <family>`, `help`.
@@ -705,7 +727,7 @@ automatically at startup. A push to GitHub does not trigger a Railway build on i
 | Variable | Purpose |
 |---|---|
 | `DATABASE_URL`, `APP_USER`, `APP_PASSWORD` | database and site login |
-| `API_KEY_PEPPER`, `CREDENTIALS_ENCRYPTION_KEY` | key hashing and credential encryption — never change once set |
+| `API_KEY_PEPPER`, `CREDENTIALS_ENCRYPTION_KEY` | key hashing and credential encryption; never change once set |
 | `ENVIRONMENT=production`, `TRUST_PROXY_HEADERS=true` | production behaviour behind Railway's proxy |
 | `SALAD_*`, `HYPERSTACK_API_KEY`, `LAMBDA_API_KEY`, `RUNPOD_API_KEY`, `DIGITALOCEAN_API_KEY` | provider market data (and routing where supported) |
 | `SHADEFORM_API_KEY`, `VAST_API_KEY`, `VERDA_CLIENT_ID/SECRET` | optional additional routing credentials |
@@ -732,7 +754,7 @@ provider calls):
 - **chaos suite**: 22 failure scenarios (timeouts, 5xx, crashes mid-launch, restarts, expired
   credentials, concurrent workers…);
 - **money-loss invariants**: 28 scenarios proving OpenGrid never loses track of a resource that
-  can cost money — every case ends either proven terminated and billed, or flagged as possibly
+  can cost money: every case ends either proven terminated and billed, or flagged as possibly
   billing with escalating alerts;
 - **concurrency proofs**: simultaneous approvals across threads and separate processes;
 - **security re-audit** and **red-team** regression suites;
@@ -755,7 +777,7 @@ provider calls):
 
 ## 17. Data honesty principles
 
-1. Never fabricate market data — no number without coverage; "insufficient data + reason" instead.
+1. Never fabricate market data: no number without coverage; "insufficient data + reason" instead.
 2. Never guess GPU mappings; never merge materially different variants.
 3. Label every number: **observed**, **inferred**, **estimated** or **transaction**.
 4. Never mix list price, observed market price, quote and execution price.
@@ -769,6 +791,11 @@ provider calls):
 
 - **Market intelligence**: live in production; window statistics (7d/30d/90d) fill in as history
   accumulates.
+- **Public pages** are on in production (`PUBLIC_PAGES=true`): the market pages, Find Compute, Developers and the
+  assistant are open to visitors; jobs, keys, billing and every money path still need a login or an API key.
+  The hosted MCP endpoint (`/mcp`) is live and accepts only an API key.
+- **Accounts**: no self-serve sign-up or payments yet. Keys are created by the operator (`/keys`, or
+  `POST /v1/admin/accounts/{id}/keys`); credits are admin-issued.
 - **Execution**: built, hardened, and independently reviewed; **all adapters are still
   simulated**. Training jobs (§6a) are built and tested but have not run on a real GPU provider yet. The next step is one supervised **Lambda validation run** (≈ $1 realistic, ≤ $1.85
   worst case with the operator abort rule). Customer routes follow only after validation.

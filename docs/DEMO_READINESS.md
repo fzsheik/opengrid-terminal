@@ -17,13 +17,13 @@ provider until you run it.
 | cURL and Python examples | **verified locally** (sandbox), real mode verified up to pending_approval | examples/ |
 | Full test suite | **46/46 Python files, 5/5 JS files passing** | |
 | Production deploy | see the final report (safe: mode PREVIEW_ONLY, Lambda simulated) | |
-| **Real Lambda run** | **NOT DONE**: you do it (docs/FIRST_TRAINING_JOB.md §0–§2) | — |
+| **Real Lambda run** | **NOT DONE**: you do it (docs/FIRST_TRAINING_JOB.md §0-§2) | n/a |
 
 ## What you must do before the demo (in order)
 
 1. **Lambda validation run.** Follow methodology/first-live-route.md: 12 steps, about 30 minutes, ≤ $1.85 worst case. This is the gate; OpenGrid cannot mark Lambda validated any other way.
 2. Turn **supervised_enabled** on for Lambda; the mode stays SUPERVISED.
-3. **Run the first MNIST job yourself** from the website (docs/FIRST_TRAINING_JOB.md §2). Expect 6–15 minutes and well under $2. The job page should end with 12/12 checks, five artifacts, `reconciled` and *terminated (provider confirmed)*.
+3. **Run the first MNIST job yourself** from the website (docs/FIRST_TRAINING_JOB.md §2). Expect 6-15 minutes and well under $2. The job page should end with 12/12 checks, five artifacts, `reconciled` and *terminated (provider confirmed)*.
 4. Check the Lambda console: no `og-*` instance and no `og-*` key left. Compare the invoice line with the job's actual cost.
 5. For the demo itself, repeat step 3 live, or show the finished job. A **sandbox** run is a safe fallback; it is labelled SIMULATED everywhere.
 

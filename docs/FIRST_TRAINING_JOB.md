@@ -10,7 +10,7 @@ approval → Lambda GPU → training → model.pt → automatic termination → 
 **Cost bound for this job.**
 - The defaults cap the run at **≤ $3.00 per GPU-hour, ≤ 30 minutes and ≤ $2.00 total**.
 - The quote, the max-price cap and the runtime ceiling all enforce those limits. Lambda bills per minute.
-- A typical MNIST run on one A10/A100/H100 takes about 6–15 minutes in total. Most of that is the pip install; training itself takes about 1 minute.
+- A typical MNIST run on one A10/A100/H100 takes about 6-15 minutes in total. Most of that is the pip install; training itself takes about 1 minute.
 
 ---
 
@@ -54,7 +54,7 @@ Then open **Jobs → New training job**. The readiness panel should be green: `c
 ## 2. Run the job from the website (click by click)
 
 1. Log in → in the left nav, **Jobs** (just above Route).
-2. On the card **Train Your First AI Model — PyTorch MNIST**, click **New training job**.
+2. On the card **Train Your First AI Model: PyTorch MNIST**, click **New training job**.
 3. Leave the defaults:
    - name `opengrid-first-training-test`
    - 3 epochs, batch size 128, learning rate 0.001, seed 42
