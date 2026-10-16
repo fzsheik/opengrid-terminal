@@ -17,9 +17,9 @@
   const REGIONS = ["US", "Canada", "Europe", "UK", "APAC", "Middle East", "LATAM", "Africa"];
   const MODES = [
     ["CHEAPEST", "Cheapest", "Lowest observed price wins; no other factor counts"],
-    ["FASTEST_AVAILABLE", "Fastest", "Availability now, OpenGrid integration and freshness first"],
+    ["FASTEST_AVAILABLE", "Soonest available", "Availability now, OpenGrid integration and freshness first (not a speed claim)"],
     ["BALANCED", "Balanced", "Price 40%, availability 20%, stability 15%, availability history 15%, freshness, integration"],
-    ["MOST_STABLE", "Stable", "Availability history and price stability first"],
+    ["MOST_STABLE", "Most stable", "Availability history and price stability first"],
     ["USER_DEFINED", "Custom", "Your own weights over the factors that have data"],
   ];
   const FACTORS = [
@@ -105,9 +105,9 @@
       };
       const badRegion = query.region && !st.region ? query.region : null;
 
-      root.append(OG.head("Route", "Best execution across every provider OpenGrid observes · preview is free and never calls a provider",
-        h("a", { class: "btn", href: "/methodology/best-execution" }, "Scoring method"),
-        h("a", { class: "btn", href: "/methodology/routing" }, "Routing & provisioning"),
+      if (OG.computeStyles) OG.computeStyles();
+      root.append(OG.head("Preview a route", "See which provider OpenGrid would choose for a GPU request, and why. Previewing is free: it never calls a provider and never spends money.",
+        h("a", { class: "btn", href: "/methodology/best-execution" }, "How routing works"),
         h("a", { class: "btn", href: "/deployments" }, "Deployments →")));
       const ticket = h("form", { class: "rt-ticket box", onsubmit: e => { e.preventDefault(); preview(); } });
       const out = h("div", { class: "rt-out" });
@@ -117,6 +117,8 @@
       function drawMode() { modeBox.replaceChildren(st.modeStatus ? OG.modeBanner(st.modeStatus) : null); }
       OG.me().then(me => {
         if (!ctx.alive()) return;
+        st.signedIn = !!me;
+        if (!me && !query.rr) drawAccess();
         st.admin = OG.isAdmin(me);
         if (st.admin) OG.api.soft("/v1/admin/execution/mode", { nocache: true }).then(m => { if (m && ctx.alive()) { st.modeStatus = m; drawMode(); if (ticketT) renderTicket(ticketT); } });
       });
@@ -204,8 +206,11 @@
       const dlIn = numIn("dl", { min: 0, step: 1, placeholder: "-", "aria-label": "Deadline hours" });
       const maxRunIn = numIn("maxRun", { min: 1, step: 1, placeholder: "-", "aria-label": "Auto-terminate after minutes" });
 
-      const modeSeg = OG.seg(MODES, st.mode, v => { st.mode = v; modeHint.textContent = MODES.find(m => m[0] === v)[2]; drawWeights(); sync(); markDirty(); });
+      const modeSeg = OG.seg(MODES.filter(m => m[0] !== "USER_DEFINED"), st.mode === "USER_DEFINED" ? null : st.mode, v => { st.mode = v; customIn.checked = false; modeHint.textContent = MODES.find(m => m[0] === v)[2]; drawWeights(); sync(); markDirty(); });
       modeSeg.classList.add("rt-modes");
+      const customIn = h("input", { type: "checkbox", checked: st.mode === "USER_DEFINED" ? true : null, onchange: e => {
+        st.mode = e.target.checked ? "USER_DEFINED" : "BALANCED"; modeSeg.set(e.target.checked ? null : "BALANCED");
+        modeHint.textContent = MODES.find(m => m[0] === st.mode)[2]; drawWeights(); sync(); markDirty(); } });
       const modeHint = h("div", { class: "rt-h" }, MODES.find(m => m[0] === st.mode)[2]);
       const weightsBox = h("div", { class: "rt-weights" });
       function drawWeights() {
@@ -259,24 +264,34 @@
         field("Disk GB", launchIn("disk_gb", "-", { type: "number", min: 10, max: 20000, class: "field num" })));
 
       const previewBtn = h("button", { class: "btn pri rt-go", type: "submit" }, "Preview", h("kbd", {}, "↵"));
-      const routeBtn = h("button", { class: "btn rt-exec", type: "button", onclick: () => routeNow(), title: "POST /v1/route: live check + quote + cost guards; SUPERVISED mode waits for admin approval" }, "Request route…");
+      const routeBtn = h("button", { class: "btn rt-exec", type: "button", onclick: () => routeNow(), title: "Asks for a quote: a live check, the price and your account's cost guards. Under supervised execution an OpenGrid admin approves the exact quote before anything launches." }, "Request a quote…");
       const dirty = h("span", { class: "rt-dirty", hidden: true }, "ticket changed: preview again");
       function markDirty() { if (st.last) dirty.hidden = false; }
 
-      ticket.append(
-        h("div", { class: "rt-tt" }, h("span", { class: "eyebrow" }, "Order ticket"), h("span", { class: "spacer" }), h("span", { class: "dim mono", style: "font-size:10.5px" }, "POST /v1/route/preview")),
-        h("div", { class: "rt-f rt-gpuf" }, h("span", { class: "rt-l" }, "GPU"), h("div", { class: "rt-gpuw" }, gpuIn, sug), gpuFull, famBox),
-        h("div", { class: "rt-row" }, field("GPUs / instance", h("span", { class: "rt-inl" }, countIn, countChips))),
-        h("div", { class: "rt-row2" }, field("Region group", h("span", { class: "rt-inl" }, regionSel, strictLbl)), field("Max $/GPU·h", maxIn)),
-        h("div", { class: "rt-row2" }, field("Duration h", durIn, "cost = quote × GPUs × hours"), field("Deadline h", dlIn, "if no duration: cost of the full window")),
-        h("div", { class: "rt-row2" }, field("Auto-terminate min", maxRunIn, "max_runtime_minutes: terminated after this"), h("span")),
-        h("div", { class: "rt-f" }, h("span", { class: "rt-l" }, "Mode"), modeSeg, modeHint, weightsBox),
+      // The simple ticket: what you need, where, your budget, an optional runtime and a routing preference.
+      // Everything else (deadline, automatic shutdown, custom weights, provider filters, launch parameters) is in
+      // Advanced options; the request body and its meaning are unchanged.
+      const advOpen = !!(st.dl || st.maxRun || st.mode === "USER_DEFINED" || st.ex.size || st.lvl || st.avail || st.strict);
+      const advBox = h("details", { class: "cx-adv rt-advopts", open: advOpen ? true : null }, h("summary", {}, h("b", {}, "Advanced options"), h("span", { class: "dim" }, " (deadline, automatic shutdown, custom weights, provider filters, launch parameters)")),
+        h("div", { class: "rt-row2" }, field("Deadline (hours)", dlIn, "Only for the cost estimate when no runtime is given: the cost of keeping the GPU for this whole window."),
+          field("Automatic shutdown (minutes)", maxRunIn, "OpenGrid terminates the GPU after this many minutes, whatever happens.")),
+        h("div", { class: "rt-f" }, strictLbl, h("span", { class: "rt-h" }, "Strict region: only listings whose location is confirmed in the chosen region.")),
+        h("div", { class: "rt-f" }, h("label", { class: "rt-chk" }, customIn, "Custom routing weights"), weightsBox),
         h("div", { class: "rt-f" }, h("span", { class: "rt-l" }, "Exclude providers ", h("span", { class: "dimmer" }, "· ", h("i", { class: "rt-prov-dot" }), " = OpenGrid can provision")), exBox),
-        h("div", { class: "rt-f" }, chk("lvl", "Require provisionable (OpenGrid integration ≥ 2)", "Only providers where OpenGrid has a provisioning adapter"),
-          chk("avail", "Require explicit availability", "Only listings whose provider reports stock")),
+        h("div", { class: "rt-f" }, chk("lvl", "Only providers OpenGrid can launch on (integration level 2 or more)", "Only providers where OpenGrid has a provisioning adapter"),
+          chk("avail", "Only listings that report availability", "Only listings whose provider reports stock")),
         launchBox,
+        h("p", { class: "rt-h" }, "Request body: POST /v1/route/preview. Count is GPUs per instance; a route launches one instance."));
+      ticket.append(
+        h("div", { class: "rt-tt" }, h("span", { class: "eyebrow" }, "What do you need?")),
+        h("div", { class: "rt-f rt-gpuf" }, h("span", { class: "rt-l" }, "GPU"), h("div", { class: "rt-gpuw" }, gpuIn, sug), gpuFull, famBox),
+        h("div", { class: "rt-row" }, field("GPUs per instance", h("span", { class: "rt-inl" }, countIn, countChips))),
+        h("div", { class: "rt-row2" }, field("Region", regionSel), field("Budget: max $ per GPU-hour", maxIn, "Optional. Listings above it are left out.")),
+        h("div", { class: "rt-row2" }, field("Expected runtime (hours)", durIn, "Optional. Only used to estimate the total cost; nothing stops at this time."), h("span")),
+        h("div", { class: "rt-f" }, h("span", { class: "rt-l" }, "Routing preference"), modeSeg, modeHint),
+        advBox,
         h("div", { class: "rt-acts" }, previewBtn, routeBtn), dirty,
-        h("p", { class: "rt-h" }, "Count is GPUs per instance; a route launches one instance. Preview writes an audit record but never calls a provider. Request route issues a quote; under SUPERVISED execution an OpenGrid admin approves it before anything launches."));
+        h("p", { class: "rt-h" }, "Preview is free and never calls a provider (it keeps an audit record). Requesting a quote starts the money path: under supervised execution an OpenGrid admin approves that exact quote before anything launches."));
       if (badRegion) ticket.prepend(h("div", { class: "state insufficient" }, h("b", {}, "Unknown region"), ` "${badRegion}" is not a region group; one of ${REGIONS.join(", ")}.`));
       drawWeights();
       drawEx(null);
@@ -325,6 +340,7 @@
           if (e.stale) return;
           const det = e.body && e.body.detail;
           if (det && det.code === "family_needs_variant") out.replaceChildren(OG.insufficient(String(det.message || e.message).replace(/[s.]*$/, ". ") + "Tick “Allow variants” or pick one variant under the GPU field.", "A family is not one product"));
+          else if (e.status === 401 || e.status === 403) drawAccess(e.status);
           else out.replaceChildren(OG.error(e, preview));
         }
       }
@@ -442,6 +458,49 @@
         return h("div", {}, chips, tbl);
       }
 
+      // Route previews are private (they keep an audit record per account). An anonymous visitor gets an explanation
+      // and the public alternative instead of a bare sign-in error.
+      function drawAccess(status) {
+        out.replaceChildren(h("section", { class: "cx-access", role: "status" },
+          h("h2", {}, status === 403 ? "This account can't preview routes" : "Previewing a route needs sign-in"),
+          h("p", {}, "A route preview estimates which provider OpenGrid would select for your request, without spending anything. It's tied to an OpenGrid account, so it needs sign-in."),
+          h("p", {}, "Without an account, Find Compute answers the same question publicly: which GPUs fit your workload, where they're cheapest, and whether OpenGrid can run them."),
+          h("div", { class: "cx-acts" }, status === 403 ? null : h("a", { class: "btn pri", href: OG.loginHref() }, "Sign in"),
+            h("a", { class: "btn", href: "/find" }, "Use Find Compute"), st.gpu ? h("a", { class: "btn", href: "/gpu/" + encodeURIComponent(st.gpu) }, "See this GPU's market") : null)));
+      }
+      // "OpenGrid recommends <provider> because …": the top contributing factors, the observed and hourly price, the
+      // cost assumptions and whether OpenGrid can launch it. Same response as the technical panel below it.
+      function simpleResult(d) {
+        const c = d.selected, q = d.quote || {}, m = d.market || {};
+        const pname = c.provider_display || OG.providerName(c.provider);
+        const why = FACTORS.filter(f => !f.nodata && c.factors && c.factors[f.key] && c.factors[f.key].contribution > 0)
+          .map(f => ({ f, x: c.factors[f.key] })).sort((a, b) => (a.x.imputed ? 1 : 0) - (b.x.imputed ? 1 : 0) || b.x.contribution - a.x.contribution).slice(0, 3)
+          .map(({ f, x }) => h("li", {}, h("b", {}, f.label + ": "), String(x.note || "").replace(/ \(scored neutral 0\.5\)$/, "")));
+        const live = d.live_provisioning_enabled === true;
+        const can = d.can_provision_selected;
+        const ready = !can ? { label: `No: OpenGrid only reads market data for ${pname}`, detail: d.best_provisionable ? `The best provider OpenGrid can launch on is ${OG.providerName(d.best_provisionable.provider)} at ${fmt.price(d.best_provisionable.price_per_gpu_hour)}/GPU·h. Requesting a quote uses it automatically.` : "No provider OpenGrid can launch on matched this request.", tone: "warn" }
+          : !live ? { label: "Preview only: live launches are switched off on OpenGrid", detail: "OpenGrid can provision on this provider, but nothing launches while live launches are off.", tone: "warn" }
+          : { label: "Yes, after approval", detail: "Requesting a quote checks the price live and applies your account's cost guards; an OpenGrid admin approves the exact quote before anything launches.", tone: "good" };
+        const fact = (label, value, sub, badge) => h("div", { class: "cx-fact" }, h("div", { class: "cx-fact-k" }, label, badge || null), h("div", { class: "cx-fact-v" }, value), sub ? h("div", { class: "cx-fact-s" }, sub) : null);
+        const alts = (d.alternatives || []).slice(0, 3);
+        const hours = q.expected_cost_usd != null ? `${fmt.num(q.hours)} h ${q.hours_from === "duration_hours" ? "of runtime" : "deadline window"}` : null;
+        return h("section", { class: "cx-route-why", "aria-label": "Route recommendation" },
+          h("h2", {}, "OpenGrid recommends ", h("a", { class: "lnk", href: "/provider/" + encodeURIComponent(c.provider) }, pname), ` for ${c.gpu_count}× ${OG.shortGpu(c.gpu)}`, c.region || c.country ? h("span", { class: "dim" }, " · " + regionText(c)) : null),
+          why.length ? h("div", {}, h("div", { class: "cx-fact-k" }, "because"), h("ul", { class: "cx-why" }, why)) : null,
+          h("div", { class: "cx-facts" },
+            fact("Observed price", h("span", {}, fmt.price(c.price_per_gpu_hour), h("small", {}, "/GPU·h")), "the provider's list price, not a quote", OG.kindBadge("observed")),
+            fact("Total per hour", h("span", {}, fmt.price(c.price_per_instance_hour), h("small", {}, "/h")), `${c.gpu_count} GPU${c.gpu_count === 1 ? "" : "s"} on one instance`),
+            fact("Expected cost", q.expected_cost_usd != null ? OG.money(q.expected_cost_usd) : h("span", { class: "dim" }, "per hour only"), hours || "add an expected runtime to estimate a total", OG.kindBadge("estimated")),
+            fact("Availability", availText(c), h("span", {}, "price seen ", OG.freshBadge(c.observed_at, { provider: c.provider })))),
+          h("p", { class: "cx-explain" }, "Cost assumptions: the observed list price × GPUs × hours. Storage, egress, fees and taxes are not included. A quote, with the live price, exists only after you request one.",
+            m.median != null ? ` Market median ${fmt.price(m.median)}/GPU·h across ${m.providers} providers.` : ""),
+          h("div", { class: "cx-run t-" + ready.tone }, h("b", {}, "Can OpenGrid launch it? ", ready.label), h("span", { class: "dim" }, ready.detail)),
+          alts.length ? h("div", { class: "cx-alts" }, h("div", { class: "cx-alts-h" }, h("h3", {}, "Next best"), h("span", { class: "dim" }, "full ranking in Technical details")),
+            alts.map(a => h("div", { class: "cx-alt" },
+              h("div", {}, h("div", { class: "cx-alt-g" }, OG.providerName(a.provider)), h("div", { class: "cx-alt-p" }, `${a.gpu_count}× ${OG.shortGpu(a.gpu)}`, h("span", { class: "dim" }, regionText(a)))),
+              h("div", { class: "cx-alt-p" }, availText(a), h("span", { class: "dim" }, a.integration_level >= 2 ? "OpenGrid can launch here" : "market data only")),
+              h("div", { class: "cx-alt-r" }, h("b", {}, fmt.price(a.price_per_gpu_hour)), h("div", { class: "dim" }, "/GPU·h observed"))))) : null);
+      }
       function renderPreview(d, meta) {
         const kids = [];
         const req = [`${d.count}× ${OG.shortGpu(d.gpu)}`, d.region_group || "any region", st.lastBody.max_price_per_gpu_hour ? "≤ " + fmt.price(st.lastBody.max_price_per_gpu_hour) + "/GPU·h" : "no max",
@@ -453,7 +512,7 @@
           d.live_provisioning_enabled ? OG.badge("live provisioning ON", "warn", "POST /v1/route on this server can launch paid instances") : OG.badge("live provisioning off here", null, "POST /v1/route on this server checks and quotes but never launches"),
           h("a", { class: "lnk mono rt-audit", href: "/v1/route/" + d.route_request_id, target: "_blank", rel: "external noopener", title: "The audit record: request, every candidate's factors, every exclusion" }, d.route_request_id, " ↗")));
         if (!d.selected) {
-          kids.push(OG.insufficient(d.reason || "no eligible listing satisfies the request", "No route"));
+          kids.push(OG.insufficient((d.reason || "no eligible listing satisfies the request") + ". Raising the budget, allowing any region or more GPU types usually helps; the exclusions below say exactly why each listing was left out.", "No GPU matches this request"));
           if (d.multi_instance_alternatives && d.multi_instance_alternatives.length) kids.push(multiBlock(d));
           kids.push(OG.section("Why nothing qualified", exclusionsBlock(d)));
           out.replaceChildren(...kids);
@@ -466,6 +525,7 @@
               d.provisioning_note ? d.provisioning_note + "." : "",
             " Request route skips non-provisionable candidates."));
         }
+        const simpleBox = simpleResult(d);
         kids.push(selectedCard(d));
         if (d.best_provisionable) kids.push(h("div", { class: "rt-bp" }, h("span", { class: "eyebrow" }, "Best provisionable"), OG.providerLink(d.best_provisionable.provider),
           h("span", { class: "mono" }, fmt.price(d.best_provisionable.price_per_gpu_hour) + "/GPU·h"), OG.conceptBadge("observed"), h("span", { class: "dim" }, regionText(d.best_provisionable)),
@@ -490,7 +550,8 @@
         kids.push(OG.section("Excluded listings", exclusionsBlock(d)));
         kids.push(h("p", { class: "note" }, "Prices: candidates carry ", h("b", {}, "observed market prices"), "; the route carries a ", h("b", {}, "quote"),
           "; a deployment carries the ", h("b", {}, "execution price"), " only once a provider reports one. ", h("a", { class: "lnk", href: "/methodology/data-kinds" }, "Data kinds →")));
-        out.replaceChildren(...kids);
+        out.replaceChildren(simpleBox, h("details", { class: "cx-adv", open: st.techOpen ? true : null, ontoggle: e => { st.techOpen = e.target.open; } },
+          h("summary", {}, h("b", {}, "Technical details"), h("span", { class: "dim" }, " (score breakdown, every ranked candidate, exclusions, the request and its audit record)")), kids));
       }
 
       function multiBlock(d) {
@@ -799,9 +860,11 @@
         if (!ctx.alive()) return;
         if (g) { st.gpu = g.slug; st.gpuName = g.name; gpuIn.value = g.short; gpuFull.textContent = g.name + (g.live ? ` · ${g.weight} providers live` : " · no live listings"); sync(); preview(); }
         else out.replaceChildren(OG.insufficient(`"${st.gpu}" does not match a canonical GPU. OpenGrid never guesses a mapping; pick one from the list.`, "Unknown GPU"));
-      } else {
+      } else if (st.signedIn === false) drawAccess();
+      else {
         out.replaceChildren(h("div", { class: "rt-empty" },
-          h("p", {}, "Describe a workload and OpenGrid ranks every eligible listing with the scoring shown: price, availability, freshness, history and whether OpenGrid can provision it."),
+          h("p", {}, "Pick a GPU above and press Preview. OpenGrid ranks every eligible listing by price, availability, freshness and history, and says whether it can launch there."),
+          h("p", { class: "dim" }, "Not sure which GPU you need? ", h("a", { class: "lnk", href: "/find" }, "Find Compute recommends one for your workload →")),
           h("p", { class: "dim" }, "Try: ", ["h100-80gb-sxm5:8:US:2.5", "h200-141gb-sxm5:1::", "a100-80gb-sxm4:8::"].map(s => {
             const [g, n, r, m] = s.split(":");
             return h("a", { class: "lnk mono rt-ex-l", href: "/route" + OG.qs.stringify({ gpu: g, count: n, region: r || null, max: m || null }) }, `${n}× ${g}${r ? " " + r : ""}${m ? " ≤ $" + m : ""}`);
