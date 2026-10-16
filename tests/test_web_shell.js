@@ -57,6 +57,10 @@ ok(/no GPU is rented and nothing is charged/.test(OG.ACCESS.simulated.text), "si
 const css = fs.readFileSync(path.join(WEB, "app.css"), "utf8");
 const raw = css.match(/font(?:-size)?:[^;{}]*\b\d+(?:\.\d+)?px/g) || [];
 eq(raw, [], "no raw px font sizes: every size is a --fs-* token");
+for (const f of ["compute.css", "devx.css"]) if (fs.existsSync(path.join(WEB, f))) {
+  const other = fs.readFileSync(path.join(WEB, f), "utf8").match(/font(?:-size)?:[^;{}]*\b\d+(?:\.\d+)?px/g) || [];
+  eq(other, [], `${f}: page stylesheets use the same --fs-* tokens`);
+}
 const tok = n => { const m = new RegExp(`--${n}:\\s*([\\d.]+)px`).exec(css); return m ? +m[1] : null; };
 ok(tok("fs-base") >= 14 && tok("fs-2xs") >= 11 && tok("fs-data") >= 12.5, `type floor: body ${tok("fs-base")}px, smallest ${tok("fs-2xs")}px, tables ${tok("fs-data")}px`);
 ok(tok("ctl-h") >= 32 && tok("ctl-h-sm") >= 26, `controls: ${tok("ctl-h")}px, compact ${tok("ctl-h-sm")}px`);
