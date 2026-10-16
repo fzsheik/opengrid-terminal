@@ -91,7 +91,7 @@ def is_page_path(path: str) -> bool:
 # /v1 areas readable without a key when PUBLIC_PAGES is on (GET/HEAD only).
 PUBLIC_V1 = ("gpus", "markets", "indices", "history", "spreads", "events", "news", "providers", "heatmaps",
              "overview", "tape", "methodology", "timeline", "best", "capabilities", "opportunities", "trust",
-             "families", "scopes", "fixings", "recommend", "assistant")
+             "families", "scopes", "fixings", "recommend", "assistant", "compare", "regions", "hardware")
 # POSTs that are public too: read-only computations over the request body (no writes, no provider calls, no
 # quotes; the market read is routing.scoring.rank_listings). Exactly these paths; the anonymous rate limit applies.
 # /v1/assistant: the OpenGrid Assistant is READ-ONLY (assistant/tools.py has no mutation tools; it writes no rows,

@@ -79,6 +79,9 @@ def _deny(status: int, detail: str, headers: dict | None = None) -> Response:
     return JSONResponse({"detail": detail}, status_code=status, headers=headers)
 
 
+LOGIN_PATH = "/login"
+
+
 @app.middleware("http")
 async def require_password(request, call_next):
     """Everything sits behind one password, except /health so the host can check the app is up.
@@ -122,6 +125,11 @@ async def require_password(request, call_next):
             public = True
     elif settings.public_pages and pages_api.is_public(request):
         public = True
+    elif settings.public_pages and path != LOGIN_PATH:
+        # Open site: a visitor must never get the browser's password popup from a background call (every page
+        # asks /v1/me). Only /login challenges for the site login; the rest says "use a key" (Bearer: no popup).
+        return Response("Authentication required: sign in at /login or use an API key", status_code=401,
+                        headers={"WWW-Authenticate": "Bearer"})
     else:
         return Response("Authentication required", status_code=401, headers={"WWW-Authenticate": 'Basic realm="OpenGrid"'})
     if public:
@@ -166,7 +174,7 @@ def classic():
 _SAFE_NEXT = re.compile(r"/[A-Za-z0-9/_.~?=&%+-]*")
 
 
-@app.get("/login", include_in_schema=False)
+@app.get(LOGIN_PATH, include_in_schema=False)
 def login(next: str = "/"):
     """Operator sign-in. Never public, so require_password always challenges here: with PUBLIC_PAGES on the pages
     load without a password and the browser would otherwise never be asked for the site login. Reached only with a

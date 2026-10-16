@@ -627,6 +627,9 @@ data. Delivery: in-app feed and signed webhooks (email not implemented).
   match an allowlist of URL-safe characters (no open redirect: browsers drop tabs and newlines and read `\` as
   `/`); it is the only server-side redirect, enforced by the security re-audit test. Sign-in-required states link
   to it.
+  With public pages on, only `/login` sends the browser's site-login challenge; every other request without
+  a login or key gets `401` with `WWW-Authenticate: Bearer`, so a visitor never sees a password popup from a
+  background call (each page asks `/v1/me`).
 
 ---
 

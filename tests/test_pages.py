@@ -267,8 +267,19 @@ def test_public_pages_through_the_middleware():
         assert r.status_code == 303 and r.headers["location"] == "/jobs", (r.status_code, r.headers.get("location"))
         for evil in ("//evil.example", "https://evil.example", "/\\evil.example", "evil"):
             assert client.get("/login", params={"next": evil}, **ok).headers["location"] == "/", evil
+        # an anonymous visitor never gets the browser's password popup from a background call: every page asks
+        # /v1/me, the API page reads /openapi.json; only /login challenges for the site login
+        for p in ("/v1/me", "/openapi.json", "/v1/jobs", "/v1/keys", "/raw", "/v1/admin/execution/mode"):
+            r = client.get(p)
+            assert r.status_code == 401, (p, r.status_code)
+            assert "basic" not in r.headers.get("www-authenticate", "").lower(), (p, r.headers.get("www-authenticate"))
+        assert client.post("/fetch").headers.get("www-authenticate", "").lower() == "bearer"
+        assert client.get("/v1/me", auth=("opengrid", "s3cret")).status_code == 200, "the signed-in operator still works"
+        for p in ("/v1/compare?a=H100&b=A100", "/v1/regions", "/v1/hardware"):  # read by /compare and the GPU pages
+            assert client.get(p).status_code not in (401, 403), p
         settings.public_pages = False
         assert client.get("/gpus").status_code == 401, "off by default: pages need the password"
+        assert client.get("/gpus").headers["www-authenticate"].startswith("Basic"), "closed site: the browser prompts"
     finally:
         settings.app_password, settings.public_pages = None, False
 
