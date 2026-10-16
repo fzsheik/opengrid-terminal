@@ -196,12 +196,14 @@ def _region_groups(provider, region, country):
 
 
 def _availability_basis(row: dict) -> str | None:
+    # The same value listing_trust(row)["availability_basis"] reports, from the provider's field mapping and the
+    # row alone: no trust context (which costs several queries per listing) is needed for it.
     try:
-        from quality.trust import listing_trust
+        from quality.trust import availability_basis
     except ImportError:
         return None
     try:
-        return listing_trust(row).get("availability_basis")
+        return availability_basis(row["provider"], row.get("available"))
     except Exception:  # a quality-module bug must not break routing
         return None
 
@@ -410,22 +412,31 @@ def market_snapshot(rows: list[dict], now: datetime) -> dict:
             "rule": "median across providers of each provider's lowest current eligible per-GPU-hour price"}
 
 
+def listing_rows(gpu: str) -> list[dict]:
+    """Every listing row rank_listings considers for one GPU (one read; reusable across counts)."""
+    with normalize.SessionLocal() as s:
+        return [dict(r._mapping) for r in s.execute(_LISTINGS, {"gpu": gpu})]
+
+
 def rank_listings(gpu: str, *, count: int = 1, region_group: str | None = None, max_price: float | None = None,
                   mode: str = "BALANCED", weights: dict | None = None, exclude_providers=(),
                   include_providers=None, require_level: int = 0, require_available: bool = False,
-                  limit: int = 25, now: datetime | None = None, strict_region: bool = False) -> dict:
+                  limit: int = 25, now: datetime | None = None, strict_region: bool = False,
+                  rows: list[dict] | None = None) -> dict:
     """The best-execution ranking for one GPU. See the module docstring.
 
     strict_region: with a region_group, also EXCLUDE listings whose location is unknown
     (code region_unconfirmed) instead of scoring them 0.5 on region_match.
+    rows: the GPU's listing rows from listing_rows(gpu), when the caller ranks the same GPU more than once (the
+    recommender ranks each GPU at two counts); read fresh otherwise.
     """
     mode = (mode or "BALANCED").upper()
     if count < 1:
         raise ScoringError("count must be >= 1")
     w = effective_weights(mode, weights, bool(region_group))
     now = now or datetime.now(timezone.utc)
-    with normalize.SessionLocal() as s:
-        rows = [dict(r._mapping) for r in s.execute(_LISTINGS, {"gpu": gpu})]
+    if rows is None:
+        rows = listing_rows(gpu)
     hist = history(gpu)
     mkt = market_snapshot(rows, now)
     excluded_set = {p.lower() for p in exclude_providers or ()}

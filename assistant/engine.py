@@ -402,13 +402,30 @@ def _rec_reply(rec: dict, req: dict, intent: str) -> str:
             lines.append("Launchable through OpenGrid: none for you right now" + (f" ({reason})." if reason else "."))
         elif key == "cheapest_market":
             lines.append("No fresh listing that fits the estimate is available right now.")
+    # the whole job, when the training work is known: more GPUs can cost more per hour and less overall
+    ref = picks.get("lowest_estimated_job_cost")
+    low = opts.get(ref.get("option_id")) if isinstance(ref, dict) else None
+    jc = _get(low or {}, "performance.job_cost")
+    rt = _get(low or {}, "performance.runtime")
+    if low and jc and rt and rt.get("known"):
+        cnt = f"{low['gpu_count']}x " if (low.get("gpu_count") or 1) > 1 else ""
+        lines.append(f"Lowest estimated cost for the whole job: {cnt}{_short(low.get('gpu'))} on "
+                     f"{low.get('provider_display') or low.get('provider')}, about {_money(jc['usd'])} "
+                     f"({_money(jc['range_usd'][0])} to {_money(jc['range_usd'][1])}) for about "
+                     f"{_num(rt['hours'])} hours. That is a theoretical estimate from spec-sheet throughput, not a "
+                     f"benchmark.")
     budget = _get(req, "constraints.budget_usd")
     if budget is not None:
         hrs = _get(cheapest or {}, "cost.budget_hours")
-        if cheapest and hrs is not None:
+        if low and jc and rt and rt.get("known"):
+            fits = jc["range_usd"][1] <= budget
+            lines.append(f"Against {_money(budget)}: " + ("the estimate fits even at its slow end." if fits else
+                         "the slow end of the estimate is above it." if jc["range_usd"][0] <= budget else
+                         "even the fast end of the estimate is above it."))
+        elif cheapest and hrs is not None:
             lines.append(f"Within {_money(budget)}: that buys about {_num(hrs)} hours on the cheapest fitting option "
-                         f"(estimated; storage, egress and startup time not included). Runtime is not benchmarked, so "
-                         f"whether that is enough time is not known.")
+                         f"(estimated; storage, egress and startup time not included). Runtime is not benchmarked and "
+                         f"the amount of training data is unknown, so whether that is enough time is not known.")
         elif intent == "can_run" and not cheapest:
             lines.append(f"So within {_money(budget)}: not with what is listed right now.")
     if rec.get("notes"):

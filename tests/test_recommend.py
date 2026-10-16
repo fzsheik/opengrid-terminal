@@ -11,6 +11,7 @@ Run:  .venv/bin/python tests/test_recommend.py
 """
 
 import json
+import math
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -106,6 +107,7 @@ def seed(Session):
         L("syn_c", H100, 0.90, lid=SOLD_ID, available=False),                     # sold out
         L("syn_a", H100, 0.80, lid=SPOT_ID, market="spot", interruptible=True),  # spot
         L("syn_a", H200, 3.60), L("syn_a", H200, 3.20, count=8),
+        L("syn_a", H100, 2.45, count=2), L("syn_a", H200, 3.55, count=2),     # 2-GPU shapes: 2 x H100 vs 1 x H200
         L("syn_b", MI300X, 2.10, count=8),
         L("syn_a", B200, 5.00, count=8),
     ]
@@ -152,6 +154,9 @@ LORA7 = {"workload_type": "fine_tuning", "frameworks": ["pytorch", "transformers
          "model": {"name": "mistralai/Mistral-7B-v0.1"}, "training": {"method": "lora"}}
 FULL70 = {"workload_type": "fine_tuning", "model": {"name": "meta-llama/Llama-3.1-70B"}, "precision": "bf16",
           "training": {"method": "full", "micro_batch_size": 1, "seq_len": 2048, "gradient_checkpointing": True}}
+FULL8 = {"workload_type": "fine_tuning", "model": {"name": "meta-llama/Llama-3.1-8B"}, "precision": "bf16",
+         "training": {"method": "full", "micro_batch_size": 1, "seq_len": 2048, "gradient_checkpointing": True,
+                      "optimizer": "adamw_8bit", "dataset_tokens": 2e8, "epochs": 1}}
 VLLM8 = {"workload_type": "inference", "frameworks": ["vllm"], "model": {"name": "meta-llama/Llama-3.1-8B"},
          "quantization": "awq", "inference": {"engine": "vllm", "concurrency": 16, "context_len": 8192}}
 
@@ -213,7 +218,10 @@ def test_b_7b_lora_compares_gpus_with_tradeoffs():
     assert all(any("vs the balanced pick" in w for w in o["why"]) for o in hp
                if o["price_per_instance_hour"] > bw["price_per_instance_hour"] * 1.005)
     for o in out["options"]:
-        assert o["memory_fit"]["headroom_pct"] == round((o["vram_gb"] - need) / o["vram_gb"] * 100, 1)
+        # a scale-up option (2 GPUs where 1 fits) carries its own, smaller per-GPU need
+        need_o = need if o["count_choice"] == "minimum" else o["memory_fit"]["needed_per_gpu_gb"]
+        assert o["count_choice"] == "minimum" or need_o < need, (o["gpu"], o["gpu_count"], need_o)
+        assert o["memory_fit"]["headroom_pct"] == round((o["vram_gb"] - need_o) / o["vram_gb"] * 100, 1)
         assert o["theoretical"]["kind"] == "theoretical"
         assert "runtime not benchmarked: no measured benchmark for this workload on this GPU" in o["limitations"]
     assert "fastest" not in json.dumps(out).lower()
@@ -524,6 +532,141 @@ def test_api():
         for t in ("route_requests", "routing_decisions", "quotes"):
             assert s.execute(text(f"SELECT count(*) FROM {t}")).scalar() == 0, t
     assert CALLS == []
+
+
+# --------------------------------------------------------------------------
+# J. multi-GPU: 2 x H100 against 1 x H200, scale-up options, runtime and whole-job cost
+# --------------------------------------------------------------------------
+
+def test_performance_pure():
+    from intelligence import performance as P
+    import hardware
+    sxm, pcie, pcie_nvl, h200nvl = (hardware.spec(g) for g in (H100, H100P, "NVIDIA H100 80GB PCIe NVLink", "NVIDIA H200 143GB NVL"))
+    assert P.interconnect(sxm, 1)["kind"] == "single_gpu"
+    assert P.interconnect(sxm, 8)["kind"] == "nvlink", "SXM: NVLink / NVSwitch between every GPU"
+    assert P.interconnect(pcie, 2)["kind"] == "pcie", "PCIe card without NVLink on record"
+    assert P.interconnect(pcie_nvl, 2)["kind"] == "nvlink" and P.interconnect(pcie_nvl, 4)["kind"] == "nvlink_bridge"
+    assert P.interconnect(h200nvl, 4)["kind"] == "nvlink", "H200 NVL bridges 2- or 4-way"
+    one = P.scaling("single_gpu", 1, "training_full")
+    assert one["speedup"] == 1.0 and one["range"] == [1.0, 1.0]
+    nv2, pc2 = P.scaling("nvlink", 2, "training_full"), P.scaling("pcie", 2, "training_full")
+    assert 1.0 < pc2["speedup"] < nv2["speedup"] < 2.0, (pc2, nv2)
+    assert P.scaling("nvlink", 2, "inference")["speedup"] < nv2["speedup"], "tensor parallel inference scales worse"
+    for kind in ("nvlink", "nvlink_bridge", "pcie"):
+        prev = 0
+        for n in (2, 4, 8, 16):
+            sc = P.scaling(kind, n, "training_full")
+            assert sc["speedup_range"][0] <= sc["speedup"] <= sc["speedup_range"][1] and sc["speedup"] > prev, (kind, n, sc)
+            assert "not a benchmark" in sc["basis"]
+            prev = sc["speedup"]
+    b = P.throughput_basis("training_full", "bf16", sxm)
+    assert b["metric"] == "tflops" and b["per_gpu"] == 989.5
+    assert P.throughput_basis("training_full", "fp8", sxm)["per_gpu"] == 1979, "fp8 run: dense fp8 rate"
+    assert P.throughput_basis("inference", None, sxm)["metric"] == "memory_bandwidth"
+    assert P.throughput_basis("unavailable", None, sxm) is None
+    assert P.utilization(0.5) == P.MFU_SMALL and P.utilization(8) == P.MFU_LARGE
+    # FLOPs per token: full 6N, LoRA 4N, +2N with checkpointing, MoE counts active parameters
+    req = lambda **tr: W.model_validate({"workload_type": "fine_tuning", "model": {"name": "x", "parameters_b": 1},
+                                         "training": {"dataset_tokens": 1e6, **tr}})
+    prof = lambda method, ck=False, active=None: {"method": method, "ckpt": (ck, ck, ck),
+                                                   "model": {"parameters_b": 10, "active_parameters_b": active}}
+    assert P.work(req(epochs=2), prof("training_full"))["flops"] == 6 * 10e9 * 2e6
+    assert P.work(req(epochs=1), prof("training_lora"))["flops"] == 4 * 10e9 * 1e6
+    assert P.work(req(epochs=1), prof("training_full", ck=True))["flops"] == 8 * 10e9 * 1e6
+    assert P.work(req(epochs=1), prof("training_full", active=2))["flops"] == 6 * 2e9 * 1e6
+    w = P.work(req(), prof("training_full"))
+    assert "1 epoch assumed" in " ".join(w["assumptions"])
+    assert P.work(W.model_validate({"workload_type": "fine_tuning"}), prof("training_full"))["flops"] is None
+    s2 = W.model_validate({"workload_type": "training", "training": {"dataset_samples": 1000, "seq_len": 512, "epochs": 3}})
+    assert P.work(s2, prof("training_full"))["tokens"] == 1000 * 512 * 3
+    assert P.work(req(), {"method": "inference", "model": {"parameters_b": 8}})["flops"] is None
+    # runtime: halving the throughput doubles the hours; the range brackets the central estimate
+    wk = {"flops": 1e18, "formula": "test"}
+    p1 = P.option_performance(sxm, 1, method="training_full", precision="bf16", wk=wk, params_b=8)
+    p2 = P.option_performance(sxm, 2, method="training_full", precision="bf16", wk=wk, params_b=8)
+    assert p1["runtime"]["known"] and p1["runtime"]["range_hours"][0] < p1["runtime"]["hours"] < p1["runtime"]["range_hours"][1]
+    assert abs(p1["runtime"]["hours"] - 1e18 / (989.5e12 * P.MFU_LARGE[0]) / 3600) < 1e-3
+    assert abs(p1["runtime"]["hours"] / p2["runtime"]["hours"] - p2["scaling"]["speedup"]) < 1e-2
+    assert p2["total"] == {"gpu_count": 2, "vram_gb": 160, "bf16_tflops_dense": 1979.0, "memory_bandwidth_tbps": 6.7}
+    assert "split 2 ways" in p2["memory_note"]
+    jc = P.job_cost(10.0, 1.01, [0.5, 2.0], lambda m: math.ceil(m))   # per-minute billing
+    assert jc["usd"] == round(10 * math.ceil(60.6) / 60, 2) and jc["range_usd"] == [5.0, 20.0]
+
+
+def test_j_two_h100_against_one_h200():
+    reset()
+    out = rec(FULL8)
+    e = out["estimate"]
+    assert e["runtime"]["estimable"] is True and e["work"]["flops"] > 0 and e["work"]["flops_per_token_factor"] == 8
+    by = {(o["gpu"], o["gpu_count"]): o for o in out["options"]}
+    h100x2, h200x1 = by.get((H100, 2)), by.get((H200, 1))
+    assert h100x2 and h200x1, sorted(by)
+    assert h100x2["count_choice"] == "minimum" and h200x1["count_choice"] == "minimum", "each GPU's smallest fitting count"
+    p100, p200 = h100x2["performance"], h200x1["performance"]
+    # same chip: one H200 has one H100's compute, two H100s about twice it after the NVLink scaling assumption
+    assert p200["total"]["bf16_tflops_dense"] == 989.5 and p100["total"]["bf16_tflops_dense"] == 1979.0
+    assert p100["interconnect"]["kind"] == "nvlink" and p200["interconnect"]["kind"] == "single_gpu"
+    assert p100["effective"]["value"] == round(989.5 * 2 * 0.93, 2) and p200["effective"]["value"] == 989.5
+    assert p100["total"]["vram_gb"] == 160 and "split 2 ways" in " ".join(h100x2["limitations"])
+    # runtime and whole-job cost: theoretical ranges, the 2-GPU option finishes in about 1/1.86 of the time
+    r100, r200 = p100["runtime"], p200["runtime"]
+    assert r100["known"] and r200["known"] and r100["kind"] == "estimated" and "not a benchmark" in r100["basis"]
+    assert abs(r200["hours"] / r100["hours"] - 1.86) < 0.01, (r200["hours"], r100["hours"])
+    jc100, jc200 = p100["job_cost"], p200["job_cost"]
+    assert jc100["range_usd"][0] <= jc100["usd"] <= jc100["range_usd"][1]
+    # per-minute billing rounds the runtime up to the next minute: at most one minute of the instance price more
+    gap = jc100["usd"] - h100x2["price_per_instance_hour"] * r100["hours"]
+    assert -0.01 <= gap <= h100x2["price_per_instance_hour"] / 60 + 0.01, gap
+    assert h100x2["cost"]["estimated_job"] == jc100
+    # 2 x H100 costs more per hour than 1 x H200 here but less for the whole job
+    assert h100x2["price_per_instance_hour"] > h200x1["price_per_instance_hour"] and jc100["usd"] < jc200["usd"]
+    low = opt(out, "lowest_estimated_job_cost")
+    assert low is not None and low["performance"]["job_cost"]["usd"] == min(
+        o["performance"]["job_cost"]["usd"] for o in out["options"] if o["performance"].get("job_cost"))
+    assert "theoretical" in out["picks"]["lowest_estimated_job_cost"]["reason"]
+    # tiers compare the totals: 2 x H100 is the higher-performance option against a 1-GPU balanced pick
+    bal = opt(out, "best_for_workload")
+    if bal["gpu_count"] == 1:
+        assert h100x2["tier"] == "higher_performance", h100x2["tier"]
+        assert h100x2["performance"]["relative_to_balanced"]["value"] > 1.1
+    assert any("runtime" in n_.lower() and "theoretical" in n_ for n_ in out["notes"])
+    # scale-up: one 2 x H200 option (H200 fits on one GPU), labelled
+    ups = [o for o in out["options"] if o["count_choice"] == "scale_up"]
+    assert any(o["gpu"] == H200 and o["gpu_count"] == 2 for o in ups), [(o["gpu"], o["gpu_count"]) for o in ups]
+    for o in ups:
+        assert any(w_.startswith("scale-up:") and "planning assumption" in w_ for w_ in o["why"]), o["why"]
+    assert len({o["gpu"] for o in ups}) == len(ups), "at most one scale-up option per GPU model"
+
+
+def test_j_scale_up_rules_and_unknown_work():
+    reset()
+    # a fixed gpu_count never adds scale-up options
+    out = rec({**FULL8, "hardware_hints": {"gpu_count": 2}})
+    assert all(o["count_choice"] == "minimum" and o["gpu_count"] == 2 for o in out["options"])
+    # max_gpus 1 leaves only GPUs that fit alone, and no scale-up
+    out = rec({**FULL8, "constraints": {"max_gpus": 1}})
+    assert out["options"] and all(o["gpu_count"] == 1 and o["count_choice"] == "minimum" for o in out["options"])
+    # without the dataset size: no runtime, no job cost, an explained empty pick and a question
+    body = json.loads(json.dumps(FULL8))
+    del body["training"]["dataset_tokens"]
+    out = rec(body)
+    assert out["estimate"]["runtime"]["estimable"] is False and out["picks"]["lowest_estimated_job_cost"] is None
+    assert "dataset tokens" in out["picks_unavailable"]["lowest_estimated_job_cost"]
+    assert all(o["performance"]["runtime"]["known"] is False and o["cost"]["estimated_job"] is None for o in out["options"])
+    assert any(q["field"] == "training.dataset_tokens" for q in out["estimate"]["questions"])
+    assert any("Runtime is not estimated" in n_ for n_ in out["notes"])
+    # a small model gets no scale-up (communication outweighs the extra compute) and says so
+    out = rec(RESNET)
+    assert all(o["count_choice"] == "minimum" for o in out["options"])
+    assert any("No multi-GPU scale-up" in n_ for n_ in out["notes"])
+    # inference compares memory bandwidth; no runtime is claimed for serving
+    out = rec(VLLM8)
+    for o in out["options"]:
+        assert o["performance"]["basis"]["metric"] == "memory_bandwidth" and o["performance"]["runtime"]["known"] is False
+    # a budget below the fast end of a job's estimate is flagged on the option, not silently dropped
+    out = rec({**FULL8, "constraints": {"budget_usd": 1}})
+    flagged = [o for o in out["options"] if any("over your $1.00 budget" in x for x in o["limitations"])]
+    assert flagged and len(flagged) == len([o for o in out["options"] if o["cost"]["estimated_job"]])
 
 
 def test_migration_roundtrip():

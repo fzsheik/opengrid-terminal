@@ -155,8 +155,18 @@
     { label: "Gemma 2 9B", name: "google/gemma-2-9b", parameters_b: 9.24, architecture: "gemma2" },
     { label: "Phi-3 mini 3.8B", name: "microsoft/Phi-3-mini-4k-instruct", parameters_b: 3.82, architecture: "phi3" },
   ];
-  const FORM_KEYS = ["task", "model", "method", "prec", "quant", "ctx", "conc", "seq", "mbs", "budget", "region", "maxp"];
-  const blankState = () => ({ task: "", model: "", method: "", prec: "", quant: "", ctx: "", conc: "", seq: "", mbs: "", budget: "", region: "", maxp: "" });
+  const FORM_KEYS = ["task", "model", "method", "prec", "quant", "ctx", "conc", "seq", "mbs", "tokens", "epochs", "budget", "region", "maxp"];
+  const blankState = () => ({ task: "", model: "", method: "", prec: "", quant: "", ctx: "", conc: "", seq: "", mbs: "", tokens: "", epochs: "", budget: "", region: "", maxp: "" });
+  // "200M" / "1.5B" / "50k" / "2,000,000" / "3e8" -> tokens; null when it is not a positive count (never guessed)
+  function tokensFromText(text) {
+    const t = String(text == null ? "" : text).trim().toLowerCase().replace(/,/g, "").replace(/\s*tokens?$/, "");
+    if (!t) return null;
+    const m = /^(\d+(?:\.\d+)?(?:e\d+)?)\s*(k|thousand|m|million|b|billion|t|trillion)?$/.exec(t);
+    if (!m) return null;
+    const mult = { k: 1e3, thousand: 1e3, m: 1e6, million: 1e6, b: 1e9, billion: 1e9, t: 1e12, trillion: 1e12 }[m[2] || ""] || 1;
+    const n = +m[1] * mult;
+    return n >= 1 && n <= 1e15 ? Math.round(n) : null;
+  }
   const normKey = s => String(s || "").toLowerCase().replace(/[^a-z0-9.]+/g, "");
   // "Llama 3.1 8B" / "meta-llama/Llama-3.1-8B" -> the suggestion; "7B" / "1.5 billion" / "350M" -> a size only;
   // anything else is sent as the model name for the server to resolve (never guessed here).
@@ -193,6 +203,8 @@
     pos("seq", "Sequence length", { int: true, max: 10000000 });
     pos("mbs", "Micro batch size", { int: true, max: 100000 });
     pos("budget", "Budget", { max: 10000000 });
+    pos("epochs", "Epochs", { max: 100000 });
+    if (st.tokens && tokensFromText(st.tokens) == null) e.tokens = "Training data: a token count like 200M, 1.5B or 50000";
     pos("maxp", "Max price", { max: 1000 });
     if (st.model && String(st.model).length > 200) e.model = "Model name is too long";
     return e;
@@ -210,6 +222,7 @@
       req.training = {
         method: wt === "training" ? "full" : (METHODS.some(x => x[0] === st.method) ? st.method : null),   // from scratch = every weight trains
         seq_len: int(st.seq) > 0 ? int(st.seq) : null, micro_batch_size: int(st.mbs) > 0 ? int(st.mbs) : null,
+        dataset_tokens: tokensFromText(st.tokens), epochs: num(st.epochs) > 0 ? num(st.epochs) : null,
       };
     }
     if (wt === "inference") req.inference = { context_len: int(st.ctx) > 0 ? int(st.ctx) : null, concurrency: int(st.conc) > 0 ? int(st.conc) : null };
@@ -227,7 +240,8 @@
     st.prec = PRECISIONS.includes(q.prec) ? q.prec : "";
     st.quant = QUANTS.some(x => x[0] === q.quant) ? q.quant : "";
     st.region = REGIONS.some(r => r[0] && r[0] === q.region) ? q.region : "";
-    for (const k of ["ctx", "conc", "seq", "mbs", "budget", "maxp"]) st[k] = num(q[k]) != null ? str(k, 20) : "";
+    for (const k of ["ctx", "conc", "seq", "mbs", "epochs", "budget", "maxp"]) st[k] = num(q[k]) != null ? str(k, 20) : "";
+    st.tokens = tokensFromText(str("tokens", 24)) != null ? str("tokens", 24) : "";
     return st;
   }
   // -> a patch for OG.qs.set: every form key present (null clears it from the URL)
@@ -236,7 +250,7 @@
     for (const k of FORM_KEYS) out[k] = st && st[k] !== "" && st[k] != null ? String(st[k]) : null;
     if (out.task !== "finetune") out.method = null;
     if (out.task !== "infer") { out.ctx = null; out.conc = null; }
-    if (out.task !== "train" && out.task !== "finetune") { out.seq = null; out.mbs = null; }
+    if (out.task !== "train" && out.task !== "finetune") { out.seq = null; out.mbs = null; out.tokens = null; out.epochs = null; }
     return out;
   }
 
@@ -309,8 +323,11 @@
     ["best_for_workload", "Best fit for your workload", "Fits with headroom at a balanced price, on fresh data. What OpenGrid would rent for this job."],
     ["best_executable", "Execution-ready through OpenGrid", "The best option OpenGrid can actually launch for you today, after approval."],
   ];
-  // No tier is called "faster": runtime is never claimed without a benchmark.
-  const TIERS = [["lower_cost", "Lower cost", "Cheapest options that still fit"], ["balanced", "Balanced", "Headroom and price in balance"], ["higher_performance", "Higher spec", "Larger or higher-spec GPUs for more money (speed is not benchmarked)"]];
+  // The fourth answer, only when the server could estimate runtimes (training with a known dataset size): what the
+  // whole job costs, which can favour more GPUs that cost more per hour. Theoretical, and labelled so.
+  const JOB_PICK = ["lowest_estimated_job_cost", "Lowest cost for the whole job", "Estimated: theoretical runtime x observed price. More GPUs can cost more per hour and less for the job."];
+  // No tier is called "faster": throughput is a spec-sheet estimate, never a benchmark.
+  const TIERS = [["lower_cost", "Lower cost", "Cheapest options that still fit"], ["balanced", "Balanced", "Headroom and price in balance"], ["higher_performance", "More throughput", "More total throughput across the GPUs, estimated from spec sheets (not benchmarked), for more money"]];
   const DEMO_HREF = "/jobs/new?preset=mnist&sandbox=1";
   const COMPONENT_LABEL = { weights: "Model weights", gradients: "Gradients", optimizer: "Optimizer state", activations: "Activations", kv_cache: "KV cache", framework_overhead: "Framework overhead" };
   const arr = v => (Array.isArray(v) ? v : []);
@@ -335,7 +352,7 @@
   // rec -> the three picks, each {key, label, blurb, option, reason, empty}
   function pickCards(rec) {
     const picks = (rec && rec.picks) || {};
-    return PICKS.map(([key, label, blurb]) => {
+    return PICKS.concat(picks.lowest_estimated_job_cost ? [JOB_PICK] : []).map(([key, label, blurb]) => {
       const ref = picks[key];
       const option = ref && ref.option_id ? optionById(rec, ref.option_id) : null;
       let empty = null;
@@ -439,6 +456,31 @@
   const usd = v => (finite(v) ? (v > 0 && v < 0.01 ? "<$0.01" : "$" + v.toFixed(2)) : "-");
   const perH = v => (finite(v) ? "$" + v.toFixed(2) + "/GPU·h" : "-");
 
+  // Hours in words: minutes under an hour, hours under two days, else days.
+  function hoursText(v) {
+    if (!finite(v)) return "-";
+    if (v < 1) return Math.max(1, Math.round(v * 60)) + " min";
+    if (v < 48) return (v < 10 ? v.toFixed(1) : String(Math.round(v))) + " h";
+    return (v / 24).toFixed(1) + " days";
+  }
+  // option.performance -> plain parts for the cards. Everything here is the server's estimate; null when absent.
+  function perfInfo(o) {
+    const p = (o && o.performance) || {};
+    const tot = p.total || {}, ic = p.interconnect || {}, sc = p.scaling || {}, rel = p.relative_to_balanced || null, rt = p.runtime || {}, jc = p.job_cost || null;
+    const n = tot.gpu_count || (o && o.gpu_count) || 1;
+    const rng = (a, f) => (Array.isArray(a) && finite(a[0]) && finite(a[1]) ? `${f(a[0])} to ${f(a[1])}` : null);
+    return {
+      n, multi: n > 1, scaleUp: !!(o && o.count_choice === "scale_up"),
+      memory: n > 1 && finite(tot.vram_gb) ? `${fmtGb(tot.vram_gb)} total, split across ${n} GPUs` : null,
+      link: n > 1 ? ic.label || null : null, linkDetail: ic.detail || null,
+      speedup: n > 1 && finite(sc.speedup) ? { text: `≈ ${sc.speedup}× one GPU`, range: rng(sc.speedup_range, v => v + "×"), basis: sc.basis || null } : null,
+      basis: p.basis && p.basis.label ? String(p.basis.label) : null,
+      relative: rel && finite(rel.value) ? { value: rel.value, text: `${rel.value}× the balanced pick`, range: rng(rel.range, v => v + "×") } : null,
+      runtime: rt.known === true && finite(rt.hours) ? { text: "≈ " + hoursText(rt.hours), range: rng(rt.range_hours, hoursText), basis: rt.basis || null } : null,
+      jobCost: jc && finite(jc.usd) ? { text: usd(jc.usd), range: rng(jc.range_usd, usd), usd: jc.usd } : null,
+    };
+  }
+
   /* ---- the simple view: one recommendation first, a few alternatives, everything else in Advanced ---- */
   // rec -> {option, key, label, reason} | null. The best fit leads; else the lowest advertised price; else the
   // first option the server ranked. Never an option the server did not return.
@@ -461,7 +503,7 @@
     const out = [];
     const push = (o, label, note) => { if (o && !seen.has(o.option_id) && out.length < max) { seen.add(o.option_id); out.push({ option: o, label, note: note || null }); } };
     const picks = (rec && rec.picks) || {};
-    for (const [key, label] of PICKS) { const ref = picks[key]; if (ref && ref.option_id) push(optionById(rec, ref.option_id), label, ref.reason ? String(ref.reason) : null); }
+    for (const [key, label] of PICKS.concat([JOB_PICK])) { const ref = picks[key]; if (ref && ref.option_id) push(optionById(rec, ref.option_id), label, ref.reason ? String(ref.reason) : null); }
     for (const t of tiersOf(rec && rec.options)) push(t.options.slice().sort((a, b) => (a.price_per_gpu_hour ?? 1e9) - (b.price_per_gpu_hour ?? 1e9)).find(o => !seen.has(o.option_id)), t.label, t.blurb);
     return out;
   }
@@ -490,7 +532,8 @@
   // The three concepts in one line each, for the summary strip -> [{key, label, text, option}]
   function conceptLines(rec) {
     return pickCards(rec).map(p => ({ key: p.key, label: p.label, option: p.option,
-      text: p.option ? `${p.option.gpu_count > 1 ? p.option.gpu_count + "× " : ""}${OG.shortGpu ? OG.shortGpu(p.option.gpu || "") : p.option.gpu} · ${p.option.provider_display || p.option.provider} · ${perH(p.option.price_per_gpu_hour)}`
+      text: p.option ? `${p.option.gpu_count > 1 ? p.option.gpu_count + "× " : ""}${OG.shortGpu ? OG.shortGpu(p.option.gpu || "") : p.option.gpu} · ${p.option.provider_display || p.option.provider} · `
+          + (p.key === JOB_PICK[0] && perfInfo(p.option).jobCost ? "≈ " + perfInfo(p.option).jobCost.text + " for the job" : perH(p.option.price_per_gpu_hour))
         : p.key === "best_executable" ? "None for this workload today" : "Nothing fits right now",
       empty: p.empty }));
   }
@@ -499,6 +542,7 @@
     checkRequirements, validatePaste, prune, modelFromText, formErrors, requirementsFromForm, stateFromQuery, queryFromState,
     applyAnswers, answersFromQuery, answersToQuery, controlFor, leafSpec,
     pickCards, readiness, availability, memoryFit, fmtGb, runtimeInfo, componentRows, tiersOf, noGpu, costLines, gpuHref, routeHref,
+    JOB_PICK, perfInfo, hoursText, tokensFromText,
     questionsOf, noExecutableReason, optionById, heroOf, alternativesOf, budgetHelp, runStatus, conceptLines };
 
   if (typeof OG.page !== "function" || typeof document === "undefined") return;   // node tests: pure part only
@@ -541,6 +585,23 @@
       r.reasons.length && r.code !== "executable" ? h("details", { class: "fd-reasons" }, h("summary", {}, `${r.reasons.length} reason${r.reasons.length === 1 ? "" : "s"}`),
         h("ul", {}, r.reasons.map(x => h("li", {}, x.reason || x.code, x.code ? h("span", { class: "mono dimmer" }, " " + x.code) : null)))) : null);
   }
+  // Performance across the option's GPUs: totals, the link, the scaling assumption, runtime and the whole job.
+  function perfBlock(o) {
+    const pi = perfInfo(o);
+    if (!pi.basis && !pi.multi && !pi.runtime) return null;
+    return h("div", { class: "cx-perf" },
+      h("div", { class: "cx-perf-h" }, h("span", { class: "fd-k" }, "Performance"), OG.kindBadge("estimated"),
+        pi.basis ? h("span", { class: "dim", title: "What the comparison is based on" }, pi.basis) : null),
+      pi.multi ? h("div", { class: "cx-perf-r" },
+        h("b", {}, `${pi.n} GPUs`), pi.memory ? h("span", {}, pi.memory) : null,
+        pi.link ? h("span", { class: "dim", title: pi.linkDetail || "" }, pi.link) : null,
+        pi.speedup ? h("span", { title: pi.speedup.basis || "" }, pi.speedup.text, pi.speedup.range ? h("span", { class: "dim" }, ` (${pi.speedup.range})`) : null) : null) : null,
+      pi.relative && pi.relative.value !== 1 ? h("div", { class: "cx-perf-r" }, h("span", {}, pi.relative.text), pi.relative.range ? h("span", { class: "dim" }, `(${pi.relative.range}, spec sheet)`) : null) : null,
+      pi.runtime ? h("div", { class: "cx-perf-r" },
+        h("span", { title: pi.runtime.basis || "" }, h("span", { class: "dim" }, "Est. runtime "), h("b", {}, pi.runtime.text), pi.runtime.range ? h("span", { class: "dim" }, ` (${pi.runtime.range})`) : null),
+        pi.jobCost ? h("span", {}, h("span", { class: "dim" }, "Est. whole job "), h("b", { class: "mono" }, pi.jobCost.text), pi.jobCost.range ? h("span", { class: "dim" }, ` (${pi.jobCost.range})`) : null) : null) : null,
+      pi.runtime ? h("div", { class: "cx-perf-n dim" }, "Theoretical: spec-sheet throughput and stated assumptions, not a benchmark. Startup, storage and egress are not included.") : null);
+  }
   function costBlock(o) {
     const c = costLines(o);
     return h("div", { class: "fd-cost" },
@@ -572,6 +633,7 @@
       h("div", { class: "fd-card-h" },
         h("div", { class: "fd-card-g" }, h("a", { class: "lnk fd-gpu", href: gpuHref(o) }, `${o.gpu_count > 1 ? o.gpu_count + "× " : ""}${OG.shortGpu(o.gpu || o.gpu_slug || "?")}`),
           h("span", { class: "fd-var dim", title: variant }, variant, finite(o.vram_gb) ? ` · ${fmtGb(o.vram_gb)}` : "")),
+        perfInfo(o).scaleUp ? OG.badge("more GPUs", "", "A larger shape of a GPU that already fits: more total throughput, more per hour") : null,
         opts.hideTier || !tier ? null : OG.badge(tier[1], "", tier[2])),
       h("div", { class: "fd-card-p" }, OG.logo(o.provider, 16), h("a", { class: "lnk", href: "/provider/" + encodeURIComponent(o.provider || "") }, o.provider_display || OG.providerName(o.provider)),
         o.region ? h("span", { class: "dim" }, "· " + o.region) : null),
@@ -583,6 +645,7 @@
         o.fresh === false ? OG.badge("stale", "warn", "Not observed recently: not presented as deployable") : null,
         (a => OG.badge(a.label, a.tone))(availability(o))),
       fitBar(o, e),
+      perfBlock(o),
       opts.compact ? h("details", { class: "fd-more" }, h("summary", {}, "Cost, why and limitations"), costBlock(o), lists) : [costBlock(o), lists],
       readyBlock(o, opts.compact),
       actions(o, opts.compact, opts.signedIn));
@@ -672,11 +735,16 @@
           o.region ? h("span", { class: "dim" }, "· " + o.region) : null, finite(o.vram_gb) ? h("span", { class: "dim" }, `· ${fmtGb(o.vram_gb)} per GPU`) : null)),
       h("div", { class: "cx-facts" },
         fact("Price", perH(o.price_per_gpu_hour), o.gpu_count > 1 && finite(o.price_per_instance_hour) ? `${usd(o.price_per_instance_hour)}/h for ${o.gpu_count} GPUs` : "per GPU-hour, observed list price", OG.kindBadge("observed")),
-        fact("Memory needed", finite(m.recommended_gb) ? fmtGb(m.recommended_gb) : OG.na("not enough information yet"),
+        fact("Memory needed", o.gpu_count > 1 && f.known ? fmtGb(f.needed) + " per GPU" : finite(m.recommended_gb) ? fmtGb(m.recommended_gb) : OG.na("not enough information yet"),
           f.known ? (f.over ? h("span", { class: "down" }, `does not fit ${fmtGb(f.vram)}`) : `fits ${fmtGb(f.vram)} per GPU · ${Math.round(f.headroom_pct)}% headroom`) : m.confidence ? "confidence " + m.confidence : null, OG.kindBadge("estimated")),
         fact("Availability", av.label, seen ? h("span", {}, "price seen ", seen) : "freshness not reported"),
-        c.budget_hours != null ? fact("Your budget", "≈ " + fmt.num(c.budget_hours, 1) + " h", "of runtime at this price", OG.kindBadge("estimated"))
-          : fact("Runtime", runtimeInfo(e).known ? runtimeInfo(e).text : "Unknown", runtimeInfo(e).known ? runtimeInfo(e).reason : "not benchmarked: cost is per hour")),
+        perfInfo(o).runtime ? fact("Est. runtime", perfInfo(o).runtime.text, (perfInfo(o).runtime.range ? perfInfo(o).runtime.range + " · " : "") + "theoretical, not a benchmark", OG.kindBadge("estimated"))
+          : c.budget_hours != null ? fact("Your budget", "≈ " + fmt.num(c.budget_hours, 1) + " h", "of runtime at this price", OG.kindBadge("estimated"))
+          : fact("Runtime", runtimeInfo(e).known ? runtimeInfo(e).text : "Unknown", runtimeInfo(e).known ? runtimeInfo(e).reason : "add your dataset size to estimate it: cost is per hour until then"),
+        perfInfo(o).jobCost ? fact("Est. whole job", perfInfo(o).jobCost.text, (perfInfo(o).jobCost.range || "") + " · runtime x price", OG.kindBadge("estimated")) : null),
+      perfInfo(o).multi ? h("div", { class: "cx-perf-r" }, h("b", {}, `${perfInfo(o).n} GPUs`), perfInfo(o).memory ? h("span", {}, perfInfo(o).memory) : null,
+        perfInfo(o).link ? h("span", { class: "dim", title: perfInfo(o).linkDetail || "" }, perfInfo(o).link) : null,
+        perfInfo(o).speedup ? h("span", { title: perfInfo(o).speedup.basis || "" }, perfInfo(o).speedup.text + " (estimated)") : null) : null,
       why.length ? h("div", {}, h("div", { class: "cx-fact-k" }, "Why it fits"), h("ul", { class: "cx-why" }, why.map(x => h("li", {}, x)))) : null,
       h("div", { class: "cx-run t-" + (rs.tone || "plain") }, h("b", {}, "Can OpenGrid run it? ", rs.label), h("span", { class: "dim" }, rs.detail)),
       h("div", { class: "cx-acts" },
@@ -693,7 +761,8 @@
       h("div", { class: "cx-alt-p" }, OG.badge(av.label.replace("Availability not reported", "availability not reported"), av.tone),
         f.known ? h("span", { class: f.over ? "down" : "dim" }, f.over ? "does not fit" : `${Math.round(f.headroom_pct)}% memory headroom`) : null,
         h("span", { class: "dim", title: rs.detail }, rs.tone === "good" ? "OpenGrid can run this" : "recommendation only")),
-      h("div", { class: "cx-alt-r" }, h("b", {}, perH(o.price_per_gpu_hour)), h("div", { class: "dim" }, o.gpu_count > 1 && finite(o.price_per_instance_hour) ? `${usd(o.price_per_instance_hour)}/h total` : "observed")),
+      h("div", { class: "cx-alt-r" }, h("b", {}, perH(o.price_per_gpu_hour)), h("div", { class: "dim" }, o.gpu_count > 1 && finite(o.price_per_instance_hour) ? `${usd(o.price_per_instance_hour)}/h total` : "observed"),
+        perfInfo(o).jobCost ? h("div", { class: "dim", title: "Estimated whole-job cost: theoretical runtime x price" }, "≈ " + perfInfo(o).jobCost.text + " job") : null),
       a.note ? h("div", { class: "cx-alt-x" }, a.note) : null);
   }
   function conceptStrip(rec) {
@@ -802,6 +871,8 @@
         { key: "region", label: "Region", cls: "dim" },
         { key: "price_per_gpu_hour", label: "$/GPU·h", num: true, fmt: v => perH(v).replace("/GPU·h", ""), title: "observed" },
         { key: "gpu_count", label: "GPUs", num: true },
+        { key: "rel", label: "Rel. perf", num: true, title: "estimated total throughput vs the balanced pick (spec sheet, not a benchmark)", value: o => (perfInfo(o).relative || {}).value ?? null, fmt: v => (finite(v) ? v + "×" : "-") },
+        { key: "job", label: "Est. job $", num: true, title: "estimated whole-job cost: theoretical runtime x observed price", value: o => (perfInfo(o).jobCost || {}).usd ?? null, fmt: v => (finite(v) ? usd(v) : "-") },
         { key: "fit", label: "Memory fit", value: o => memoryFit(o, e).headroom_pct, num: true, fmt: (v, o) => { const f = memoryFit(o, e); return f.known ? (f.over ? h("span", { class: "down" }, "does not fit") : `${fmtGb(f.needed).replace(" GB", "")}/${fmtGb(f.vram)} · ${Math.round(f.headroom_pct)}%`) : "-"; } },
         { key: "available", label: "Available", value: o => availability(o).label, fmt: (v, o) => OG.badge(availability(o).label.replace("Availability not reported", "not reported"), availability(o).tone) },
         { key: "age_seconds", label: "Seen", num: true, fmt: (v, o) => v != null || o.observed_at ? OG.freshBadge(v != null ? v : o.observed_at, { provider: o.provider }) : "-" },
@@ -942,6 +1013,12 @@
           step("3", "What matters?", "All optional. Options over your max price are left out.",
             h("div", { class: "fd-row2" }, numIn("budget", "Total budget ($)", { step: "any", placeholder: "e.g. 50" }), numIn("maxp", "Max $ per GPU-hour", { step: "any", placeholder: "e.g. 3" })),
             h("label", { class: "fd-f" }, h("span", { class: "fd-l" }, "Preferred region"), regionSel),
+            wt === "training" || wt === "fine_tuning" ? h("div", {},
+              h("p", { class: "fd-hint" }, "How much data? With it, OpenGrid estimates each option's runtime and the cost of the whole job, so you can see when more GPUs finish for less."),
+              h("div", { class: "fd-row2" },
+                h("label", { class: "fd-f" }, h("span", { class: "fd-l" }, "Training data (tokens)"),
+                  h("input", { class: "field", type: "text", value: st.tokens, placeholder: "e.g. 200M or 1.5B", inputmode: "text", spellcheck: "false", maxlength: 24, oninput: ev => upd("tokens", ev.target.value.trim()) }), err("tokens")),
+                numIn("epochs", "Epochs", { step: "any", placeholder: "e.g. 3" }))) : null,
             wt === "inference" ? h("div", {}, h("p", { class: "fd-hint" }, "Serving needs: longer context and more parallel requests need more GPU memory."),
               h("div", { class: "fd-row2" }, numIn("ctx", "Context length (tokens)", { step: 1, placeholder: "e.g. 8192", inputmode: "numeric" }), numIn("conc", "Concurrent requests", { step: 1, placeholder: "e.g. 8", inputmode: "numeric" }))) : null,
             h("details", { class: "fd-adv", open: advOpenF ? true : null }, h("summary", {}, "Advanced: precision, quantization", wt === "training" || wt === "fine_tuning" ? ", batch" : ""),

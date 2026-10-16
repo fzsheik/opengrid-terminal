@@ -70,7 +70,7 @@
 .cx-alt-r { text-align: right; }
 .cx-alt-r b { font-family: var(--mono); color: var(--text); font-size: var(--fs-base); }
 
-.cx-three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.cx-three { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px; }
 .cx-three > div { border: 1px solid var(--line); border-radius: 3px; padding: 6px 8px; font-size: var(--fs-sm); min-width: 0; }
 .cx-three .cx-fact-k { margin-bottom: 2px; }
 .cx-three .cx-3v { color: var(--text); }
@@ -169,3 +169,10 @@
 
 /* My Jobs card: the mode tag sits next to the name, never stretched */
 .jb-card-n .cx-mode { align-self: flex-start; justify-self: start; width: max-content; }
+
+/* ---- performance across an option's GPUs (estimated: spec sheets + stated assumptions) ---- */
+.cx-perf { display: grid; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; font-size: var(--fs-sm); }
+.cx-perf-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cx-perf-r { display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; color: var(--text-2); }
+.cx-perf-r b { color: var(--text); }
+.cx-perf-n { font-size: var(--fs-xs); }

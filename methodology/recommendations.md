@@ -1,6 +1,6 @@
 # Workload recommendations
 
-OpenGrid estimates how much GPU memory a workload needs from published formulas, then matches that estimate against fresh, observed on-demand listings. Every default it assumes is listed in the answer, runtime is never guessed, and a GPU is called "executable" only when OpenGrid can actually launch the workload for you. One engine on the server (`intelligence/`) answers the website, the assistant, the CLI and the MCP server alike. The contract is `docs/OPENGRID2_CONTRACTS.md`.
+OpenGrid estimates how much GPU memory a workload needs from published formulas, then matches that estimate against fresh, observed on-demand listings. It compares options by their total theoretical throughput across all their GPUs, and, for training when you say how much data you train on, estimates each option's runtime and whole-job cost as a range. Every default it assumes is listed in the answer, nothing is presented as a benchmark, and a GPU is called "executable" only when OpenGrid can actually launch the workload for you. One engine on the server (`intelligence/`) answers the website, the assistant, the CLI and the MCP server alike. The contract is `docs/OPENGRID2_CONTRACTS.md`.
 
 Endpoints: `POST /v1/recommend/estimate` (memory, GPU count, questions; pure computation) and `POST /v1/recommend` (the estimate plus ranked market options). Both take a `WorkloadRequirements` body (every field optional; unknown is `null`). Both are read-only: the recommendation reads listings with the same ranking `/v1/best` uses and writes no audit, quote or route rows. With `PUBLIC_PAGES` on they can be called without a key, under the anonymous rate limit.
 
@@ -40,7 +40,41 @@ Per-GPU need is computed for 1, 2, 4 and 8 GPUs, or up to `constraints.max_gpus`
 - **Inference:** tensor parallelism splits the weights and the KV cache N ways.
 - **CPU offload:** moves the optimizer states off the GPU.
 
-The suggested count is the smallest one whose per-GPU need, with the margin, fits the largest whole GPU on record (MIG slices and laptops excluded). In the recommendation each GPU model gets its own smallest fitting count. More than one GPU for sharded training or tensor parallelism means GPU-to-GPU traffic on every step. NVLink / SXM / Infinity Fabric parts are preferred, and PCIe-only multi-GPU options carry a limitation and a lower workload score.
+The suggested count is the smallest one whose per-GPU need, with the margin, fits the largest whole GPU on record (MIG slices and laptops excluded). In the recommendation each GPU model gets its own smallest fitting count, so "2 x H100" (two 80 GB GPUs) and "1 x H200" (one 141 GB GPU) can both appear for the same workload. More than one GPU for sharded training or tensor parallelism means GPU-to-GPU traffic on every step. NVLink / SXM / Infinity Fabric parts are preferred, and PCIe-only multi-GPU options carry a limitation and a lower workload score.
+
+**Scale-up options.** For each GPU model that fits, OpenGrid also looks at its next count (2n GPUs, within `max_gpus`), so more GPUs of one model can compete with fewer, larger GPUs. Each GPU model gets at most one scale-up option (its best-valued listing), marked `count_choice: "scale_up"`. There are none when `hardware_hints.gpu_count` fixes the count, or for models under 1B parameters, where communication outweighs the extra compute.
+
+## Performance across GPUs (theoretical)
+
+Two GPUs are not "twice one GPU", and a bigger GPU is not "faster" just because it has more memory. An H200 has the same chip and the same compute as an H100 (989.5 dense BF16 TFLOPS each), with more and faster memory (141 GB at 4.8 TB/s against 80 GB at 3.35 TB/s). Two H100s have twice the compute and 160 GB in total, but the model is split across them and they exchange data on every step. Each option's `performance` block (`intelligence/performance.py`) says this in numbers:
+
+- **Basis.** Training and fine-tuning are compute bound: dense tensor throughput at the training precision (BF16/FP16; dense FP8 for an FP8 run when the GPU publishes it; FP32 for FP32). Inference token generation is memory-bandwidth bound at small batch (every weight is read once per token): memory bandwidth. Vendor peak figures from [hardware](/methodology/hardware), never benchmarks.
+- **Totals.** `total`: GPUs, VRAM, dense BF16 TFLOPS and memory bandwidth summed over the option's GPUs. A multi-GPU option also says its memory is split across the GPUs, not held in one.
+- **Interconnect.** `interconnect.kind`: `single_gpu`; `nvlink` (SXM, OAM or Superchip parts: NVLink / NVSwitch / Infinity Fabric between every GPU, or an NVLink bridge spanning all the cards); `nvlink_bridge` (bridged pairs of PCIe cards, more cards than one bridge spans); `pcie` (no NVLink on record).
+- **Scaling assumption.** `scaling`: speedup = GPUs x efficiency, with a range. OpenGrid planning assumptions, not measurements (communication-overhead context: [FSDP](https://arxiv.org/abs/2304.11277), [Megatron-LM](https://arxiv.org/abs/2104.04473)):
+
+  | Efficiency per GPU | 2 GPUs | 4 GPUs | 8 GPUs |
+  |---|---|---|---|
+  | training, NVLink | 93% (85-98) | 90% (80-96) | 87% (75-94) |
+  | training, bridged pairs | 90% (80-96) | 75% (55-88) | 65% (45-82) |
+  | training, PCIe | 80% (60-92) | 70% (50-86) | 60% (40-80) |
+  | inference (tensor parallel), NVLink | 85% (70-95) | 75% (60-90) | 65% (50-85) |
+  | inference, bridged pairs | 80% (65-92) | 60% (40-80) | 50% (30-70) |
+  | inference, PCIe | 65% (45-85) | 50% (30-75) | 40% (25-65) |
+
+  Beyond 8 GPUs the efficiency drops another 5 points per doubling (floor 30%).
+- **Effective throughput.** `effective` = per-GPU figure x speedup. `relative_to_balanced` divides it by the balanced pick's: "2 x H100: about 1.86x the balanced 1 x H200".
+
+## Runtime and whole-job cost (training, when the data size is known)
+
+Runtime is estimated only for training and fine-tuning, and only when the amount of data is given: `training.dataset_tokens` (or `dataset_samples` x `seq_len`), times `epochs` (1 is assumed and stated when epochs are not given). Without it, `runtime.known` is false, no job cost is shown, and a question asks for the dataset size.
+
+- **Work.** FLOPs = k x N x T, N = parameters (active parameters for a mixture of experts), T = tokens trained. k = 6 for full training (forward 2N + backward 4N per token, [Kaplan et al. 2020](https://arxiv.org/abs/2001.08361) section 2.1). k = 4 for LoRA / QLoRA: frozen base weights get no weight gradients, but activation gradients still flow through every layer ([LoRA](https://arxiv.org/abs/2106.09685)). +2 with gradient checkpointing (one extra forward pass, [Chen et al. 2016](https://arxiv.org/abs/1604.06174)). QLoRA's dequantization overhead is not modelled and the output says its real runtime is usually longer.
+- **Runtime.** hours = FLOPs / (effective throughput x utilization) / 3600. Utilization (model FLOPs utilization): 35%, range 20-50%, for models of 1B+ parameters. Well-tuned pretraining reaches 46-52% ([PaLM](https://arxiv.org/abs/2204.02311) 46.2%, [Megatron-LM](https://arxiv.org/abs/2104.04473) 52%); typical fine-tuning stacks land lower, so the central figure is conservative. Smaller models: 20%, range 5-40%. The range pairs the low utilization with the low scaling efficiency (slow end) and the high with the high (fast end). Startup, data-loading stalls, evaluation and checkpoint saving are not included.
+- **Job cost.** `performance.job_cost` (also `cost.estimated_job`) = runtime x instance price, each end of the range rounded up to the provider's billing unit. Storage, egress and startup time are not included.
+- **Pick.** `lowest_estimated_job_cost` is the option with the lowest central job-cost estimate. It can be a multi-GPU option that costs more per hour. For example, at illustrative prices of $4.90/h for two H100s and $3.60/h for one H200, a full fine-tune of an 8B model on 200M tokens is estimated at about 5.5 h (about $27) on the two H100s and about 10 h (about $37) on the H200. With a budget, an option whose estimated job cost exceeds it carries a limitation; it is not dropped, because the estimate is theoretical.
+
+These figures are estimates in the open: every input, assumption and source is in the response. A consented measured benchmark for the workload and GPU (`performance_observations`, below) is the only thing that would replace them.
 
 ## From estimate to options
 
@@ -64,8 +98,9 @@ The suggested count is the smallest one whose per-GPU need, with the margin, fit
    - `cheapest_market`: the lowest instance price that fits.
    - `best_for_workload`: the top workload score among options with at least 10% headroom.
    - `best_executable`: the first option OpenGrid can launch for this caller (see below), often `null`.
+   - `lowest_estimated_job_cost`: the lowest estimated whole-job cost (training with a known dataset size; see "Runtime and whole-job cost"), else `null` with the reason in `picks_unavailable`.
 6. **Tiers.** Tiers are relative to the balanced pick.
-   - `higher_performance`: more than 10% higher theoretical memory bandwidth, or more VRAM at equal bandwidth.
+   - `higher_performance`: at least 10% more effective theoretical throughput in total over the option's GPUs (see "Performance across GPUs"). When a GPU has no throughput figure on record, more than 10% higher memory bandwidth, or more VRAM at equal bandwidth.
    - `lower_cost`: at least 10% cheaper per hour.
    - `balanced`: everything else.
 
@@ -75,9 +110,9 @@ The suggested count is the smallest one whose per-GPU need, with the margin, fit
 
 Costs are **scenarios**, not predictions. Each one is price per GPU-hour x GPUs x billed hours for 1, 10 and 100 hours, plus the stated `runtime_hours` if given. Billed hours round the runtime up to the provider's billing unit and minimum commitment, taken from the adapter's declared capabilities (`workloads.select.billing`). A provider without an adapter is assumed to bill per hour, and the output says so. `budget_hours` is how many hours the budget buys at that price. `unknown_costs` lists what is not included: storage, egress, startup / provisioning time and idle time. These are not zero; they are unknown. Prices are observed list prices, not quotes. A route quotes and re-validates the price before any launch.
 
-## Theoretical versus measured, and why runtime is unknown
+## Theoretical versus measured
 
-Memory is **estimated** from formulas. Hardware comparisons use **theoretical** vendor peaks (see [hardware](/methodology/hardware)). Prices are **observed**. Runtime depends on achieved throughput: kernels, data loading, communication, the framework version, the provider's host. OpenGrid has no measured benchmark for arbitrary workloads, so runtime is reported as unknown (`runtime.known: false`) and never estimated from peak FLOPs. The `performance_observations` table (migration 0020) is the data model for future measured results. Each row records the GPU, workload class, model size, method, precision, runtime, peak VRAM, utilization, provisioning delay, cost, outcome, source kind (`theoretical`, `user_supplied`, `measured_benchmark` or `completed_job`) and the owner's consent. It is empty today. The recommender reads it only to report "no measured benchmark for this workload on this GPU". Only consented `measured_benchmark` or `completed_job` rows would ever count as measured.
+Memory is **estimated** from formulas. Hardware comparisons use **theoretical** vendor peaks (see [hardware](/methodology/hardware)). Prices are **observed**. Real runtime depends on achieved throughput: kernels, data loading, communication, the framework version, the provider's host. OpenGrid has no measured benchmark for arbitrary workloads, so the runtimes above are **estimated** from peak throughput with stated utilization and scaling assumptions, always as a range and always labelled theoretical; the workload-level `estimate.runtime.known` stays false. The `performance_observations` table (migration 0020) is the data model for future measured results. Each row records the GPU, workload class, model size, method, precision, runtime, peak VRAM, utilization, provisioning delay, cost, outcome, source kind (`theoretical`, `user_supplied`, `measured_benchmark` or `completed_job`) and the owner's consent. It is empty today. The recommender reads it only to report "no measured benchmark for this workload on this GPU". Only consented `measured_benchmark` or `completed_job` rows would ever count as measured.
 
 ## What "executable" means
 

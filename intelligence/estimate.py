@@ -2,14 +2,15 @@
 
     estimate(req: WorkloadRequirements) -> dict      (contract section 2)
 
-Pure computation: no database, no provider call. Runtime is never estimated here (no measured benchmark exists
-for arbitrary workloads; see methodology/recommendations.md). Questions are asked only for fields that are
-unknown AND change the answer.
+Pure computation: no database, no provider call. Runtime depends on the GPU, so it is not a single number here:
+`work` is the training work (FLOPs from the tokens trained, when known) and each recommended option carries its own
+theoretical runtime range (intelligence/performance.py). Nothing is a benchmark. Questions are asked only for
+fields that are unknown AND change the answer.
 """
 
 from __future__ import annotations
 
-from intelligence import memory
+from intelligence import memory, performance
 from intelligence.requirements import WorkloadRequirements
 
 METHODOLOGY = "/methodology/recommendations"
@@ -82,6 +83,11 @@ def questions(req: WorkloadRequirements, prof: dict, need: bool | None) -> list[
     if known.get("precision") == "assumed" and wc is not None:
         out.append(_q("precision", "Which precision or quantization (bf16, fp8, int8, 4-bit)?",
                       "weights take 2 bytes per parameter in bf16, 1 in 8-bit, about 0.5 in 4-bit"))
+    tr = req.training
+    if wc == "training" and m.get("parameters_b") and not (tr is not None and (tr.dataset_tokens or (tr.dataset_samples and tr.seq_len))):
+        out.append(_q("training.dataset_tokens", "How many tokens will you train on (and for how many epochs)?",
+                      "lets OpenGrid estimate the runtime and the whole-job cost of each GPU option, including "
+                      "whether more GPUs finish it for less"))
     return out[:MAX_QUESTIONS]
 
 
@@ -97,6 +103,16 @@ def estimate(req: WorkloadRequirements) -> dict:
                "profile": prof, "gpu_count": {"min": 0, "suggested": 0, "reason": need_why},
                "interconnect": {"needed": False, "reason": "no GPU needed"}}
     gc, ic = mem.pop("gpu_count"), mem.pop("interconnect")
+    wk = performance.work(req, prof) if mem.get("method") not in (None, "unavailable") else {
+        "tokens": None, "flops": None, "reason": "no memory estimate"}
+    if wk.get("flops"):
+        runtime = {"known": False, "estimable": True, "kind": "estimated",
+                   "reason": "runtime depends on the GPU: each option has a theoretical runtime range (vendor peak "
+                             "throughput x stated utilization and multi-GPU scaling assumptions, not a benchmark)"}
+    else:
+        runtime = {"known": False, "estimable": False,
+                   "reason": f"runtime not estimated: {wk.get('reason') or 'training work unknown'}, and no measured "
+                             "benchmark exists for this workload"}
     return {
         "needs_gpu": need,
         "needs_gpu_reason": need_why,
@@ -104,7 +120,8 @@ def estimate(req: WorkloadRequirements) -> dict:
         "memory": mem,
         "gpu_count": gc,
         "interconnect": ic,
-        "runtime": {"known": False, "reason": "no measured benchmark for this workload; runtime not estimated"},
+        "runtime": runtime,
+        "work": wk,
         "questions": questions(req, prof, need),
         "methodology": METHODOLOGY,
     }

@@ -116,7 +116,8 @@ def test_full_training_hand_computed():
     assert m["range_gb"] is None, "nothing uncertain was assumed"
     assert e["gpu_count"]["suggested"] == 1 and e["interconnect"]["needed"] is False
     assert e["runtime"]["known"] is False and "benchmark" in e["runtime"]["reason"]
-    assert e["questions"] == [], e["questions"]
+    # everything that changes the memory estimate is known; only the dataset size (for runtime) is asked
+    assert [q["field"] for q in e["questions"]] == ["training.dataset_tokens"], e["questions"]
     assert m["trainable_parameters"] == 1_000_000_000
 
 

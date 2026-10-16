@@ -463,6 +463,38 @@ def test_workload_contract_mirror():
         assert "file_contents" in str(e)
 
 
+def test_recommendation_shows_multi_gpu_performance():
+    """The human output of `recommend`: totals over the GPUs, the link, runtime and whole-job cost, labelled."""
+    import contextlib
+    import io
+
+    from opengrid_cli import cli
+
+    o = {"option_id": "h100:a:us:2", "tier": "higher_performance", "count_choice": "minimum", "gpu": "NVIDIA H100 80GB SXM5",
+         "gpu_count": 2, "provider": "a", "provider_display": "A", "region": "us", "price_per_gpu_hour": 2.45,
+         "price_per_instance_hour": 4.9, "price_kind": "observed", "age_seconds": 60, "fresh": True,
+         "memory_fit": {"needed_per_gpu_gb": 54.75, "vram_gb": 80, "headroom_pct": 32},
+         "cost": {"scenarios": []}, "why": [], "limitations": [], "execution": {"executable": False, "reasons": []},
+         "performance": {"basis": {"label": "dense BF16 tensor throughput (training is compute bound)"},
+                         "total": {"gpu_count": 2, "vram_gb": 160},
+                         "effective": {"value": 1840.47, "unit": "TFLOPS", "basis": "2 x 989.5 TFLOPS x 93% scaling"},
+                         "relative_to_balanced": {"value": 1.86},
+                         "interconnect": {"label": "NVLink / Infinity Fabric between every GPU", "detail": "NVLink 4, 900 GB/s"},
+                         "runtime": {"known": True, "hours": 5.54, "range_hours": [3.68, 10.61]},
+                         "job_cost": {"usd": 27.2, "range_usd": [18.05, 52.02]}}}
+    up = dict(o, option_id="h200:a:us:2", count_choice="scale_up", gpu="NVIDIA H200 141GB SXM5")
+    rec = {"estimate": {}, "options": [o, up], "notes": [],
+           "picks": {"lowest_estimated_job_cost": {"option_id": "h100:a:us:2", "reason": "lowest estimated cost"}}}
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        cli.show_recommendation(rec)
+    t = buf.getvalue()
+    assert "lowest job cost   : NVIDIA H100 80GB SXM5 x2" in t, t
+    assert "1.86x the balanced pick" in t and "2 GPUs: 160 GB total, split across them" in t
+    assert "est. runtime 5.54 h (3.68 to 10.6 h)" in t and "theoretical, not a benchmark" in t
+    assert "[higher_performance, scale-up]" in t
+
+
 if __name__ == "__main__":
     os.chdir(PROJECT)
     run_tests([v for k, v in list(globals().items()) if k.startswith("test_") and callable(v)])

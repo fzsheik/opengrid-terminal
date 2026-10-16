@@ -11,10 +11,15 @@ Pipeline
     3. market, READ-ONLY: routing.scoring.rank_listings(gpu, count=n, ...) per fitting GPU (never
        routing.engine.preview, so no audit / quote rows). It keeps only fresh, on-demand, priced, not sold-out
        listings with exactly n GPUs per instance; everything else becomes an exclusion with its code
+       Scale-up: for each fitting GPU also its next count (2n, within max_gpus) when the model is 1B+ parameters,
+       so "2 x H100" competes with "1 x H200" (one scale-up option per GPU model, never with a fixed gpu_count)
     4. per option: memory fit, cost scenarios (price x GPUs x billed hours, billing unit via workloads.select.billing),
-       execution readiness (workloads.select.provider_readiness for the caller AND a supported workload)
-    5. workload value score -> tiers (lower_cost / balanced / higher_performance by theoretical specs, never
-       "fastest") and picks (cheapest_market / best_for_workload / best_executable)
+       performance (intelligence.performance: totals over the GPUs, interconnect, a multi-GPU scaling assumption,
+       and for training with known tokens a theoretical runtime and whole-job cost range), execution readiness
+       (workloads.select.provider_readiness for the caller AND a supported workload)
+    5. workload value score -> tiers (lower_cost / balanced / higher_performance by total effective theoretical
+       throughput, never "fastest") and picks (cheapest_market / best_for_workload / best_executable /
+       lowest_estimated_job_cost when runtimes are estimable)
 """
 
 from __future__ import annotations
@@ -26,6 +31,7 @@ from datetime import datetime, timezone
 import hardware
 import provider_meta
 from api.common import gpu_slug
+from intelligence import performance as P
 from intelligence.estimate import METHODOLOGY, estimate
 from intelligence.requirements import Constraints, WorkloadRequirements
 from routing import adapters, scoring
@@ -36,6 +42,8 @@ from workloads import templates as T
 MAX_EXCLUDED = 200
 HOURS = (1, 10, 100)
 MIN_HEADROOM_PCT = 10.0
+SCALE_UP_MIN_B = 1.0          # below this, adding GPUs mostly adds communication: no scale-up options
+HIGHER_PERF = 1.10            # higher_performance: effective throughput at least 10% above the balanced pick
 # below this many billion parameters a training run is small enough that a CPU is a realistic option
 SMALL_MODEL_B = 0.01
 UNKNOWN_COSTS = ["storage", "egress", "startup / provisioning time", "idle time before and after the run"]
@@ -163,11 +171,18 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
     est = estimate(req)
     mem = est["memory"]
     prof = mem["profile"]
+    wk = est.get("work") or {}
     notes = ["Prices are observed list prices, not quotes: a route quotes and re-validates before any launch.",
-             "Runtime is not estimated (no measured benchmark); costs are scenarios at stated hours.",
-             "Hardware comparisons use theoretical vendor specs (memory bandwidth, dense throughput), not benchmarks."]
+             ("Runtimes and whole-job costs are theoretical estimates (vendor peak throughput x stated utilization "
+              "and multi-GPU scaling assumptions), shown as ranges; no benchmark exists for this workload."
+              if wk.get("flops") else
+              "Runtime is not estimated (" + str(wk.get("reason") or "training work unknown") + "); costs are "
+              "scenarios at stated hours."),
+             "Performance compares the total over all GPUs of an option (dense throughput for training, memory "
+             "bandwidth for inference) after a multi-GPU scaling assumption; spec-sheet figures, not benchmarks."]
     # picks_unavailable: for each pick that is null, why (so no interface shows an unexplained blank)
-    out = {"estimate": est, "picks": {"cheapest_market": None, "best_for_workload": None, "best_executable": None},
+    out = {"estimate": est, "picks": {"cheapest_market": None, "best_for_workload": None, "best_executable": None,
+                                      "lowest_estimated_job_cost": None},
            "picks_unavailable": {},
            "options": [], "excluded": [], "excluded_total": 0, "excluded_by_code": {}, "questions": est["questions"],
            "notes": notes, "as_of": now.isoformat(), "methodology": METHODOLOGY}
@@ -196,10 +211,12 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
 
     by_count = {int(k): v for k, v in mem["per_gpu_by_count"].items()}
     counts = sorted(by_count)
+    fixed = False
     if req.hardware_hints is not None and req.hardware_hints.gpu_count:
         hint = req.hardware_hints.gpu_count
         if hint in by_count:
             counts = [hint]
+            fixed = True
             notes.append(f"GPU count fixed at {hint} (hardware_hints.gpu_count).")
     usable = float(mem.get("usable_vram_fraction") or 1.0)
     hreq = _hw_requirements(req, prof)
@@ -242,14 +259,38 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
         fitting.append((g, n, spec, why_n))
     if unlisted_fit:
         notes.append(f"{unlisted_fit} other compatible GPU model(s) have no market listings at all.")
+    # scale-up: the next count of each fitting GPU (2n), so more GPUs of one model compete with fewer larger ones
+    scale_ups: list[tuple] = []
+    if not fixed and mem["method"] in ("training_full", "training_lora", "training_qlora", "inference"):
+        if params_b is not None and params_b < SCALE_UP_MIN_B:
+            notes.append(f"No multi-GPU scale-up options: a {params_b:g}B-parameter model gains little from more "
+                         "GPUs (communication outweighs the extra compute).")
+        else:
+            for g, n, spec, _ in fitting:
+                if 2 * n in by_count:
+                    scale_ups.append((g, 2 * n, spec, None))
 
     budget, runtime_h = c.budget_usd, c.runtime_hours
     cands: list[dict] = []
     bills: dict[str, dict] = {}
-    for g, n, spec, why_n in fitting:
+    rows_by_gpu: dict[str, list] = {}       # one listings read per GPU, shared by its minimum and scale-up counts
+    for g, n, spec, why_n, scale in [f + (False,) for f in fitting] + [f + (True,) for f in scale_ups]:
+        rows = rows_by_gpu.get(g)
+        if rows is None:
+            rows = rows_by_gpu[g] = scoring.listing_rows(g)
         rk = scoring.rank_listings(g, count=n, region_group=region, max_price=c.max_price_per_gpu_hour,
                                    mode="BALANCED", exclude_providers=c.exclude_providers,
-                                   include_providers=c.include_providers or None, limit=1000, now=now)
+                                   include_providers=c.include_providers or None, limit=1000, now=now, rows=rows)
+        if scale:       # a larger shape of a GPU that already fits: its listings join, its exclusions do not
+            for cd in rk["candidates"]:
+                b = bills.setdefault(cd["provider"], wsel.billing(cd["provider"]))
+                price_inst = cd["price_per_gpu_hour"] * n
+                cost = _cost(price_inst, b, budget, runtime_h)
+                if budget and runtime_h and cost["runtime_total_usd"] > budget + 1e-9:
+                    continue
+                cands.append({"c": cd, "gpu": g, "n": n, "spec": spec, "cost": cost, "price_inst": price_inst,
+                              "need": by_count[n], "scale": True, "bill": b})
+            continue
         for e in rk["exclusions"]:
             if e["code"] in DROP_EXCLUSION_CODES:
                 continue
@@ -272,7 +313,7 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
                 continue
             kept += 1
             cands.append({"c": cd, "gpu": g, "n": n, "spec": spec, "cost": cost, "price_inst": price_inst,
-                          "need": by_count[n]})
+                          "need": by_count[n], "scale": False, "bill": b})
         if not kept and not rk["candidates"]:
             codes = sorted({e["code"] for e in rk["exclusions"] if e["code"] not in DROP_EXCLUSION_CODES})
             excluded.append(_excl(g, "no_fresh_listing",
@@ -288,18 +329,51 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
     pool = list(best.values())
 
     if pool:
+        prec = prof.get("precision")
+        for x in pool:
+            x["perf"] = P.option_performance(x["spec"], x["n"], method=mem["method"], precision=prec, wk=wk,
+                                             params_b=params_b)
+            rt = x["perf"]["runtime"]
+            if rt.get("known"):
+                bill = x["bill"]
+                x["perf"]["job_cost"] = P.job_cost(x["price_inst"], rt["hours"], rt["range_hours"],
+                                                   lambda m, bill=bill: wsel.billed_minutes(m, bill))
+        # the price term: an option's estimated whole-job cost against the median job cost (what the user actually
+        # pays) when it has one; else its hourly instance price against the median hourly price
+        jobs = [x["perf"]["job_cost"]["usd"] for x in pool if x["perf"].get("job_cost")]
+        job_aware = bool(jobs)
+        med_job = statistics.median(jobs) if jobs else None
         med = statistics.median(x["price_inst"] for x in pool)
         for x in pool:
             vram = float(x["spec"]["vram_gb"]) * usable
             need = x["need"]["recommended_gb"]
             x["headroom"] = round((vram - need) / vram * 100, 1) if vram else 0.0
-            pct = (x["price_inst"] - med) / med if med else 0.0
+            jc = x["perf"].get("job_cost")
+            if jc and med_job:
+                pct = (jc["usd"] - med_job) / med_job
+            else:
+                pct = (x["price_inst"] - med) / med if med else 0.0
             nvl = bool(x["spec"].get("nvlink")) or x["spec"].get("form_factor") in ("SXM", "OAM", "Superchip")
             x["nvlink"] = nvl
             penalty = 0.1 if (x["n"] > 1 and not nvl) else 0.0
             x["value"] = round(0.55 * scoring.clamp(0.5 - pct) + 0.25 * x["c"]["score"]
                                + 0.20 * scoring.clamp(x["headroom"] / 40) - penalty, 4)
         pool.sort(key=lambda x: (-x["value"], x["price_inst"], x["gpu"], x["c"]["provider"], x["c"]["listing_id"]))
+        # at most one scale-up option per GPU model (its best-valued listing): an alternative, not a flood
+        seen_up: set = set()
+        kept_pool = []
+        for x in pool:
+            if x["scale"]:
+                if x["gpu"] in seen_up:
+                    continue
+                seen_up.add(x["gpu"])
+            kept_pool.append(x)
+        pool = kept_pool
+        if job_aware:
+            notes.append("Options are ranked by their estimated whole-job cost (theoretical runtime x price), not "
+                         "the hourly price: more GPUs can cost more per hour and less for the job.")
+    else:
+        job_aware = False
 
     mode = None
     pr: dict[str, dict] = {}
@@ -336,9 +410,22 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
         vram = float(spec["vram_gb"])
         why = [f"fits the {x['need']['recommended_gb']:g} GB per-GPU estimate with {x['headroom']:.0f}% headroom"
                + (f" ({n} GPUs, {x['need']['parallelism']})" if n > 1 else "")]
+        perf = x["perf"]
+        if x["scale"]:
+            sc = perf["scaling"]
+            why.append(f"scale-up: {n} GPUs where {n // 2} fit; est. {sc['speedup']:g}x one GPU's throughput "
+                       f"(range {sc['speedup_range'][0]:g} to {sc['speedup_range'][1]:g}x, "
+                       f"{perf['interconnect']['label']}; planning assumption)")
         lim = []
+        if n > 1:
+            lim.append(perf.get("memory_note") or f"{n} GPUs: the model is split across them")
+        if perf["runtime"].get("known") and spec.get("vendor") == "AMD":
+            lim.append("AMD (ROCm): achieved utilization is often lower than on NVIDIA for the same model, so this "
+                       "runtime estimate may be optimistic")
         if not bench.get(g):
-            lim.append("runtime not benchmarked: no measured benchmark for this workload on this GPU")
+            lim.append("runtime is a theoretical estimate: no measured benchmark for this workload on this GPU"
+                       if perf["runtime"].get("known") else
+                       "runtime not benchmarked: no measured benchmark for this workload on this GPU")
         if cd["available"] is None:
             lim.append("availability not reported by provider")
         if x["cost"]["billing_unit"] == "unknown":
@@ -363,10 +450,12 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
             "memory_fit": {"needed_per_gpu_gb": x["need"]["recommended_gb"], "min_per_gpu_gb": x["need"]["min_gb"],
                            "vram_gb": vram, "usable_vram_gb": round(vram * usable, 2), "headroom_pct": x["headroom"],
                            "fits": True},
-            "cost": x["cost"],
+            "cost": dict(x["cost"], estimated_job=perf.get("job_cost")),
             "theoretical": {"memory_bandwidth_tbps": spec.get("memory_bandwidth_tbps"),
                             "bf16_tflops_dense": spec.get("bf16_tflops_dense"), "nvlink": spec.get("nvlink"),
                             "released": spec.get("released"), "kind": "theoretical"},
+            "count_choice": "scale_up" if x["scale"] else "minimum",
+            "performance": perf,
             "value_score": x["value"], "market_score": cd["score"],
             "why": why, "limitations": lim,
             "execution": {"executable": executable, "reasons": reasons, "workload_supported": supported,
@@ -380,35 +469,79 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
     bfw = (roomy or pool)[0] if pool else None
     exe = next((x for x in pool if x["option"]["execution"]["executable"]), None)
 
-    # tiers, relative to the balanced pick
+    # tiers, relative to the balanced pick: total effective theoretical throughput over all of an option's GPUs
     if bfw is not None:
         ref_perf, ref_price = _perf(bfw["spec"]), bfw["price_inst"]
+        ref_eff = (bfw["perf"].get("effective") or {}).get("value")
         for x in pool:
             o = x["option"]
+            eff = (x["perf"].get("effective") or {}).get("value")
+            if ref_eff and eff:
+                rel = round(eff / ref_eff, 2)
+                rr = [round(v / ref_eff, 2) for v in x["perf"]["effective"]["range"]]
+                x["perf"]["relative_to_balanced"] = {"value": rel, "range": rr, "kind": "estimated",
+                                                     "basis": x["perf"]["basis"]["label"]}
             if x is bfw:
                 o["tier"] = "balanced"
                 o["why"].append("best workload value: price against the compatible market, OpenGrid's market score "
                                 "and memory headroom")
                 continue
-            perf = _perf(x["spec"])
-            if perf[0] > ref_perf[0] * 1.1 or (perf[0] == ref_perf[0] and perf[2] > ref_perf[2]):
-                o["tier"] = "higher_performance"
-                bw, rbw = x["spec"].get("memory_bandwidth_tbps"), bfw["spec"].get("memory_bandwidth_tbps")
-                o["why"].append(f"higher theoretical memory bandwidth ({bw:g} vs {rbw:g} TB/s, spec sheet, not a "
-                                "benchmark)" if bw and rbw else f"more VRAM ({x['spec']['vram_gb']:g} vs "
-                                                               f"{bfw['spec']['vram_gb']:g} GB)")
-            elif x["price_inst"] < ref_price * 0.9:
-                o["tier"] = "lower_cost"
-                o["why"].append(f"{(1 - x['price_inst'] / ref_price):.0%} cheaper per hour than the balanced pick")
+            if ref_eff and eff:
+                higher = eff > ref_eff * HIGHER_PERF
             else:
-                o["tier"] = "balanced"
+                perf = _perf(x["spec"])
+                higher = perf[0] > ref_perf[0] * 1.1 or (perf[0] == ref_perf[0] and perf[2] > ref_perf[2])
+            if higher:
+                o["tier"] = "higher_performance"
+                if ref_eff and eff:
+                    b = x["perf"]["basis"]
+                    tot = (f"{x['n']} x {b['per_gpu']:g} {b['unit']}" if x["n"] > 1 else f"{b['per_gpu']:g} {b['unit']}")
+                    o["why"].append(f"est. {eff / ref_eff:.2f}x the balanced pick's {b['metric'].replace('_', ' ')} "
+                                    f"({tot}{' after scaling' if x['n'] > 1 else ''}; spec sheet, not a benchmark)"
+                                    .replace("tflops", "throughput"))
+                else:
+                    bw, rbw = x["spec"].get("memory_bandwidth_tbps"), bfw["spec"].get("memory_bandwidth_tbps")
+                    o["why"].append(f"higher theoretical memory bandwidth ({bw:g} vs {rbw:g} TB/s, spec sheet, not a "
+                                    "benchmark)" if bw and rbw else f"more VRAM ({x['spec']['vram_gb']:g} vs "
+                                                                   f"{bfw['spec']['vram_gb']:g} GB)")
+            else:
+                jx, jr = x["perf"].get("job_cost"), bfw["perf"].get("job_cost")
+                if jx and jr and jx["usd"] < jr["usd"] * 0.9:
+                    o["tier"] = "lower_cost"
+                    o["why"].append(f"{(1 - jx['usd'] / jr['usd']):.0%} cheaper for the whole job than the balanced "
+                                    "pick (estimated)")
+                elif x["price_inst"] < ref_price * 0.9:
+                    o["tier"] = "lower_cost"
+                    o["why"].append(f"{(1 - x['price_inst'] / ref_price):.0%} cheaper per hour than the balanced pick")
+                else:
+                    o["tier"] = "balanced"
+            jx, jr = x["perf"].get("job_cost"), bfw["perf"].get("job_cost")
+            if jx and jr and jx["usd"] > jr["usd"] * 1.05:
+                o["why"].append(f"but est. +{(jx['usd'] / jr['usd'] - 1):.0%} for the whole job vs the balanced pick"
+                                + (" (it takes longer)" if x["perf"]["runtime"]["hours"] > bfw["perf"]["runtime"]["hours"] else ""))
             if x["price_inst"] > ref_price * 1.005:
                 o["why"].append(f"+{(x['price_inst'] / ref_price - 1):.0%} per hour vs the balanced pick")
     if cheapest is not None:
         cheapest["option"]["why"].append("cheapest fresh listing that fits the memory estimate")
+    # lowest estimated whole-job cost (training with known tokens): a per-hour price is not the job's price
+    costed = [x for x in pool if x["perf"].get("job_cost")]
+    lowjob = min(costed, key=lambda x: (x["perf"]["job_cost"]["usd"], x["perf"]["runtime"]["hours"], x["price_inst"]),
+                 default=None)
+    if lowjob is not None:
+        jc, rt = lowjob["perf"]["job_cost"], lowjob["perf"]["runtime"]
+        lowjob["option"]["why"].append(f"lowest estimated whole-job cost: ${jc['usd']:,.2f} (range "
+                                       f"${jc['range_usd'][0]:,.2f} to ${jc['range_usd'][1]:,.2f}) for about "
+                                       f"{rt['hours']:.3g} h (theoretical)")
+    for x in costed:
+        jc = x["perf"]["job_cost"]
+        if budget and jc["range_usd"][0] > budget + 1e-9:
+            x["option"]["limitations"].append(f"estimated job cost ${jc['range_usd'][0]:,.2f} to ${jc['range_usd'][1]:,.2f} "
+                                              f"is over your ${budget:,.2f} budget even at the fast end")
+        elif budget and jc["usd"] > budget + 1e-9:
+            x["option"]["limitations"].append(f"estimated job cost ${jc['usd']:,.2f} may exceed your ${budget:,.2f} budget")
 
     chosen = [x for x in pool][:limit]
-    for must in (cheapest, bfw, exe):
+    for must in (cheapest, bfw, exe, lowjob):
         if must is not None and must not in chosen:
             chosen = chosen[:limit - 1] + [must] if len(chosen) >= limit else chosen + [must]
     # presented lower cost -> balanced -> higher performance, cheapest first within a tier (value order breaks ties)
@@ -427,6 +560,15 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
     if bfw is not None:
         out["picks"]["best_for_workload"] = ref(bfw, f"best balance of price, market quality and memory headroom "
                                                      f"({bfw['headroom']:.0f}%) among fresh listings")
+    if lowjob is not None:
+        jc = lowjob["perf"]["job_cost"]
+        out["picks"]["lowest_estimated_job_cost"] = ref(lowjob, f"lowest estimated cost for the whole job: "
+                                                                f"${jc['usd']:,.2f} on {lowjob['n']} x {lowjob['gpu']} "
+                                                                "(theoretical runtime x observed price)")
+    elif pool:
+        out["picks_unavailable"]["lowest_estimated_job_cost"] = (
+            "runtime not estimated: " + str(wk.get("reason") or "training work unknown")
+            + (" (give dataset tokens and epochs)" if (mem["method"] or "").startswith("training") else ""))
     if exe is not None:
         out["picks"]["best_executable"] = ref(exe, "first option OpenGrid can launch for you now (readiness checks "
                                                    "pass and the workload is a supported template)")
@@ -437,7 +579,7 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
         notes.append("No option is executable through OpenGrid for this request: " + why_not
                      + ". The market recommendations above still apply.")
     if not pool:
-        for k in ("cheapest_market", "best_for_workload", "best_executable"):
+        for k in ("cheapest_market", "best_for_workload", "best_executable", "lowest_estimated_job_cost"):
             out["picks_unavailable"][k] = "no fresh, on-demand listing fits this workload under the constraints"
     if not pool:
         notes.append("No fresh, on-demand listing fits this workload under the constraints; see excluded.")

@@ -486,9 +486,14 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
   recommended VRAM, ranges, confidence and every assumption listed. Model configs from published HF configs.
 - **Recommender** (`intelligence/recommend.py`, `POST /v1/recommend`, `/v1/recommend/estimate`, public, read-only):
   compatible GPUs and counts → fresh on-demand listings via `rank_listings` (never `engine.preview`, no rows
-  written) → tiers (lower cost / balanced / higher performance by theoretical specs) and three picks
-  (cheapest advertised, best for the workload, best OpenGrid can run). Runtime is never invented: cost is
-  scenarios with stated assumptions and listed unknown costs. "Executable" needs the readiness checks and a
+  written) → tiers (lower cost / balanced / higher performance by total effective theoretical throughput) and
+  picks (cheapest advertised, best for the workload, best OpenGrid can run, lowest estimated whole-job cost).
+  Multi-GPU aware (`intelligence/performance.py`): each GPU model's smallest fitting count plus one scale-up
+  (2n) option, so 2 x H100 competes with 1 x H200; every option totals its GPUs (TFLOPS, VRAM, bandwidth),
+  names the GPU-to-GPU link (NVLink / bridged pairs / PCIe) and applies a stated scaling assumption with a range.
+  With the training dataset size (tokens x epochs) each option gets a theoretical runtime range (6/4/8 x N x T
+  FLOPs, 35% utilization, range 20-50%) and a whole-job cost range at its billing unit. Never a benchmark, always
+  labelled; without the dataset size runtime stays unknown and cost is scenarios. "Executable" needs the readiness checks and a
   supported workload (today only the MNIST template). `performance_observations` table (0020) is ready for
   measured benchmarks; no data yet.
 - **Local analyzer** (`cli/src/opengrid_cli/analyze`): allowlisted files only, `.gitignore`, symlink and size

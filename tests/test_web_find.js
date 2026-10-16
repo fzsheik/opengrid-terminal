@@ -122,6 +122,40 @@ eq(cl3[2].text, "None for this workload today", "no execution-ready option is sa
 const dangling = clone(REC); dangling.picks.best_for_workload = { option_id: "missing", reason: "x" };
 ok(F.pickCards(dangling)[1].option === null && F.pickCards(dangling)[1].empty, "a pick pointing at no option renders as empty, not broken");
 
+// ---------- training data: tokens in words -> dataset_tokens (unlocks runtime and whole-job cost) ----------
+eq(["200M", "1.5B", "50k", "2,000,000", "3e8", "200 million tokens", "1T"].map(F.tokensFromText), [2e8, 1.5e9, 5e4, 2e6, 3e8, 2e8, 1e12], "token counts in words");
+eq(["", "lots", "-5", "0", "200 apples"].map(F.tokensFromText), [null, null, null, null, null], "anything else is not a token count (never guessed)");
+const trq = F.requirementsFromForm({ task: "finetune", model: "Llama 3.1 8B", method: "full", tokens: "200M", epochs: "2" }, {});
+eq([trq.training.dataset_tokens, trq.training.epochs], [2e8, 2], "form: training data and epochs reach the request");
+ok(F.formErrors({ tokens: "lots" }).tokens && !F.formErrors({ tokens: "200M" }).tokens, "an unreadable token count is a field error");
+eq(F.queryFromState({ task: "infer", tokens: "200M", epochs: "2" }).tokens, null, "training data is dropped from the URL for inference");
+eq(F.stateFromQuery({ task: "train", tokens: "1.5B", epochs: "3" }).tokens, "1.5B", "training data survives a reload");
+ok(!("dataset_tokens" in (F.requirementsFromForm({ task: "infer", model: "Llama 3.1 8B", tokens: "200M" }, {}).training || {})), "inference: no training block");
+
+// ---------- multi-GPU performance and the whole-job pick ----------
+eq(F.pickCards(REC).length, 3, "no job-cost pick from the server: still the three cards");
+const withJob = clone(REC);
+const o2 = withJob.options[1];
+o2.gpu_count = 2; o2.count_choice = "minimum"; o2.price_per_instance_hour = 4.9;
+o2.performance = { basis: { label: "dense BF16 tensor throughput (training is compute bound)" }, total: { gpu_count: 2, vram_gb: 160 },
+  interconnect: { label: "NVLink / Infinity Fabric between every GPU", detail: "NVLink 4, 900 GB/s" },
+  scaling: { speedup: 1.86, speedup_range: [1.7, 1.96], basis: "planning assumption" }, effective: { value: 1840.47 },
+  relative_to_balanced: { value: 1.86, range: [1.7, 1.96] }, runtime: { known: true, hours: 5.54, range_hours: [3.68, 10.61], basis: "theoretical" },
+  job_cost: { usd: 27.2, range_usd: [18.05, 52.02] } };
+withJob.picks.lowest_estimated_job_cost = { option_id: o2.option_id, reason: "lowest estimated cost for the whole job" };
+const pj = F.pickCards(withJob);
+eq(pj.map(p => p.key), ["cheapest_market", "best_for_workload", "best_executable", "lowest_estimated_job_cost"], "the job-cost pick is a fourth, separate answer");
+ok(/Estimated/.test(pj[3].blurb) && /per hour and less for the job/.test(pj[3].blurb), "the job-cost pick says it is estimated and why it can differ from the hourly price");
+ok(F.conceptLines(withJob)[3].text.includes("≈ $27.20 for the job"), "summary strip: the job pick shows the job cost, not the hourly price");
+const pi = F.perfInfo(o2);
+eq([pi.n, pi.multi, pi.memory, pi.link, pi.speedup.text, pi.relative.text], [2, true, "160 GB total, split across 2 GPUs", "NVLink / Infinity Fabric between every GPU", "≈ 1.86× one GPU", "1.86× the balanced pick"], "perfInfo: totals, link, scaling, relative");
+eq([pi.runtime.text, pi.runtime.range, pi.jobCost.text, pi.jobCost.range], ["≈ 5.5 h", "3.7 h to 11 h", "$27.20", "$18.05 to $52.02"], "perfInfo: runtime and job-cost ranges in words");
+const unknownRt = F.perfInfo({ gpu_count: 1, performance: { runtime: { known: false, hours: 3 } } });
+ok(unknownRt.runtime === null && unknownRt.jobCost === null && !unknownRt.multi, "runtime known=false: no runtime shown, even with a stray number");
+ok(F.perfInfo(null).runtime === null && F.perfInfo({}).n === 1, "no performance block: nothing invented");
+eq([F.hoursText(0.25), F.hoursText(5.54), F.hoursText(30), F.hoursText(96)], ["15 min", "5.5 h", "30 h", "4.0 days"], "hours in words");
+ok(F.perfInfo({ count_choice: "scale_up", gpu_count: 2 }).scaleUp, "a scale-up option is marked");
+
 // ---------- readiness: stale / sold-out never deployable ----------
 const byId = id => F.optionById(REC, id);
 eq(F.readiness(byId("a100-80gb-sxm4:lambda:us-east-1:1")).code, "recommendation_only", "unsupported workload → recommendation only");

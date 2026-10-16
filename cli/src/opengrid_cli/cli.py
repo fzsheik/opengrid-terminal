@@ -549,6 +549,34 @@ def _opt_line(o: dict) -> str:
                                                    is not None else ""))
 
 
+def _perf_lines(o: dict) -> list[str]:
+    """An option's performance block in plain lines: totals over its GPUs, interconnect, scaling, runtime, job cost."""
+    pf = o.get("performance") or {}
+    out = []
+    tot, b, eff = pf.get("total") or {}, pf.get("basis") or {}, pf.get("effective") or {}
+    n = tot.get("gpu_count") or o.get("gpu_count") or 1
+    if b:
+        line = f"performance (estimated): {b.get('label')}"
+        if eff.get("value") is not None:
+            line += f"; effective {eff['value']:g} {eff.get('unit', '')}" + (f" ({eff.get('basis')})" if n > 1 else "")
+        rel = (pf.get("relative_to_balanced") or {}).get("value")
+        if rel is not None:
+            line += f"; {rel:g}x the balanced pick"
+        out.append(line)
+    if n > 1:
+        ic = pf.get("interconnect") or {}
+        out.append(f"{n} GPUs: {tot.get('vram_gb')} GB total, split across them; link: {ic.get('label')} "
+                   f"({ic.get('detail')})")
+    rt = pf.get("runtime") or {}
+    if rt.get("known"):
+        lo, hi = rt.get("range_hours") or [None, None]
+        jc = pf.get("job_cost") or {}
+        out.append(f"est. runtime {rt['hours']:.3g} h ({lo:.3g} to {hi:.3g} h); est. whole job "
+                   f"{fmt_price(jc.get('usd'))} ({fmt_price((jc.get('range_usd') or [None])[0])} to "
+                   f"{fmt_price((jc.get('range_usd') or [None, None])[1])}); theoretical, not a benchmark")
+    return out
+
+
 def show_recommendation(r: dict) -> None:
     e = r.get("estimate") or {}
     print("\nestimate (server-side; estimated):")
@@ -559,7 +587,7 @@ def show_recommendation(r: dict) -> None:
     picks = r.get("picks") or {}
     print("\npicks:")
     for key, label in (("cheapest_market", "cheapest market"), ("best_for_workload", "best for workload"),
-                       ("best_executable", "best executable")):
+                       ("best_executable", "best executable"), ("lowest_estimated_job_cost", "lowest job cost")):
         p = picks.get(key)
         if not p:
             why_none = (r.get("picks_unavailable") or {}).get(key)
@@ -572,7 +600,9 @@ def show_recommendation(r: dict) -> None:
     if r.get("options"):
         print("\noptions:")
     for o in r.get("options") or []:
-        print(f"  [{o.get('tier')}] {_opt_line(o)}")
+        print(f"  [{o.get('tier')}{', scale-up' if o.get('count_choice') == 'scale_up' else ''}] {_opt_line(o)}")
+        for line in _perf_lines(o):
+            print(f"      {line}")
         cost = o.get("cost") or {}
         for s in cost.get("scenarios") or []:
             print(f"      cost {s.get('hours')} h: {fmt_price(s.get('total_usd'))} ({s.get('assumption')})")

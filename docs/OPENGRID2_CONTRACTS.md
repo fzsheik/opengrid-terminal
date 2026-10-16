@@ -82,7 +82,10 @@ Body: WorkloadRequirements. Pure computation (no DB writes, no provider calls). 
   },
   "gpu_count": { "min": 1, "suggested": 1, "reason": "..." },
   "interconnect": { "needed": false, "reason": "..." },
-  "runtime": { "known": false, "reason": "no benchmark for this workload; runtime not estimated" },
+  "runtime": { "known": false, "estimable": true | false,      // estimable: training with a known dataset size
+               "reason": "runtime depends on the GPU: each option has a theoretical runtime range ..." },
+  "work": { "tokens": 2e8, "epochs": 1, "flops": 1.28e19, "flops_per_token_factor": 8,   // or {"tokens": null, "reason"}
+            "formula": "8 x parameters x tokens (...)", "assumptions": [...], "kind": "estimated" },
   "questions": [ { "field": "training.method", "question": "Full fine-tuning, LoRA or QLoRA?",
                    "why": "changes optimizer memory by ~10x" } ],
   "methodology": "/methodology/recommendations"
@@ -101,7 +104,8 @@ anonymous caller is reported as "sign in / API key required", never assumed.
   "picks": {
     "cheapest_market":  <option-ref> | null,   // cheapest fresh eligible listing that FITS memory
     "best_for_workload": <option-ref> | null,  // fits with headroom, balanced score, fresh
-    "best_executable":  <option-ref> | null    // first option OpenGrid can actually launch for this caller
+    "best_executable":  <option-ref> | null,   // first option OpenGrid can actually launch for this caller
+    "lowest_estimated_job_cost": <option-ref> | null  // lowest theoretical whole-job cost (training, dataset size known)
   },                                            // option-ref = {"option_id": "...", "reason": "..."}
   "picks_unavailable": { "best_executable": "the workload is not a supported template" },  // why each null pick is null
   "options": [ {
@@ -119,6 +123,19 @@ anonymous caller is reported as "sign in / API key required", never assumed.
               "unknown_costs": ["storage", "egress", "startup time"], "kind": "estimated" },
     "why": ["fits 29 GB estimate with 64% headroom", "cheapest fresh H100 SXM listing"],
     "limitations": ["runtime not benchmarked", "availability not reported by provider"],
+    "count_choice": "minimum" | "scale_up",     // scale_up: 2n GPUs of a model that fits on n (one per GPU model)
+    "performance": {                             // ESTIMATED from spec sheets + stated assumptions; never a benchmark
+      "basis": { "metric": "tflops" | "memory_bandwidth", "per_gpu": 989.5, "unit": "TFLOPS", "label": "..." } | null,
+      "total": { "gpu_count": 2, "vram_gb": 160, "bf16_tflops_dense": 1979.0, "memory_bandwidth_tbps": 6.7 },
+      "interconnect": { "kind": "single_gpu" | "nvlink" | "nvlink_bridge" | "pcie", "label": "...", "detail": "NVLink 4, 900 GB/s" },
+      "scaling": { "efficiency": 0.93, "range": [0.85, 0.98], "speedup": 1.86, "speedup_range": [1.7, 1.96], "basis": "..." },
+      "effective": { "value": 1840.47, "range": [...], "unit": "TFLOPS", "basis": "2 x 989.5 TFLOPS x 93% scaling" } | null,
+      "relative_to_balanced": { "value": 1.86, "range": [...], "basis": "..." } | null,
+      "memory_note": "160 GB in total, split 2 ways ...",          // multi-GPU only
+      "runtime": { "known": true, "hours": 5.54, "range_hours": [3.68, 10.61], "basis": "...", "assumptions": [...] }
+                 | { "known": false, "reason": "..." },
+      "job_cost": { "usd": 27.2, "range_usd": [18.05, 52.02], "billed_hours": 5.55, "basis": "..." }   // when runtime known
+    },
     "execution": { "executable": false, "reasons": [ {"code": "...", "reason": "..."} ],
                    "workload_supported": false,   // only the allowlisted MNIST template is runnable
                    "route_preview_url": "/route?gpu=h100-80gb-sxm5&count=1" }
@@ -134,7 +151,10 @@ anonymous caller is reported as "sign in / API key required", never assumed.
 
 Rules every interface must keep:
 - Prices are observed market data; never invented. Stale or sold-out listings are not presented as deployable.
-- Runtime is unknown unless a measured benchmark exists; cost is shown as scenarios with stated assumptions.
+- Runtime is never a benchmark. With a known training dataset size each option carries a THEORETICAL runtime and
+  whole-job cost range (labelled estimated); otherwise runtime is unknown and cost is shown as scenarios.
+- Multi-GPU options are compared on their totals after a stated scaling assumption, never as "n x one GPU", and
+  always say the model is split across the GPUs.
 - "Executable" requires the existing readiness checks AND a supported workload (today: the MNIST template).
 - `needs_gpu=false` recommendations must say so plainly and return no options.
 - `allow_spot: null` means not stated (treated as on-demand only); unknown `region` values are a 422 `unknown_region`.

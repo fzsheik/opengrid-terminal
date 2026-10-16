@@ -153,9 +153,24 @@ def fake_recommend(req, who, *, limit=10, now=None):
                                    "workload_supported": False,
                                    "route_preview_url": f"/route?gpu={slug}&count=1"}})
     opts = opts[:limit]
+    tokens = req.training.dataset_tokens
+    for o, tf in zip(opts, (362, 312, 989.5)):          # dense BF16 TFLOPS per GPU (spec sheet)
+        rt = {"known": False}
+        if tokens:
+            hrs = round(4 * 8e9 * tokens / (tf * 1e12 * 0.35) / 3600, 3)
+            rt = {"known": True, "kind": "estimated", "hours": hrs, "range_hours": [round(hrs * 0.7, 3), round(hrs * 1.75, 3)]}
+            o["performance"] = {"runtime": rt, "job_cost": {"usd": round(hrs * o["price_per_instance_hour"], 2),
+                                                            "range_usd": [round(hrs * 0.7 * o["price_per_instance_hour"], 2),
+                                                                          round(hrs * 1.75 * o["price_per_instance_hour"], 2)],
+                                                            "kind": "estimated"}}
+        else:
+            o["performance"] = {"runtime": rt}
+    costed = [o for o in opts if o["performance"].get("job_cost")]
+    low = min(costed, key=lambda o: o["performance"]["job_cost"]["usd"]) if costed else None
     picks = {"cheapest_market": opts and {"option_id": opts[0]["option_id"], "reason": "cheapest that fits"} or None,
              "best_for_workload": opts and {"option_id": opts[-1]["option_id"], "reason": "most headroom"} or None,
-             "best_executable": None}
+             "best_executable": None,
+             "lowest_estimated_job_cost": {"option_id": low["option_id"], "reason": "lowest estimated job cost"} if low else None}
     return {"estimate": est, "picks": picks, "options": opts,
             "excluded": [{"gpu": "NVIDIA L4 24GB", "code": "insufficient_vram", "reason": f"24 GB < {need} GB needed"}],
             "questions": est["questions"], "notes": ["Prices are observed list prices, not quotes."],
@@ -402,6 +417,15 @@ def test_multi_turn_context():
     assert f"Within $50.00: that buys about {hrs:g} hours" in r3["reply"] and "not benchmarked" in r3["reply"]
     assert not any(q["field"] == "constraints.budget_usd" for c in r3["cards"] if c["type"] == "questions"
                    for q in c["data"]), "a question already answered is not asked again"
+    # the amount of training data turns per-hour prices into a whole-job estimate (theoretical, labelled)
+    r3b = ask("200M tokens", r3["context"])
+    assert CALLS[-1]["req"]["training"]["dataset_tokens"] == 200_000_000
+    rec3b = r3b["cards"][0]["data"]
+    low = next(o for o in rec3b["options"] if o["option_id"] == rec3b["picks"]["lowest_estimated_job_cost"]["option_id"])
+    jc = low["performance"]["job_cost"]
+    assert "Lowest estimated cost for the whole job" in r3b["reply"] and f"${jc['usd']:,.2f}" in r3b["reply"], r3b["reply"]
+    assert "theoretical estimate" in r3b["reply"] and "not a benchmark" in r3b["reply"]
+    assert "Against $50.00:" in r3b["reply"]
     # a brand-new workload question starts fresh
     r4 = ask("inference for a 70B model", r3["context"])
     assert CALLS[-1]["req"]["model"]["parameters_b"] == 70.0 and r4["context"]["requirements"]["workload_type"] == "inference"
