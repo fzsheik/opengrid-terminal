@@ -110,7 +110,7 @@
       const heroEl = h("div", { class: "ix-hero" });
       const body = h("div", {}, OG.loading("Loading indices…"));
       const noteEl = h("p", { class: "note" });
-      root.append(OG.head("Indices", "Every OpenGrid index: chain-linked, one vote per provider, published only with enough constituents",
+      root.append(OG.head("Indices", "OpenGrid price indices. Each is published only when enough providers price it.",
         h("span", { class: "flt" }, h("span", {}, "Family"), famSeg), h("span", { class: "flt" }, h("span", {}, "Status"), pubSeg), search,
         h("a", { class: "btn", href: "/methodology/indices" }, "Methodology")),
         statsEl, heroEl, body, noteEl);
@@ -119,7 +119,7 @@
       async function load() {
         let res;
         try { res = await ctx.api("/v1/indices", { full: true, slot: "ix-list" }); }
-        catch (e) { if (!e.stale) body.replaceChildren(OG.error(e, load)); return; }
+        catch (e) { if (!e.stale && !st.rows) body.replaceChildren(OG.error(e, load)); return; }
         st.rows = res.data.map(r => Object.assign({}, r, (st.rows || []).find(o => o.id === r.id) && { _x: (st.rows || []).find(o => o.id === r.id)._x }));
         st.meta = res.meta;
         OG.status.asOf(res.meta && res.meta.as_of);
@@ -200,7 +200,7 @@
             fmt: (v, r) => !r._x ? h("span", { class: "dimmer" }, "·") : r._x.low ? h("span", { title: "at " + fmt.dateTime(r._x.low.hour) }, levelFmt(r._x.low.level, r.unit)) : OG.na("never published") },
           { key: "vol", label: "Vol 30d", num: true, desc: true, value: r => r._x && r._x.vol30 ? r._x.vol30.annualized : null, title: "Annualized realized volatility of hourly log returns, 30 days",
             fmt: (v, r) => !r._x ? h("span", { class: "dimmer" }, "·") : OG.value(v, volFmt, r._x.vol30 ? r._x.vol30.reason : "unavailable") },
-          { key: "constituents", label: fam === "composite" ? "Comp." : "Prov.", num: true, desc: true, title: fam === "composite" ? "Published components this hour" : "Included providers this hour (3 needed)",
+          { key: "constituents", label: fam === "composite" ? "Components" : "Providers", num: true, desc: true, title: fam === "composite" ? "Published components this hour" : "Included providers this hour (3 needed)",
             fmt: (v, r) => h("span", { class: r.published ? "" : "ix-low" }, String(v)) },
           { key: "spark", label: "7d", sort: false, csv: false, minor: 1, fmt: (v, r) => r._x && r._x.spark ? OG.charts.sparkline(r._x.spark, { width: 84, height: 18, dir: fmt.dir(r.changes["7d"]) }) : h("span", { class: "dimmer" }, r._x ? "-" : "·") },
           { key: "published", label: "Status", value: r => (r.published ? 1 : 0), desc: true, csv: r => (r.published ? "published" : "not published: " + r.reason), cls: "ix-st", fmt: (v, r) => statusCell(r) },
@@ -230,9 +230,8 @@
           parts.push(h("section", { class: "sec ix-fam" }, h("div", { class: "ix-fam-d" }, desc), t));
         }
         body.replaceChildren(...(parts.length ? parts : [OG.empty(st.rows.length ? "No index matches these filters." : "No index has data yet: indices compute hourly from the market rollup once listings are recorded.")]));
-        noteEl.replaceChildren(OG.kindBadge("observed"), " observed market prices (list prices as normalized), never quotes or execution prices. ",
-          "Changes are measured from the current published level; a change is n/a (hover) when history does not cover the window or the chain was rebased. ",
-          "* = last published level, shown dim when the index is not published now. ",
+        noteEl.replaceChildren(OG.kindBadge("observed"), " Built from list prices, not quotes. ",
+          "* = last published level (the index is not published now). Hover an n/a for the reason. ",
           h("a", { class: "lnk", href: "/methodology/indices" }, "How indices are computed →"));
       }
 
@@ -250,11 +249,18 @@
       const root = h("div", { class: "ix ix-d" });
       el.append(root);
       root.append(OG.loading("Loading index…"));
-      let d;
-      try { d = await ctx.api("/v1/indices/" + encodeURIComponent(id)); }
-      catch (e) {
-        root.replaceChildren(OG.head("Index " + id, null), OG.error(e), h("p", {}, h("a", { class: "lnk", href: "/indices" }, "All indices →")));
-        return;
+      let d = null;
+      // a failed first load offers "Try again" (a 404 shows none: retrying cannot help)
+      while (!d) {
+        try { d = await ctx.api("/v1/indices/" + encodeURIComponent(id)); }
+        catch (e) {
+          let again;
+          const retried = new Promise(r => { again = r; });
+          root.replaceChildren(OG.head("Index " + id, null), OG.error(e, () => { root.replaceChildren(OG.loading("Loading index…")); again(); }), h("p", {}, h("a", { class: "lnk", href: "/indices" }, "All indices →")));
+          if (e.status === 404) return;
+          await retried;
+          if (!ctx.alive()) return;
+        }
       }
       ctx.setTitle(d.name);
       const def = d.definition || {};
@@ -264,8 +270,8 @@
       const yf = v => levelFmt(v, d.unit);
 
       const winSeg = OG.seg(WINDOWS, st.win, v => { st.win = v; OG.qs.set({ window: v === "30d" ? null : v }); loadHistory(); });
-      const resSeg = OG.seg([["auto", "AUTO"], ["1h", "1H"], ["1d", "1D"]], st.res, v => { st.res = v; OG.qs.set({ res: v === "auto" ? null : v }); loadHistory(); });
-      const rawBtn = h("button", { class: "chip", "aria-pressed": String(st.raw), title: "Overlay the unchained cross-sectional statistic (moves when providers join/leave)", onclick: () => { st.raw = !st.raw; rawBtn.setAttribute("aria-pressed", String(st.raw)); OG.qs.set({ raw: st.raw ? "1" : null }); drawChart(); } }, "raw cross-section");
+      const resSeg = OG.seg([["auto", "Auto"], ["1h", "Hourly"], ["1d", "Daily"]], st.res, v => { st.res = v; OG.qs.set({ res: v === "auto" ? null : v }); loadHistory(); });
+      const rawBtn = h("button", { class: "chip", "aria-pressed": String(st.raw), title: "Also draw the plain statistic of each hour, without chain-linking (it jumps when providers join or leave)", onclick: () => { st.raw = !st.raw; rawBtn.setAttribute("aria-pressed", String(st.raw)); OG.qs.set({ raw: st.raw ? "1" : null }); drawChart(); } }, "Unlinked line");
       const gpuSlug = d.gpu ? OG.slug(d.gpu) : null;
       const chartEl = h("div", { class: "box box-p ix-chart" });
       const stripEl = h("div", { class: "ix-strip" });
@@ -278,16 +284,22 @@
       const fixSec = OG.section("Settlement fixings", fixEl);
       fixSec.hidden = true;  // shown only for settlement indices
 
+      // banner and stats are redrawn with every refresh, like the chart and constituents
+      const bannerEl = h("div", {}), statsEl = h("div", {});
+      const drawTop = () => {
+        bannerEl.replaceChildren(d.published ? "" : OG.insufficient(d.reason + (d.last_published ? ` · last published ${yf(d.last_published.level)} at ${fmt.dateTime(d.last_published.hour)}` : ""), "Not published"));
+        statsEl.replaceChildren(statsStrip());
+      };
       root.replaceChildren(...[
         OG.head(h("span", { class: "ix-title" }, h("span", { class: "eyebrow" }, FAM_LABEL[d.kind] || d.kind), d.name, h("span", { class: "ix-id" }, d.id)),
           d.interruptible ? "Interruptible capacity: spot instances can be reclaimed by the provider." : def.description,
-          h("span", { class: "flt" }, h("span", {}, "Window"), winSeg), h("span", { class: "flt" }, h("span", {}, "Res"), resSeg), d.kind !== "composite" ? rawBtn : null,
+          h("span", { class: "flt" }, h("span", {}, "Window"), winSeg),
           gpuSlug ? h("a", { class: "btn", href: "/gpu/" + gpuSlug }, OG.shortGpu(d.gpu) + " market →") : null,
           h("a", { class: "btn", href: "/methodology/indices" }, "Methodology")),
-        d.published ? null : OG.insufficient(d.reason + (d.last_published ? ` · last published ${yf(d.last_published.level)} at ${fmt.dateTime(d.last_published.hour)}` : ""), "Not published"),
-        statsStrip(),
+        bannerEl,
+        statsEl,
         h("div", { class: "cols ix-cols" },
-          h("div", {}, chartEl, stripEl, hoverEl, chartNote),
+          h("div", {}, h("div", { class: "bar ix-chart-ctl" }, h("span", { class: "flt" }, h("span", {}, "Points"), resSeg), d.kind !== "composite" ? rawBtn : null), chartEl, stripEl, hoverEl, chartNote),
           h("div", {}, OG.section("Definition", defEl), OG.section("Related", relEl))),
         OG.section(d.kind === "composite" ? "Components now" : "Constituents now", consEl), fixSec].filter(Boolean));
 
@@ -309,11 +321,12 @@
 
       /* ---- history ---- */
       let chart = null;
-      async function loadHistory() {
-        chartEl.replaceChildren(OG.loading("Loading history…")); chart = null;
+      // quiet (timed refresh): the chart stays on screen until the new history arrives
+      async function loadHistory(quiet) {
+        if (!quiet || !chart) { chartEl.replaceChildren(OG.loading("Loading history…")); if (chart) chart.destroy(); chart = null; }
         let hst;
         try { hst = await ctx.api(`/v1/indices/${encodeURIComponent(id)}/history`, { params: { window: st.win, resolution: st.res === "auto" ? null : st.res }, slot: "ix-hist" }); }
-        catch (e) { if (!e.stale) chartEl.replaceChildren(OG.error(e, loadHistory)); return; }
+        catch (e) { if (!e.stale && !(quiet && chart)) chartEl.replaceChildren(OG.error(e, () => loadHistory())); return; }
         st.resolved = hst.resolution;
         st.pts = fillGrid(hst.points || [], hst.resolution);
         drawChart();
@@ -351,15 +364,14 @@
                 st.resolved === "1d" ? h("span", { class: "dim" }, `  ${p.published_hours}/24 h published · range ${yf(p.low)} to ${yf(p.high)}`) : h("span", { class: "dim" }, `  ${p.constituents} constituent${p.constituents === 1 ? "" : "s"}${p.link_constituents != null ? ", " + p.link_constituents + " linked" : ""}${p.reason ? " · " + p.reason : ""}`)]
                 : [h("span", { class: "ix-unpub" }, h("i"), "not published: "), h("span", {}, p.reason || (st.resolved === "1d" ? "no published hour this day" : "no reason stored"))]);
           } };
-        chartEl.textContent = "";
         if (chart) chart.destroy();
+        chartEl.textContent = "";
         chart = OG.charts.timeseries(chartEl, opts);
-        ctx.onCleanup(() => chart && chart.destroy());
         drawStrip(pts);
         const gaps = pts.filter(p => !p.published).length;
         const isolated = lv.filter((v, i) => v != null && lv[i - 1] == null && lv[i + 1] == null).length;
-        chartNote.replaceChildren(OG.kindBadge("observed"), ` Chain-linked level, ${st.resolved === "1d" ? "daily close (last published hour)" : "hourly"}. Each hour's move is measured only on constituents present in both hours, so a provider joining or leaving cannot move it. `,
-          gaps ? `${gaps} unpublished ${st.resolved === "1d" ? "day" : "hour"}${gaps === 1 ? "" : "s"} in this window are gaps in the line and red in the strip below (hover for the reason). ` : "Published for every stored hour in this window. ",
+        chartNote.replaceChildren(`${st.resolved === "1d" ? "Daily close" : "Hourly level"}. A provider joining or leaving does not move the line. `,
+          gaps ? `${gaps} unpublished ${st.resolved === "1d" ? "day" : "hour"}${gaps === 1 ? "" : "s"} show as gaps (hover for the reason). ` : "Published for every stored hour in this window. ",
           events.length ? `${events.length} chain rebase${events.length === 1 ? "" : "s"} marked. ` : "",
           isolated ? `${isolated} published ${st.resolved === "1d" ? "day" : "hour"}${isolated === 1 ? " stands" : "s stand"} alone between gaps, so ${isolated === 1 ? "it has" : "they have"} no line segment; hover the chart to read ${isolated === 1 ? "it" : "them"}.` : "");
       }
@@ -409,7 +421,7 @@
               { key: "status", label: "Status", fmt: (v, r) => h("span", { class: v === "included" ? "ix-pub" : "ix-unpub" }, h("i"), STATUS_TXT[v] || v, r.linked === false ? h("span", { class: "dim" }, " · not linked this hour (rebased child)") : null) },
               { key: "segment_no", label: "Chain seg.", num: true, cls: "dim" },
             ] }),
-          h("p", { class: "note" }, "Weights are the definition's equal weights. The composite moves by the weighted mean of its published components' hourly relatives; it is published only when ≥ 50% of weight is published."));
+          h("p", { class: "note" }, "Equal weights. Published only when at least half the weight is published."));
           return;
         }
         const wt = weights(items, d.method);
@@ -428,7 +440,7 @@
               csv: r => (r._w ? r._w.w : null), fmt: (v, r) => (r._w ? h("span", { class: r._w.w ? "" : "dimmer", title: r._w.note || "" }, r._w.w ? (r._w.w * 100).toFixed(r._w.w === 1 ? 0 : 1) + "%" : r._w.note === "trimmed (20% each end)" ? "trimmed" : "0%") : h("span", { class: "dimmer" }, "-")) },
             { key: "recorded_since", label: "Recorded since", num: true, value: r => (r.recorded_since ? +new Date(r.recorded_since) : null), csv: r => r.recorded_since, fmt: v => (v ? fmt.dateTime(v) : "-"), title: "First hour OpenGrid recorded this provider for this GPU" },
           ] }),
-        h("p", { class: "note" }, "One vote per provider: its lowest eligible listing (on-demand, canonical, not sold out). Excluded when its feed was failing that hour or the vote is more than 3× above / below the median. Weight column is derived from the method; the level is chained on the providers common to consecutive hours."));
+        h("p", { class: "note" }, "One vote per provider: its lowest on-demand listing that is not sold out. A vote is left out when the feed was failing or it is more than 3× away from the median."));
       }
 
       function drawDef() {
@@ -477,8 +489,9 @@
           { label: "Latest hourly fixing", value: lv(lh), reason: lh ? lh.reason : "no hourly fixing yet", sub: lh ? fixUtc(lh.fixing_time) : null },
           { label: "Hourly status", value: lh ? fxStatus(lh) : null, reason: "no hourly fixing yet" },
         ]);
-        if (!rows.length) { fixEl.replaceChildren(strip, OG.empty("No fixing taken yet: an hour is fixed only once the rollup can no longer revise it (≈5 h).")); return; }
-        fixEl.replaceChildren(strip, OG.table({
+        if (!rows.length) { fixEl.replaceChildren(strip, OG.empty("No fixing taken yet: an hour is fixed about 5 hours later, once it can no longer change.")); return; }
+        const wasOpen = !!(fixEl.querySelector("details.ix-more") || {}).open;
+        fixEl.replaceChildren(strip, h("details", { class: "ix-more", open: wasOpen ? "" : null }, h("summary", {}, "Details: every fixing, with evidence"), OG.table({
           rows, compact: true, rowKey: r => r.fixing_id, csv: `opengrid-${id}-fixings.csv`, sort: { key: "fixing_time", dir: "desc" },
           title: `Official fixings · ${(daily.fixings || []).length} daily, ${((hourly && hourly.fixings) || []).length} hourly (latest, effective)`,
           rowClass: r => (r.status === "not_published" ? "out" : ""),
@@ -492,14 +505,20 @@
             { key: "fixing_id", label: "Evidence", sort: false, csv: r => r.fixing_id, fmt: v => h("a", { class: "lnk mono", href: "/v1/fixings/" + encodeURIComponent(v), target: "_blank", rel: "noopener", title: "full inputs, constituent snapshot and raw-snapshot evidence (JSON)" }, v.slice(0, 11) + "…") },
             { key: "verify", label: "", sort: false, csv: false, fmt: (v, r) => verifyBtn(r.fixing_id) },
           ] }),
-          h("p", { class: "note" }, OG.kindBadge("observed"), " Official fixings are taken only after an hour can no longer be revised, never change, and carry every input their value is recomputed from. The daily settlement is the TWAP of the day's hourly fixings. Corrections are new 'restated' rows; ",
-            h("a", { class: "lnk", href: "/v1/fixings/restatements", target: "_blank", rel: "noopener" }, "all restatements"), " · ",
-            h("a", { class: "lnk", href: "/methodology/settlement" }, "Settlement methodology →")));
+          h("p", { class: "note" }, "Fixings never change and keep every input. The daily settlement is the average of the day's hourly fixings. Corrections are new 'restated' rows (",
+            h("a", { class: "lnk", href: "/v1/fixings/restatements", target: "_blank", rel: "noopener" }, "raw list"), "). ")),
+          h("p", { class: "note" }, h("a", { class: "lnk", href: "/methodology/settlement" }, "Settlement methodology →")));
       }
 
-      drawConstituents(); drawDef(); drawRelated(); drawFixings();
+      ctx.onCleanup(() => chart && chart.destroy());
+      drawTop(); drawConstituents(); drawDef(); drawRelated(); drawFixings();
       loadHistory();
-      ctx.every(300000, async () => { const nd = await OG.api.soft("/v1/indices/" + encodeURIComponent(id)); if (nd && ctx.alive()) { d = nd; drawConstituents(); } loadHistory(); });
+      // every section refreshes together, so the page never shows two different hours
+      ctx.every(300000, async () => {
+        const nd = await OG.api.soft("/v1/indices/" + encodeURIComponent(id));
+        if (nd && ctx.alive()) { d = nd; drawTop(); drawConstituents(); drawDef(); drawRelated(); drawFixings(); }
+        loadHistory(true);
+      });
     },
   });
 })();

@@ -17,8 +17,7 @@
       const sum = h("span", { class: "dim mono", style: "font-size:11px" });
       const filters = h("div", { class: "bar" });
       const holder = h("div", {}, OG.loading("Loading listings…"));
-      el.append(OG.head("Explorer", "Every current listing from every provider, as observed. Filter, sort, share the URL, export CSV.",
-        h("button", { class: "btn", onclick: () => { for (const k of KEYS) f[k] = ""; sync(); buildFilters(); draw(); } }, "Reset")), filters, holder);
+      el.append(OG.head("Explorer", "Every current listing from every provider, exactly as published. Filters stay in the URL, so a view can be shared."), filters, holder);
 
       const sync = () => { const patch = {}; for (const k of KEYS) patch[k] = f[k] || null; OG.qs.set(patch); };
       let tmr = 0;
@@ -47,7 +46,9 @@
           select("tier", "Tier", distinct("provider_tier")),
           select("count", "GPUs", distinct("gpu_count", v => v + "×")),
           select("avail", "Stock", [["in", "in stock"], ["notout", "not sold out"], ["out", "sold out"], ["unknown", "unknown"]], "Any"),
-          input("min", "$ min", "0.00", "num"), input("max", "$ max", "∞", "num"));
+          input("min", "$ min", "0.00", "num"), input("max", "$ max", "∞", "num"),
+          h("span", { class: "spacer" }),
+          h("button", { class: "btn sm", onclick: () => { for (const k of KEYS) f[k] = ""; sync(); buildFilters(); draw(); } }, "Reset"));
       }
 
       const num = v => (v === "" || v == null || isNaN(Number(v)) ? null : Number(v));
@@ -82,17 +83,17 @@
           // a price of 0 is "not priced" (the provider published no rate), never "$0.000", and sorts last
           { key: "price_per_gpu_hour", label: "$/GPU·h", num: true, value: r => (r.price_per_gpu_hour > 0 ? r.price_per_gpu_hour : null), csv: r => r.price_per_gpu_hour,
             fmt: v => (v > 0 ? fmt.price(v) : OG.na("no price published for this listing")), cls: "strong" },
-          { key: "last_change", label: "Last chg", num: true, title: "Change from the previous recorded price of this listing (observed)",
+          { key: "last_change", label: "Last change", num: true, title: "Change from the previous recorded price of this listing (observed)",
             value: r => (r.previous_price_per_gpu_hour && r.price_per_gpu_hour != null ? r.price_per_gpu_hour / r.previous_price_per_gpu_hour - 1 : null),
             fmt: (v, r) => (r.previous_price_per_gpu_hour && r.price_per_gpu_hour != null ? h("span", { title: `was ${fmt.price(r.previous_price_per_gpu_hour)}, changed ${fmt.dateTime(r.changed_at)}` }, OG.chg(r.price_per_gpu_hour / r.previous_price_per_gpu_hour - 1)) : h("span", { class: "dimmer" }, "-")) },
           { key: "price_per_instance_hour", label: "$/inst·h", num: true, value: r => (r.price_per_instance_hour > 0 ? r.price_per_instance_hour : null), csv: r => r.price_per_instance_hour, fmt: v => (v > 0 ? fmt.price(v) : "-"), minor: 4 },
           { key: "region", label: "Region", cls: "dim", ell: 140 },
-          { key: "country", label: "Ctry", cls: "dim", minor: 5 },
+          { key: "country", label: "Country", cls: "dim", minor: 5 },
           { key: "market_type", label: "Market", cls: "dim" },
           { key: "provider_tier", label: "Tier", cls: "dim", minor: 6 },
-          { key: "interruptible", label: "Intr", title: "Interruptible (can be preempted)", fmt: v => v === true ? "yes" : v === false ? "no" : "-", cls: "dim", minor: 5 },
+          { key: "interruptible", label: "Interruptible", title: "Can be preempted (spot)", fmt: v => v === true ? "yes" : v === false ? "no" : "-", cls: "dim", minor: 5 },
           { key: "available", label: "Stock", fmt: v => stock(v) },
-          trust ? { key: "avail_basis", label: "Stock basis", value: r => (trustOf(r) || {}).availability_basis ?? null, cls: "dim", minor: 7 } : null,
+          trust ? { key: "avail_basis", label: "Stock basis", title: "How the stock figure is known", value: r => (trustOf(r) || {}).availability_basis ?? null, cls: "dim", minor: 7 } : null,
           { key: "vcpu", label: "vCPU", num: true, minor: 9 },
           { key: "ram_gb", label: "RAM", num: true, fmt: v => v != null ? fmt.num(v, 0) + "G" : "-", minor: 9 },
           { key: "source_type", label: "Source", value: r => (trustOf(r) || {}).source_type || (OG.providerMeta(r.provider) || {}).source_type || null, cls: "dim", title: "How OpenGrid reads this provider (provider_meta)", minor: 8 },
@@ -116,40 +117,39 @@
             empty: "No listings match these filters.",
           });
           holder.replaceChildren(tbl, h("p", { class: "note" }, OG.kindBadge("observed"),
-            " Prices and stock exactly as each provider reports them, normalized to USD per GPU-hour. Market lines elsewhere use a stricter subset (on-demand, not interruptible, in stock or unknown). ",
+            " Prices and stock as each provider reports them, in USD per GPU-hour. ",
             h("a", { class: "lnk", href: "/methodology" }, "Methodology")));
         } else tbl.update(list);
       }
-      function rebuildTable() { tbl = null; draw(); }
 
+      // Optional enrichments (extra columns) are read alongside the first load, so the table is built once
+      const listOf = r => (Array.isArray(r) ? r : r && Array.isArray(r.items) ? r.items : null);
+      const enrich = Promise.all([OG.api.soft("/v1/gpus", { params: { limit: 1000 } }), OG.api.soft("/v1/trust/listings", { params: { limit: 1000 } })]).then(([g, t]) => {
+        const gl = listOf(g), tl = listOf(t);
+        if (gl) {
+          const m = new Map();
+          for (const x of gl) {
+            const name = x.name || x.gpu || x.canonical_name, sp = x.spec || x.hardware || x;
+            if (name && (sp.vram_gb != null || sp.architecture)) m.set(name, { vram_gb: sp.vram_gb, architecture: sp.architecture });
+          }
+          if (m.size) specs = m;
+        }
+        if (tl && tl.length) trust = new Map(tl.map(x => [x.provider + "\u0000" + x.listing_id, x]));
+      });
+      // a failed refresh keeps the rows already on screen
       async function load() {
         try {
-          rows = await ctx.api("/listings");
+          const next = await ctx.api("/listings");
+          await enrich;
+          rows = next;
           const newest = rows.reduce((m, r) => (r.observed_at && r.observed_at > m ? r.observed_at : m), "");
           if (newest) OG.status.asOf(newest);
           if (!filters.firstChild) buildFilters();
           draw();
-        } catch (e) { holder.replaceChildren(OG.error(e, load)); }
+        } catch (e) { if (!rows) holder.replaceChildren(OG.error(e, load)); }
       }
       load();
       ctx.every(120000, load);
-      // Optional enrichments: add columns when the /v1 endpoints exist
-      OG.api.soft("/v1/gpus", { params: { limit: 1000 } }).then(r => {
-        const list = Array.isArray(r) ? r : r && Array.isArray(r.items) ? r.items : null;
-        if (!ctx.alive() || !list) return;
-        const m = new Map();
-        for (const g of list) {
-          const name = g.name || g.gpu || g.canonical_name, sp = g.spec || g.hardware || g;
-          if (name && (sp.vram_gb != null || sp.architecture)) m.set(name, { vram_gb: sp.vram_gb, architecture: sp.architecture });
-        }
-        if (m.size) { specs = m; rebuildTable(); }
-      });
-      OG.api.soft("/v1/trust/listings", { params: { limit: 1000 } }).then(r => {
-        const list = Array.isArray(r) ? r : r && Array.isArray(r.items) ? r.items : null;
-        if (!ctx.alive() || !list || !list.length) return;
-        trust = new Map(list.map(t => [t.provider + "\u0000" + t.listing_id, t]));
-        rebuildTable();
-      });
     },
   });
 })();

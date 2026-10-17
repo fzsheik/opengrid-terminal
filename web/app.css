@@ -654,7 +654,6 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .ev-side { position: sticky; top: 0; }
 .ev-legend { border: 1px solid var(--line); border-radius: 3px; background: var(--surface); max-height: calc(100vh - 150px); overflow: auto; }
 .ev-lg { display: block; width: 100%; text-align: left; padding: 5px 8px 6px; border-bottom: 1px solid var(--line); }
-.ev-lg:hover { background: var(--hover); }
 .ev-lg.on { background: var(--blue-bg); box-shadow: inset 2px 0 0 var(--accent); }
 .ev-lg-h { display: flex; align-items: center; gap: 6px; }
 .ev-lg-h .ev-ty { width: 64px; flex: none; }
@@ -1115,7 +1114,6 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 @media (max-width: 1080px) { .gp-grid { grid-template-columns: minmax(0, 1fr); } .gp-quote { flex-direction: column; } .gp-quote .stats { border-left: 0; border-top: 1px solid var(--line); } }
 /* /compare */
 .cmp-pick { border-bottom: 1px solid var(--line); padding-bottom: 8px; }
-.cmp-presets { display: inline-flex; gap: 10px; font-size: var(--fs-sm); flex-wrap: wrap; }
 .cmp-heads { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 4px 0 6px; }
 .cmp-side { display: flex; justify-content: space-between; align-items: center; gap: 10px; border: 1px solid var(--line); border-top: 2px solid var(--line-2); background: var(--surface); border-radius: 3px; padding: 6px 10px; }
 .cmp-name { font-size: var(--fs-lg); font-weight: 600; }
@@ -1140,12 +1138,21 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .cmp-focus { border: 1px solid var(--line-2); border-radius: 3px; padding: 5px 10px; margin-bottom: 8px; font-size: var(--fs-base); }
 .cmp-start { display: flex; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 1080px) { .cmp-grid, .cmp-heads { grid-template-columns: minmax(0, 1fr); } }
+/* market pages: links to account-only pages (Route) carry a lock until signed in */
+body.og-signed-in .acct-lnk .acct-lock { display: none; }
+/* market pages: secondary / technical detail folded under a "Details" disclosure */
+.gp-more, .pd-more, .ix-more { margin-top: 6px; }
+.gp-more > summary, .pd-more > summary, .ix-more > summary { cursor: pointer; font-size: var(--fs-xs); color: var(--muted); width: max-content; }
+.gp-more[open] > summary, .pd-more[open] > summary, .ix-more[open] > summary { margin-bottom: 6px; }
+.pv-details > summary.sec-h, .pd-map > summary.sec-h, .nw-details > summary.sec-h, .ops-more > summary.sec-h { cursor: pointer; width: max-content; }
+.pv-details[open] > summary.sec-h, .pd-map[open] > summary.sec-h, .nw-details[open] > summary.sec-h, .ops-more[open] > summary.sec-h { margin-bottom: 8px; }
+.ops-more { margin-top: 14px; }
+.ix-chart-ctl { margin-bottom: 6px; }
 /* ---- end page: gpu/gpus/compare ---- */
 .hm-ctl { gap: 12px; margin-bottom: 10px; }
 .hm-basis { font: var(--fs-xs) var(--mono); }
 .hm-legend { font-size: var(--fs-sm); color: var(--text-2); margin: 0 0 6px; line-height: 1.5; }
 .hm-legend b { font-weight: 600; color: var(--text); }
-.hm-k { font: 600 var(--fs-2xs) var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line-2); border-radius: 2px; padding: 0 4px; margin-right: 6px; }
 .hm-box { overflow-x: auto; }
 .hm-page .stat-v .lnk { font-size: var(--fs-base); }
 
@@ -1204,8 +1211,6 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .nw-f { gap: 10px; margin-bottom: 6px; }
 .nw-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
 .nw-chips .chip { height: 20px; font-size: var(--fs-xs); padding: 0 7px; }
-.nw-active { font-size: var(--fs-xs); margin-bottom: 6px; }
-.nw-active:empty { display: none; }
 .nw-cols { grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); }
 .nw-hd { display: flex; justify-content: flex-end; margin: -2px 0 4px; }
 .nw-count { font: var(--fs-xs) var(--mono); }

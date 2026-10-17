@@ -5,21 +5,21 @@
   const { h, fmt, Lib: L } = OG;
   const share = v => (v == null ? "-" : Math.round(v * 100) + "%");
   const GROUPS = [
-    ["provider", "GPU × provider", [["gpu-provider-premium", "Premium vs market"], ["gpu-provider-availability", "Availability"], ["gpu-provider-change24h", "24h change"]]],
-    ["region", "GPU × region", [["gpu-region-cheapest", "Cheapest"], ["gpu-region-premium", "Premium vs global"], ["gpu-region-availability", "Priced listings"]]],
+    ["provider", "GPU × provider", [["gpu-provider-premium", "Price vs market"], ["gpu-provider-availability", "Availability"], ["gpu-provider-change24h", "24h change of lowest price"]]],
+    ["region", "GPU × region", [["gpu-region-cheapest", "Cheapest"], ["gpu-region-premium", "Price vs global"], ["gpu-region-availability", "Priced listings"]]],
     ["time", "GPU × day", [["gpu-time-volatility", "Volatility"], ["gpu-time-availability", "Availability"], ["gpu-time-change", "Daily change"]]],
   ];
   // per kind: scale, value format, domain rule, what a colour means
   const K = {
-    "gpu-provider-premium": { div: true, f: fmt.pct, cap: 1, read: "provider's lowest vs the median of the other providers' lowest, now. Blue = cheaper than the rest of the market, red = dearer." },
-    "gpu-provider-availability": { f: share, dom: [0, 1], days: true, read: "share of tracked hours the provider had a priced listing for that GPU." },
-    "gpu-provider-change24h": { div: true, f: fmt.pct, cap: 0.25, read: "provider's lowest at the latest rollup hour vs 24 hours earlier." },
-    "gpu-region-cheapest": { f: fmt.price, invert: true, units: "USD / GPU-hour", read: "cheapest priced listing in the region group, USD per GPU-hour. Brighter = cheaper." },
-    "gpu-region-premium": { div: true, f: fmt.pct, cap: 1, read: "median provider lowest in the region vs the global median for that GPU." },
-    "gpu-region-availability": { f: v => fmt.num(v), read: "number of priced listings in the region group now." },
-    "gpu-time-volatility": { f: v => (v * 100).toFixed(2) + "%", days: true, read: "stdev of hourly log changes of the market median that day (≥ 12 changes, else empty)." },
-    "gpu-time-availability": { f: share, dom: [0, 1], days: true, read: "provider-hours priced / provider-hours tracked that day." },
-    "gpu-time-change": { div: true, f: fmt.pct, cap: 0.2, days: true, read: "market median close vs the previous day's close." },
+    "gpu-provider-premium": { div: true, f: fmt.pct, cap: 1, m: "provider-value", read: "provider's lowest vs the median of the other providers' lowest, now. Blue = cheaper than the rest of the market, red = dearer." },
+    "gpu-provider-availability": { f: share, dom: [0, 1], days: true, m: "provider-value", read: "share of tracked hours the provider had a priced listing for that GPU." },
+    "gpu-provider-change24h": { div: true, f: fmt.pct, cap: 0.25, m: "events", read: "24h change of each provider's lowest price (latest hour vs 24 hours earlier)." },
+    "gpu-region-cheapest": { f: fmt.price, invert: true, units: "USD / GPU-hour", m: "data-trust", read: "cheapest priced listing in the region group, USD per GPU-hour. Brighter = cheaper." },
+    "gpu-region-premium": { div: true, f: fmt.pct, cap: 1, m: "dispersion", read: "median provider lowest in the region vs the global median for that GPU." },
+    "gpu-region-availability": { f: v => fmt.num(v), m: "data-trust", read: "number of priced listings in the region group now." },
+    "gpu-time-volatility": { f: v => (v * 100).toFixed(2) + "%", days: true, m: "indices", read: "how much the market median moved hour to hour that day (empty with fewer than 12 changes)." },
+    "gpu-time-availability": { f: share, dom: [0, 1], days: true, m: "data-trust", read: "provider-hours priced / provider-hours tracked that day." },
+    "gpu-time-change": { div: true, f: fmt.pct, cap: 0.2, days: true, m: "indices", read: "market median close vs the previous day's close." },
   };
   const groupOf = kind => GROUPS.find(g => g[2].some(k => k[0] === kind)) || GROUPS[0];
   const pctl = (arr, q) => { const a = arr.slice().sort((x, y) => x - y); return a.length ? a[Math.min(a.length - 1, Math.floor(q * (a.length - 1) + 0.5))] : null; };
@@ -31,9 +31,8 @@
       const st = { kind: K[OG.qs.get("kind")] ? OG.qs.get("kind") : "gpu-provider-premium", days: OG.qs.get("days"), order: OG.qs.get("order", "coverage"), empty: OG.qs.get("empty") === "1" };
       const grpHold = h("div", { class: "pv-hold" }), kindHold = h("div", { class: "pv-hold" }), dayHold = h("div", { class: "pv-hold" }), ordHold = h("div", { class: "pv-hold" });
       const statsEl = h("div", {}), chartEl = h("div", { class: "box box-p hm-box" }), legendEl = h("div", { class: "hm-legend" });
-      el.append(OG.head("Heatmaps", "Where each GPU is cheap, dear, available or moving, across providers, regions and days. Hatched = no data, not zero.",
-        h("span", { class: "flt" }, h("span", {}, "Order"), ordHold)),
-        h("div", { class: "bar hm-ctl" }, grpHold, kindHold, h("span", { class: "spacer" }), dayHold),
+      el.append(OG.head("Heatmaps", "Where each GPU is cheap, dear, available or moving. Hatched cells have no data (not zero)."),
+        h("div", { class: "bar hm-ctl" }, grpHold, kindHold, h("span", { class: "spacer" }), dayHold, h("span", { class: "flt" }, h("span", {}, "Sort"), ordHold)),
         statsEl, legendEl, chartEl);
 
       function drawCtl() {
@@ -47,10 +46,15 @@
       function setKind(k) { st.kind = k; st.days = null; OG.qs.set({ kind: k === "gpu-provider-premium" ? null : k, days: null }); drawCtl(); load(); }
 
       let res = null, chart = null;
+      // a timed refresh keeps the matrix on screen; only a new kind or window shows the spinner
+      let shownKey = null;
       async function load() {
-        chartEl.replaceChildren(OG.loading("Loading matrix…"));
-        try { res = await ctx.api("/v1/heatmaps/" + st.kind, { params: K[st.kind].days && st.days ? { days: st.days } : null, full: true, slot: "hm" }); }
-        catch (e) { if (!e.stale) chartEl.replaceChildren(OG.error(e, load)); return; }
+        const key = st.kind + "|" + (st.days || "");
+        if (!res || shownKey !== key) { res = null; chartEl.replaceChildren(OG.loading("Loading matrix…")); if (chart) { chart.destroy(); chart = null; } }
+        let r;
+        try { r = await ctx.api("/v1/heatmaps/" + st.kind, { params: K[st.kind].days && st.days ? { days: st.days } : null, full: true, slot: "hm" }); }
+        catch (e) { if (!e.stale && shownKey !== key) chartEl.replaceChildren(OG.error(e, load)); return; }
+        res = r; shownKey = key;
         OG.status.asOf(res.meta && res.meta.as_of);
         draw();
       }
@@ -84,10 +88,10 @@
           { label: "GPUs", value: String(rows.length) },
           { label: isProv ? "Providers" : isTime ? "Days" : "Region groups", value: String(cols.length) },
           { label: "Cells with data", value: total ? share(all.length / total) : null, reason: "empty matrix", sub: `${all.length} of ${total}` },
-          isTime ? null : { label: "No comparison", value: String(single), sub: `GPUs with ≤ 1 ${isProv ? "provider" : "region"} cell`, title: "A GPU sold by one provider (or in one region) cannot be compared: its premium is undefined, not zero" },
+          isTime ? null : { label: isProv ? "Single provider" : "Single region", value: String(single), sub: "GPUs with nothing to compare", title: "A GPU sold by one provider (or in one region) cannot be compared: its premium is undefined, not zero" },
           isTime ? null : { label: isProv ? "Median coverage" : "Median regions", value: perRow.length ? String(pctl(perRow, 0.5)) : null, reason: "no rows", sub: `${isProv ? "providers" : "regions"} per GPU` },
           widest ? { label: "Widest spread", value: h("span", {}, OG.gpuLink(rows[widest.i])), sub: `${kd.f(widest.lo)} → ${kd.f(widest.hi)}`, title: "GPU with the largest gap between its lowest and highest cell" } : null,
-          { label: "Basis", value: meta.basis || (isTime ? `last ${st.days || 30} days` : "current") },
+          { label: "Covers", value: meta.basis || (isTime ? `last ${st.days || 30} days` : "now") },
         ]));
 
         // domain
@@ -100,11 +104,11 @@
           const top = p95 != null && p95 > e[0] && p95 < e[1] * 0.8 ? p95 : e[1];
           domain = st.kind === "gpu-region-availability" ? [0, top || 1] : [e[0], top];
         }
-        legendEl.replaceChildren(...[h("span", { class: "hm-k" }, kd.div ? "diverging" : "sequential"),
+        legendEl.replaceChildren(...[
           h("span", {}, h("b", {}, groupOf(st.kind)[2].find(k => k[0] === st.kind)[1] + ": "), kd.read),
           h("span", { class: "dim" }, ` Unit: ${meta.unit || "-"}${meta.definition ? " · " + meta.definition : ""}${meta.min_hours ? ` · needs ≥ ${meta.min_hours} hours` : ""}${kd.div ? ` · colour clipped at ±${fmt.pct(domain[2]).replace("+", "")}` : ""}.`),
           meta.hour ? h("span", { class: "dim" }, ` Hour ${fmt.dateTime(meta.hour)}.`) : null,
-          " ", h("a", { class: "lnk dim", href: "/methodology/" + (st.kind === "gpu-provider-availability" ? "provider-value" : "dispersion") }, "Methodology →"),
+          " ", h("a", { class: "lnk dim", href: "/methodology/" + (kd.m || "dispersion") }, "Methodology →"),
           hidden.length ? h("div", { class: "dim hm-hidden" }, `${hidden.length} GPU${hidden.length === 1 ? "" : "s"} with no cell hidden${st.kind.endsWith("-premium") ? " (a premium needs a second provider or region to compare with)" : ""}: `,
             hidden.slice(0, 14).map((i, k) => [k ? ", " : "", OG.gpuLink(d.rows[i])]), hidden.length > 14 ? " …" : "", ". ",
             h("a", { class: "lnk", href: "#", onclick: e => { e.preventDefault(); st.empty = true; OG.qs.set({ empty: "1" }); drawCtl(); draw(); } }, "Show them")) : null].filter(Boolean));
