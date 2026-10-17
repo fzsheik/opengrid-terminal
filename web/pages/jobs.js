@@ -1134,11 +1134,14 @@
         const epochsIn = h("input", { class: "field num", type: "number", min: eb.min, max: eb.max, step: 1, value: eb.default ?? 3, inputmode: "numeric", "aria-label": "Epochs" });
         const demoMsg = h("div", { class: "jb-easy-msg", "aria-live": "polite" });
         const walkBox = h("div");
+        // the walkthrough and its "Show" button take turns: never both on screen
+        const walkBtn = h("button", { class: "btn sm", type: "button", onclick: () => showWalk() }, "Show the walkthrough");
         const showWalk = () => {
+          walkBtn.hidden = true;
           const rows = walkthrough(+epochsIn.value || eb.default || 3);
           walkBox.replaceChildren(h("section", { class: "cx-walk", "aria-label": "Walkthrough of the example job" },
             h("div", { class: "cx-walk-h" }, h("b", {}, "Walkthrough"), OG.badge("example only: not a real job", "warn"), h("span", { class: "spacer" }),
-              h("button", { class: "btn sm", type: "button", onclick: () => walkBox.replaceChildren() }, "Hide")),
+              h("button", { class: "btn sm", type: "button", onclick: () => { walkBox.replaceChildren(); walkBtn.hidden = false; } }, "Hide")),
             h("ol", {},
               h("li", {}, h("b", {}, "Preparing. "), "OpenGrid checks the job's settings against the MNIST template's limits."),
               h("li", {}, h("b", {}, "Running. "), `${rows.length} epoch${rows.length === 1 ? "" : "s"} of training are simulated. A real run would rent a GPU here, after OpenGrid approves the price.`),
@@ -1167,7 +1170,7 @@
           h("p", {}, "A small model learns to read handwritten digits (PyTorch MNIST). The simulation takes it through every step a real job takes and shows the progress, results and cost."),
           h("ul", { class: "cx-facts-line" }, h("li", {}, "Simulated: no GPU is rented"), h("li", {}, "No provider charge"), h("li", {}, "Finishes in seconds")),
           demoAct, demoMsg,
-          h("div", { class: "cx-acts" }, h("button", { class: "btn sm", type: "button", onclick: showWalk }, "Show the walkthrough")),
+          h("div", { class: "cx-acts" }, walkBtn),
           walkBox);
         if (!signedIn) showWalk();
 
