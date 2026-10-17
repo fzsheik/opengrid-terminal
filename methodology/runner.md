@@ -27,12 +27,14 @@ code**, and it never receives provider or storage credentials. Code: `runner/`. 
 
 During training the reporter also sends a `gpu` event every 15 s (`nvidia-smi`: utilization, memory used,
 temperature, power) and forwards every non-JSON line of trainer stdout/stderr as `log` (≤ 4,000 chars per
-line, ≤ 5,000 lines, then counted).
+line, ≤ 5,000 lines, then counted). These samples double as the liveness signal: a runner that reported and
+then sends nothing for `JOB_RUNNER_SILENCE_MINUTES` (10; while still initializing, the 20-minute bootstrap
+timeout) becomes `runner_lost` and is terminated (methodology/jobs.md section 3).
 
 After `complete` the script idles. **It never shuts the OS down**: Lambda documents that `shutdown`/`poweroff`
 put the instance in *Alert* status "and billing will continue". OpenGrid terminates the instance through
 the provider API (existing `deployments.terminate` → tracker/reconcile), on complete, on failure, on the
-deadline, or on cancel, whether or not the runner ever calls back.
+deadline, when the runner goes silent, or on cancel, whether or not the runner ever calls back.
 
 ## 2. Pinned software and where the pins come from
 

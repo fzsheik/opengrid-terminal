@@ -231,6 +231,17 @@ eq(J.nextStep({ status: "training_completed", finished: true, sandbox: true, out
 eq(J.nextStep({ status: "orphan_suspected", resource: { deployment_id: "dep_1" } }).href, "/deployments/dep_1", "possibly billing: open the deployment");
 eq(J.nextStep({ status: "pending_approval", route_request_id: "rr_1" }, null, { admin: true }).href, "/route?rr=rr_1", "admin + pending approval: the approval ticket");
 eq(J.nextStep({ status: "pending_approval" }, null, {}).href, null, "customer + pending approval: nothing to do");
+// runner_lost (jobs/sync.py: the runner reported, then went silent): a red workload failure, terminated like the others
+eq(J.plainState("runner_lost"), "Lost contact with the GPU", "runner_lost in plain words");
+ok(J.FAILED.includes("runner_lost") && J.MAY_BILL.includes("runner_lost") && J.tone("runner_lost") === "bad" && !J.isTerminal({ status: "runner_lost" }), "runner_lost: failed, may bill, keeps polling");
+const lostRun = { status: "runner_lost", outcome: "failed", failure: { code: "runner_lost", reason: "the GPU machine stopped reporting for 12 minutes" }, resource: { deployment_id: "dep_9", possibly_billing: true, disposition: "possibly_billing" } };
+const lostNext = J.nextStep(lostRun);
+ok(/stopped reporting/.test(lostNext.text) && lostNext.href === "/deployments/dep_9", "runner_lost while the GPU may bill: says so, links the deployment");
+ok(J.needsAttention(lostRun) && J.stages(lostRun).steps.find(x => x.key === "running").mark === "failed", "runner_lost needs attention while billing; fails the Running stage");
+eq(J.timeline({ events: [{ at: "2026-10-01T00:00:01Z", from: "training", to: "runner_lost" }] }).map(x => [x.text, x.tone]), [["Lost contact with the GPU", "bad"]], "timeline: runner_lost, red");
+const ended = { status: "reconciled", finished: true, outcome: "failed", failure: { code: "gpu_interrupted" }, resource: { disposition: "terminated_confirmed" } };
+ok(/stopped before training finished/.test(J.nextStep(ended).text) && J.nextStep(ended).href === "/jobs/new", "interrupted, reconciled: says the run is incomplete, start a new job");
+ok(J.PLAIN_FAILURE.gpu_interrupted && J.PLAIN_FAILURE.runner_lost && !J.needsAttention(ended), "failure-code titles; a reconciled interruption needs no attention");
 const pe = (status, detail) => J.plainError({ status, body: detail ? { detail } : null, message: "raw" });
 ok(pe(401).signIn === true && /OpenGrid account/.test(pe(401).title) && /invite-only/.test(pe(401).text), "401 -> needs an OpenGrid account (invite-only), not a customer sign-in");
 ok(/account/.test(J.liveStatus(null, null).title) && !/Sign in/.test(J.liveStatus(null, null).title), "real-GPU status signed out: account wording, no sign-in prompt");

@@ -110,6 +110,7 @@ def world(*, mode="SUPERVISED", validated=True, supervised=True, price=PRICE, bo
     settings.runtime_default_minutes = 60
     settings.job_artifact_store = "postgres"
     settings.job_bootstrap_timeout_minutes = 20
+    settings.job_runner_silence_minutes = 10
     settings.default_max_active_deployments = 50
     A._OVERRIDE.clear()
     bf.mode(mode)
@@ -649,6 +650,127 @@ def test_deadline_timeout():
                                                 "max_runtime_reached") or dep_row(jid).status == "terminated"
 
 
+def _later(minutes):
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc) + timedelta(minutes=minutes)
+
+
+def _silence_notes(jid):
+    return scalar("SELECT count(*) FROM job_events WHERE job_id = :j AND reason LIKE 'runner silent%'", j=jid)
+
+
+def test_runner_lost():
+    """(a) the runner reported, then went silent past job_runner_silence_minutes -> runner_lost + ONE terminate
+    (idempotent across passes), then the normal terminating -> ... -> reconciled path. (b) below it: nothing."""
+    world()
+    settings.job_runner_silence_minutes = 10
+    code, out, w = submit_real()
+    jid = out["job_id"]
+    _run_until_training(jid)
+    r = sync.sync_job(jid, now=_later(9))
+    j = job_row(jid)
+    assert j.status == "training" and j.failure_code is None and "terminate" not in r, (j.status, r)
+    assert len(SIM.terminates()) == 0 and _silence_notes(jid) == 0
+    r = sync.sync_job(jid, now=_later(11))
+    j = job_row(jid)
+    assert j.status in ("runner_lost", "terminating") and j.failure_code == "runner_lost" and j.outcome == "failed", \
+        (j.status, j.failure_code)
+    assert "stopped reporting for 1" in (j.failure_reason or ""), j.failure_reason
+    assert len(SIM.terminates()) == 1 and dep_row(jid).terminate_requested_at is not None, r
+    for m in (12, 13, 30):
+        sync.sync_job(jid, now=_later(m))
+    sync.run_all()
+    assert len(SIM.terminates()) == 1, "terminate requested exactly once"
+    j = drive_to_end(jid, 8)
+    assert j.status == "reconciled" and j.outcome == "failed" and j.failure_code == "runner_lost", (j.status, j.failure_code)
+    kinds = [r[0] for r in q("SELECT to_status FROM job_events WHERE job_id = :j ORDER BY id", j=jid)]
+    assert kinds.index("runner_lost") < kinds.index("terminating") < kinds.index("termination_confirmed"), kinds
+    assert O.get(jid, w)["failure"]["code"] == "runner_lost"
+
+
+def test_runner_silence_while_initializing():
+    """(c) never reported -> still bootstrap_failed (bootstrap_timeout), never runner_lost. A runner that reported
+    during setup gets the bootstrap timeout as its silence limit (the PyTorch install emits nothing for minutes)."""
+    world()
+    settings.job_runner_silence_minutes = 10
+    code, out, w = submit_real()
+    jid = out["job_id"]
+    to_running(jid)
+    sync.sync_job(jid, now=_later(11))
+    assert job_row(jid).status == "initializing" and len(SIM.terminates()) == 0
+    sync.sync_job(jid, now=_later(settings.job_bootstrap_timeout_minutes + 1))
+    j = job_row(jid)
+    assert j.failure_code == "bootstrap_timeout" and j.status in ("bootstrap_failed", "terminating"), (j.status, j.failure_code)
+    assert len(SIM.terminates()) == 1
+
+    world()
+    settings.job_runner_silence_minutes = 10
+    code, out, w = submit_real()
+    jid = out["job_id"]
+    to_running(jid)
+    sync.ingest(jid, [{"seq": 1, "type": "phase", "data": {"phase": "bootstrap_started"}}])
+    sync.sync_job(jid, now=_later(11))
+    assert job_row(jid).status == "initializing" and len(SIM.terminates()) == 0, "setup grace: bootstrap timeout"
+    sync.sync_job(jid, now=_later(settings.job_bootstrap_timeout_minutes + 1))
+    j = job_row(jid)
+    assert j.failure_code == "runner_lost" and len(SIM.terminates()) == 1, (j.status, j.failure_code)
+
+
+def test_gpu_interrupted():
+    """(d) the provider ended the machine without OpenGrid asking: failure_code gpu_interrupted (the deployment's
+    interruption outcome), never runner_lost, and no extra terminate."""
+    world()
+    settings.job_runner_silence_minutes = 10
+    code, out, w = submit_real()
+    jid = out["job_id"]
+    _run_until_training(jid)
+    SIM.instances[dep_row(jid).provider_instance_id]["status"] = "terminated"
+    tracker.track()
+    d = dep_row(jid)
+    assert d.status == "terminated" and d.interruptions == 1 and d.terminate_requested_at is None, (d.status, d.interruptions)
+    sync.sync_job(jid, now=_later(11))
+    j = job_row(jid)
+    assert j.failure_code == "gpu_interrupted" and j.outcome == "failed", (j.status, j.failure_code)
+    kinds = [r[0] for r in q("SELECT to_status FROM job_events WHERE job_id = :j ORDER BY id", j=jid)]
+    assert "runner_lost" not in kinds and len(SIM.terminates()) == 0, (kinds, SIM.terminates())
+    assert drive_to_end(jid).status == "reconciled" and job_row(jid).failure_code == "gpu_interrupted"
+
+    # stopped by the provider (still exists, may bill) + silent -> runner_lost with the cause gpu_interrupted
+    world()
+    settings.job_runner_silence_minutes = 10
+    code, out, w = submit_real()
+    jid = out["job_id"]
+    _run_until_training(jid)
+    deployments.transition(dep_row(jid).deployment_id, "stopped", "provider reports the instance stopped",
+                           actor="system")
+    sync.sync_job(jid, now=_later(5))
+    assert job_row(jid).status == "training" and len(SIM.terminates()) == 0, "not silent yet: nothing"
+    sync.sync_job(jid, now=_later(11))
+    j = job_row(jid)
+    assert j.failure_code == "gpu_interrupted" and j.status in ("runner_lost", "terminating"), (j.status, j.failure_code)
+    assert len(SIM.terminates()) == 1
+
+
+def test_runner_silence_degraded():
+    """(e) silent while the deployment is degraded (uncertain): the degraded state stays visible, one note per
+    silence, no terminate beyond the existing behaviour."""
+    world()
+    settings.job_runner_silence_minutes = 10
+    code, out, w = submit_real()
+    jid = out["job_id"]
+    _run_until_training(jid)
+    SIM.instances[dep_row(jid).provider_instance_id]["status"] = "unhealthy"
+    tracker.track()
+    assert dep_row(jid).status == "degraded", dep_row(jid).status
+    for m in (11, 12, 20):
+        sync.sync_job(jid, now=_later(m))
+    j = job_row(jid)
+    assert j.status == "training" and j.failure_code is None and j.outcome is None, (j.status, j.failure_code)
+    assert len(SIM.terminates()) == 0 and dep_row(jid).status == "degraded"
+    assert _silence_notes(jid) == 1, _silence_notes(jid)
+    assert O.get(jid, w)["resource"]["possibly_billing"] is True
+
+
 def test_worker_restart_rebuild():
     """No job_sync ran while the approval, launch and boot happened: one pass rebuilds the job from the DB."""
     world()
@@ -803,7 +925,9 @@ def test_live_mode_launches_with_the_bootstrap():
 TESTS = [test_state_machine, test_preview_shapes, test_sandbox_end_to_end, test_refusals_are_not_faked,
          test_real_path_happy, test_customer_key, test_bootstrap_timeout, test_training_failure_terminates, test_oom,
          test_cuda_init_failed, test_artifact_upload_failure, test_no_success_without_result, test_cancel_before_launch,
-         test_cancel_after_launch, test_ambiguous_provider_timeout, test_deadline_timeout, test_worker_restart_rebuild,
+         test_cancel_after_launch, test_ambiguous_provider_timeout, test_deadline_timeout, test_runner_lost,
+         test_runner_silence_while_initializing, test_gpu_interrupted, test_runner_silence_degraded,
+         test_worker_restart_rebuild,
          test_out_of_order_and_late_callbacks, test_s3_backend_fake, test_readiness,
          test_price_changed_and_gpu_unavailable, test_quote_expired_at_approval, test_live_mode_launches_with_the_bootstrap]
 

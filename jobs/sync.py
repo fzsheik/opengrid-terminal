@@ -19,6 +19,22 @@ Enforcement (sync_job(enforce=True); terminate = the EXISTING deployments.termin
     running with NO runner callback for settings.job_bootstrap_timeout_minutes   -> bootstrap_failed + terminate
     past the deployment deadline while the workload runs                          -> training_timed_out (the
                                                                                      reconciler terminates)
+    runner reported, then silent for settings.job_runner_silence_minutes (while initializing: the bootstrap
+    timeout if longer -- the pinned PyTorch install emits nothing for minutes), not completed (_silence):
+        deployment running                                                       -> runner_lost (runner_lost)
+                                                                                     + terminate
+        deployment stopping/stopped without OpenGrid asking (interruption)       -> runner_lost (gpu_interrupted)
+                                                                                     + terminate
+        deployment degraded / uncertain / stopped on request                     -> one note per silence (state
+                                                                                     kept: never papered over)
+        deployment terminating / terminated                                      -> nothing: _follow owns it
+    Silence is measured from the later of last_runner_event_at and the newest artifact upload. A gpu sample
+    every ~15 s (runner/reporter.py) keeps a live trainer far inside it even through retry backoff (cap 60 s).
+The deployment ending before the runner completed -> failure_code gpu_interrupted when it was an interruption
+(routing/deployments._apply: detail.interruption, it left running without OpenGrid asking), otherwise
+terminated_before_completion. failure_code is written once, so existing rows keep theirs.
+Precedence on one pass: the runner's own error / complete > deadline (training_timed_out) > the deployment's
+end (gpu_interrupted / terminated_before_completion) > runner silence (runner_lost).
 Everything is reconstructed from the database (jobs, job_runner_events, deployments) on every pass, so a worker
 restart loses nothing; Postgres row locks (SELECT ... FOR UPDATE on the job) serialise concurrent workers.
 """
@@ -560,6 +576,31 @@ def _past_deadline(dep, now) -> bool:
     return dep.terminate_deadline_at is not None and now >= dep.terminate_deadline_at
 
 
+_ENDED = ("stopping", "stopped", "terminating", "terminated")
+
+
+def _interrupted(s, dep) -> dict | None:
+    """The machine left `running` without OpenGrid asking and is stopped / gone (routing/deployments._apply sets
+    detail.interruption and counts d.interruptions). degraded alone is uncertain, never an interruption here."""
+    from store.routing import DeploymentEvent
+    if dep.status not in _ENDED or not (dep.interruptions or 0):
+        return None
+    evs = s.scalars(select(DeploymentEvent).where(DeploymentEvent.deployment_id == dep.deployment_id,
+                                                  DeploymentEvent.to_status.in_(_ENDED))
+                    .order_by(DeploymentEvent.at.desc(), DeploymentEvent.id.desc())).all()
+    e = next((e for e in evs if (e.detail or {}).get("interruption")), None)
+    if e is None and dep.status in ("terminating", "terminated") and dep.terminate_requested_at is None:
+        e = evs[0] if evs else None     # running -> degraded (counted) -> ended by the provider: still unasked
+    if e is None:
+        return None
+    return {"at": e.at.isoformat(), "from": e.from_status, "to": e.to_status, "reason": e.reason,
+            "interruptions": dep.interruptions}
+
+
+def _early_end_code(s, dep) -> str:
+    return "gpu_interrupted" if _interrupted(s, dep) else "terminated_before_completion"
+
+
 def _follow(s, job, dep, now) -> None:
     D, J = dep.status, job.status
     ev = _dep_ev(dep)
@@ -612,9 +653,12 @@ def _follow(s, job, dep, now) -> None:
             elif not cancelled:
                 S.note(s, job, "the deployment is terminating while the workload had not completed", ev)
         if job.status not in ("terminating",) + tuple(x for x in S.FINISHED):
-            go("terminating", "termination requested; awaiting provider confirmation",
+            early = not cancelled and not _completed(job) and job.failure_code is None
+            code = _early_end_code(s, dep) if early else None
+            go("terminating", "the provider is ending the GPU machine without OpenGrid asking (interrupted)"
+               if code == "gpu_interrupted" else "termination requested; awaiting provider confirmation",
                outcome=("cancelled" if cancelled else "failed") if not _completed(job) else None,
-               failure_code=None if cancelled or _completed(job) else "terminated_before_completion")
+               failure_code=code)
     elif D in ("termination_failed", "orphan_suspected", "credentials_unavailable"):
         if not S.is_finished(job) and job.status != D:
             if S.can(job.status, D) or S.path_to(job.status, D):
@@ -629,9 +673,11 @@ def _follow(s, job, dep, now) -> None:
             if job.status in S.RUNNING and not _completed(job) and _past_deadline(dep, now):
                 go("training_timed_out", "runtime ceiling reached", outcome="failed", failure_code="training_timed_out")
             no_result = job.outcome is None
-            go("termination_confirmed", "the provider confirmed the instance is gone",
+            code = None if (cancelled or not no_result) else _early_end_code(s, dep)
+            go("termination_confirmed", "the provider confirmed the instance is gone"
+               + (" (it ended without OpenGrid asking: interrupted)" if code == "gpu_interrupted" else ""),
                outcome=("cancelled" if cancelled else "failed") if no_result else None,
-               failure_code=None if (cancelled or not no_result) else "terminated_before_completion")
+               failure_code=code)
             if tev:
                 S.note(s, job, "termination evidence", {**ev, "terminated": tev})
         if job.status in ("termination_confirmed", "reconciliation_pending"):
@@ -664,6 +710,63 @@ def _deployment_checks(s, job, dep) -> None:
         M.set_check(job, "termination_verified", "pass",
                     {"terminated_at": dep.terminated_at.isoformat() if dep.terminated_at else None,
                      "provider_event": _terminated_evidence(s, dep)}, "provider")
+
+
+_WORKLOAD = ("initializing", "training", "saving_artifacts")
+SILENCE_NOTE = "runner silent"
+
+
+def _last_sign_of_life(s, job) -> datetime | None:
+    from store.jobs import JobArtifact
+    art = s.scalar(select(func.max(JobArtifact.created_at)).where(JobArtifact.job_id == job.job_id))
+    return max((t for t in (job.last_runner_event_at, art) if t is not None), default=None)
+
+
+def _silence_limit(job) -> timedelta:
+    m = int(settings.job_runner_silence_minutes)
+    if job.status == "initializing":
+        m = max(m, int(settings.job_bootstrap_timeout_minutes))
+    return timedelta(minutes=m)
+
+
+def _silence(s, job, dep, now) -> None:
+    """The runner reported at least once, then went silent (module docstring). Moves the job to runner_lost (the
+    WORKLOAD_FAILED rule in _enforce then terminates via the existing path) or records a note; never anything else.
+    The bootstrap case (never reported) is _enforce's bootstrap_timeout."""
+    from routing import deployments as D
+
+    if dep is None or job.last_runner_event_at is None or _completed(job):
+        return
+    if int(settings.job_runner_silence_minutes) <= 0:
+        return   # 0 = the check is off
+    if job.status not in _WORKLOAD + S.UNCERTAIN or dep.status in ("terminating", "terminated"):
+        return
+    last = _last_sign_of_life(s, job)
+    limit = _silence_limit(job)
+    if last is None or now - last < limit:
+        return
+    mins = int((now - last).total_seconds() // 60)
+    ev = {**_dep_ev(dep), "last_runner_event_at": last.isoformat(), "silent_minutes": mins,
+          "threshold_minutes": int(limit.total_seconds() // 60)}
+    live = job.status in _WORKLOAD and dep.terminate_requested_at is None and dep.status in D.LIVE_STATES
+    if live and dep.status == "running":
+        _walk(s, job, "runner_lost", actor="system",
+              reason=f"the GPU machine stopped reporting for {mins} minutes (the provider still shows it running); "
+                     "terminating it", evidence=ev, outcome="failed", failure_code="runner_lost", now=now)
+        return
+    intr = _interrupted(s, dep) if live else None
+    if intr:
+        _walk(s, job, "runner_lost", actor="system",
+              reason=f"the provider stopped the GPU machine without OpenGrid asking; no report for {mins} "
+                     "minutes; terminating it", evidence={**ev, "interruption": intr}, outcome="failed",
+              failure_code="gpu_interrupted", now=now)
+        return
+    from store.jobs import JobEvent
+    seen = s.scalar(select(func.count()).select_from(JobEvent).where(
+        JobEvent.job_id == job.job_id, JobEvent.at >= last, JobEvent.reason.like(SILENCE_NOTE + "%")))
+    if not seen:
+        S.note(s, job, f"{SILENCE_NOTE}: no report from the GPU machine for {mins} minutes while the deployment is "
+                       f"{dep.status}; the {dep.status} state stands (resolved by the tracker / reconciliation)", ev)
 
 
 def _enforce(s, job, dep, now) -> str | None:
@@ -726,6 +829,7 @@ def sync_job(job_id: str, *, enforce: bool = True, now: datetime | None = None, 
             _follow(s, job, dep, now)
             _deployment_checks(s, job, dep)
             if enforce:
+                _silence(s, job, dep, now)
                 term = _enforce(s, job, dep, now)
             dep_id = dep.deployment_id
         if S.is_finished(job) or job.status in ("termination_confirmed", "reconciliation_pending"):

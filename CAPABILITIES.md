@@ -780,7 +780,7 @@ automatically at startup. A push to GitHub does not trigger a Railway build on i
 | `RAW_PAYLOAD_RETENTION_DAYS`, `RAW_SNAPSHOT_RETENTION_DAYS` | raw storage retention (payloads referenced by settlement fixings are always kept) |
 | `JOB_CALLBACK_BASE_URL` | where GPU runners call back (default `PUBLIC_BASE_URL`; https required) |
 | `JOB_ARTIFACT_STORE`, `JOB_ARTIFACT_MAX_MB`, `JOB_ARTIFACT_S3_*` | training artifacts: Postgres (default) or S3-compatible |
-| `JOB_SYNC_INTERVAL_SECONDS`, `JOB_BOOTSTRAP_TIMEOUT_MINUTES`, `JOB_TOKEN_GRACE_MINUTES` | training-job timing |
+| `JOB_SYNC_INTERVAL_SECONDS`, `JOB_BOOTSTRAP_TIMEOUT_MINUTES`, `JOB_RUNNER_SILENCE_MINUTES`, `JOB_TOKEN_GRACE_MINUTES` | training-job timing |
 
 `deploy/make_env.py` builds the Railway variables file and generates the secrets.
 

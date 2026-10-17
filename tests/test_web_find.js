@@ -267,7 +267,7 @@ eq(cxlPre.current, "starting", "cancel right after approval (nothing launched) s
 eq(real("quote_expired", ["created", "quoted", "pending_approval", "quote_expired"]).steps[2].tone, "warn", "quote expired: amber at approval");
 eq(J.stages({ status: "training", sandbox: false }).steps.filter(x => x.mark === "done").length, 4, "no history: earlier stages assumed passed (none marked skipped)");
 ok(Object.keys(J.STAGE_OF).every(s => ["created", "validating", "quoted", "pending_approval", "approved", "provisioning", "initializing", "training", "saving_artifacts", "training_completed", "terminating", "termination_confirmed", "reconciliation_pending", "reconciled",
-  "validation_failed", "no_eligible_provider", "quote_expired", "approval_rejected", "provider_timeout", "provisioning_uncertain", "bootstrap_failed", "training_failed", "out_of_memory", "cancelling", "training_timed_out", "artifact_upload_failed", "termination_failed", "orphan_suspected"].includes(s)),
+  "validation_failed", "no_eligible_provider", "quote_expired", "approval_rejected", "provider_timeout", "provisioning_uncertain", "bootstrap_failed", "training_failed", "out_of_memory", "cancelling", "training_timed_out", "artifact_upload_failed", "termination_failed", "orphan_suspected", "runner_lost"].includes(s)),
   "every mapped state exists in jobs/states.py");
 const allStates = J.FLOW.concat(J.FAILED, J.UNCERTAIN, J.CANCEL);
 ok(allStates.every(s => { const sg = J.stages({ status: s, sandbox: false }); return sg.steps.filter(x => x.mark === "current" || x.mark === "failed").length >= 1 || sg.ended; }), "every job state maps to a stage");

@@ -17,7 +17,7 @@
   const FLOW = ["created", "validating", "quoted", "pending_approval", "approved", "provisioning", "initializing", "training",
     "saving_artifacts", "training_completed", "terminating", "termination_confirmed", "reconciliation_pending", "reconciled"];
   const FAILED = ["validation_failed", "no_eligible_provider", "quote_expired", "approval_rejected", "bootstrap_failed", "training_failed",
-    "out_of_memory", "training_timed_out", "artifact_upload_failed", "termination_failed"];
+    "out_of_memory", "training_timed_out", "artifact_upload_failed", "runner_lost", "termination_failed"];
   const UNCERTAIN = ["provider_timeout", "provisioning_uncertain", "orphan_suspected", "credentials_unavailable"];
   const CANCEL = ["cancel_requested", "cancelling"];
   // Nothing was ever launched: the job is over (jobs/states.py FINISHED minus reconciled). Failures after a
@@ -26,12 +26,12 @@
   const FINISHED = ["reconciled"].concat(ENDED_BEFORE_LAUNCH);
   // Sandbox (SIMULATED) jobs end where the simulation ends: nothing existed to terminate.
   const SANDBOX_FLOW = ["created", "validating", "initializing", "training", "saving_artifacts", "training_completed"];
-  const SANDBOX_FINISHED = ["training_completed", "validation_failed", "bootstrap_failed", "training_failed", "out_of_memory", "training_timed_out", "artifact_upload_failed"];
+  const SANDBOX_FINISHED = ["training_completed", "validation_failed", "bootstrap_failed", "training_failed", "out_of_memory", "training_timed_out", "artifact_upload_failed", "runner_lost"];
   const PRE_LAUNCH = ["created", "validating", "quoted", "pending_approval", "approved", "quote_expired"];
   // States in which an instance may exist at the provider (may bill).
   const MAY_BILL = ["provisioning", "initializing", "training", "saving_artifacts", "training_completed", "terminating", "provider_timeout",
     "provisioning_uncertain", "bootstrap_failed", "training_failed", "out_of_memory", "training_timed_out", "artifact_upload_failed",
-    "termination_failed", "orphan_suspected", "credentials_unavailable", "cancel_requested", "cancelling"];
+    "runner_lost", "termination_failed", "orphan_suspected", "credentials_unavailable", "cancel_requested", "cancelling"];
 
   function tone(s) {
     if (FAILED.includes(s)) return "bad";
@@ -497,7 +497,7 @@
     quoted: "selecting", no_eligible_provider: "selecting",
     pending_approval: "approval", quote_expired: "approval", approval_rejected: "approval",
     approved: "starting", provisioning: "starting", provider_timeout: "starting", provisioning_uncertain: "starting", initializing: "starting", bootstrap_failed: "starting",
-    training: "running", training_failed: "running", out_of_memory: "running", training_timed_out: "running",
+    training: "running", training_failed: "running", out_of_memory: "running", training_timed_out: "running", runner_lost: "running",
     saving_artifacts: "saving", artifact_upload_failed: "saving",
     training_completed: "shutting_down", terminating: "shutting_down", termination_confirmed: "shutting_down", termination_failed: "shutting_down",
     orphan_suspected: "shutting_down", reconciliation_pending: "shutting_down", cancelling: "shutting_down",
@@ -506,7 +506,7 @@
   // sandbox: setup is simulated (no GPU to start); the simulation ends at training_completed
   const SANDBOX_STAGE_OF = Object.assign({}, STAGE_OF, { initializing: "preparing", bootstrap_failed: "preparing", training_completed: "complete" });
   // states that end (or fail) the stage they sit in
-  const STAGE_FAILS = ["validation_failed", "no_eligible_provider", "approval_rejected", "bootstrap_failed", "training_failed", "out_of_memory", "training_timed_out", "artifact_upload_failed"];
+  const STAGE_FAILS = ["validation_failed", "no_eligible_provider", "approval_rejected", "bootstrap_failed", "training_failed", "out_of_memory", "training_timed_out", "artifact_upload_failed", "runner_lost"];
   // states whose stage depends on where the job was when they happened
   const STAGE_FROM_HISTORY = ["credentials_unavailable", "cancel_requested"];
   // job -> {mode, steps: [{key, label, mark: done|current|failed|todo|skipped, tone, state}], current, failed_stage, ended, outcome, attention}
@@ -711,10 +711,16 @@
     provisioning: "Starting the GPU", provider_timeout: "The provider is slow to answer", provisioning_uncertain: "Not sure the GPU started: checking with the provider",
     initializing: "Setting up the GPU", bootstrap_failed: "Setting up failed", training: "Training", training_failed: "Training failed",
     out_of_memory: "Training ran out of GPU memory", training_timed_out: "Hit the time limit", saving_artifacts: "Saving the results",
-    artifact_upload_failed: "Saving the results failed", training_completed: "Training finished", terminating: "Shutting down the GPU",
+    artifact_upload_failed: "Saving the results failed", runner_lost: "Lost contact with the GPU", training_completed: "Training finished", terminating: "Shutting down the GPU",
     termination_confirmed: "The provider confirmed the GPU is gone", termination_failed: "Shutting down the GPU failed: retrying",
     reconciliation_pending: "Working out the final cost", reconciled: "Final cost settled", orphan_suspected: "A GPU may still be running: checking",
     credentials_unavailable: "Lost access to the provider account", cancel_requested: "Cancel requested", cancelling: "Cancelling",
+  };
+  // Failure codes that name the cause better than the state they ended in (jobs/sync.py): the error block's title.
+  const PLAIN_FAILURE = {
+    runner_lost: "Lost contact with the GPU: it stopped reporting",
+    gpu_interrupted: "The provider stopped the GPU before training finished",
+    terminated_before_completion: "The GPU stopped before training finished",
   };
   const SANDBOX_PLAIN = { initializing: "Setting up (simulated)", training: "Training (simulated)", saving_artifacts: "Saving the report (simulated)", training_completed: "Simulation finished" };
   const plainState = (s, sandbox) => (sandbox && SANDBOX_PLAIN[s]) || PLAIN_STATE[s] || String(s || "unknown").replace(/_/g, " ");
@@ -731,6 +737,8 @@
   function nextStep(job, dep, opts) {
     opts = opts || {};
     const s = stateOf(job), sb = isSandbox(job), sm = summary(job, dep), o = outcomeOf(job);
+    if (!sb && s === "runner_lost" && sm.possibly_billing)
+      return { text: "The GPU machine stopped reporting, so OpenGrid is shutting it down and marks it gone only once the provider confirms. Nothing to do: the operator is alerted if the shutdown stalls.", href: sm.deployment_id ? "/deployments/" + encodeURIComponent(sm.deployment_id) : null, label: "Open the GPU's deployment" };
     if (!sb && (UNCERTAIN.includes(s) || s === "termination_failed" || (FAILED.includes(s) && sm.possibly_billing)))
       return { text: "A GPU may still be billing. OpenGrid keeps retrying the shutdown and alerts its operator.", href: sm.deployment_id ? "/deployments/" + encodeURIComponent(sm.deployment_id) : null, label: "Open the GPU's deployment" };
     if (s === "pending_approval") return opts.admin && sm.route_request_id ? { text: "Approve or reject the price on the route ticket.", href: "/route?rr=" + encodeURIComponent(sm.route_request_id), label: "Open the approval ticket" }
@@ -739,6 +747,8 @@
     if (!isTerminal(job)) return { text: sb ? "Nothing to do: the simulation finishes on its own." : "Nothing to do: progress updates here automatically.", href: null, label: null };
     if (sb && (o === "simulated" || o === "succeeded" || s === "training_completed"))
       return { text: "That's the whole flow a real job takes. Your own model gets a GPU recommendation today.", href: "/find", label: "Find a GPU for my model" };
+    if (!sb && ["runner_lost", "gpu_interrupted"].includes(job && job.failure && job.failure.code))
+      return { text: "The GPU stopped before training finished, so the run is incomplete. Results saved before that are below; start a new job to try again.", href: "/jobs/new", label: "Start a new job" };
     if (o === "failed" || STAGE_FAILS.includes(s)) return { text: "Check what went wrong below, then start a new job.", href: "/jobs/new", label: "Start a new job" };
     return { text: "Download the results below, or start another job.", href: "/jobs/new", label: "Start another job" };
   }
@@ -769,7 +779,7 @@
   }
 
   OG.jobs = { FLOW, SANDBOX_FLOW, FAILED, UNCERTAIN, CANCEL, PRE_LAUNCH, MAY_BILL, ENDED_BEFORE_LAUNCH, FINISHED, SANDBOX_FINISHED, REGIONS, STRATEGIES,
-    DEFAULT_CONFIG, LIMIT_BOUNDS, CHECKS, CODE_ACTION, FOUNDER, STAGES, SANDBOX_STAGES, STAGE_OF, PLAIN_STATE,
+    DEFAULT_CONFIG, LIMIT_BOUNDS, CHECKS, CODE_ACTION, FOUNDER, STAGES, SANDBOX_STAGES, STAGE_OF, PLAIN_STATE, PLAIN_FAILURE,
     tone, strip, stateOf, isTerminal, outcomeOf, OUTCOME_TONE, isSandbox, usd, perGpuH, duration, bytes, configSpec, limitBounds, templateId, preset,
     validate, views, candExecutable, normBlockers, groupBlockers, blockerAction, plainBlocker, estimateLine, checks, metricPoints, progress, logPage, candKey, summary,
     stages, plainStatus, jobLine, demoBody, isDemoLink, liveStatus, walkthrough, jobGroups, needsAttention, cancelAction, plainState, timeline, nextStep, plainError };

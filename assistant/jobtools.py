@@ -40,6 +40,8 @@ FAILURE_TEXT = {
     "gpu_unavailable": "the GPU was no longer available",
     "provider_rejected": "the provider refused the launch",
     "terminated_before_completion": "the GPU stopped before training completed",
+    "gpu_interrupted": "the provider stopped the GPU without OpenGrid asking",
+    "runner_lost": "the GPU machine stopped reporting",
     "no_eligible_provider": "no eligible GPU was available",
     "validation_failed": "the request was not valid",
 }
