@@ -922,40 +922,22 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .dep-tl .dep-det { flex-basis: 100%; font-size: var(--fs-xs); }
 
 /* /keys */
-.pg-keys .ky-cols { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
-.pg-keys .ky-cols > * { min-width: 0; }
-.pg-keys .ky-cols .sec:first-child { margin-top: 4px; }
-.pg-keys .ky-side-b p { margin: 6px 0 0; }
 .pg-keys .ky-scopes { display: inline-flex; flex-wrap: wrap; gap: 3px; white-space: normal; }
 .pg-keys .ky-rev:hover, .pg-wl .ky-rev:hover { color: var(--down); border-color: var(--red-b2); }
-.pg-keys .ky-create { padding: 8px 10px; }
 .pg-keys .ky-row, .pg-keys .ky-add form { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
-.pg-keys .ky-f { display: flex; flex-direction: column; gap: 2px; }
-.pg-keys .ky-f .lbl { margin: 0; }
-.pg-keys .ky-scopes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 2px 14px; }
-.pg-keys .ky-scope { display: flex; align-items: center; gap: 7px; padding: 3px 4px; font-size: var(--fs-sm); cursor: pointer; border-radius: 2px; }
-.pg-keys .ky-scope:hover { background: var(--hover); }
-.pg-keys .ky-sn { color: var(--text); min-width: 118px; font-size: var(--fs-sm); }
-.pg-keys .ky-sd { color: var(--muted); flex: 1; }
 .ky-secret { border: 1px solid var(--amber-b2); background: var(--amber-bg); border-radius: 3px; padding: 8px 10px; margin: 6px 0 4px; }
 .ky-secret-h { display: flex; align-items: center; gap: 8px; }
 .ky-warn { font-size: var(--fs-sm); color: var(--text-2); margin: 6px 0; }
 .ky-secret-v { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
 .ky-secret-v code { flex: 1; font-size: var(--fs-base); background: var(--bg); border: 1px solid var(--line-2); border-radius: 3px; padding: 5px 8px; color: var(--amber-t2); user-select: all; word-break: break-all; }
-.pg-keys .ky-cred-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
-.pg-keys .ky-cred-modes p { margin: 6px 0 0; font-size: var(--fs-sm); color: var(--text-2); }
-.pg-keys .ky-cred-modes p.dim { color: var(--muted); }
-.pg-keys .ky-mode-h { display: flex; align-items: center; gap: 8px; }
 .pg-keys .ky-add { margin-top: 8px; }
 .pg-keys .ky-add .note { margin: 0; flex-basis: 100%; }
 .pg-keys .ky-secret-in { width: 260px; font-family: var(--mono); }
-.pg-keys .ky-nopay { border: 1px solid var(--amber-b); background: var(--amber-bg); border-radius: 3px; padding: 7px 10px; font-size: var(--fs-sm); color: var(--text-2); margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.pg-keys .ky-nopay > b { color: var(--warn); }
 .pg-keys .ky-comp { margin: 6px 0 0; padding-left: 16px; font-size: var(--fs-sm); }
 .pg-keys .ky-inv { margin-bottom: 6px; }
 .pg-keys .ky-inv summary { display: flex; gap: 12px; align-items: center; padding: 6px 10px; cursor: pointer; font-size: var(--fs-sm); }
 .pg-keys .ky-inv .tbl { border: 0; border-top: 1px solid var(--line); }
-@media (max-width: 1180px) { .pg-keys .ky-cols, .pg-keys .ky-cred-modes { grid-template-columns: minmax(0, 1fr); } }
+
 
 /* /watchlists */
 .pg-wl .wl-grid { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 14px; align-items: start; }
@@ -999,46 +981,6 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .pg-wl .wl-acc p { margin: 0; font-size: var(--fs-base); color: var(--text-2); }
 @media (max-width: 1000px) { .pg-wl .wl-grid { grid-template-columns: minmax(0, 1fr); } }
 
-/* /api */
-.pg-api .api-grid { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 16px; align-items: start; }
-.pg-api .api-toc { position: sticky; top: 0; padding: 8px 0; display: flex; flex-direction: column; }
-.pg-api .api-toc .eyebrow { padding: 0 10px 4px; }
-.pg-api .api-tl { display: flex; justify-content: space-between; padding: 2px 10px; font-size: var(--fs-sm); color: var(--muted); text-decoration: none; }
-.pg-api .api-tl:hover { color: var(--text); background: var(--hover); }
-.pg-api .api-body { min-width: 0; max-width: 1180px; }
-.pg-api .api-sec { scroll-margin-top: 8px; }
-.pg-api .api-sec:first-child { margin-top: 2px; }
-.pg-api .api-sec .note { margin: 0 0 6px; }
-.pg-api .api-scopes th { width: 130px; color: var(--text); }
-.pg-api .api-ex { display: flex; gap: 8px; align-items: flex-start; }
-.pg-api .api-ex pre { flex: 1; }
-.pg-api .api-fbar { margin-top: 18px; }
-.pg-api .api-fbar .field { width: 240px; }
-.pg-api .api-ops { overflow: hidden; }
-.pg-api .api-op { border-bottom: 1px solid var(--line); }
-.pg-api .api-op:last-child { border-bottom: 0; }
-.pg-api .api-op summary { display: flex; align-items: center; gap: 10px; padding: 4px 10px; cursor: pointer; font-size: var(--fs-sm); list-style: none; }
-.pg-api .api-op summary::-webkit-details-marker { display: none; }
-.pg-api .api-op summary:hover, .pg-api .api-op[open] summary { background: var(--hover); }
-.pg-api .api-m { font: 600 var(--fs-2xs) var(--mono); width: 48px; text-align: center; border-radius: 2px; padding: 1px 0; border: 1px solid; flex: none; }
-.pg-api .m-get { color: var(--blue-t); border-color: var(--blue-b); }
-.pg-api .m-post { color: var(--green-t); border-color: var(--green-b); }
-.pg-api .m-patch, .pg-api .m-put { color: var(--amber-t); border-color: var(--amber-b); }
-.pg-api .m-delete { color: var(--red-t); border-color: var(--red-b); }
-.pg-api .api-p { color: var(--text); white-space: nowrap; }
-.pg-api .api-s { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.pg-api .api-ob { padding: 6px 10px 10px 68px; border-top: 1px solid var(--line); background: var(--bg); }
-.pg-api .api-ob .lbl { margin: 8px 0 4px; }
-.pg-api .api-params th { width: 170px; }
-.pg-api .api-try { margin-top: 8px; }
-.pg-api .api-ti { display: flex; flex-wrap: wrap; gap: 6px 10px; margin-bottom: 6px; }
-.pg-api .api-tf { display: flex; align-items: center; gap: 5px; font-size: var(--fs-xs); }
-.pg-api .api-tf .field { width: 150px; font-family: var(--mono); }
-.pg-api .api-url { font-size: var(--fs-sm); color: var(--text-2); word-break: break-all; }
-.pg-api .api-res-h { display: flex; align-items: center; gap: 8px; margin: 6px 0 4px; }
-.pg-api .api-res { max-height: 420px; }
-@media (max-width: 1000px) { .pg-api .api-grid { grid-template-columns: minmax(0, 1fr); } .pg-api .api-toc { position: static; } }
-.pg-api .dep-kv td { font-family: var(--sans); }
 /* ---- end page: route/deployments/keys/watchlists/api ---- */
 
 /* ---- page: gpu/gpus/compare ---- */
