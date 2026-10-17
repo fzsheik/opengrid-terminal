@@ -26,25 +26,34 @@
       el.append(root);
       const me = await OG.me();
       if (!ctx.alive()) return;
-      if (!OG.isAdmin(me)) { root.append(OG.head("Execution control"), OG.error({ status: 403, message: "admin scope required" })); return; }
+      if (!OG.isAdmin(me)) { root.append(OG.operatorGate("Execution control", me)); return; }
       const I = {};   // intents: one Idempotency-Key per user intent
-      const B = {};
+      const B = {}, M = {};
       for (const k of ["alarm", "orphans", "kill", "mode", "queue", "live", "resources", "flags", "matrix", "validation", "recon", "limits", "log"]) B[k] = h("div", { class: "ex-b ex-" + k });
+      // one message slot per section: an action's result or error replaces the previous one (never piles up)
+      for (const k of ["hot", "orphans", "kill", "mode", "live", "resources", "flags", "validation", "recon", "limits"]) M[k] = h("div", { class: "ex-msg", "aria-live": "polite" });
+      const say = (k, node) => M[k].replaceChildren(node || "");
+      const unknownNote = intent => intent && intent.state === "unknown" ? h("p", { class: "warn-t" }, "Outcome unknown: retrying reuses the same Idempotency-Key, so the server cannot act twice.") : null;
       const modeBadge = h("span");
+      const resSum = h("span", {}, "Details: leftover provider resources");
+      const fold = (summary, open, ...kids) => h("details", { class: "sec", open: open ? true : null }, h("summary", { class: "sec-h" }, summary), kids);
       root.append(
-        OG.head("Execution control", "Mode, kill switches, providers, orphans and reconciliation · every change needs a reason and is logged",
-          modeBadge, h("a", { class: "btn", href: "/admin/checklist" }, "First-route checklist →"), h("button", { class: "btn", type: "button", onclick: () => loadAll() }, "Reload")),
-        B.alarm, B.orphans,
-        h("div", { class: "cols-2 ex-ctl" }, B.kill, B.mode),
-        B.queue, B.live,
-        OG.section("Temporary provider resources · leftover og-* SSH keys etc.", B.resources),
-        OG.section("Provider execution flags", B.flags),
-        h("details", { class: "sec ex-mx", open: query.matrix === "1" ? true : null }, h("summary", { class: "sec-h" }, "Capability matrix · what each adapter can really do (evidence on hover)"), B.matrix),
-        h("div", { class: "cols-2" }, OG.section("Validation launcher", B.validation), OG.section("Reconciliation", B.recon)),
-        OG.section("Account limits (cost guards)", B.limits),
-        OG.section("Control audit log", B.log));
+        OG.head("Execution control", "Everything that can launch or bill. Every change needs a reason and is logged.",
+          modeBadge, h("a", { class: "btn", href: "/admin/checklist" }, "First-route checklist"), h("button", { class: "btn", type: "button", onclick: () => loadAll() }, "Reload")),
+        M.hot, B.alarm, M.orphans, B.orphans,
+        h("div", { class: "cols-2 ex-ctl" }, h("div", {}, M.kill, B.kill), h("div", {}, M.mode, B.mode)),
+        B.queue, M.live, B.live,
+        OG.section("Provider execution flags", M.flags, B.flags),
+        OG.section("Validation launcher", M.validation, B.validation),
+        OG.section("Account limits (cost guards)", M.limits, B.limits),
+        fold(resSum, false, M.resources, B.resources),
+        fold("Details: capability matrix (evidence on hover)", query.matrix === "1", B.matrix),
+        fold("Details: reconciliation runs", false, M.recon, B.recon),
+        fold("Details: control audit log", false, B.log));
 
-      let modeSt = null, all = [], flags = [], caps = [];
+      let modeSt = null, all = [], flags = [], caps = [], depsOk = null, orphOk = null;
+      // a failed background refresh: one notice on top of the last good view (replaced, never stacked)
+      const staleIn = (box, node) => { const f = box.firstElementChild; if (f && f.classList.contains("x-stale")) f.replaceWith(node); else box.prepend(node); };
 
       /* ---------- uncertain deployments + orphans (top: they may bill) ---------- */
       function drawAlarm() {
@@ -64,7 +73,7 @@
               { key: "state_changed_at", label: "Since", num: true, fmt: v => fmt.age(v) },
               { key: "accrued_cost_estimate_usd", label: "Accrued est.", num: true, fmt: v => v != null ? OG.money(v) : OG.na("no running time observed") },
               { key: "failure_reason", label: "Reason", cls: "wrap dim", fmt: v => v || "" },
-              { key: "act", label: "", sort: false, csv: false, fmt: (v, r) => forceBtn(r) },
+              { key: "act", label: "", sort: false, csv: false, fmt: (v, r) => forceBtn(r, "hot") },
             ], rows: hot, compact: true, csv: false, sort: { key: "state_changed_at", dir: "asc" }, rowClass: r => "t-" + (D.tone(r.status) || "plain"),
           })));
       }
@@ -73,9 +82,15 @@
         try { const r = await ctx.api("/v1/admin/orphans", { full: true, nocache: true }); rows = r.data; open = r.meta && r.meta.open; }
         catch (e) {
           const ov = await OG.api.soft("/v1/admin/execution/overview", { nocache: true });
-          if (!ov || !Array.isArray(ov.orphans)) { B.orphans.replaceChildren(OG.section("Orphans", notYet("GET /v1/admin/orphans", e))); return; }
+          if (!ov || !Array.isArray(ov.orphans)) {
+            if (orphOk) staleIn(B.orphans, OG.refreshNotice(e, orphOk, () => loadOrphans()));   // keep the last good table and its buttons
+            else B.orphans.replaceChildren(OG.section("Orphans", notYet("GET /v1/admin/orphans", e)));
+            return;
+          }
           rows = ov.orphans; src = "execution overview (resolve endpoint unavailable)";
         }
+        rows = Array.isArray(rows) ? rows : [];
+        orphOk = new Date().toISOString();
         const live = rows.filter(o => ["open", "terminating"].includes(o.status));
         const perHour = live.reduce((s, o) => s + (o.price_per_hour || 0), 0);
         const unknownPrice = live.filter(o => o.price_per_hour == null).length;
@@ -112,8 +127,9 @@
         const body = { action, reason: v.reason };
         const k = "orphan:" + o.id + ":" + action;
         I[k] = OG.intentFor(I[k], k, body);
-        try { await OG.api.intent(I[k], `/v1/admin/orphans/${o.id}/resolve`, { method: "POST", body }); loadOrphans(); loadLog(); }
-        catch (e) { B.orphans.append(notYet("POST /v1/admin/orphans/{id}/resolve", e)); }
+        say("orphans", OG.loading("Sending…"));
+        try { await OG.api.intent(I[k], `/v1/admin/orphans/${o.id}/resolve`, { method: "POST", body }); say("orphans", h("div", { class: "og-ok" }, h("b", {}, `${action}: `), o.instance_id)); loadOrphans(); loadLog(); }
+        catch (e) { say("orphans", h("div", {}, notYet("POST /v1/admin/orphans/{id}/resolve", e), unknownNote(I[k]))); }
       }
 
       /* ---------- temporary provider resources (per-deployment SSH keys, ...) ---------- */
@@ -125,6 +141,7 @@
         catch (e) { B.resources.replaceChildren(notYet("GET /v1/admin/resources", e)); return; }
         const rows = Array.isArray(r.data) ? r.data : [];
         const unproven = (r.meta && r.meta.not_provably_ours) ?? rows.filter(x => !x.provably_ours).length;
+        resSum.textContent = "Details: leftover provider resources (" + (rows.length ? rows.length + " not yet deleted" : "none") + ")";
         B.resources.replaceChildren(resMsg || "",
           h("p", { class: "note" }, rows.length ? `${rows.length} not yet deleted${unproven ? ` · ${unproven} not provably OpenGrid's (never deleted by OpenGrid: remove in the provider console if yours)` : ""}. Keys are deleted only after the deployment's termination is confirmed.`
             : "No leftover temporary provider resources: every per-deployment key OpenGrid created is deleted."),
@@ -176,8 +193,9 @@
           body: h("p", {}, "Every new launch is refused until an admin restores a mode. Running deployments keep running and can still be terminated."),
           fields: [{ key: "word", label: "Type STOP to confirm", match: "STOP", required: true }, { key: "reason", type: "textarea", label: "Reason (required, logged, alerts ops)", required: true, minLength: 3 }] });
         if (!v) return;
+        say("kill", null);
         try { modeSt = await ctx.api("/v1/admin/execution/kill", { method: "POST", body: { reason: v.reason } }); drawMode(); drawKill(); loadLog(); }
-        catch (e) { B.kill.append(OG.error(e)); }
+        catch (e) { say("kill", OG.error(e)); }
       }
       function drawMode() {
         if (!modeSt) { B.mode.replaceChildren(OG.loading()); return; }
@@ -199,24 +217,26 @@
           body: h("div", {}, h("p", {}, OG.MODE_HELP[m]), m !== "DISABLED" && m !== "PREVIEW_ONLY" ? h("p", { class: "warn-t" }, "Check the first-route checklist is green before enabling launches.") : null),
           fields: [m === "LIVE" ? { key: "word", label: "Type LIVE to confirm", match: "LIVE", required: true } : null, { key: "reason", type: "textarea", label: "Reason (required, logged)", required: true, minLength: 3 }].filter(Boolean) });
         if (!v) return;
+        say("mode", null);
         try { modeSt = await ctx.api("/v1/admin/execution/mode", { method: "POST", body: { mode: m, reason: v.reason } }); drawMode(); drawKill(); loadLog(); }
-        catch (e) { B.mode.append(OG.error(e)); }
+        catch (e) { say("mode", OG.error(e)); }
       }
 
       /* ---------- approval queue, live deployments ---------- */
-      function forceBtn(r) {
+      function forceBtn(r, slot) {
         if (["terminated", "rejected", "provision_failed", "provider_rejected", "quote_failed"].includes(r.status)) return null;
-        return h("button", { class: "btn sm w4-danger", type: "button", onclick: () => forceTerminate(r) }, "Force-terminate");
+        return h("button", { class: "btn sm w4-danger", type: "button", onclick: () => forceTerminate(r, slot) }, "Force-terminate");
       }
-      async function forceTerminate(r) {
+      async function forceTerminate(r, slot) {
         const v = await OG.ask({ title: "Force-terminate " + r.deployment_id, danger: true, confirm: "Force-terminate",
           body: h("p", {}, `Admin terminate on ${OG.providerName(r.provider)} with the deployment's pinned credential (any account, any mode). OpenGrid marks it terminated only when the provider confirms.`),
           fields: [{ key: "id", label: "Type the deployment id to confirm", match: r.deployment_id, required: true }, { key: "reason", type: "textarea", label: "Reason (required, logged)", required: true, minLength: 3 }] });
         if (!v) return;
         const body = { reason: v.reason }, k = "force:" + r.deployment_id;
         I[k] = OG.intentFor(I[k], k, body);
-        try { await OG.api.intent(I[k], `/v1/admin/deployments/${encodeURIComponent(r.deployment_id)}/terminate`, { method: "POST", body }); loadDeps(); loadLog(); }
-        catch (e) { B.live.append(OG.error(e)); }
+        say(slot, OG.loading("Terminating…"));
+        try { await OG.api.intent(I[k], `/v1/admin/deployments/${encodeURIComponent(r.deployment_id)}/terminate`, { method: "POST", body }); say(slot, h("div", { class: "og-ok" }, h("b", {}, "Terminate requested: "), h("span", { class: "mono" }, r.deployment_id))); loadDeps(); loadLog(); }
+        catch (e) { say(slot, h("div", {}, OG.error(e), unknownNote(I[k]))); }
       }
       function depTable(rows, extra, empty) {
         return OG.table({
@@ -240,17 +260,21 @@
           { key: "open", label: "", sort: false, fmt: (v, r) => h("a", { class: "btn sm pri", href: "/route?rr=" + r.route_request_id }, "Review ticket →") },
         ], "Nothing waiting for approval.")));
         const live = all.filter(r => D.LIVE.includes(r.status) && !HOT.includes(r.status));
-        const perH = live.reduce((s, r) => s + ((r.prices.execution_price ?? r.prices.quote) || 0) * (r.gpu_count || 0), 0);
+        const perH = live.reduce((s, r) => s + (((r.prices || {}).execution_price ?? (r.prices || {}).quote) || 0) * (r.gpu_count || 0), 0);
         B.live.replaceChildren(OG.section(`Live deployments · ${live.length} · ≈ ${OG.money(perH)}/h at quote`, depTable(live, [
           { key: "uptime_seconds", label: "Runtime", num: true, fmt: v => fmt.age(v || 0) },
           { key: "terminate_deadline_at", label: "Auto-terminate", num: true, fmt: v => v ? OG.countdown(v, { expired: "past deadline" }) : OG.na("no deadline") },
           { key: "accrued_cost_estimate_usd", label: "Accrued est.", num: true, fmt: v => v != null ? OG.money(v) : "-" },
-          { key: "act", label: "", sort: false, csv: false, fmt: (v, r) => forceBtn(r) },
+          { key: "act", label: "", sort: false, csv: false, fmt: (v, r) => forceBtn(r, "live") },
         ], "Nothing is running.")));
       }
       async function loadDeps() {
-        try { all = await ctx.api("/v1/admin/deployments", { params: { limit: 2000 }, nocache: true }); drawAlarm(); drawDeps(); drawValidation(); }
-        catch (e) { B.alarm.replaceChildren(OG.error(e, loadDeps)); }
+        try { all = await ctx.api("/v1/admin/deployments", { params: { limit: 2000 }, nocache: true }); depsOk = new Date().toISOString(); drawAlarm(); drawDeps(); drawValidation(); }
+        catch (e) {
+          // keep the last good tables (and their Force-terminate buttons); only the first load shows the error
+          if (depsOk) staleIn(B.alarm, OG.refreshNotice(e, depsOk, () => loadDeps()));
+          else B.alarm.replaceChildren(OG.error(e, loadDeps));
+        }
       }
 
       /* ---------- provider flags, capability matrix ---------- */
@@ -282,16 +306,18 @@
         const v = await OG.ask({ title: `${val ? "Enable" : "Disable"} ${label} launches on ${OG.providerName(r.provider)}`, danger: val, confirm: val ? "Enable" : "Disable",
           fields: [key === "live_enabled" && val ? { key: "word", label: `Type ${r.provider} to confirm`, match: r.provider, required: true } : null, { key: "reason", type: "textarea", label: "Reason (required, logged)", required: true, minLength: 3 }].filter(Boolean) });
         if (!v) return;
+        say("flags", null);
         try { await ctx.api("/v1/admin/execution/providers/" + encodeURIComponent(r.provider), { method: "POST", body: { [key]: val, reason: v.reason } }); loadFlags(); loadLog(); }
-        catch (e) { B.flags.append(OG.error(e)); }
+        catch (e) { say("flags", OG.error(e)); }
       }
       async function killProvider(r, kill) {
         const v = await OG.ask({ title: `${kill ? "Kill" : "Unkill"} ${OG.providerName(r.provider)}`, danger: kill, confirm: kill ? "Kill provider" : "Lift kill switch",
           body: h("p", {}, kill ? "No new launch on this provider. Running deployments keep being tracked and can be terminated." : "Launches on this provider follow its flags again."),
           fields: [{ key: "reason", type: "textarea", label: "Reason (required, logged)", required: true, minLength: 3 }] });
         if (!v) return;
+        say("flags", null);
         try { await ctx.api(`/v1/admin/execution/providers/${encodeURIComponent(r.provider)}/${kill ? "kill" : "unkill"}`, { method: "POST", body: { reason: v.reason } }); loadFlags(); loadLog(); }
-        catch (e) { B.flags.append(OG.error(e)); }
+        catch (e) { say("flags", OG.error(e)); }
       }
       function drawMatrix() {
         const provs = caps.filter(c => c.matrix);
@@ -309,11 +335,19 @@
             h("tr", {}, h("th", { class: "mx-k" }, "provider-specific risks"), provs.map(c => h("td", { class: "mx-c mx-risk" }, (c.matrix.risks || []).map(r => h("div", {}, "• " + r))))))))),
           h("p", { class: "note" }, "From each adapter's CAPABILITIES (GET /v1/capabilities). YES / NO / PARTIAL as documented; hover a cell for the evidence (docs URL or observed behaviour)."));
       }
+      let capsState = "loading";   // "loading" | "ok" | an error: the validation launcher always ends in a result or a message
       async function loadFlags() {
         try {
           [flags, caps] = await Promise.all([ctx.api("/v1/admin/execution/providers", { nocache: true }), ctx.api("/v1/capabilities", { nocache: true })]);
+          flags = Array.isArray(flags) ? flags : []; caps = Array.isArray(caps) ? caps : [];
+          capsState = "ok";
           drawFlags(); drawMatrix(); drawValidation();
-        } catch (e) { B.flags.replaceChildren(OG.error(e, loadFlags)); }
+        } catch (e) {
+          capsState = e;
+          B.flags.replaceChildren(OG.error(e, loadFlags));
+          B.matrix.replaceChildren(OG.error(e, loadFlags));
+          drawValidation();
+        }
       }
 
       /* ---------- validation launcher ---------- */
@@ -350,29 +384,35 @@
             pre.checked_at ? h("span", { class: "dim" }, " · checked " + fmt.dateTime(pre.checked_at)) : null));
         return h("div", { class: "ex-pre" }, head, body, alertRes || null);
       }
+      // Created once: the 20 s refresh redraws the launcher but never clears what the operator typed.
+      const valGpu = h("input", { class: "field", placeholder: "GPU slug (optional)", "aria-label": "GPU slug (optional)" });
       function drawValidation() {
+        if (capsState === "loading") { B.validation.replaceChildren(OG.loading("Loading providers…")); return; }
+        if (capsState !== "ok") { B.validation.replaceChildren(OG.error(capsState, loadFlags)); return; }
         const provs = caps.filter(c => (c.level_implemented || 0) >= 2).map(c => c.provider);
-        if (!provs.length) { B.validation.replaceChildren(OG.loading()); return; }
+        if (!provs.length) { B.validation.replaceChildren(OG.empty("No provider on this server can provision yet (integration level 2 or more is needed), so there is nothing to validate.")); return; }
         if (!valProv || !provs.includes(valProv)) { valProv = provs.includes("lambda") ? "lambda" : provs[0]; loadPre(valProv); }
+        const focused = document.activeElement === valGpu, selA = valGpu.selectionStart, selB = valGpu.selectionEnd;
         const sel = h("select", { class: "field", onchange: () => { valProv = sel.value; alertRes = null; loadPre(valProv); } },
           provs.map(p => h("option", { value: p, selected: p === valProv ? true : null }, OG.providerName(p) + " · " + ((flags.find(f => f.provider === p) || {}).adapter_status || "simulated"))));
         sel.value = valProv;
         const ready = !!(pre && pre.ok && pre.provider === valProv);
-        const gpu = h("input", { class: "field", placeholder: "GPU slug (optional)" });
+        const gpu = valGpu;
         const vdeps = all.filter(r => r.purpose === "validation");
         B.validation.replaceChildren(
           h("div", { class: "ex-cap" }, h("b", {}, "Validation cap (not overridable): "), "1 instance · 1 GPU · ≤ $3.00/h total · ≤ 30 min runtime · auto-terminate · admin approval"),
           preconditionsPanel(),
           h("div", { class: "bar" }, sel, gpu, h("button", { class: "btn pri", type: "button", disabled: ready ? null : true, title: ready ? null : "every validation precondition must be green", onclick: () => startValidation(sel.value, gpu.value.trim()) }, "Validate provider…"),
             ready ? null : h("span", { class: "down" }, "disabled until every precondition is green")),
-          h("p", { class: "note" }, "Creates a purpose=validation route pending approval. Approve it on its ticket, watch it run, terminate it (or let the deadline do it); the evidence below must be complete before the adapter becomes validated."),
+          h("p", { class: "note" }, "Creates a validation route that waits for your approval on its ticket. The adapter becomes validated only when every evidence step below is complete."),
           vdeps.length ? OG.table({
             columns: [{ key: "status", label: "State", fmt: v => OG.stateBadge(v) }, { key: "deployment_id", label: "Validation deployment", cls: "mono", fmt: v => h("button", { class: "lnk mono", type: "button", onclick: () => follow(v) }, v) },
-              { key: "provider", label: "Provider", fmt: v => OG.providerLink(v) }, { key: "gpu", label: "GPU", fmt: v => OG.shortGpu(v || "") }, { key: "quote", label: "$/GPU·h", num: true, value: r => r.prices.quote, fmt: v => fmt.price(v) },
+              { key: "provider", label: "Provider", fmt: v => OG.providerLink(v) }, { key: "gpu", label: "GPU", fmt: v => OG.shortGpu(v || "") }, { key: "quote", label: "$/GPU·h", num: true, value: r => (r.prices || {}).quote, fmt: v => fmt.price(v) },
               { key: "rr", label: "", sort: false, fmt: (v, r) => ["pending_approval", "quote_expired"].includes(r.status) ? h("a", { class: "btn sm pri", href: "/route?rr=" + r.route_request_id }, "Approve on ticket →") : h("a", { class: "btn sm", href: "/deployments/" + r.deployment_id }, "Open →") }],
             rows: vdeps, compact: true, csv: false,
           }) : h("p", { class: "dim" }, "No validation deployments yet."),
           valFollow ? h("div", { class: "ex-vf" }, h("div", { class: "sec-h" }, "Evidence · ", h("span", { class: "mono" }, valFollow)), valEv ? valEv : OG.loading("Reading evidence…")) : null);
+        if (focused) { valGpu.focus(); try { valGpu.setSelectionRange(selA, selB); } catch (e) { /* not a text input */ } }
       }
       async function follow(dep) {
         valFollow = dep; OG.qs.set({ vdep: dep }); valEv = null; drawValidation();
@@ -389,7 +429,7 @@
         const k = "mark:" + dep;
         I[k] = OG.intentFor(I[k], k, {});
         try { await OG.api.intent(I[k], `/v1/admin/validation/${encodeURIComponent(dep)}/mark`, { method: "POST" }); loadFlags(); follow(dep); loadLog(); }
-        catch (e) { valEv = h("div", {}, valEv, notYet("POST /v1/admin/validation/{id}/mark", e)); drawValidation(); }
+        catch (e) { say("validation", h("div", {}, notYet("POST /v1/admin/validation/{id}/mark", e), unknownNote(I[k]))); }
       }
       async function startValidation(provider, gpuSlug) {
         const ok = await OG.dialog({ title: "Validate " + OG.providerName(provider), confirm: "Create validation route",
@@ -398,16 +438,19 @@
         if (!ok) return;
         const body = { provider }; if (gpuSlug) body.gpu = gpuSlug;
         I.val = OG.intentFor(I.val, "validation_start", body);
+        say("validation", OG.loading("Creating the validation route…"));
         try {
           const r = await OG.api.intent(I.val, "/v1/admin/validation/start", { method: "POST", body });
+          say("validation", h("div", { class: "og-ok" }, h("b", {}, "Validation route created: "), h("span", { class: "mono" }, (r && r.deployment_id) || ""), " ",
+            r && r.route_request_id ? h("a", { class: "btn sm pri", href: "/route?rr=" + r.route_request_id }, "Approve on ticket") : null));
+          if (r && r.deployment_id) valGpu.value = "";
           await loadDeps();
-          B.validation.prepend(h("div", { class: "og-ok" }, h("b", {}, "Validation route created: "), h("span", { class: "mono" }, r.deployment_id || ""), " ",
-            r.route_request_id ? h("a", { class: "btn sm pri", href: "/route?rr=" + r.route_request_id }, "Approve on ticket →") : null));
-          if (r.deployment_id) follow(r.deployment_id);
-        } catch (e) { B.validation.prepend(notYet("POST /v1/admin/validation/start", e)); }
+          if (r && r.deployment_id) follow(r.deployment_id);
+        } catch (e) { say("validation", h("div", {}, notYet("POST /v1/admin/validation/start", e), unknownNote(I.val))); }
       }
 
       /* ---------- reconciliation runs ---------- */
+      const reconFind = h("div");
       async function loadRecon() {
         let runs, last = null, src = "GET /v1/admin/reconcile/runs";
         try { const r = await ctx.api("/v1/admin/reconcile/runs", { params: { limit: 20 }, full: true, nocache: true }); runs = r.data; last = r.meta && r.meta.last_run; }
@@ -428,12 +471,14 @@
               { key: "counts", label: "Findings", sort: false, cls: "wrap", fmt: v => v && Object.keys(v).length ? Object.entries(v).map(([k, n]) => h("span", { class: "badge " + (/orphan|fail|unresolved/.test(k) ? "warn" : "") }, k.replace(/_/g, " ") + " " + n)) : h("span", { class: "dim" }, "none") },
               { key: "error", label: "Error", cls: "wrap dim", fmt: v => v || "" },
             ], rows: runs, compact: true, csv: false, sort: { key: "id", dir: "desc" },
-            onRow: r => B.recon.append(h("pre", { class: "w4-code ex-find" }, JSON.stringify(r.findings || [], null, 1).slice(0, 4000))),
-          }) : h("p", { class: "dim" }, "No reconciliation run recorded. The job runs every few minutes in a deployed server (not with OPENGRID_NO_JOBS)."));
+            onRow: r => reconFind.replaceChildren(h("div", { class: "sec-h" }, "Findings of run #" + r.id), h("pre", { class: "w4-code ex-find" }, JSON.stringify(r.findings || [], null, 1).slice(0, 4000))),
+          }) : h("p", { class: "dim" }, "No reconciliation run recorded. The job runs every few minutes in a deployed server (not with OPENGRID_NO_JOBS)."),
+          runs.length ? reconFind : null);
       }
       async function runRecon() {
-        B.recon.prepend(OG.loading("Running one reconciliation pass (read-only list calls; may terminate provably-ours orphans)…"));
-        try { await ctx.api("/v1/admin/reconcile/run", { method: "POST" }); } catch (e) { B.recon.prepend(notYet("POST /v1/admin/reconcile/run", e)); return; }
+        say("recon", OG.loading("Running one reconciliation pass (read-only list calls; may terminate provably-ours orphans)…"));
+        try { await ctx.api("/v1/admin/reconcile/run", { method: "POST" }); } catch (e) { say("recon", notYet("POST /v1/admin/reconcile/run", e)); return; }
+        say("recon", null);
         loadRecon(); loadOrphans(); loadDeps();
       }
 
@@ -468,8 +513,9 @@
           const v = await OG.ask({ title: "Change cost guards for account #" + limAcct, confirm: "Save limits", body: h("pre", { class: "w4-code" }, JSON.stringify(body, null, 1)),
             fields: [{ key: "reason", type: "textarea", label: "Reason (required, logged)", required: true, minLength: 3 }] });
           if (!v) return;
+          say("limits", null);
           try { await ctx.api("/v1/admin/execution/limits/" + encodeURIComponent(limAcct), { method: "POST", body: Object.assign(body, { reason: v.reason }) }); loadLimits(); loadLog(); }
-          catch (e) { B.limits.append(OG.error(e)); }
+          catch (e) { say("limits", OG.error(e)); }
         };
         B.limits.replaceChildren(head, OG.stats([
           { label: "Active deployments", value: fmt.num(U.active_deployments), sub: "cap " + (L.max_active_deployments ?? "-") },

@@ -92,6 +92,18 @@
     return h("div", { class: "x-ssh" + (r.lines.some(l => l.tone) ? " x-ssh-bad" : "") }, h("b", {}, "SSH access:"),
       r.lines.map(l => h("div", { class: "x-ssh-l" }, h("span", { class: "x-ssh-k" }, l.label + ": "), h("span", { class: "mono" + (l.tone ? " down x-ssh-red" : "") }, l.value))));
   };
+  // The one access state for operator-only pages (/admin/*): who it is for, and the staff sign-in when signed out.
+  OG.operatorGate = (title, me) => h("div", { class: "x-gate" }, OG.head(title),
+    OG.accessNote("operator", me ? "Your sign-in does not include operator access." : null),
+    me ? null : h("p", { class: "x-gate-a" }, h("a", { class: "btn sm", href: OG.loginHref() }, "OpenGrid staff: operator sign-in"), " ",
+      h("a", { class: "lnk", href: "/" }, "Explore free pages")));
+  // A failed background refresh: keep the last good view (and its Terminate button) and say so in one line.
+  X.refreshNote = (err, lastOkIso) => {
+    const why = err && typeof err.status === "number" && err.status ? (err.status === 401 ? "sign-in required" : "HTTP " + err.status) : "no connection";
+    return `Could not refresh (${why}). Showing the view from ${lastOkIso ? fmt.time(lastOkIso) : "earlier"}; the buttons still work.`;
+  };
+  OG.refreshNotice = (err, lastOkIso, retry) => h("div", { class: "x-stale", role: "status" }, h("span", {}, X.refreshNote(err, lastOkIso)),
+    retry ? h("button", { class: "btn sm", type: "button", onclick: retry }, "Try now") : null);
 
   const money = v => (v == null ? null : OG.money(v));
   const kv = rows => h("table", { class: "dep-kv" }, rows.filter(Boolean).map(([k, v, title]) =>
@@ -123,11 +135,10 @@
       el.append(root);
       const FILTERS = [["all", "All"], ["live", "Live"], ["uncertain", "Uncertain"], ["pending", "Pending approval"], ["failed", "Failed"], ["terminated", "Terminated"]];
       const st = { filter: FILTERS.some(f => f[0] === query.status) ? query.status : "all", rows: null };
-      const stats = h("div"), holder = h("div", {}, OG.loading("Loading deployments…")), alarm = h("div");
+      const stats = h("div"), holder = h("div", {}, OG.loading("Loading deployments…")), alarm = h("div"), stale = h("div");
       const seg = OG.seg(FILTERS, st.filter, v => { st.filter = v; OG.qs.set({ status: v === "all" ? null : v }); draw(); });
-      root.append(OG.head("Deployments", "Compute OpenGrid launched or is about to launch · transaction data",
-        OG.kindBadge("transaction"), seg, h("button", { class: "btn", type: "button", onclick: () => load() }, "Reload"),
-        h("a", { class: "btn pri", href: "/route" }, "New route →")), alarm, stats, holder);
+      root.append(OG.head("Deployments", "GPUs OpenGrid launched, or is about to launch, for you. Anything that may still bill is listed first.",
+        seg, h("button", { class: "btn", type: "button", onclick: () => load() }, "Reload")), stale, alarm, stats, holder);
       const match = (r, f) => f === "all" || (f === "live" ? D.LIVE.includes(r.status) : f === "uncertain" ? D.UNCERTAIN.includes(r.status) || r.status === "termination_failed"
         : f === "pending" ? ["pending_approval", "approved", "quote_expired"].includes(r.status) : f === "failed" ? D.FAILED.includes(r.status) : r.status === f);
       const rank = r => (r.status === "termination_failed" || D.UNCERTAIN.includes(r.status) ? 0 : D.LIVE.includes(r.status) ? 1 : PRE_LAUNCH.includes(r.status) ? 2 : 3);
@@ -141,7 +152,7 @@
           { key: "gpu", label: "GPU", fmt: v => OG.gpuLink(v) },
           { key: "gpu_count", label: "GPUs", num: true },
           { key: "quote", label: "Quote $/GPU·h", num: true, value: r => r.prices && r.prices.quote, fmt: v => v != null ? fmt.price(v) : OG.na("no quote recorded") },
-          { key: "exec", label: "Execution $/GPU·h", num: true, value: r => r.prices && r.prices.execution_price, fmt: v => v != null ? fmt.price(v) : OG.na("the provider has not reported an execution price") },
+          { key: "exec", label: "Execution $/GPU·h", num: true, hidden: true, value: r => r.prices && r.prices.execution_price, fmt: v => v != null ? fmt.price(v) : OG.na("the provider has not reported an execution price") },
           { key: "created_at", label: "Created", num: true, fmt: v => fmt.dateTime(v) },
           { key: "uptime_seconds", label: "Runtime", num: true, fmt: v => dur(v), title: "OpenGrid-observed running time" },
           { key: "terminate_deadline_at", label: "Auto-terminate", num: true, fmt: (v, r) => v && D.LIVE.includes(r.status) ? OG.countdown(v) : h("span", { class: "dim" }, v ? fmt.dateTime(v) : "-") },
@@ -156,27 +167,30 @@
         const hot = rows.filter(r => rank(r) === 0);
         alarm.replaceChildren(hot.length ? h("div", { class: "og-alarm" }, h("b", {}, `${hot.length} deployment${hot.length === 1 ? "" : "s"} in an uncertain or failed-termination state`),
           h("span", {}, ": an instance may exist and bill. Open each one; reconciliation evidence is on the detail page.")) : null);
-        stats.replaceChildren(OG.stats([
+        stats.replaceChildren(rows.length ? OG.stats([
           { label: "Deployments", value: fmt.num(rows.length) },
           { label: "Live", value: fmt.num(rows.filter(r => D.LIVE.includes(r.status)).length), sub: "an instance may exist" },
-          { label: "Running", value: fmt.num(rows.filter(r => r.status === "running").length) },
-          { label: "Uncertain", value: fmt.num(hot.length), sub: "needs evidence" },
+          { label: "Uncertain", value: fmt.num(hot.length), sub: "may be billing" },
           { label: "Pending approval", value: fmt.num(rows.filter(r => r.status === "pending_approval").length) },
-          { label: "GPU-hours observed", value: rows.length ? fmt.num(rows.reduce((s, r) => s + (r.uptime_seconds || 0) * (r.gpu_count || 0) / 3600, 0), 1) : null, reason: "no deployments", kind: "transaction" },
-        ]));
+        ]) : null);
         if (!rows.length) {
           holder.replaceChildren(h("div", { class: "dep-empty" }, h("b", {}, "No deployments yet."),
-            h("p", {}, "A deployment exists once POST /v1/route quotes a provisionable listing under SUPERVISED or LIVE execution. In PREVIEW_ONLY the route returns ", h("code", { class: "mono" }, "not_provisioned"), " and creates none."),
-            h("p", {}, h("a", { class: "btn pri", href: "/route" }, "Preview a route →"), " ", h("a", { class: "btn", href: "/methodology/execution-safety" }, "Execution safety"))));
+            h("p", {}, "A deployment appears here once an approved route launches a GPU. While execution is preview-only, routes are priced but nothing is launched."),
+            h("p", {}, h("a", { class: "btn pri", href: "/route" }, "Preview a route"), " ", h("a", { class: "btn", href: "/methodology/execution-safety" }, "Execution safety"))));
           return;
         }
         tbl.update(rows.filter(r => match(r, st.filter)));
-        if (holder.firstChild !== tbl) holder.replaceChildren(tbl, h("p", { class: "note" }, "Quote = what the route quoted; execution price = what the provider reports charging. Never merged. Uptime is OpenGrid-observed. ",
-          h("a", { class: "lnk", href: "/methodology/execution-safety" }, "State machine →")));
+        if (holder.firstChild !== tbl) holder.replaceChildren(tbl, h("p", { class: "note" }, "Quote is what the route quoted, never what the provider charged. Runtime is observed by OpenGrid. ",
+          h("a", { class: "lnk", href: "/methodology/execution-safety" }, "How deployments work")));
       }
+      let lastOk = null;
       async function load() {
-        try { st.rows = await ctx.api("/v1/deployments", { nocache: true }); draw(); }
-        catch (e) { holder.replaceChildren(OG.error(e, load)); }
+        try { st.rows = await ctx.api("/v1/deployments", { nocache: true }); lastOk = new Date().toISOString(); stale.replaceChildren(); draw(); }
+        catch (e) {
+          // keep the last good list; only the first load shows the full error / sign-in state
+          if (st.rows) stale.replaceChildren(OG.refreshNotice(e, lastOk, () => load()));
+          else holder.replaceChildren(OG.error(e, load));
+        }
       }
       load();
       ctx.every(30000, load);
@@ -197,12 +211,27 @@
       const admin = OG.isAdmin(me);
       const intents = {};          // one Idempotency-Key per user intent (terminate / stop), reused only on an unknown outcome
       const flash = h("div", { class: "dep-flash" });
-      let d = null, trace = null, quality = null, fb = null, val = null;
+      const stale = h("div", { "aria-live": "polite" });   // "could not refresh": survives every redraw
+      const openFolds = new Set();                          // Details sections the reader opened stay open on refresh
+      let d = null, trace = null, quality = null, fb = null, val = null, lastOk = null;
 
+      // -> true when the view was redrawn with fresh data. A failed refresh never removes a good view: the
+      // Terminate / Stop controls must stay on screen while a live deployment is being polled.
       async function load(refresh) {
+        let next;
         try {
-          d = await ctx.api("/v1/deployments/" + encodeURIComponent(id), { params: { refresh: refresh ? "true" : "false" }, nocache: true });
-        } catch (e) { root.replaceChildren(OG.head("Deployment " + id, null, h("a", { class: "btn", href: "/deployments" }, "← Deployments")), OG.error(e, () => load())); return; }
+          next = await ctx.api("/v1/deployments/" + encodeURIComponent(id), { params: { refresh: refresh ? "true" : "false" }, nocache: true });
+        } catch (e) {
+          if (d) { stale.replaceChildren(OG.refreshNotice(e, lastOk, () => load())); return false; }
+          root.replaceChildren(OG.head("Deployment " + id, null, h("a", { class: "btn", href: "/deployments" }, "← Deployments")), OG.error(e, () => load()));
+          return false;
+        }
+        if (!next || typeof next !== "object") {
+          if (d) { stale.replaceChildren(OG.refreshNotice(null, lastOk, () => load())); return false; }
+          root.replaceChildren(OG.head("Deployment " + id, null, h("a", { class: "btn", href: "/deployments" }, "← Deployments")), OG.error({ status: 404 }));
+          return false;
+        }
+        d = next; lastOk = new Date().toISOString(); stale.replaceChildren();
         const extra = await Promise.all([
           admin ? OG.api.soft("/v1/admin/trace/" + encodeURIComponent(id), { nocache: true }) : null,
           OG.api.soft(admin ? "/v1/admin/quality" : "/v1/quality", { params: { limit: 1000, days: 3650, include_validation: admin ? "true" : null }, nocache: true }),
@@ -212,7 +241,13 @@
         if (!ctx.alive()) return;
         [trace, quality, fb, val] = extra;
         draw();
+        return true;
       }
+      const fold = (key, summary, ...kids) => {
+        const det = h("details", { class: "sec dep-fold", open: openFolds.has(key) ? true : null,
+          ontoggle: () => { if (det.open) openFolds.add(key); else openFolds.delete(key); } }, h("summary", { class: "sec-h" }, summary), kids);
+        return det;
+      };
 
       function reconciliation() {
         if (d.reconciliation) return { rec: d.reconciliation, src: "GET /v1/deployments/{id}" };
@@ -225,7 +260,7 @@
         const p = d.prices || {};
         const q = rec && rec.quote;
         const tx = d.transaction;
-        const why = d.reconciled_at ? null : TERMINAL.includes(d.status) ? "not reconciled yet (runs after confirmed termination)" : "reconciled after termination";
+        const why = d.reconciled_at ? null : TERMINAL.includes(d.status) ? "not reconciled yet (runs after confirmed termination)" : "runs after termination";
         const row = (label, concept, v, sub, reason) => h("div", { class: "dep-cost" },
           h("div", { class: "rt-cl" }, label, concept), h("div", { class: "dep-cv" }, v != null ? money(v) : OG.na(reason || why || "unavailable")), sub ? h("div", { class: "rt-cs" }, sub) : null);
         const quoteTotal = q && q.est_total_cost != null ? q.est_total_cost : null;
@@ -247,7 +282,7 @@
           ["Runtime billed", rec.runtime ? `${dur(rec.runtime.billable_seconds)} billable · ${dur(rec.runtime.running_seconds)} running · ${dur(rec.runtime.stopped_seconds)} stopped` : null],
           ["Reconciled", d.reconciled_at ? fmt.dateTime(d.reconciled_at) : null, "source: " + R.src],
         ]) : h("p", { class: "note" }, why ? "Cost reconciliation: " + why + "." : "");
-        return OG.section("Cost: four numbers, never merged", cells, detail);
+        return OG.section(h("span", {}, "Cost ", h("span", { class: "dim" }, "four numbers, never merged")), cells, detail);
       }
 
       function pricesBlock() {
@@ -276,7 +311,7 @@
         const ts = v => v ? h("span", { title: v }, X.exactTime(v)) : null;
         const provBasis = d.billable_basis === "provider_running_at";
         const billBadge = d.billable_basis ? (provBasis ? OG.badge("provider timestamp", "good", "billable time from the provider's own running timestamp") : OG.kindBadge("estimated")) : null;
-        return OG.section("Runtime ceiling · lifecycle timestamps · SSH access", h("div", { class: "cols-2" },
+        return OG.section("Runtime and timestamps",
           kv([
             ["Max runtime", maxRun ? `${maxRun} min · source ${X.ceilingSource(d.runtime_ceiling_source)}` : null, "effective_max_runtime_minutes: OpenGrid terminates the instance at the deadline; never unlimited"],
             ["Auto-terminates", d.terminate_deadline_at ? h("span", {}, X.exactTime(d.terminate_deadline_at), " ",
@@ -288,10 +323,10 @@
             ["Billable start", d.billable_start ? h("span", {}, X.exactTime(d.billable_start), " ", billBadge) : null, d.billable_basis ? "basis: " + d.billable_basis : "not known yet"],
             ["Billable end", d.billable_end ? h("span", {}, X.exactTime(d.billable_end), " ", billBadge) : d.billable_start && !TERMINAL.includes(d.status) ? h("span", { class: "warn-t" }, "open: may still be billing") : null, d.billable_basis ? "basis: " + d.billable_basis : null],
             ["Billable basis", d.billable_basis ? h("span", {}, d.billable_basis, " ", billBadge) : null, "provider_running_at = provider timestamp; opengrid_observed_running / provider_created_at = estimate"],
-          ]),
-          h("div", {}, OG.sshAccessBlock(d.ssh_access, { purpose: d.purpose, keyRef: d.launch && d.launch.ssh_key }),
-            d.ssh_access && d.ssh_access.note ? h("p", { class: "note" }, d.ssh_access.note) : null)));
+          ]));
       }
+      const sshBlock = () => h("div", { class: "dep-ssh" }, OG.sshAccessBlock(d.ssh_access, { purpose: d.purpose, keyRef: d.launch && d.launch.ssh_key }),
+        d.ssh_access && d.ssh_access.note ? h("p", { class: "note" }, d.ssh_access.note) : null);
 
       function qualityRow() {
         const outs = quality && quality.outcomes;
@@ -310,7 +345,7 @@
 
       function validationBlock() {
         if (d.purpose !== "validation") return null;
-        if (!val) return OG.section("Validation evidence", h("p", { class: "note" }, "Admin only."));
+        if (!val) return null;   // operator only
         if (val.error) return OG.section("Validation evidence", val.error.status === 404 ? OG.insufficient("GET /v1/admin/validation/{id} is not available on this server yet.", "Not available yet") : OG.error(val.error));
         const steps = val.steps || {};
         return OG.section("Validation evidence " + (val.validated ? "· validated" : `· ${(val.missing || []).length} step(s) missing`),
@@ -348,10 +383,10 @@
 
       function traceBlock() {
         if (!admin) return null;
-        if (!trace) return OG.section("Trace", h("p", { class: "note" }, "GET /v1/admin/trace/" + id + " did not answer."));
+        if (!trace) return null;   // operator debug view; absent when the trace endpoint does not answer
         const steps = trace.steps || [];
         const KEYS = ["to_status", "status", "outcome", "provider", "reason", "quote_price_per_gpu_hour", "period_start", "period_end", "gpu_hours", "provider_cost_usd", "usage_record_id", "kind"];
-        return h("details", { class: "sec dep-trace" }, h("summary", { class: "sec-h" }, `Trace · ${steps.length} steps (admin) · ${trace.route_request_id || ""}`),
+        return fold("trace", `Details: trace, ${steps.length} steps (operator)`,
           h("ol", { class: "dep-vt" }, steps.map(s => h("li", { class: "vt-" + s.step },
             h("span", { class: "mono dim" }, fmt.time(s.at)), h("b", { class: "mono" }, s.step.replace(/_/g, " ")),
             h("span", { class: "dim dep-det" }, KEYS.filter(k => s[k] != null && typeof s[k] !== "object").map(k => `${k}: ${s[k]}`).join(" · "))))),
@@ -359,7 +394,7 @@
       }
 
       function feedbackBlock() {
-        if (d.status !== "terminated") return OG.section("Design-partner feedback", h("p", { class: "note" }, "The feedback form opens once the deployment is terminated."));
+        if (d.status !== "terminated") return null;   // asked only once the deployment is terminated
         const QS = [["would_have_chosen_provider", "Would you have chosen this provider yourself?"], ["price_better", "Was the price better than what you normally pay?"],
           ["setup_easier", "Was setup easier?"], ["would_route_next", "Would you route the next workload through OpenGrid?"]];
         const cur = fb || {};
@@ -379,7 +414,7 @@
           h("label", { class: "og-ask-f" }, h("span", { class: "og-ask-l" }, "What broke?"), broke),
           h("label", { class: "og-ask-f" }, h("span", { class: "og-ask-l" }, "Notes"), notes),
           h("div", { class: "dep-acts" }, h("button", { class: "btn pri", type: "submit" }, fb ? "Update feedback" : "Send feedback"), msg));
-        return OG.section("Design-partner feedback", form, h("p", { class: "note" }, "Opinions only: never used in reliability or savings figures."));
+        return OG.section("How did it go?", form, h("p", { class: "note" }, "Opinions only: never used in reliability or savings figures."));
       }
 
       async function act(what) {
@@ -412,14 +447,15 @@
         const canTerm = !TERMINAL.includes(d.status);
         const canStop = d.supports_stop && ["running", "degraded"].includes(d.status) && d.provider_instance_id;
         const acts = [
-          h("button", { class: "btn", type: "button", title: "GET ?refresh=true: asks the provider now (read-only)", onclick: () => { flash.replaceChildren(OG.loading("Asking the provider…")); load(true).then(() => flash.replaceChildren(d && d.refresh ? h("div", { class: "note" }, d.refresh.refreshed ? "Refreshed from the provider. " + (d.refresh.note || "") : "Not refreshed: " + (d.refresh.reason || d.refresh.note || "")) : "")); } }, "Refresh from provider"),
+          h("button", { class: "btn", type: "button", title: "Asks the provider for the current state now (read-only)", onclick: () => { flash.replaceChildren(OG.loading("Asking the provider…")); load(true).then(fresh => flash.replaceChildren(fresh && d && d.refresh ? h("div", { class: "note" }, d.refresh.refreshed ? "Refreshed from the provider. " + (d.refresh.note || "") : "Not refreshed: " + (d.refresh.reason || d.refresh.note || "")) : "")); } }, "Refresh from provider"),
           canStop ? h("button", { class: "btn", type: "button", onclick: () => act("stop") }, "Stop…") : null,
           canTerm ? h("button", { class: "btn w4-danger", type: "button", onclick: () => act("terminate") }, PRE_LAUNCH.includes(d.status) ? "Cancel request…" : "Terminate…") : null,
           OG.copy(id, { title: "Copy the deployment id" }),
         ];
         const banner = STATE_NOTE[d.status] ? h("div", { class: "og-alarm t-" + (D.tone(d.status) || "plain") }, OG.stateBadge(d.status), h("span", {}, STATE_NOTE[d.status]),
           d.failure_reason ? h("span", { class: "mono dim" }, " · " + d.failure_reason) : null) : null;
-        const est = (d.prices.execution_price ?? d.prices.quote);
+        const prices = d.prices || {};
+        const est = (prices.execution_price ?? prices.quote);
         const alarm = X.billingAlarm(d);
         const billAlarm = alarm ? h("div", { class: "og-alarm t-bad x-billing" }, h("b", {}, alarm.title), h("span", {}, alarm.text),
           canTerm ? h("button", { class: "btn sm w4-danger", type: "button", onclick: () => act("terminate") }, "Terminate…") : null) : null;
@@ -429,22 +465,24 @@
             h("span", {}, d.provider ? OG.providerLink(d.provider) : "not placed", " · ", `${d.gpu_count}× `, OG.gpuLink(d.gpu || ""), d.region ? " · " + d.region : "", " · ",
               d.purpose === "validation" ? OG.badge("validation", "warn") : "customer", d.route_request_id ? [" · ", h("a", { class: "lnk mono", href: "/route?rr=" + d.route_request_id }, d.route_request_id)] : null),
             OG.stateBadge(d.status), acts),
-          flash, billAlarm, banner, OG.stateStrip(d.status, d.events),
+          stale, flash, billAlarm, banner, OG.stateStrip(d.status, d.events),
           OG.stats([
-            { label: "State since", value: d.state_changed_at ? fmt.age(d.state_changed_at) : null, sub: d.state_changed_at ? fmt.dateTime(d.state_changed_at) : null },
-            { label: "Runtime", value: dur(d.uptime_seconds), sub: "OpenGrid-observed running", kind: "transaction" },
-            { label: "Max runtime", value: maxRun ? maxRun + " min" : null, reason: "not reported", sub: "source " + X.ceilingSource(d.runtime_ceiling_source) },
-            { label: "Auto-terminate", value: d.terminate_deadline_at ? (live ? OG.countdown(d.terminate_deadline_at, { expired: "PAST DEADLINE" }) : fmt.dateTime(d.terminate_deadline_at)) : null, reason: PRE_LAUNCH.includes(d.status) ? "set at approval: approval time + " + (maxRun || "N") + " min" : "no deadline", sub: d.terminate_deadline_at ? X.exactTime(d.terminate_deadline_at) : null },
-            { label: "Accrued (est.)", value: est != null && d.uptime_seconds ? OG.money(est * d.gpu_count * d.uptime_seconds / 3600) : null, reason: "nothing ran", kind: "estimated", sub: "price × GPUs × observed runtime" },
-            { label: "Last checked", value: d.last_checked_at ? fmt.age(d.last_checked_at) : null, reason: "never read from the provider", sub: d.last_checked_at ? fmt.dateTime(d.last_checked_at) : null },
-            { label: "Reconciled", value: d.reconciled_at ? fmt.dateTime(d.reconciled_at) : null, reason: TERMINAL.includes(d.status) ? "pending" : "after termination" },
+            { label: "State since", value: d.state_changed_at ? fmt.age(d.state_changed_at) + " ago" : null, sub: d.state_changed_at ? fmt.dateTime(d.state_changed_at) : null },
+            { label: "Runtime", value: dur(d.uptime_seconds), sub: "observed by OpenGrid", kind: "transaction" },
+            { label: "Auto-terminate", value: d.terminate_deadline_at ? (live ? OG.countdown(d.terminate_deadline_at, { expired: "PAST DEADLINE" }) : fmt.dateTime(d.terminate_deadline_at)) : null, reason: PRE_LAUNCH.includes(d.status) ? "set at approval: approval time + " + (maxRun || "N") + " min" : "no deadline",
+              sub: maxRun ? "max runtime " + maxRun + " min" : null, title: d.terminate_deadline_at ? X.autoTerminate(d.terminate_deadline_at, maxRun, d.runtime_ceiling_source) : null },
+            { label: "Accrued (est.)", value: est != null && d.uptime_seconds ? OG.money(est * d.gpu_count * d.uptime_seconds / 3600) : null, reason: "nothing ran", kind: "estimated", sub: "price × GPUs × runtime" },
+            { label: "Last checked", value: d.last_checked_at ? fmt.age(d.last_checked_at) + " ago" : null, reason: "never read from the provider", sub: d.last_checked_at ? fmt.dateTime(d.last_checked_at) : null },
           ]),
-          h("div", { class: "cols-2" }, costBlock(), pricesBlock()),
-          lifecycleBlock(),
+          costBlock(),
+          sshBlock(),
           (d.limit_violations || []).length ? OG.section("Limit violations at approval", violationTable(d.limit_violations)) : null,
-          h("div", { class: "cols-2" }, h("div", {}, eventsBlock(), attemptsBlock()), h("div", {}, qualityRow(), validationBlock(), feedbackBlock())),
+          feedbackBlock(),
+          fold("prices", "Details: prices, credential and timestamps", h("div", { class: "cols-2" }, pricesBlock(), lifecycleBlock())),
+          fold("events", `Details: events (${(d.events || []).length}) and provision attempts`, eventsBlock(), attemptsBlock()),
+          fold("quality", "Details: routing quality" + (d.purpose === "validation" && admin ? " and validation evidence" : ""), qualityRow(), validationBlock()),
           traceBlock(),
-          h("p", { class: "note" }, "Data kinds: quote / execution / transaction are never mixed. ", h("a", { class: "lnk", href: "/methodology/execution-safety" }, "Execution safety →")));
+          h("p", { class: "note" }, "Quote, execution and transaction numbers are never mixed. ", h("a", { class: "lnk", href: "/methodology/execution-safety" }, "Execution safety")));
       }
 
       load();

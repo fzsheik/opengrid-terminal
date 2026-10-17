@@ -1440,7 +1440,6 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .pg-depd .dep-acts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .pg-depd .dep-fb { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); padding: 8px 10px; }
 .pg-depd .dep-fq { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: var(--fs-sm); color: var(--text-2); }
-.pg-depd .dep-trace summary { cursor: pointer; }
 .pg-depd .dep-vt { list-style: none; margin: 4px 0 0; padding: 0 0 0 14px; border-left: 1px solid var(--line-2); }
 .pg-depd .dep-vt li { position: relative; display: flex; gap: 10px; align-items: baseline; padding: 3px 0; font-size: var(--fs-sm); }
 .pg-depd .dep-vt li::before { content: ""; position: absolute; left: -18px; top: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
@@ -1585,6 +1584,15 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .pg-depd .x-billing > b { font: 700 var(--fs-base) var(--mono); letter-spacing: .1em; color: var(--down); }
 .pg-ex .ex-pre { border: 1px solid var(--line); border-radius: 3px; background: var(--surface); padding: 6px 10px; margin-bottom: 8px; }
 .pg-ex .ex-pre .sec-h { display: flex; align-items: center; gap: 6px; }
+/* "could not refresh": the last good view stays, this one line says so */
+.x-stale { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 10px; margin: 0 0 8px; border: 1px solid var(--amber-b); border-left: 3px solid var(--warn); border-radius: var(--radius); background: var(--surface); font-size: var(--fs-sm); color: var(--text-2); }
+/* operator-only pages, signed out */
+.x-gate-a { display: flex; align-items: center; gap: 12px; margin: 0; font-size: var(--fs-sm); }
+/* Details disclosures on the execution pages */
+details.dep-fold > summary, .pg-ex details.sec > summary { cursor: pointer; }
+details.dep-fold { margin-top: 10px; }
+.pg-ex .ex-msg:empty { display: none; }
+.pg-ex .ex-msg { margin: 0 0 8px; }
 @media (max-width: 1100px) { .pg-route .tk-safety { grid-template-columns: minmax(0, 1fr); } }
 /* ---- end page: execution UI ---- */
 
@@ -1761,6 +1769,11 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .pg-rsv .rs-best { margin-top: 6px; }
 .pg-rsv .rs-notes { white-space: pre-wrap; word-break: break-word; }
 .pg-rsv .sec { margin-top: 10px; }
+.pg-rsv .rs-more { margin-top: 6px; }
+.pg-rsv .rs-more > summary { cursor: pointer; font-size: var(--fs-sm); color: var(--muted); }
+.pg-rsv .rs-more[open] > summary { margin-bottom: 6px; }
+.pg-val .val-fold { margin-top: 8px; }
+.pg-val .val-fold > summary { cursor: pointer; }
 /* ---- end page: reserve ---- */
 
 /* ---------------- OpenGrid Assistant (web/pages/assistant.js): theme tokens only ---------------- */
