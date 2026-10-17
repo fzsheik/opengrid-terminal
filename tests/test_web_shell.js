@@ -13,8 +13,11 @@ const WEB = path.join(__dirname, "..", "web");
 // ---------- errors read as sentences; HTTP and endpoints only in the technical detail ----------
 const E = OG.explainError;
 const e401 = E({ status: 401, message: "Authentication required", path: "http://x.example/v1/jobs" });
-eq([e401.title, e401.action], ["Sign-in required", "signin"], "401: an access state with a sign-in next step");
-ok(/invite-only/.test(e401.text) && !/HTTP|401|\/v1/.test(e401.title + e401.text), "401: explains accounts, no HTTP or endpoint in the words");
+eq([e401.title, e401.action], ["Invite only", "signin"], "401: an access state (invite only), not a failure");
+ok(/invite-only/.test(e401.text) && /API key/.test(e401.text) && !/HTTP|401|\/v1/.test(e401.title + e401.text), "401: explains invite-only accounts and API keys, no HTTP or endpoint in the words");
+const core = fs.readFileSync(path.join(WEB, "core.js"), "utf8");
+ok(core.includes('"/developers#access" }, "How to get an API key")') && core.includes('"OpenGrid staff: sign in"'), "401 state: how to get an API key, plus the small staff sign-in (the only browser login)");
+ok(!/Sign-in required|Needs an account|needs an account/.test(core), "one access word in the shell: invite only (no 'needs an account' / 'sign-in required')");
 ok(e401.tech.includes("HTTP 401") && e401.tech.includes("/v1/jobs") && !e401.tech.includes("x.example"), "401: status and path kept as technical detail (origin stripped)");
 for (const [st, title] of [[403, "Not included in your access"], [404, "Not found"], [429, "Too many requests"], [0, "Could not reach OpenGrid"], [503, "OpenGrid had a problem"]]) {
   const x = E({ status: st, message: "m", path: "/v1/x" });
@@ -34,6 +37,20 @@ eq([F(at(1500), now, true).tone, F(at(1500), now, true).text], ["stale", "Prices
 eq(F(at(7200), now, true).text, "Prices may be out of date: last read 2 hours ago", "hours");
 eq([F(null, now, false).tone, F(null, now, false).text], ["down", "Can't reach OpenGrid"], "no answer: can't reach, never jargon");
 eq(F(null, now, null).text, "Connecting…", "before the first answer");
+eq(F(null, now, true).text, "Prices loaded", "prices answered but the read time is unknown: no made-up freshness");
+// the freshness is the last provider read (newest successful fetch), never the response time
+const R = OG.lastReadOf;
+eq(R([{ last_ok_fetch: "2026-10-15T11:50:00Z" }, { last_ok_fetch: null }, { last_ok_fetch: "2026-10-15T11:58:00Z" }, {}]), "2026-10-15T11:58:00Z", "last read: the newest successful fetch");
+eq(R([{ last_ok_fetch: null }]), null, "no successful fetch: unknown");
+eq(R(null), null, "no provider list: unknown");
+ok(/OG\.status\.asOf\(read\)/.test(core) && !/OG\.status\.asOf\(m\.t1\)/.test(core), "the shell drives 'Prices updated' from the last provider read, not /market's response time");
+for (const f of ["home.js", "overview.js"]) {
+  const src = fs.readFileSync(path.join(WEB, "pages", f), "utf8");
+  ok(!/OG\.status\.(asOf|tape|live)\(/.test(src), `${f}: leaves the status bar and the ticker to the shell (one meaning, one format on every page)`);
+}
+const ov = fs.readFileSync(path.join(WEB, "pages", "overview.js"), "utf8");
+ok(/h\("details", \{ class: "ov-adv" \}/.test(ov) && !/"σ 1h"|label: "z"|label: "n"|label: "Δ"|label: "Prov"/.test(ov), "/markets: secondary signals folded, no symbol-only column names");
+ok(!/request failed|service did not answer|"…"/.test(ov), "/markets: no internal error text or bare '…' placeholders");
 
 // ---------- tape: whole items only, room kept for "+N more" ----------
 const T = OG.tapeFit;
@@ -82,10 +99,12 @@ for (const [theme, b] of [["dark", block(":root")], ["light", block(':root[data-
 // ---------- homepage: the first screen ----------
 const home = fs.readFileSync(path.join(WEB, "pages", "home.js"), "utf8");
 ok(home.includes('"Compare GPU prices. Find the right compute. Run supported workloads."'), "headline says what OpenGrid does");
-ok(["Explore GPU Prices", "Find Compute for My Project", "Try the Free Training Demo"].every(t => home.includes(`"${t}"`)), "the three primary actions");
-ok(/demoAct = action\(demoBtn/.test(home) && /OG\.me\(\)\.then\(me => \{\s*if \(!me/.test(home), "a visitor's demo action explains the account in place; only a signed-in user gets the /jobs/new link");
-ok(home.includes('"Needs an account"') && home.includes('"Simulation · free"') && (home.match(/"Free · no account"/g) || []).length === 2, "every action is tagged: free / simulation / needs an account");
+ok(["Explore GPU prices", "Find compute for my project", "Try the free training demo"].every(t => home.includes(`"${t}"`)), "the three primary actions (sentence case)");
+ok(/demoAct = action\(demoBtn/.test(home) && /OG\.me\(\)\.then\(me => \{\s*if \(!me/.test(home), "a visitor's demo action explains invite-only access in place; only a signed-in user gets the /jobs/new link");
+ok(home.includes('"Invite only"') && home.includes('"Simulation · free"') && (home.match(/"Free · no account"/g) || []).length === 2, "every action is tagged: free / simulation / invite only");
 ok(home.includes('"Running your own code", "not yet"'), "what works today: says plainly what does not work yet");
+ok(home.includes('"GPU prices right now"') && !/hm-how|hm-stats|\/v1\/indices|hm-more-row/.test(home), "homepage: headline, what works today, three actions and the price board; nothing else");
+ok(!/[\u2013\u2014]/.test(home + ov), "no en or em dashes in the homepage or /markets copy");
 ok(!/arbitrary|any workload|run anything/i.test(home), "no claim that arbitrary workloads run today");
 
 console.log(failures ? `\n${failures} FAILED` : "\nall shell tests passed");
