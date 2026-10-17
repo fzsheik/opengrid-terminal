@@ -324,7 +324,43 @@ def test_marketplace_persistence():
         scratchdb.drop(DB)
 
 
+def test_feed_outage_reported_once():
+    """Production, 2026-10-16: the 6h lookback slid into an old outage and cut off its first polls, so each
+    later run saw a "new" outage starting one round later (new dedupe key) and posted it again. Replays the
+    feed detector every poll round across one outage and a second, later one: each is reported exactly once."""
+    w = World(days=3)
+    t0 = w.T - timedelta(hours=30)
+    down = {t0 + timedelta(minutes=15 * i) for i in range(4, 10)}        # 6 failed rounds (90m)
+    down |= {t0 + timedelta(hours=5, minutes=15 * i) for i in range(3)}  # a later 3-round outage (45m)
+    polls = [t0 + timedelta(minutes=15 * i) for i in range(4 * 24)]
+    for t in polls:
+        w.fetch("syn_f", t, ok=t not in down)
+    w.fetch("syn_a", w.start)
+    w.listing("syn_a", H100, [(w.start, 2.00, True)])
+    w.listing("syn_f", H100, [(t0, 2.10, True)])   # tracked since t0, so a later streak counts as "down"
+    try:
+        Session = _setup(w)
+        with Session.begin() as s:
+            ctx = events.load_context(s, events.SEGMENT, save=True)
+        for t in polls:
+            with Session.begin() as s:
+                em = events.Emitter(events._prior_events(s, t - events.BACKFILL), None)
+                events.detect_feeds(s, ctx, em, t + timedelta(seconds=30))
+                events._insert(s, em.out, t)
+        with Session() as s:
+            rows = s.execute(text("SELECT type, occurred_at, detail FROM market_events WHERE provider = 'syn_f' "
+                                  "ORDER BY occurred_at, type")).all()
+        got = [(r.type, r.occurred_at) for r in rows]
+        assert got == [("provider_feed_down", t0 + timedelta(hours=1)),
+                       ("provider_feed_recovered", t0 + timedelta(hours=2, minutes=30)),
+                       ("provider_feed_down", t0 + timedelta(hours=5)),
+                       ("provider_feed_recovered", t0 + timedelta(hours=5, minutes=45))], got
+        assert [r.detail.get("outage_seconds") for r in rows if r.type == "provider_feed_recovered"] == [5400, 2700]
+    finally:
+        scratchdb.drop(DB)
+
+
 if __name__ == "__main__":
     for t in (test_crafted_detectors, test_idempotent, test_thin_history, test_random_fixture_late_joiner,
-              test_marketplace_persistence):
+              test_marketplace_persistence, test_feed_outage_reported_once):
         t(); print(t.__name__, "ok")

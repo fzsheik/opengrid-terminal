@@ -819,8 +819,15 @@ def detect_feeds(s, ctx: Context, em: Emitter, now: datetime) -> dict:
         interval = cls.polling.interval_seconds if cls else 900
         gap = timedelta(seconds=min(120, interval / 2))
         cs = ctx.cov_start.get(p)
+        rounds = _rounds(rs, gap)
+        if p not in open_:
+            # The lookback slides into old outages: a failed streak at the very start of the window may have
+            # begun before it. An earlier run already reported it; dated from its first visible poll it would
+            # get a new dedupe key and be reported again, with a recovery of the wrong length.
+            while rounds and rounds[0][1]:
+                rounds.pop(0)
         fails, worked = [], False   # a feed that never worked is "not set up", not "down"
-        for t, failed, err in _rounds(rs, gap):
+        for t, failed, err in rounds:
             had_worked = worked or (cs is not None and cs < (fails[0][0] if fails else t))
             if failed:
                 fails.append((t, err))
