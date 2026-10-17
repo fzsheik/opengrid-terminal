@@ -42,6 +42,8 @@ from workloads import templates as T
 MAX_EXCLUDED = 200
 HOURS = (1, 10, 100)
 MIN_HEADROOM_PCT = 10.0
+COMFORT_HEADROOM_PCT = 10.0   # "room to spare": headroom over the recommended need, which already carries a 20% margin
+SAFE_MARKET_SCORE = 0.6       # and a listing OpenGrid's market score rates as dependable
 SCALE_UP_MIN_B = 1.0          # below this, adding GPUs mostly adds communication: no scale-up options
 HIGHER_PERF = 1.10            # higher_performance: effective throughput at least 10% above the balanced pick
 # below this many billion parameters a training run is small enough that a CPU is a realistic option
@@ -161,6 +163,69 @@ def _benchmarks(gpus: list[str], method: str | None) -> dict[str, int]:
 
 def _excl(gpu: str, code: str, reason: str, **kw) -> dict:
     return {"gpu": gpu, "gpu_slug": gpu_slug(gpu), "code": code, "reason": reason, **kw}
+
+
+def _money(v: float) -> str:
+    return f"${v:,.2f}"
+
+
+def _bfw_sentence(x: dict, rule: str | None, basis: str | None) -> str:
+    """Why the recommended option was chosen, in one sentence a first-time user can check against the list."""
+    what = ("lowest estimated cost for the whole job" if basis == "job" else "cheapest per hour")
+    head = f"{x['headroom']:.0f}% memory headroom"
+    gpus = "one GPU" if x["n"] == 1 else f"{x['n']} GPUs"
+    if rule in ("simple", "safe"):
+        return (f"Recommended: the {what} that fits on {gpus} with room to spare ({head}), is in stock now and comes "
+                "from a dependable listing")
+    if rule == "roomy":
+        return f"Recommended: the {what} that fits with room to spare ({head}); stock is not confirmed by the provider"
+    return f"Recommended: the {what} that fits at all ({head}, a tight fit)"
+
+
+def _and(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def _summary(x: dict, bfw: dict | None, basis: str | None) -> str:
+    """One line: what this option is, compared with the recommended one."""
+    if bfw is None:
+        return ""
+    if x is bfw:
+        return "Recommended"
+    jx, jr = x["perf"].get("job_cost"), bfw["perf"].get("job_cost")
+    use_job = bool(basis == "job" and jx and jr)
+    d = (jx["usd"] - jr["usd"]) if use_job else (x["price_inst"] - bfw["price_inst"])
+    amt = (lambda v: f"{_money(v)}") if use_job else (lambda v: f"{_money(v)}/h")
+    tail = " for the whole job" if use_job else ""
+    rel = (x["perf"].get("relative_to_balanced") or {}).get("value")
+    issues = []
+    if x["headroom"] < COMFORT_HEADROOM_PCT:
+        issues.append(f"a tight fit ({x['headroom']:.0f}% memory headroom)")
+    if x["c"]["available"] is None:
+        issues.append("stock not reported by the provider")
+    if x["c"]["score"] < SAFE_MARKET_SCORE:
+        issues.append("a less dependable listing")
+    if x["n"] > bfw["n"]:
+        issues.append(f"the model is split across {x['n']} GPUs" + ("" if x.get("nvlink") else " over PCIe"))
+    but = (", but " + _and(issues)) if issues else ""
+    if d < -0.005:
+        return f"{amt(-d)} cheaper{tail}{but}"
+    if abs(d) <= 0.005:
+        return "Same price as the recommended option" + but
+    more = f"{amt(d)} more{tail}"
+    if use_job and x["price_inst"] < bfw["price_inst"] - 0.005:
+        slow = f" (about {rel:.2g}x the throughput)" if rel else ""
+        return (f"Cheaper per hour ({_money(x['price_inst'])}/h) but slower{slow}, so {more}"
+                + (". Also " + _and(issues) if issues else ""))
+    if rel is not None and rel > 1.1:
+        return f"{more}, for about {rel:.2g}x the throughput (estimated){but}"
+    if x["gpu"] == bfw["gpu"] and x["n"] == bfw["n"]:
+        return f"Same GPU, {more} at {x['option']['provider_display']}" + ((", and " + _and(issues)) if issues else "")
+    if issues:
+        return f"{more}, and " + _and(issues)
+    if x["headroom"] > bfw["headroom"] + 10:
+        return f"{more}, for extra memory headroom ({x['headroom']:.0f}% vs {bfw['headroom']:.0f}%) this job does not need"
+    return f"{more}, with no advantage for this workload"
 
 
 def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime | None = None) -> dict:
@@ -338,26 +403,27 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
                 bill = x["bill"]
                 x["perf"]["job_cost"] = P.job_cost(x["price_inst"], rt["hours"], rt["range_hours"],
                                                    lambda m, bill=bill: wsel.billed_minutes(m, bill))
-        # the price term: an option's estimated whole-job cost against the median job cost (what the user actually
-        # pays) when it has one; else its hourly instance price against the median hourly price
+        # The price term always rewards a lower price (no cap): the cheapest option scores 1, one costing twice as
+        # much scores 0.5. It compares whole-job costs when an option has one (what the user actually pays), else
+        # hourly instance prices. Headroom earns full credit at "room to spare" (20%): more buys nothing.
         jobs = [x["perf"]["job_cost"]["usd"] for x in pool if x["perf"].get("job_cost")]
         job_aware = bool(jobs)
-        med_job = statistics.median(jobs) if jobs else None
-        med = statistics.median(x["price_inst"] for x in pool)
+        min_job = min(jobs) if jobs else None
+        min_price = min(x["price_inst"] for x in pool)
         for x in pool:
             vram = float(x["spec"]["vram_gb"]) * usable
             need = x["need"]["recommended_gb"]
             x["headroom"] = round((vram - need) / vram * 100, 1) if vram else 0.0
             jc = x["perf"].get("job_cost")
-            if jc and med_job:
-                pct = (jc["usd"] - med_job) / med_job
+            if jc and min_job:
+                price_term = min_job / jc["usd"] if jc["usd"] > 0 else 1.0
             else:
-                pct = (x["price_inst"] - med) / med if med else 0.0
+                price_term = min_price / x["price_inst"] if x["price_inst"] > 0 else 1.0
             nvl = bool(x["spec"].get("nvlink")) or x["spec"].get("form_factor") in ("SXM", "OAM", "Superchip")
             x["nvlink"] = nvl
-            penalty = 0.1 if (x["n"] > 1 and not nvl) else 0.0
-            x["value"] = round(0.55 * scoring.clamp(0.5 - pct) + 0.25 * x["c"]["score"]
-                               + 0.20 * scoring.clamp(x["headroom"] / 40) - penalty, 4)
+            penalty = (0.1 if (x["n"] > 1 and not nvl) else 0.0) + (0.08 if x["c"]["available"] is None else 0.0)
+            x["value"] = round(0.60 * price_term + 0.25 * x["c"]["score"]
+                               + 0.15 * scoring.clamp(x["headroom"] / COMFORT_HEADROOM_PCT) - penalty, 4)
         pool.sort(key=lambda x: (-x["value"], x["price_inst"], x["gpu"], x["c"]["provider"], x["c"]["listing_id"]))
         # at most one scale-up option per GPU model (its best-valued listing): an alternative, not a flood
         seen_up: set = set()
@@ -465,8 +531,28 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
     # picks
     cheapest = min(pool, key=lambda x: (x["price_inst"], x["c"]["age_seconds"], x["gpu"], x["c"]["provider"]),
                    default=None)
-    roomy = [x for x in pool if x["headroom"] >= MIN_HEADROOM_PCT]
-    bfw = (roomy or pool)[0] if pool else None
+    # The recommendation: the cheapest option that is clearly safe (room to spare, in stock, a dependable
+    # listing), by whole-job cost when every safe option has one, else by price per hour. If none is that safe,
+    # the same rule with each condition relaxed in turn, so there is always one plain reason it was chosen.
+    def _cost_key(xs):
+        costed = [x for x in xs if x["perf"].get("job_cost")]
+        if costed and len(costed) * 2 >= len(xs):      # most have a whole-job estimate: compare whole jobs
+            return "job", costed, lambda x: (x["perf"]["job_cost"]["usd"], x["price_inst"], -x["c"]["score"])
+        return "hour", xs, lambda x: (x["price_inst"], -x["c"]["score"], x["c"]["age_seconds"])
+    min_n = min((x["n"] for x in pool), default=1)
+    linked = lambda x: x["n"] == 1 or x.get("nvlink")
+    safe = lambda x: (x["headroom"] >= COMFORT_HEADROOM_PCT and x["c"]["available"] is True
+                      and x["c"]["score"] >= SAFE_MARKET_SCORE and linked(x))
+    bfw, bfw_rule, bfw_basis = None, None, None
+    for rule, ok in (("simple", lambda x: safe(x) and x["n"] == min_n),      # fewest GPUs that work, safely
+                     ("safe", safe),
+                     ("roomy", lambda x: x["headroom"] >= COMFORT_HEADROOM_PCT),
+                     ("any", lambda x: True)):
+        cands = [x for x in pool if ok(x)]
+        if cands:
+            bfw_basis, cands, key = _cost_key(cands)
+            bfw, bfw_rule = min(cands, key=key), rule
+            break
     exe = next((x for x in pool if x["option"]["execution"]["executable"]), None)
 
     # tiers, relative to the balanced pick: total effective theoretical throughput over all of an option's GPUs
@@ -483,8 +569,7 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
                                                      "basis": x["perf"]["basis"]["label"]}
             if x is bfw:
                 o["tier"] = "balanced"
-                o["why"].append("best workload value: price against the compatible market, OpenGrid's market score "
-                                "and memory headroom")
+                o["why"].insert(1, _bfw_sentence(bfw, bfw_rule, bfw_basis))
                 continue
             if ref_eff and eff:
                 higher = eff > ref_eff * HIGHER_PERF
@@ -553,13 +638,16 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
     def ref(x, reason):
         return None if x is None else {"option_id": x["option"]["option_id"], "reason": reason}
 
+    # one plain line per option, against the recommended one: why it is (or is not) the recommendation
+    for x in pool:
+        x["option"]["summary"] = _summary(x, bfw, bfw_basis)
+
     if cheapest is not None:
         out["picks"]["cheapest_market"] = ref(cheapest, f"lowest instance price that fits: "
                                                         f"${cheapest['price_inst']:.2f}/h for {cheapest['n']} x "
                                                         f"{cheapest['gpu']} on {cheapest['option']['provider_display']}")
     if bfw is not None:
-        out["picks"]["best_for_workload"] = ref(bfw, f"best balance of price, market quality and memory headroom "
-                                                     f"({bfw['headroom']:.0f}%) among fresh listings")
+        out["picks"]["best_for_workload"] = ref(bfw, _bfw_sentence(bfw, bfw_rule, bfw_basis))
     if lowjob is not None:
         jc = lowjob["perf"]["job_cost"]
         out["picks"]["lowest_estimated_job_cost"] = ref(lowjob, f"lowest estimated cost for the whole job: "
