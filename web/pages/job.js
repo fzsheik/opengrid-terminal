@@ -194,7 +194,7 @@
         if (!f) return null;
         const a = J.blockerAction({ code: f.code, message: f.reason });
         const failState = (job.events || []).map(e => e && (e.to || e.to_status)).filter(s => s && J.FAILED.includes(s)).pop() || (J.FAILED.includes(st()) ? st() : null);
-        const title = failState ? J.plainState(failState, sandbox()) : "Something went wrong";
+        const title = J.PLAIN_FAILURE[f.code] || (failState ? J.plainState(failState, sandbox()) : "Something went wrong");
         return h("div", { class: "og-alarm" + (J.FAILED.includes(st()) || J.outcomeOf(job) === "failed" ? "" : " t-warn") }, h("b", {}, title),
           h("span", {}, sandbox() ? "Nothing was charged: this was a simulation." : J.summary(job, dep).possibly_billing ? "OpenGrid is shutting the GPU down; see the GPU status above." : "The GPU and cost status are shown above."),
           h("details", { class: "cx-tech" }, h("summary", {}, "Technical details"), h("span", { class: "mono" }, String(f.code || "error")), " · ", f.reason || "",

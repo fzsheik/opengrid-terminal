@@ -40,7 +40,8 @@ methodology/runner.md.
    `runner.bootstrap.render(job_id, token, ...)` (section 4). If it cannot render, the launch is refused
    (`job_bootstrap_unavailable`, deployment back to `pending_approval`): a placeholder never reaches a provider.
 5. The runner reports phases, logs, metrics, GPU samples, its result, artifacts, and `complete`.
-6. On `complete` (any outcome), a training failure, OOM, an artifact failure, a bootstrap timeout or a cancel,
+6. On `complete` (any outcome), a training failure, OOM, an artifact failure, a bootstrap timeout, a runner
+   that went silent (`runner_lost`) or a cancel,
    job_sync calls the EXISTING `deployments.terminate` (actor system, idempotent); the tracker / reconciler
    confirm termination with provider evidence; cost reconciliation (`routing/transactions.py`) sets
    `reconciled_at`; the job becomes `reconciled`.
@@ -59,10 +60,11 @@ methodology/runner.md.
 | approved | admin approved; launch next | provisioning, pending_approval, quote_expired, provider_timeout, provisioning_uncertain, cancel_requested |
 | provisioning | the provision call was made | initializing, provider_timeout, provisioning_uncertain, no_eligible_provider, bootstrap_failed, cancel/terminate states |
 | provider_timeout / provisioning_uncertain | the launch outcome is unknown: the instance may exist; reconciliation resolves it by name, never a second launch | provisioning, initializing, terminate states |
-| initializing | the provider reports running; bootstrap in progress | training, saving_artifacts, training_completed, failure states, terminate states |
-| training → saving_artifacts | runner phases (forward only: a late or out-of-order phase never moves a job back) | training_completed, failure states |
+| initializing | the provider reports running; bootstrap in progress | training, saving_artifacts, training_completed, failure states (incl. runner_lost), terminate states |
+| training → saving_artifacts | runner phases (forward only: a late or out-of-order phase never moves a job back) | training_completed, failure states (incl. runner_lost) |
 | training_completed | `complete(succeeded)` with the runner's result AND every required artifact persisted and sha256-verified AND real GPU metrics | terminating (+ terminate states) |
 | bootstrap_failed, training_failed, out_of_memory, training_timed_out, artifact_upload_failed | the workload failed; outcome `failed`; the GPU is still terminated | terminating, termination_confirmed, termination_failed, orphan_suspected, credentials_unavailable, cancel_requested |
+| runner_lost | the runner reported, then went silent past `JOB_RUNNER_SILENCE_MINUTES` before completing (section 3); outcome `failed`, `failure.code` `runner_lost` (or `gpu_interrupted` when the provider stopped the machine unasked); the GPU is terminated | as the row above |
 | cancel_requested → cancelling | customer cancel after launch | terminating, termination_confirmed, termination_failed, … |
 | terminating | terminate requested, awaiting provider confirmation | termination_confirmed, termination_failed, orphan_suspected, credentials_unavailable |
 | termination_failed, orphan_suspected, credentials_unavailable | possibly still billing; the operator is alerted by the existing reconciliation | terminating, termination_confirmed, … |
@@ -93,6 +95,29 @@ database in one pass. Enforcement: runner complete / any workload failure / canc
 terminate; past the deployment's `terminate_deadline_at` while the workload runs → `training_timed_out` (the
 deadline's auto-terminate itself stays the reconciler's). Runner tokens are revoked when the job reaches
 `termination_confirmed` or finishes.
+
+**Runner liveness.** The runner sends a `gpu` sample every ~15 s while the trainer runs (and retries with
+backoff capped at 60 s), so a live job reports far more often than `JOB_RUNNER_SILENCE_MINUTES` (10). A job in
+initializing / training / saving_artifacts that has reported at least once, has not posted `complete`, and has
+sent nothing (no runner event, no artifact upload) for that long is judged by what the deployment shows:
+
+| deployment | job |
+|---|---|
+| running | `runner_lost` (`failure.code` `runner_lost`, reason "the GPU machine stopped reporting for N minutes") + the existing terminate, exactly once |
+| stopping / stopped without OpenGrid asking (an interruption) | `runner_lost` with `failure.code` `gpu_interrupted` + terminate |
+| degraded, termination_failed, orphan_suspected, credentials_unavailable, provider_timeout, launch_unknown, or stopped on request | unchanged: the uncertain state stays visible; one `runner silent` note per silence |
+| terminating / terminated | the deployment mapping above decides (no runner_lost) |
+
+While still initializing, the limit is the longer of `JOB_RUNNER_SILENCE_MINUTES` and
+`JOB_BOOTSTRAP_TIMEOUT_MINUTES` (the pinned PyTorch install sends nothing for minutes). A job that never reported
+is the bootstrap case (`bootstrap_failed` / `bootstrap_timeout`). `0` turns the check off. Precedence on one
+pass: the runner's own error / complete, then the deadline (`training_timed_out`), then the deployment's end,
+then silence.
+
+**Interruptions.** When the deployment ends before the runner completed and it was an interruption (it left
+`running` without OpenGrid asking: `deployment_events.detail.interruption`, `deployments.interruptions`), the
+job's `failure.code` is `gpu_interrupted`; any other early end stays `terminated_before_completion`. The code
+is written once, so jobs recorded before this rule keep theirs.
 
 ## 4. Runner authentication and callbacks
 
@@ -159,7 +184,8 @@ again), `idempotency_key_required` (428), `idempotency_key_reused` (422), `idemp
 `artifact_storage_unavailable` (503), runner `runner_token_*` (401/403), `job_finished` (409). In-job failures
 are `failure.code`: `cuda_init_failed`, `bootstrap_failed`, `bootstrap_timeout`, `training_failed`,
 `out_of_memory`, `training_timed_out`, `artifact_upload_failed`, `result_missing`, `metrics_missing`,
-`gpu_unavailable`, `price_changed`, `approval_rejected`, `terminated_before_completion`; an unconfirmed
+`gpu_unavailable`, `price_changed`, `approval_rejected`, `terminated_before_completion`, `gpu_interrupted`,
+`runner_lost`; an unconfirmed
 termination shows as `resource.termination_unconfirmed` with `disposition = possibly_billing`.
 
 ## 10. Endpoints

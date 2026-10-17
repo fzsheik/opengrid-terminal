@@ -145,6 +145,7 @@ curl "${H[@]}" -X POST $OPENGRID_URL/v1/jobs/<job_id>/cancel -H "Idempotency-Key
 **Job failure states.**
 - `bootstrap_failed`, `training_failed`, `out_of_memory`, `training_timed_out` and `artifact_upload_failed` all still **terminate the GPU automatically**.
 - A job that is running but sends no runner callback for 20 minutes becomes `bootstrap_failed` and is terminated.
+- A job whose runner reported and then went silent for 10 minutes becomes `runner_lost` ("Lost contact with the GPU") and is terminated; if the provider itself stopped or ended the machine, the failure code is `gpu_interrupted`.
 
 **Abort rule** (the same as for validation). Act if any of these happens:
 - OpenGrid is unreachable for more than 5 minutes after approval;

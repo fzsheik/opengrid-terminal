@@ -150,6 +150,8 @@ class Settings(BaseSettings):
     job_callback_base_url: str | None = None     # where the GPU's runner calls back; None = public_base_url
     job_sync_interval_seconds: int = 30          # job_sync: deployment state + runner callbacks -> job state
     job_bootstrap_timeout_minutes: int = 20      # running with no runner callback this long -> bootstrap_failed
+    job_runner_silence_minutes: int = 10         # runner reported, then nothing this long -> runner_lost (+ terminate)
+                                                 # (while still initializing: the bootstrap timeout, if longer)
     job_token_grace_minutes: int = 15            # runner token expires at the deployment deadline + this
     # --- OpenGrid Assistant (assistant/, api/assistant.py; POST /v1/assistant) ---
     # The deterministic engine always works. An LLM is OPTIONAL and off unless BOTH a provider and its key are

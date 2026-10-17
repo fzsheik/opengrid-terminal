@@ -124,6 +124,7 @@ _JOB_STATES = {
     "out_of_memory": ("❌", "Job out of GPU memory"),
     "training_timed_out": ("⏱️", "Job hit its runtime ceiling"),
     "artifact_upload_failed": ("❌", "Job artifacts not persisted"),
+    "runner_lost": ("📡", "Job lost contact with the GPU"),
     "cancel_requested": ("🛑", "Job cancel requested"),
     "termination_failed": ("🔴", "Job GPU termination NOT confirmed"),
     "orphan_suspected": ("🔴", "Job GPU possible orphan"),
@@ -266,8 +267,8 @@ _QUERIES = {
         WHERE e.at > :since AND NOT j.sandbox AND e.from_status IS DISTINCT FROM e.to_status
           AND e.to_status IN ('pending_approval', 'initializing', 'training', 'training_completed', 'reconciled',
                               'approval_rejected', 'no_eligible_provider', 'bootstrap_failed', 'training_failed',
-                              'out_of_memory', 'training_timed_out', 'artifact_upload_failed', 'cancel_requested',
-                              'termination_failed', 'orphan_suspected', 'provisioning_uncertain')
+                              'out_of_memory', 'training_timed_out', 'artifact_upload_failed', 'runner_lost',
+                              'cancel_requested', 'termination_failed', 'orphan_suspected', 'provisioning_uncertain')
         ORDER BY e.at, e.id LIMIT :n""", job_message),
     "reservations": ("""
         SELECT e.id AS key, e.at AS ts, e.request_id, e.to_status, e.actor, e.at,

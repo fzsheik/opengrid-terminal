@@ -10,9 +10,11 @@ Sandbox (SIMULATED, no provider):  created -> validating -> initializing -> trai
 Failure / uncertain
     validation_failed, no_eligible_provider, quote_expired, approval_rejected      (before any launch)
     provider_timeout, provisioning_uncertain                                       (launch outcome unknown)
-    bootstrap_failed, training_failed, out_of_memory, training_timed_out, artifact_upload_failed
+    bootstrap_failed, training_failed, out_of_memory, training_timed_out, artifact_upload_failed, runner_lost
                                                                                    (workload failed: the GPU is
-                                                                                    still terminated afterwards)
+                                                                                    still terminated afterwards;
+                                                                                    runner_lost = the runner
+                                                                                    reported, then went silent)
     cancel_requested, cancelling                                                   (customer cancel after launch)
     termination_failed, orphan_suspected, credentials_unavailable                  (possibly still billing)
 
@@ -36,7 +38,7 @@ STATES = (
     "validation_failed", "no_eligible_provider", "quote_expired", "approval_rejected", "provider_timeout",
     "provisioning_uncertain", "bootstrap_failed", "training_failed", "out_of_memory", "cancel_requested",
     "cancelling", "training_timed_out", "artifact_upload_failed", "termination_failed", "orphan_suspected",
-    "credentials_unavailable",
+    "credentials_unavailable", "runner_lost",
 )
 OUTCOMES = ("succeeded", "failed", "cancelled", "simulated")
 ACTORS = ("user", "admin", "system", "runner", "reconciler")
@@ -45,7 +47,7 @@ ACTORS = ("user", "admin", "system", "runner", "reconciler")
 PRE_LAUNCH = ("created", "validating", "quoted", "pending_approval", "approved", "quote_expired")
 # The workload failed or was stopped while a GPU may exist: the next step is always termination.
 WORKLOAD_FAILED = ("bootstrap_failed", "training_failed", "out_of_memory", "training_timed_out",
-                   "artifact_upload_failed")
+                   "artifact_upload_failed", "runner_lost")
 # A resource may exist and OpenGrid cannot (yet) prove its disposition.
 UNCERTAIN = ("provider_timeout", "provisioning_uncertain", "termination_failed", "orphan_suspected",
              "credentials_unavailable")
@@ -78,17 +80,18 @@ ALLOWED: dict[str, tuple[str, ...]] = {
     "provisioning_uncertain": ("provisioning", "provider_timeout", "initializing", "no_eligible_provider",
                                "bootstrap_failed") + _LIVE_ANY,
     "initializing": ("training", "saving_artifacts", "training_completed", "bootstrap_failed", "training_failed",
-                     "out_of_memory", "artifact_upload_failed") + _LIVE_ANY,
+                     "out_of_memory", "artifact_upload_failed", "runner_lost") + _LIVE_ANY,
     "training": ("saving_artifacts", "training_completed", "training_failed", "out_of_memory",
-                 "artifact_upload_failed", "bootstrap_failed") + _LIVE_ANY,
-    "saving_artifacts": ("training_completed", "artifact_upload_failed", "training_failed", "out_of_memory")
-                        + _LIVE_ANY,
+                 "artifact_upload_failed", "bootstrap_failed", "runner_lost") + _LIVE_ANY,
+    "saving_artifacts": ("training_completed", "artifact_upload_failed", "training_failed", "out_of_memory",
+                         "runner_lost") + _LIVE_ANY,
     "training_completed": _LIVE_ANY,
     "bootstrap_failed": _LIVE_ANY,
     "training_failed": _LIVE_ANY,
     "out_of_memory": _LIVE_ANY,
     "training_timed_out": ("cancel_requested",) + _RESOURCE_END,
     "artifact_upload_failed": _LIVE_ANY,
+    "runner_lost": _LIVE_ANY,
     "cancel_requested": ("cancelling", "approval_rejected") + _RESOURCE_END,
     "cancelling": _RESOURCE_END,
     "terminating": ("termination_confirmed", "termination_failed", "orphan_suspected", "credentials_unavailable"),
