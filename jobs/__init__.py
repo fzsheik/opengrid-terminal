@@ -18,6 +18,7 @@ The job workload code lives in submodules imported explicitly, never from here:
     jobs.states        the job state machine (ALLOWED transitions, transition() -> job_events)
     jobs.orchestrator  preview / submit / cancel: workloads.select -> the EXISTING engine route
     jobs.sync          job_sync: deployment state + runner callbacks -> job state; enforcement
+    jobs.relaunch      job_relaunch: automatic relaunch of an interrupted job (off unless enabled + opted in)
     jobs.tokens        derived per-job runner tokens (HMAC), replay protection
     jobs.artifacts     ArtifactStore (postgres default, s3 optional)
     jobs.ephemeral_ssh one-way ephemeral SSH keys (private half discarded)

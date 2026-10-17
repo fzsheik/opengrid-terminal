@@ -11,6 +11,9 @@
                         or object key (s3 backend)
     job_tokens          runner callback tokens: ONLY the nonce is stored; the token is HMAC(pepper, job+nonce),
                         derived when the bootstrap is rendered and never written anywhere
+    job_relaunches      (migration 0021) one automatic-relaunch decision per failed attempt (PK failed_job_id):
+                        claimed -> relaunched | stopped | blocked; jobs.retry_of is UNIQUE (one successor per
+                        attempt), jobs.root_job_id / attempt link the chain (jobs/relaunch.py)
 
 A job's account_id is a plain integer (no cross-domain foreign key); None is the site operator. A job
 references route_request_id / deployment_id / quote_id of the EXISTING execution layer; it never duplicates
@@ -34,6 +37,8 @@ class Job(Base):
         Index("ix_jobs_deployment", "deployment_id"),
         Index("ix_jobs_route_request", "route_request_id"),
         Index("ix_jobs_open", "finished_at", postgresql_where=text("finished_at IS NULL")),
+        Index("ux_jobs_retry_of", "retry_of", unique=True, postgresql_where=text("retry_of IS NOT NULL")),
+        Index("ix_jobs_root", "root_job_id", postgresql_where=text("root_job_id IS NOT NULL")),
     )
 
     job_id: Mapped[str] = mapped_column(String(40), primary_key=True)          # job-<hex>
@@ -74,6 +79,10 @@ class Job(Base):
     failure_code: Mapped[str | None] = mapped_column(String(48))
     failure_reason: Mapped[str | None] = mapped_column(Text)
     evidence: Mapped[dict | None] = mapped_column(JSONB)                       # the 12 verification checks
+    # The relaunch chain (migration 0021_job_relaunch; jobs/relaunch.py). NULL on an ordinary job (= attempt 1).
+    retry_of: Mapped[str | None] = mapped_column(String(40))                   # the failed attempt this one relaunches
+    root_job_id: Mapped[str | None] = mapped_column(String(40))                # the chain's first attempt
+    attempt: Mapped[int | None] = mapped_column(Integer)                       # 2, 3, ...
 
 
 class JobEvent(Base):
@@ -162,3 +171,29 @@ class JobToken(Base):
     revoke_reason: Mapped[str | None] = mapped_column(String(200))
     last_seq: Mapped[int | None] = mapped_column(BigInteger)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class JobRelaunch(Base):
+    """One automatic-relaunch decision per failed attempt (jobs/relaunch.py). The primary key is the claim: of two
+    workers considering the same failed attempt, exactly one inserts the row and may go on to submit."""
+    __tablename__ = "job_relaunches"
+    __table_args__ = (Index("ix_job_relaunches_root", "root_job_id"),
+                      Index("ix_job_relaunches_successor", "successor_job_id"))
+
+    failed_job_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    root_job_id: Mapped[str] = mapped_column(String(40))
+    attempt: Mapped[int] = mapped_column(Integer)                              # the failed attempt's number
+    status: Mapped[str] = mapped_column(String(16))                            # claimed | relaunched | stopped | blocked
+    reason_code: Mapped[str | None] = mapped_column(String(48))
+    reason: Mapped[str | None] = mapped_column(Text)
+    successor_job_id: Mapped[str | None] = mapped_column(String(40))
+    excluded_providers: Mapped[list | None] = mapped_column(JSONB)
+    resume_from: Mapped[dict | None] = mapped_column(JSONB)
+    spend_so_far_usd: Mapped[float | None] = mapped_column(Numeric(14, 4))
+    max_total_usd: Mapped[float | None] = mapped_column(Numeric(14, 4))
+    est_next_usd: Mapped[float | None] = mapped_column(Numeric(14, 4))
+    detail: Mapped[dict | None] = mapped_column(JSONB)
+    tries: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

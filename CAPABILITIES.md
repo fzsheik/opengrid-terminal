@@ -51,7 +51,7 @@ important) what it deliberately does not claim.
 | API operations | **203** (188 under `/v1`, 61 of them admin-only), plus 3 runner-callback routes outside the public schema |
 | Web pages | **37** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar |
 | Database tables | **71** (Postgres, migrated by Alembic, 20 migrations) |
-| Background jobs | **17** (polling, rollups, indices, settlement fixings, events, news, reconciliation, tracking, training-job sync, reservation expiry, alerts, feeds…) |
+| Background jobs | **18** (polling, rollups, indices, settlement fixings, events, news, reconciliation, tracking, training-job sync, job relaunch (off by default), reservation expiry, alerts, feeds…) |
 | Provisioning adapters | **9 providers** (Lambda, RunPod, Hyperstack, DigitalOcean, Crusoe/Denvr/Latitude via Shadeform, Vast, Verda) |
 | Discord channels | **4** (ops, deployments, market, news) with OpenGrid-branded embeds |
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination |
@@ -434,6 +434,12 @@ One real workload end to end: **"Train Your First AI Model: PyTorch MNIST"** (al
   (`POST /v1/route/{rr}/approve`) → launch → terminate → reconcile path. An explicit job state machine
   (created … training … reconciled, plus every failure / uncertain state) with outcome and resource
   disposition kept separate; `job_sync` every 30 s rebuilds state after restarts.
+- **Automatic relaunch** (`jobs/relaunch.py`, migration `0021_job_relaunch`; OFF by default:
+  `JOB_AUTO_RELAUNCH_ENABLED` and a per-job `retry: {max_attempts 1-3, max_total_usd}`): after `gpu_interrupted` /
+  `runner_lost`, and only once the provider confirmed the old GPU is gone, a new attempt through the same quote /
+  approval / cost-guard path, as the original owner, on another provider, resuming from the latest checkpoint,
+  with all attempts within `max_total_usd`; at most one successor per attempt (`UNIQUE(retry_of)`); "Attempt 2 of
+  3" on the job page and My Jobs.
 - **Runner** (`runner/`): a cloud-init bootstrap (≈ 197 KB) installs hash-locked torch 2.4.1+cu121, checks
   nvidia-smi and CUDA, trains a small CNN, uploads `model.pt`, `config.json`, `metrics.json`, `env.json`,
   `manifest.json` (sha256-verified) and calls back with a per-job HMAC-derived token (never stored).

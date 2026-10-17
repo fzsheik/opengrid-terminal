@@ -4,6 +4,10 @@ A job response always shows BOTH states: the job's own (`status`, `outcome`) and
 (`resource.deployment_status`, `resource.disposition`). A failed job never implies the GPU stopped billing:
 `resource.disposition` says 'possibly_billing' until the provider confirmed termination.
 
+`chain` (present only for a job with a retry policy or one that is part of an automatic-relaunch chain;
+jobs/relaunch.chain_infos): attempt n of max, previous / next job ids, why this attempt was relaunched, the decision
+taken about relaunching THIS attempt (relaunched | stopped + reason | pending), spend so far vs the ceiling.
+
 The 12 checks (founder): every one carries {status, source, evidence, at}. status is
     pending   no evidence yet
     pass      evidence from the named source (provider API / runner on the GPU / OpenGrid's own records)
@@ -157,7 +161,7 @@ def checkpoints_block(job, artifacts, marks: dict | None = None) -> dict:
 
 
 def public(job, dep=None, *, quote: dict | None = None, detail: bool = False, events=None, artifacts=None,
-           metrics_latest=None, runner_marks=None) -> dict:
+           metrics_latest=None, runner_marks=None, chain: dict | None = None) -> dict:
     """The job as the API returns it (no key material, no token, no bootstrap script)."""
     from jobs import states
 
@@ -204,6 +208,8 @@ def public(job, dep=None, *, quote: dict | None = None, detail: bool = False, ev
                   "deployment": f"/v1/deployments/{job.deployment_id}" if job.deployment_id else None,
                   "route": f"/v1/route/{job.route_request_id}" if job.route_request_id else None},
     }
+    if chain is not None:     # only a job with a retry policy or in a relaunch chain (jobs/relaunch.chain_infos)
+        out["chain"] = chain
     if detail:
         out["events"] = events or []
         out["artifacts"] = artifacts or []

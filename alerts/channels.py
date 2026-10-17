@@ -2,6 +2,7 @@
 
     ops           OPS_ALERT_WEBHOOK_URL       urgent money-at-risk alerts (alerts/ops.py sends these)
     deployments   DEPLOYMENTS_WEBHOOK_URL     lifecycle: awaiting approval, approved, running, terminated, failed
+                                              (+ OpenGrid Jobs transitions, automatic relaunches and chain stops)
     market        MARKET_WEBHOOK_URL          notable / major market events (price moves, lows, cheapest, sell-outs)
     news          NEWS_WEBHOOK_URL            stories with relevance >= NEWS_POST_MIN_RELEVANCE
 
@@ -132,8 +133,17 @@ _JOB_STATES = {
 }
 
 
+# Automatic relaunch notes (jobs/relaunch.py; evidence.relaunch_event): not transitions, posted all the same.
+_RELAUNCH = {
+    "relaunched": ("🔁", "Job relaunched after an interruption"),
+    "relaunched_from": ("🔁", "Job relaunch attempt submitted"),
+    "chain_stopped": ("⏹️", "Job not relaunched: chain stopped"),
+}
+
+
 def job_message(row: dict) -> dict:
-    mark, label = _JOB_STATES.get(row["to_status"], ("•", row["to_status"]))
+    mark, label = _RELAUNCH.get(row.get("relaunch_event") or "") or _JOB_STATES.get(row["to_status"],
+                                                                                   ("•", row["to_status"]))
     fields = [("Job", f"`{row['job_id']}` {row.get('name') or ''}".strip(), True), ("Template", row.get("template"), True),
               ("Outcome", row.get("outcome"), True), ("Deployment", row.get("deployment_id") and
                                                       f"`{row['deployment_id']}`", True),
@@ -261,14 +271,18 @@ _QUERIES = {
         WHERE e.at > :since AND e.to_status = ANY(:states) ORDER BY e.at, e.id LIMIT :n""", deployment_message),
     "jobs": ("""
         SELECT e.id AS key, e.at AS ts, e.job_id, e.to_status, e.actor, e.reason, e.at,
-               j.name, j.template, j.outcome, j.deployment_id, d.provider
+               j.name, j.template, j.outcome, j.deployment_id, d.provider,
+               e.evidence->>'relaunch_event' AS relaunch_event
         FROM job_events e JOIN jobs j USING (job_id)
         LEFT JOIN deployments d ON d.deployment_id = j.deployment_id
-        WHERE e.at > :since AND NOT j.sandbox AND e.from_status IS DISTINCT FROM e.to_status
-          AND e.to_status IN ('pending_approval', 'initializing', 'training', 'training_completed', 'reconciled',
-                              'approval_rejected', 'no_eligible_provider', 'bootstrap_failed', 'training_failed',
-                              'out_of_memory', 'training_timed_out', 'artifact_upload_failed', 'runner_lost',
-                              'cancel_requested', 'termination_failed', 'orphan_suspected', 'provisioning_uncertain')
+        WHERE e.at > :since AND NOT j.sandbox
+          AND ((e.from_status IS DISTINCT FROM e.to_status
+                AND e.to_status IN ('pending_approval', 'initializing', 'training', 'training_completed', 'reconciled',
+                                    'approval_rejected', 'no_eligible_provider', 'bootstrap_failed', 'training_failed',
+                                    'out_of_memory', 'training_timed_out', 'artifact_upload_failed', 'runner_lost',
+                                    'cancel_requested', 'termination_failed', 'orphan_suspected',
+                                    'provisioning_uncertain'))
+               OR e.evidence->>'relaunch_event' IN ('relaunched', 'relaunched_from', 'chain_stopped'))
         ORDER BY e.at, e.id LIMIT :n""", job_message),
     "reservations": ("""
         SELECT e.id AS key, e.at AS ts, e.request_id, e.to_status, e.actor, e.at,

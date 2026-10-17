@@ -901,6 +901,218 @@ def test_orphans():
 
 
 # --------------------------------------------------------------------------
+# Automatic job relaunch (jobs/relaunch.py): a chain of attempts through the REAL jobs submit / route path
+# --------------------------------------------------------------------------
+
+class _LambdbAdapter(__import__("routing.adapters.lambda_labs", fromlist=["LambdaAdapter"]).LambdaAdapter):
+    """A test-only second provider: the real Lambda adapter, its own MoneySim, the platform lambda key."""
+    CREDENTIAL_PROVIDER = "lambda"
+
+
+PRICE_B = 3.30
+RELAUNCH_CAP = 4.0          # retry.max_total_usd across ALL attempts of the chain
+
+
+def _jobs_world():
+    """Second provider 'lambdb' (own MoneySim), job settings, the jobs modules on the simulated clock."""
+    from jobs import orchestrator, relaunch, sync
+    sim2 = MoneySim()
+    sim2.price_cents = int(round(PRICE_B * 100))
+    adapters.register("lambdb", _LambdbAdapter)
+    adapters.TRANSPORTS["lambdb"] = sim2.transport()
+    rows = []
+    for prov, price in (("lambda", PRICE), ("lambdb", PRICE_B)):
+        r = bf.listing(prov, price, gpu=G, region="us-east-1", lid=f"{prov}:{SKU}")
+        r.sku = SKU
+        rows.append(r)
+    bf.market(G, rows)
+    bf.flags("lambdb")
+    for m in (sync, relaunch, orchestrator):
+        CLOCK.orig.setdefault(m, m._now)
+        m._now = CLOCK.now
+    settings.job_callback_base_url = "https://jobs.test.opengrid.example"
+    settings.job_artifact_store = "postgres"
+    settings.job_runner_silence_minutes = 10
+    settings.job_bootstrap_timeout_minutes = 20
+    settings.job_auto_relaunch_enabled = True
+    settings.api_key_pepper = settings.api_key_pepper or "test-pepper-money"
+    created_while_alive: list = []
+    created_at: list = []
+    orig = sim2._create
+
+    def create(body, acct="A"):
+        created_at.append(CLOCK.now())
+        alive = [k for k, v in SIM.instances.items() if v["status"] != "terminated"]   # Lambda bills until then
+        if alive:
+            created_while_alive.append(alive)
+        return orig(body, acct)
+
+    sim2._create = create
+    return sim2, created_while_alive, created_at
+
+
+def _jobs_teardown():
+    settings.job_auto_relaunch_enabled = False
+    adapters.unregister("lambdb")
+    adapters.TRANSPORTS.pop("lambdb", None)
+
+
+def _job_owner():
+    from accounts import keys
+    from accounts.auth import Principal
+    aid = bf.fresh_account()
+    scopes = ["data:read", "route:preview", "route:execute", "deployments:read", "deployments:write"]
+    k = keys.create_key(aid, "money-relaunch", scopes=scopes)
+    return Principal(kind="api_key", account_id=aid, key_id=k["id"], scopes=frozenset(scopes))
+
+
+def _job_body():
+    return {"name": "relaunch-money", "job_type": "training", "template": "pytorch-mnist",
+            "config": {"epochs": 4, "batch_size": 128, "learning_rate": 0.001, "seed": 42},
+            "resources": {"gpu": "auto", "gpu_count": 1, "region": "US"}, "routing": {"strategy": "CHEAPEST"},
+            "limits": {"max_price_per_gpu_hour_usd": 4, "max_total_cost_usd": 2, "max_runtime_minutes": 30},
+            "retry": {"max_attempts": 3, "max_total_usd": RELAUNCH_CAP}}
+
+
+def _job_cycle(minutes=5):
+    from jobs import relaunch, sync
+    cycle(minutes)
+    sync.run_all()
+    relaunch.run_all()
+
+
+def _train_with_checkpoint(jid):
+    import hashlib
+
+    from jobs import artifacts as A
+    from jobs import sync
+    sync.ingest(jid, [{"seq": 1, "type": "phase", "data": {"phase": "bootstrap_started"}},
+                      {"seq": 2, "type": "phase", "data": {"phase": "training_started", "device": "cuda"}},
+                      {"seq": 3, "type": "metric", "data": {"epoch": 1, "train_loss": 0.2, "test_accuracy": 0.97,
+                                                            "batch_device": "cuda:0"}}])
+    data = b"ckpt-1-" * 64
+    meta = A.store().put(jid, "ckpt-e0001.pt", data, hashlib.sha256(data).hexdigest())
+    sync.on_artifact(jid, meta)
+    sync.sync_job(jid)
+
+
+def _chain_checks(jid, sim2, created_while_alive, created_at, iid1):
+    """The relaunch money invariants: one successor; never an instance alive for two attempts at once; the whole
+    chain billed within retry.max_total_usd; both deployments PROVEN terminated (assert_A on each provider)."""
+    global SIM
+    from store.jobs import Job
+    with normalize.SessionLocal() as s:
+        j1 = s.get(Job, jid)
+        succ = list(s.scalars(__import__("sqlalchemy").select(Job).where(Job.retry_of == jid)))
+    assert len(succ) == 1, [x.job_id for x in succ]
+    j2 = succ[0]
+    assert j2.attempt == 2 and j2.spec["routing"]["exclude_providers"] == ["lambda"], j2.spec
+    assert j2.spec["resume_from"]["job_id"] == jid and j2.spec["resume_from"]["epoch"] == 1
+    d1, d2 = j1.deployment_id, j2.deployment_id
+    assert dep(d1).provider == "lambda" and dep(d2).provider == "lambdb"
+    assert not created_while_alive, f"a successor was created while attempt 1's instance was alive: {created_while_alive}"
+    assert len(created_at) == 1 and created_at[0] >= SIM.true_end[iid1], (created_at, SIM.true_end.get(iid1))
+    assert len(sim2.creates()) == 1 and len(SIM.creates()) == 1
+    billed = float(scalar("SELECT coalesce(sum(provider_cost_usd), 0) FROM usage_records WHERE deployment_id IN "
+                          "(:a, :b)", a=d1, b=d2))
+    reconciled = sum(float(((dep(d).reconciliation or {}).get("opengrid_transaction_cost") or {}).get("amount_usd")
+                           or 0) for d in (d1, d2))
+    assert billed > 0 and billed <= RELAUNCH_CAP + 1e-6 and reconciled <= RELAUNCH_CAP + 1e-6, (billed, reconciled)
+    est = float(j1.est_max_total_usd) + float(j2.est_max_total_usd)
+    assert est <= RELAUNCH_CAP + 1e-6, f"the attempts' cost ceilings exceed the chain ceiling: {est}"
+    assert_A(d1)
+    global_invariants()
+    s1 = SIM
+    SIM = sim2
+    try:
+        assert_A(d2)
+        bf.invariants([d2], sim=sim2)
+    finally:
+        SIM = s1
+    return d1, d2
+
+
+def test_relaunch_after_interruption_no_overlap_within_budget():
+    """The provider interrupts attempt 1 (gpu_interrupted): the successor on another provider is created only after
+    attempt 1's instance is provider-confirmed terminated; the chain stays within retry.max_total_usd."""
+    from jobs import orchestrator as O
+    setup()
+    sim2, while_alive, created_at = _jobs_world()
+    try:
+        w = _job_owner()
+        code, out = O.submit(_job_body(), w)
+        jid = out["job_id"]
+        d1 = O._load(jid, None).deployment_id
+        DEPS.append(d1)
+        to_running(d1)
+        _train_with_checkpoint(jid)
+        iid1 = dep(d1).provider_instance_id
+        cycle(10)
+        with SIM.lock:                                   # the provider ends the machine on its own
+            SIM.instances[iid1]["status"] = "terminated"
+            SIM.true_end[iid1] = CLOCK.now()
+        for _ in range(30):
+            _job_cycle(2)
+            succ = scalar("SELECT job_id FROM jobs WHERE retry_of = :j", j=jid)
+            if succ and dep(O._load(succ, None).deployment_id or "x") is not None and \
+                    dep(O._load(succ, None).deployment_id).status == "terminated":
+                break
+        assert O._load(jid, None).failure_code == "gpu_interrupted"
+        succ = scalar("SELECT job_id FROM jobs WHERE retry_of = :j", j=jid)
+        assert succ, "no successor"
+        d2 = O._load(succ, None).deployment_id
+        drive(d2)
+        _job_cycle(1)
+        _chain_checks(jid, sim2, while_alive, created_at, iid1)
+        RESULTS.append(("relaunch after gpu_interrupted: no overlap, chain within budget", "A", "pass"))
+    finally:
+        _jobs_teardown()
+
+
+def test_relaunch_waits_while_termination_unconfirmed():
+    """runner_lost while the provider refuses the delete (termination_failed: possibly billing): NO successor in any
+    pass until the provider confirms the instance is gone; then exactly one, within the budget."""
+    from jobs import orchestrator as O
+    from jobs import relaunch
+    setup()
+    sim2, while_alive, created_at = _jobs_world()
+    try:
+        w = _job_owner()
+        code, out = O.submit(_job_body(), w)
+        jid = out["job_id"]
+        d1 = O._load(jid, None).deployment_id
+        DEPS.append(d1)
+        to_running(d1)
+        _train_with_checkpoint(jid)
+        iid1 = dep(d1).provider_instance_id
+        SIM.fault("terminate", *(["http500"] * 6))
+        CLOCK.advance(minutes=11)                        # the runner goes silent: runner_lost -> terminate (refused)
+        from jobs import sync
+        sync.sync_job(jid)
+        assert O._load(jid, None).failure_code == "runner_lost"
+        seen = set()
+        for _ in range(40):
+            _job_cycle(2)
+            seen.add(dep(d1).status)
+            if iid1 in SIM.alive():
+                assert not sim2.creates(), "a successor while attempt 1 may still bill"
+                assert relaunch.consider(jid)["decision"] == "skipped"
+            if scalar("SELECT count(*) FROM jobs WHERE retry_of = :j", j=jid):
+                break
+        assert seen & {"termination_failed", "terminating"}, seen
+        succ = scalar("SELECT job_id FROM jobs WHERE retry_of = :j", j=jid)
+        assert succ, f"no successor after the confirmed termination ({dep(d1).status})"
+        d2 = O._load(succ, None).deployment_id
+        drive(d2)
+        _job_cycle(1)
+        SIM.true_end.setdefault(iid1, CLOCK.now())
+        _chain_checks(jid, sim2, while_alive, created_at, iid1)
+        RESULTS.append(("relaunch waits through termination_failed (runner_lost)", "A", "pass"))
+    finally:
+        _jobs_teardown()
+
+
+# --------------------------------------------------------------------------
 
 def main():
     old_key = settings.lambda_api_key

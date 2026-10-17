@@ -686,7 +686,7 @@
     return UNCERTAIN.includes(s) || s === "termination_failed" || s === "quote_expired" || (FAILED.includes(s) && summary(j).possibly_billing && !isTerminal(j));
   }
   function jobGroups(rows) {
-    const list = (Array.isArray(rows) ? rows : []).slice().sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+    const list = collapseChains(rows).slice().sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
     const attention = list.filter(needsAttention);
     const rest = list.filter(j => !needsAttention(j));
     return { attention, active: rest.filter(j => !isTerminal(j)), completed: rest.filter(j => isTerminal(j)) };
@@ -725,11 +725,16 @@
   const SANDBOX_PLAIN = { initializing: "Setting up (simulated)", training: "Training (simulated)", saving_artifacts: "Saving the report (simulated)", training_completed: "Simulation finished" };
   const plainState = (s, sandbox) => (sandbox && SANDBOX_PLAIN[s]) || PLAIN_STATE[s] || String(s || "unknown").replace(/_/g, " ");
   // The job's own events, oldest first, as a readable timeline -> [{at, text, tone, state, reason}] (state notes skipped).
+  // Automatic-relaunch notes (evidence.relaunch_event) are kept: they are the chain's story.
+  const relaunchEvent = e => (e && e.evidence && typeof e.evidence === "object" ? e.evidence.relaunch_event : null) || null;
   function timeline(job) {
     const sb = isSandbox(job);
-    const ev = ((job && job.events) || []).filter(e => e && (e.to || e.to_status || e.state) && (e.from || e.from_status) !== (e.to || e.to_status || e.state));
+    const ev = ((job && job.events) || []).filter(e => e && (e.to || e.to_status || e.state) && ((e.from || e.from_status) !== (e.to || e.to_status || e.state) || relaunchEvent(e)));
     return ev.slice().sort((a, b) => String(a.at).localeCompare(String(b.at))).map(e => {
-      const s = e.to || e.to_status || e.state;
+      const s = e.to || e.to_status || e.state, re = relaunchEvent(e), x = e.evidence || {};
+      if (re === "relaunched") return { at: e.at || null, state: s, text: `Relaunched automatically as attempt ${x.attempt || "?"}` + (x.provider ? " on " + provName(x.provider) : ""), reason: e.reason || null, tone: "good", next: x.successor_job_id || null };
+      if (re === "chain_stopped") return { at: e.at || null, state: s, text: "Not relaunched: " + (STOP_PLAIN[x.code] || "the retry policy ended here"), reason: e.reason || null, tone: "warn" };
+      if (re === "relaunched_from") return { at: e.at || null, state: s, text: `Created automatically as attempt ${(x.relaunch || {}).attempt || "?"}`, reason: e.reason || null, tone: "busy", prev: (x.relaunch || {}).retry_of || null };
       return { at: e.at || null, state: s, text: plainState(s, sb), reason: e.reason || null, tone: tone(s) || (s === "created" ? "busy" : "") };
     });
   }
@@ -747,8 +752,13 @@
     if (!isTerminal(job)) return { text: sb ? "Nothing to do: the simulation finishes on its own." : "Nothing to do: progress updates here automatically.", href: null, label: null };
     if (sb && (o === "simulated" || o === "succeeded" || s === "training_completed"))
       return { text: "That's the whole flow a real job takes. Your own model gets a GPU recommendation today.", href: "/find", label: "Find a GPU for my model" };
-    if (!sb && ["runner_lost", "gpu_interrupted"].includes(job && job.failure && job.failure.code))
+    if (!sb && ["runner_lost", "gpu_interrupted"].includes(job && job.failure && job.failure.code)) {
+      const cs = chainStatus(job);
+      if (cs && cs.tone === "good") return { text: "The GPU stopped before training finished. " + cs.text + " It continues from the latest checkpoint on another provider.", href: cs.href, label: cs.label };
+      if (cs && cs.tone === "busy") return { text: "The GPU stopped before training finished. " + cs.text, href: null, label: null };
+      if (cs) return { text: "The GPU stopped before training finished, so the run is incomplete. " + cs.text + " Start a new job to try again.", href: "/jobs/new", label: "Start a new job" };
       return { text: "The GPU stopped before training finished, so the run is incomplete. Results saved before that are below; start a new job to try again.", href: "/jobs/new", label: "Start a new job" };
+    }
     if (o === "failed" || STAGE_FAILS.includes(s)) return { text: "Check what went wrong below, then start a new job.", href: "/jobs/new", label: "Start a new job" };
     return { text: "Download the results below, or start another job.", href: "/jobs/new", label: "Start another job" };
   }
@@ -814,6 +824,73 @@
     return { text: (isTerminal(job) ? "Was set to resume from " : "Will resume from ") + of, tone: "", job_id: r.job_id };
   };
   Object.assign(OG.jobs, { isCheckpoint, ckptEpoch, artifactLabel, splitOutputs, resumeLine });
+
+  /* =============================== automatic relaunch chain (pure) =============================== */
+  // jobs/relaunch.py: the job's `chain` block (only on a job with a retry policy or in a chain). Plain words only.
+  const provName = p => (p ? ((typeof OG.providerName === "function" && OG.providerName(p)) || String(p).replace(/^\w/, ch => ch.toUpperCase())) : "the provider");
+  const CAUSE_PLAIN = {
+    gpu_interrupted: p => `the GPU on ${provName(p)} was interrupted`,
+    runner_lost: p => `the GPU on ${provName(p)} stopped reporting`,
+  };
+  const STOP_PLAIN = {
+    max_attempts_reached: "it already used every attempt its retry setting allows",
+    retry_budget_exhausted: "another attempt could cost more than the job's total budget for all attempts",
+    no_eligible_provider: "no other GPU provider could take it",
+    owner_key_revoked: "the API key that started it was revoked",
+    owner_key_expired: "the API key that started it has expired",
+    owner_scope_missing: "the API key that started it can no longer launch GPUs",
+    account_suspended: "the account is suspended",
+    owner_unavailable: "OpenGrid could not confirm who owns it",
+  };
+  const chainOf = job => (job && job.chain && typeof job.chain === "object" ? job.chain : null);
+  const inChain = c => !!c && (c.attempt > 1 || !!c.next_job_id || !!c.previous_job_id || !!c.stopped || !!(c.relaunch && c.relaunch.status));
+  // "Attempt 2 of 3 · relaunched after the GPU on Lambda was interrupted · resumed from epoch 2" -> {text, prev, next}
+  function chainLine(job) {
+    const c = chainOf(job);
+    if (!inChain(c)) return null;
+    const parts = [`Attempt ${c.attempt || 1} of ${Math.max(c.max_attempts || 1, c.attempt || 1)}`];
+    const ra = c.relaunched_after;
+    if (ra) {
+      const why = CAUSE_PLAIN[ra.code];
+      parts.push("relaunched after " + (why ? why(ra.provider) : "the previous attempt stopped"));
+      parts.push(ra.from_scratch ? "started from scratch (no checkpoint)" : `resumed from epoch ${ra.resume_from_epoch ?? "?"}`);
+    }
+    return { text: parts.join(" · "), prev: c.previous_job_id || null, next: c.next_job_id || null, simulated: !!c.simulated };
+  }
+  // What happened about relaunching THIS attempt -> null | {text, tone, href, label}
+  function chainStatus(job) {
+    const c = chainOf(job);
+    if (!c) return null;
+    const r = c.relaunch || {};
+    if (c.stopped || r.status === "stopped") {   // a relaunch the submission refused may still have left a job row
+      const code = (c.stopped || r).code;
+      return { text: "Not relaunched: " + (STOP_PLAIN[code] || (c.stopped || r).reason || "the retry policy ended here") + ".", tone: "warn",
+        href: c.next_job_id ? "/jobs/" + encodeURIComponent(c.next_job_id) : null, label: c.next_job_id ? "Open the refused attempt" : null };
+    }
+    if (c.next_job_id) return { text: `OpenGrid relaunched this job automatically as attempt ${(c.attempt || 1) + 1}.`, tone: "good", href: "/jobs/" + encodeURIComponent(c.next_job_id), label: "Open the next attempt" };
+    if (r.status === "blocked") return { text: "The automatic relaunch is delayed by an OpenGrid problem. The previous GPU is confirmed gone, so nothing is billing; OpenGrid's operator is alerted.", tone: "warn", href: null, label: null };
+    if (r.status === "claimed") return { text: "Relaunching now.", tone: "busy", href: null, label: null };
+    if (r.status === "pending") return { text: String(r.reason || "A relaunch is due.").replace(/^\w/, ch => ch.toUpperCase()) + ".", tone: "busy", href: null, label: null };
+    if (r.status === "not_relaunched") return { text: "Not relaunched: " + (r.reason || "automatic relaunch is off") + ".", tone: "", href: null, label: null };
+    return null;
+  }
+  // "Spent so far $0.21 of $6.00 across all attempts" (null without a ceiling or a figure)
+  function chainSpend(job) {
+    const c = chainOf(job);
+    if (!c || c.max_total_usd == null || c.spend_so_far_usd == null || !inChain(c)) return null;
+    return `Spent so far ${usd(c.spend_so_far_usd)} of ${usd(c.max_total_usd)} across all attempts`;
+  }
+  // My Jobs shows a chain as its newest attempt: an older attempt is hidden once its successor is listed, unless it
+  // still needs attention (it may be billing) or is not finished.
+  function collapseChains(rows) {
+    const list = Array.isArray(rows) ? rows : [];
+    const ids = new Set(list.map(r => r && r.job_id));
+    return list.filter(r => {
+      const c = chainOf(r);
+      return !(c && c.next_job_id && ids.has(c.next_job_id) && isTerminal(r) && !needsAttention(r));
+    });
+  }
+  Object.assign(OG.jobs, { chainLine, chainStatus, chainSpend, collapseChains, STOP_PLAIN });
 
   if (typeof OG.page !== "function" || typeof document === "undefined") return;   // node tests: pure part only
 
@@ -931,6 +1008,7 @@
         return h("a", { class: "jb-card", href: "/jobs/" + encodeURIComponent(r.job_id), "aria-label": `${r.name || "unnamed job"}: ${jobLine(r).text}` },
           h("span", { class: "jb-card-n" }, h("b", {}, r.name || "unnamed job"), J.modeTag(sb), h("span", { class: "dim" }, (a => a === "now" ? "just now" : a + " ago")(fmt.age(r.created_at)))),
           J.lineEl(r),
+          (cl => cl ? h("span", { class: "jb-card-m dim" }, cl.text) : null)(J.chainLine(r)),
           h("span", { class: "jb-card-m dim" }, where, cost ? " · " + cost : ""));
       };
       const SHOW = 10;

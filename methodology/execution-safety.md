@@ -229,6 +229,22 @@ billing).
 Every provider call is logged on `opengrid.provider` with route_request_id, deployment_id, provider, op,
 outcome/status, latency; never credentials, bodies or env values.
 
+## Automatic job relaunch
+
+`jobs/relaunch.py` (methodology/jobs.md 8b) can submit a NEW job after an interruption; it adds no way to
+provision. It is off unless `JOB_AUTO_RELAUNCH_ENABLED` is on AND the job set `retry.max_attempts > 1` with a
+`retry.max_total_usd` ceiling. It acts only on `gpu_interrupted` / `runner_lost`, and only once the previous
+attempt's deployment is **provider-confirmed `terminated`** (job `termination_confirmed` /
+`reconciliation_pending` / `reconciled`): never from `degraded`, `terminating`, `termination_failed`,
+`orphan_suspected`, `credentials_unavailable`, `provider_timeout`, `launch_unknown` / `provisioning_uncertain`,
+so two attempts of one chain can never bill at the same time. The successor goes through the same submit ->
+quote -> `engine.route` -> cost guards -> approval path (SUPERVISED: `pending_approval` for an admin), as the
+original owner re-verified (revoked / expired key, lost `route:execute`, suspended account -> no relaunch),
+excluding every provider that interrupted the chain, with a total-cost limit that can only shrink to the remaining
+chain budget, and `spend so far + its estimate <= max_total_usd` checked before anything is quoted. At most one
+successor per failed attempt: a claim row (primary key), the idempotency store (key `relaunch:<job id>`) and
+`UNIQUE(jobs.retry_of)`. An internal error raises the ops alert `relaunch_blocked`.
+
 ## Pinned credential fingerprint
 
 A deployment pins *where* its credential comes from (`platform:<provider>` or a BYO credential row) and, from
