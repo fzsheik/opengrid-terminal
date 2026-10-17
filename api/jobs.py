@@ -15,7 +15,9 @@
     POST /v1/jobs/{job_id}/cancel       (*)     before launch: reject; after: terminate           [route:execute]
   runner callbacks (ONLY the job token: Authorization: Bearer ogj_<job_id>.<token>; never an API key)
     POST /v1/jobs/{job_id}/runner/events        {"events": [{seq, type, at, data}, ...]}  duplicate seq ignored
-    PUT  /v1/jobs/{job_id}/runner/artifacts/{name}   raw bytes, X-Content-SHA256 (or X-Artifact-SHA256)
+    PUT  /v1/jobs/{job_id}/runner/artifacts/{name}   raw bytes, X-Content-SHA256 (or X-Artifact-SHA256); names
+                                                ckpt-eNNNN.pt are checkpoints (own size limit, latest-N retention)
+    GET  /v1/jobs/{job_id}/runner/resume        the checkpoint this job was created to resume from (404 otherwise)
     POST /v1/jobs/{job_id}/runner/complete      {outcome: succeeded|failed|oom|timeout, summary}
 (*) Idempotency-Key header REQUIRED (routing/idempotency.py): same key + same body replays; different body 422;
 in flight 409 + Retry-After. Approval of a real job is the EXISTING POST /v1/route/{route_request_id}/approve.
@@ -256,17 +258,34 @@ async def runner_artifact(job_id: str, name: str, request: Request):
         A.check_name(name)
     except A.ArtifactError as e:
         raise HTTPException(e.status, {"code": e.code, "message": e.message}) from None
-    limit = A.max_bytes()
+    limit = A.checkpoint_max_bytes() if A.is_checkpoint(name) else A.max_bytes()
     data = await _runner_body(request, limit)
     sha = request.headers.get("x-content-sha256") or request.headers.get("x-artifact-sha256")
     try:
         meta = A.store().put(job_id, name, data, sha, content_type=request.headers.get("content-type"))
     except A.ArtifactError as e:
         raise HTTPException(e.status, {"code": e.code, "message": e.message}) from None
-    if not meta.get("replayed"):
+    if not meta.get("replayed") and not meta.get("superseded"):
         jobs.sync.on_artifact(job_id, meta)
     tokens.touch(auth.token_id, None)
     return {"ok": True, "artifact": meta}
+
+
+@router.get("/v1/jobs/{job_id}/runner/resume", tags=["jobs-runner"], include_in_schema=False)
+def runner_resume(job_id: str, request: Request):
+    """The checkpoint THIS job was created to resume from (pinned at submission). The job token is the only
+    credential; nothing else of the source job is reachable through it."""
+    auth = _runner_auth(request, job_id)
+    from jobs import artifacts as A
+
+    try:
+        meta, data = A.resume_source(job_id)
+    except A.ArtifactError as e:
+        raise HTTPException(e.status, {"code": e.code, "message": e.message}) from None
+    tokens.touch(auth.token_id, None)
+    return Response(data, media_type="application/octet-stream",
+                    headers={"X-Content-SHA256": meta["sha256"], "X-Artifact-SHA256": meta["sha256"],
+                             "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
 
 @router.post("/v1/jobs/{job_id}/runner/complete", tags=["jobs-runner"], include_in_schema=False)

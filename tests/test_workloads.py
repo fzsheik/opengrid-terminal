@@ -182,7 +182,8 @@ def test_preset_valid_and_idempotent():
     v = validate(body())
     r = v.request
     assert r["name"] == "opengrid-first-training-test" and r["template"] == "pytorch-mnist"
-    assert r["config"] == {"epochs": 3, "batch_size": 128, "learning_rate": 0.001, "seed": 42}
+    assert r["config"] == {"epochs": 3, "batch_size": 128, "learning_rate": 0.001, "seed": 42,
+                           "checkpoint_every_epochs": 1}
     assert r["resources"]["gpu"] == "auto" and r["resources"]["region"] == "US" and r["resources"]["gpu_count"] == 1
     assert r["routing"]["strategy"] == "BALANCED"
     assert r["limits"] == {"max_price_per_gpu_hour_usd": 3.0, "max_total_cost_usd": 2.0, "max_runtime_minutes": 30}
@@ -283,6 +284,18 @@ def test_other_fields():
     refused("dataset_not_allowed", body(dataset_ref="https://evil.example/data.tar"))
     assert validate(body(dataset_ref="mnist")).request["dataset_ref"] == "mnist"
     assert validate(body(sandbox=True)).request["sandbox"] is True
+    # checkpointing: a template config field with bounds; resume_from: shape only here (ownership at submission)
+    assert validate(body(config={"checkpoint_every_epochs": 0})).request["config"]["checkpoint_every_epochs"] == 0
+    refused("config_out_of_bounds", body(config={"checkpoint_every_epochs": 11}))
+    refused("config_out_of_bounds", body(config={"checkpoint_every_epochs": -1}))
+    refused("invalid_config", body(config={"checkpoint_every_epochs": 1.5}))
+    assert "resume_from" not in validate(body()).request, "an ordinary request keeps its shape"
+    rf = validate(body(resume_from={"job_id": "job-0123456789abcdef"})).request["resume_from"]
+    assert rf == {"job_id": "job-0123456789abcdef", "artifact": None}
+    refused("invalid_resume_from", body(resume_from={"job_id": "job-0123456789abcdef\n"}))
+    refused("invalid_resume_from", body(resume_from={"job_id": "../../etc"}))
+    refused("resume_artifact_not_checkpoint", body(resume_from={"job_id": "job-0123456789abcdef", "artifact": "model.pt"}))
+    refused("unknown_field", body(resume_from={"job_id": "job-0123456789abcdef", "url": "https://evil.example/x"}))
 
 
 # --------------------------------------------------------------------------

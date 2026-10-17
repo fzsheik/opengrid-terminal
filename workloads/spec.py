@@ -9,6 +9,8 @@
 Job types finetuning / inference / batch_compute / custom_container PARSE (they are part of the schema) but
 validate() refuses them with code `unsupported_workload_type`. Only allowlisted templates run; no code, no
 command and no dataset URL can be supplied. See methodology/workloads.md.
+resume_from {job_id, artifact?} is shape-checked here; ownership, storage and sha256 are checked at submission
+(jobs/artifacts.resolve_resume), which pins {job_id, artifact, epoch, sha256, size} into the job's spec.
 """
 
 from __future__ import annotations
@@ -26,6 +28,8 @@ JOB_TYPES = ("training", "finetuning", "inference", "batch_compute", "custom_con
 SUPPORTED_JOB_TYPES = ("training",)
 ARTIFACT_DESTINATIONS = ("opengrid",)
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}\Z")  # \Z: `$` would accept a trailing newline
+JOB_REF_RE = re.compile(r"^job-[0-9a-f]{8,32}\Z")
+CHECKPOINT_RE = re.compile(r"^ckpt-e[0-9]{4}\.pt\Z")      # jobs/artifacts.CHECKPOINT_RE
 
 
 class WorkloadError(ValueError):
@@ -71,6 +75,13 @@ class Limits(_M):
     max_runtime_minutes: int
 
 
+class ResumeFrom(_M):
+    """Continue from a stored checkpoint of an earlier job of the SAME account (jobs/artifacts.resolve_resume checks
+    ownership + storage + sha256 at submission). artifact omitted = that job's latest checkpoint."""
+    job_id: str
+    artifact: str | None = None
+
+
 class WorkloadSpec(_M):
     name: str | None = None
     job_type: Literal["training", "finetuning", "inference", "batch_compute", "custom_container"]
@@ -83,6 +94,7 @@ class WorkloadSpec(_M):
     sandbox: bool = False
     artifact_destination: str = "opengrid"
     dataset_ref: str | None = None
+    resume_from: ResumeFrom | None = None
 
 
 @dataclass
@@ -307,6 +319,16 @@ def validate(body) -> Validated:
         raise WorkloadError("dataset_not_allowed", f"dataset_ref must be omitted or {tmpl['dataset']['id']!r}: only the "
                                                    "template's own dataset is allowed in this release",
                             field="dataset_ref")
+    resume = None
+    if s.resume_from is not None:
+        if not JOB_REF_RE.match(s.resume_from.job_id or ""):
+            raise WorkloadError("invalid_resume_from", "resume_from.job_id must be a job id (job-<hex>)",
+                                field="resume_from.job_id")
+        if s.resume_from.artifact is not None and not CHECKPOINT_RE.match(s.resume_from.artifact):
+            raise WorkloadError("resume_artifact_not_checkpoint", "resume_from.artifact must be a checkpoint name "
+                                                                  "ckpt-eNNNN.pt (or omitted for the latest)",
+                                field="resume_from.artifact")
+        resume = {"job_id": s.resume_from.job_id, "artifact": s.resume_from.artifact}
 
     request = {
         "name": name, "job_type": s.job_type, "template": tmpl["id"], "config": config,
@@ -320,6 +342,8 @@ def validate(body) -> Validated:
         "ssh_public_key": pk, "sandbox": bool(s.sandbox), "artifact_destination": s.artifact_destination,
         "dataset_ref": tmpl["dataset"]["id"],
     }
+    if resume is not None:   # only when asked: an ordinary request keeps exactly its old shape
+        request["resume_from"] = resume
     requirements = {**req0, "min_vram_gb": vram, "min_vcpu": vcpu, "min_ram_gb": ram, "min_disk_gb": disk,
                     "gpu_count": r.gpu_count, "region": region, "strict_region": bool(r.strict_region)}
     return Validated(request=request, template=tmpl, requirements=requirements, notes=notes,

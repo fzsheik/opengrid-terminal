@@ -777,6 +777,33 @@
   OG.command(/^j\s+new$/i, () => OG.go("/jobs/new"), "j new            new training job (PyTorch MNIST)");
   OG.command(/^j$/i, () => OG.go("/jobs"), "j                jobs");
 
+  /* =============================== checkpoints / resume (pure) =============================== */
+  // jobs/artifacts.py: names ckpt-eNNNN.pt are resumable checkpoints (kind "checkpoint"), never results.
+  const CKPT_RE = /^ckpt-e(\d{4})\.pt$/;
+  const isCheckpoint = a => !!a && (a.kind === "checkpoint" || CKPT_RE.test(a.name || ""));
+  const ckptEpoch = a => {
+    if (!a) return null;
+    if (a.epoch != null) return +a.epoch;
+    const m = CKPT_RE.exec(a.name || "");
+    return m ? +m[1] : null;
+  };
+  const artifactLabel = a => isCheckpoint(a) ? `Checkpoint (epoch ${ckptEpoch(a) ?? "?"})` : (a && a.name) || "";
+  // results first (by name), then checkpoints newest first
+  const splitOutputs = arts => {
+    const all = (Array.isArray(arts) ? arts : []).filter(Boolean);
+    return { results: all.filter(a => !isCheckpoint(a)), checkpoints: all.filter(isCheckpoint).sort((x, y) => (ckptEpoch(y) || 0) - (ckptEpoch(x) || 0)) };
+  };
+  // "Resumed from epoch N of job X" once the runner (or the simulation) confirmed it; before that, what is pinned.
+  const resumeLine = job => {
+    const r = job && job.resume;
+    if (!r || !r.job_id) return null;
+    const ep = r.confirmed && r.confirmed_from_epoch != null ? r.confirmed_from_epoch : r.epoch;
+    const of = `epoch ${ep ?? "?"} of job ${r.job_id}`;
+    if (r.confirmed) return { text: `Resumed from ${of}` + (r.simulated ? " (simulated: the checkpoint was not loaded)" : ""), tone: r.simulated ? "warn" : "good", job_id: r.job_id };
+    return { text: (isTerminal(job) ? "Was set to resume from " : "Will resume from ") + of, tone: "", job_id: r.job_id };
+  };
+  Object.assign(OG.jobs, { isCheckpoint, ckptEpoch, artifactLabel, splitOutputs, resumeLine });
+
   if (typeof OG.page !== "function" || typeof document === "undefined") return;   // node tests: pure part only
 
   /* =============================== DOM helpers (shared with job.js) =============================== */

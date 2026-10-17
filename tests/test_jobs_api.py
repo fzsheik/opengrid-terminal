@@ -311,9 +311,62 @@ def test_runner_routes_refuse_api_keys_and_site_login():
     assert scalar("SELECT count(*) FROM job_runner_events") == 0 and scalar("SELECT count(*) FROM job_artifacts") == 0
 
 
+def _put(jid, name, data, hh=None):
+    return client.put(f"/v1/jobs/{jid}/runner/artifacts/{name}", headers={
+        **(hh or runner(jid)), "Content-Type": "application/octet-stream",
+        "X-Content-SHA256": hashlib.sha256(data).hexdigest()}, content=data)
+
+
+def test_checkpoints_and_resume_over_http():
+    setup()
+    settings.job_checkpoint_keep = 2
+    h, aid = key()
+    a = submit(h, T.body(config={"epochs": 4})).json()["data"]["job_id"]
+    T.to_running(a)
+    c1 = b"epoch-one-state" * 100
+    r = _put(a, "ckpt-e0001.pt", c1)
+    assert r.status_code == 200 and r.json()["artifact"]["kind"] == "checkpoint", r.text
+    old = settings.job_checkpoint_max_mb
+    settings.job_checkpoint_max_mb = 1
+    try:
+        r = _put(a, "ckpt-e0002.pt", b"x" * (1024 * 1024 + 10))
+        assert r.status_code == 413, r.text   # the checkpoint limit binds before the body is even read in full
+    finally:
+        settings.job_checkpoint_max_mb = old
+    r = client.get(f"/v1/jobs/{a}/artifacts", headers=h)
+    (art,) = r.json()["data"]
+    assert art["name"] == "ckpt-e0001.pt" and art["kind"] == "checkpoint" and art["epoch"] == 1, art
+    assert art["download"] == f"/v1/jobs/{a}/artifacts/ckpt-e0001.pt"
+    r = client.get(f"/v1/jobs/{a}/artifacts/ckpt-e0001.pt", headers=h)
+    assert r.status_code == 200 and r.content == c1 and r.headers["x-artifact-sha256"] == hashlib.sha256(c1).hexdigest()
+    j = client.get(f"/v1/jobs/{a}", headers=h).json()["data"]
+    assert j["checkpoints"]["latest"]["epoch"] == 1 and j["checkpoints"]["resumable"] and j["resume"] is None
+    r = client.get(f"/v1/jobs/{a}/runner/resume", headers=runner(a))
+    assert r.status_code == 404 and r.json()["detail"]["code"] == "resume_not_requested", r.text
+    # another account cannot resume from it (and learns nothing about it)
+    h2, _ = key()
+    r = submit(h2, T.body(resume_from={"job_id": a}, config={"epochs": 4}))
+    assert r.status_code == 404 and r.json()["detail"]["code"] == "resume_job_not_found", r.text
+    r = client.post("/v1/jobs/preview", headers=h, json=T.body(resume_from={"job_id": a, "artifact": "ckpt-e0009.pt"}))
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "resume_checkpoint_not_found", r.text
+    # the same account: a new job pinned to the latest checkpoint; its runner (only) downloads it
+    r = submit(h, T.body(resume_from={"job_id": a}, config={"epochs": 4}))
+    assert r.status_code == 202, r.text
+    b = r.json()["data"]
+    assert b["resume"]["job_id"] == a and b["resume"]["epoch"] == 1 and b["request"]["resume_from"]["artifact"] == "ckpt-e0001.pt"
+    T.to_running(b["job_id"])
+    r = client.get(f"/v1/jobs/{b['job_id']}/runner/resume", headers=runner(b["job_id"]))
+    assert r.status_code == 200 and r.content == c1, r.text
+    assert r.headers["x-content-sha256"] == hashlib.sha256(c1).hexdigest() and "no-store" in r.headers["cache-control"]
+    for hh, code in ((runner(a), 403), (h, 401), (HDR, 401)):
+        r = client.get(f"/v1/jobs/{b['job_id']}/runner/resume", headers=hh)
+        assert r.status_code == code, (hh, r.status_code, r.text)
+
+
 TESTS = [test_templates_and_readiness, test_scopes, test_preview_and_validation_errors,
          test_idempotency_replay_and_conflict, test_concurrent_submits_one_job_one_route, test_tenant_isolation,
-         test_full_flow_over_http, test_cancel_api, test_sandbox_api, test_runner_routes_refuse_api_keys_and_site_login]
+         test_full_flow_over_http, test_cancel_api, test_sandbox_api, test_runner_routes_refuse_api_keys_and_site_login,
+         test_checkpoints_and_resume_over_http]
 
 
 def main_(only=None) -> int:

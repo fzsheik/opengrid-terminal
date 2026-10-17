@@ -40,6 +40,7 @@ class FakeOpenGrid:
         self.events, self.batches, self.artifacts, self.completes = {}, [], {}, []
         self.requests, self.plan = [], []     # plan: status codes to return for the next N requests
         self.terminal = False
+        self.resume = None                    # bytes served at GET runner/resume (None = 404, not requested)
         self.lock = threading.Lock()
         srv = self
 
@@ -94,9 +95,19 @@ class FakeOpenGrid:
                 if self.command == "POST" and what == "complete":
                     srv.completes.append(json.loads(body))
                     return self._reply(200)
+                if self.command == "GET" and what == "resume":
+                    if srv.resume is None:
+                        return self._reply(404, {"code": "resume_not_requested"})
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/octet-stream")
+                    self.send_header("Content-Length", str(len(srv.resume)))
+                    self.send_header("X-Content-SHA256", hashlib.sha256(srv.resume).hexdigest())
+                    self.end_headers()
+                    self.wfile.write(srv.resume)
+                    return None
                 return self._reply(404)
 
-            do_POST = do_PUT = _handle
+            do_POST = do_PUT = do_GET = _handle
 
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), H)
         self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}"
@@ -336,6 +347,12 @@ if mode == "oom":
 for e in (1, 2):
     ev("metric", epoch=e, train_loss=1.0 / e, test_accuracy=0.9 + e / 100)
     ev("phase", phase="epoch_completed", epoch=e)
+    if mode == "ckpt":
+        c = out / "checkpoints"; c.mkdir(parents=True, exist_ok=True)
+        n = "ckpt-e%04d.pt" % e; (c / n).write_bytes(b"state-%d" % e * 100)
+        sha = hashlib.sha256((c / n).read_bytes()).hexdigest() if e == 1 else "0" * 64   # e2: bytes changed
+        ev("phase", phase="checkpoint_saved", epoch=e, name=n, sha256=sha, bytes=600)
+        time.sleep(0.5)
 out.mkdir(parents=True, exist_ok=True)
 names = ("model.pt", "config.json", "metrics.json", "env.json")
 for n in names: (out / n).write_bytes(n.encode() * 50)
@@ -411,6 +428,117 @@ def test_supervisor_upload_failure_fails_job():
             assert res["outcome"] == "failed" and res["summary"]["reason"] == "artifact_upload_failed", res
     finally:
         srv.close()
+
+
+def test_supervisor_uploads_checkpoints_not_as_results():
+    srv = FakeOpenGrid()
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            res = _supervise(srv, d, "ckpt")
+            assert res["outcome"] == "succeeded", res
+            assert srv.artifacts["ckpt-e0001.pt"] == b"state-1" * 100, "checkpoint uploaded via the artifacts PUT"
+            assert "ckpt-e0002.pt" not in srv.artifacts, "bytes that differ from the trainer's sha256 are not sent"
+            phases = [e["data"] for e in sorted(srv.events.values(), key=lambda e: e["seq"]) if e["type"] == "phase"]
+            up = [p for p in phases if p["phase"] == "checkpoint_uploaded"]
+            assert [p["name"] for p in up] == ["ckpt-e0001.pt"] and up[0]["sha256"] == hashlib.sha256(
+                b"state-1" * 100).hexdigest(), phases
+            bad = [p for p in phases if p["phase"] == "checkpoint_upload_failed"]
+            assert bad and bad[0]["reason"] == "sha256_changed", bad
+            # results are unaffected: the same five names, the checkpoint is neither required nor in the manifest
+            (c,) = srv.completes
+            assert set(c["summary"]["artifacts"]["uploaded"]) == set(R.UPLOAD_ARTIFACTS)
+            assert c["summary"]["checkpoints_uploaded"] == 1
+            i_up = next(i for i, p in enumerate(phases) if p["phase"] == "checkpoint_uploaded")
+            i_res = next(i for i, p in enumerate(phases) if p["phase"] == "uploading_artifacts")
+            assert i_up < i_res, "the checkpoint went up during training, before the results"
+        # an unknown / path-like name is never read from disk or sent
+        rep = R.Reporter(_client(srv.url), R.Spool(Path(tempfile.mkdtemp()) / "state"))
+        assert rep.upload_checkpoint(tempfile.gettempdir(), {"name": "../model.pt"}) is False
+        assert rep.upload_checkpoint(tempfile.gettempdir(), {"name": "ckpt-e9999.pt"}) is False   # missing: skipped
+    finally:
+        srv.close()
+
+
+def test_fetch_resume_is_sha256_pinned():
+    srv = FakeOpenGrid()
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            c = _client(srv.url, max_attempts=2)
+            dest = Path(d) / "resume.pt"
+            try:
+                c.fetch_resume(dest, sha256="a" * 64)
+                raise AssertionError("404 (resume not requested) accepted")
+            except R.PermanentError:
+                pass
+            srv.resume = os.urandom(3000)
+            good = hashlib.sha256(srv.resume).hexdigest()
+            try:
+                c.fetch_resume(dest, sha256="b" * 64)
+                raise AssertionError("wrong bytes kept")
+            except R.PermanentError:
+                pass
+            assert not dest.exists() and not list(Path(d).glob(".*part")), "nothing left behind on a mismatch"
+            srv.plan = [503]   # transient: retried, the partial download starts over
+            assert c.fetch_resume(dest, sha256=good) == {"bytes": 3000, "sha256": good}
+            assert dest.read_bytes() == srv.resume
+            gets = [h for m, p, h, _ in srv.requests if m == "GET"]
+            assert gets and all(h.get("authorization", "").startswith("Bearer ogj_") for h in gets)
+            try:
+                c.fetch_resume(Path(d) / "x.pt", sha256=good, max_bytes=100)
+                raise AssertionError("oversize accepted")
+            except R.PermanentError:
+                pass
+            # CLI: downloads, then reports resume_downloaded (the token never printed)
+            tf = Path(d) / "token"
+            tf.write_text(TOKEN)
+            p = subprocess.run([sys.executable, "-m", "runner.reporter", "fetch-resume", "--base-url", srv.url,
+                                "--job", JOB, "--token-file", str(tf), "--state-dir", str(Path(d) / "state"),
+                                "--dest", str(Path(d) / "cli.pt"), "--sha256", good, "--epoch", "2"],
+                               cwd=ROOT, capture_output=True, text=True, timeout=60)
+            assert p.returncode == 0, p.stderr[-2000:]
+            assert TOKEN not in p.stdout + p.stderr
+            assert (Path(d) / "cli.pt").read_bytes() == srv.resume
+            ph = [e["data"] for e in srv.events.values() if e["type"] == "phase"]
+            assert any(x["phase"] == "resume_downloaded" and x["epoch"] == "2" and x["sha256"] == good for x in ph)
+    finally:
+        srv.close()
+
+
+def test_trainer_checkpoint_pure_parts():
+    from runner import mnist_train as M
+    assert "torch" not in sys.modules
+    assert M.checkpoint_name(3) == "ckpt-e0003.pt" and re.fullmatch(R.CHECKPOINT_NAME, M.checkpoint_name(12))
+    # every N epochs, never after the last one (that is model.pt), never with 0
+    assert [e for e in range(1, 6) if M.should_checkpoint(e, 1, 5)] == [1, 2, 3, 4]
+    assert [e for e in range(1, 7) if M.should_checkpoint(e, 2, 6)] == [2, 4]
+    assert not any(M.should_checkpoint(e, 0, 5) for e in range(1, 6))
+    assert not M.should_checkpoint(1, 1, 1)
+    assert M.validate_config({})["checkpoint_every_epochs"] == 1
+    assert M.validate_config({"checkpoint_every_epochs": 0})["checkpoint_every_epochs"] == 0
+    for bad in ({"checkpoint_every_epochs": -1}, {"checkpoint_every_epochs": 21}, {"checkpoint_every_epochs": 1.5}):
+        try:
+            M.validate_config(bad)
+            raise AssertionError(f"accepted {bad}")
+        except ValueError:
+            pass
+    cfg = M.validate_config({"epochs": 5})
+    ck = {"format": M.CKPT_FORMAT, "template": M.TEMPLATE, "epoch": 2, "model": {}, "optimizer": {}}
+    assert M.resume_start(ck, cfg) == 3
+    for bad in ({**ck, "epoch": 5}, {**ck, "epoch": 0}, {**ck, "epoch": True}, {**ck, "template": "other"},
+                {**ck, "format": "x"}, {k: v for k, v in ck.items() if k != "optimizer"}, ["not", "a", "dict"]):
+        try:
+            M.resume_start(bad, cfg)
+            raise AssertionError(f"resumable: {bad}")
+        except ValueError:
+            pass
+    with tempfile.TemporaryDirectory() as d:
+        for e in (1, 2, 3):
+            (Path(d) / M.checkpoint_name(e)).write_bytes(b"x")
+        (Path(d) / "model.pt").write_bytes(b"x")
+        assert M.prune_local(d) == ["ckpt-e0001.pt"]
+        assert sorted(p.name for p in Path(d).iterdir()) == ["ckpt-e0002.pt", "ckpt-e0003.pt", "model.pt"]
+    p = M._parse_args(["--out", "o", "--data", "d", "--resume", "r.pt", "--resume-sha256", "a" * 64])
+    assert p.resume == "r.pt" and p.resume_sha256 == "a" * 64
 
 
 def test_cli_emit_and_complete_never_print_token():
@@ -516,12 +644,57 @@ def test_cpu_smoke_real_mnist():
         srv.close()
 
 
+def _trainer(py, out, data, *extra):
+    p = subprocess.run([py, "-m", "runner.mnist_train", "--allow-cpu", "--limit-train", "1000", "--limit-test", "500",
+                        "--num-workers", "0", "--out", str(out), "--data", data, *extra],
+                       cwd=ROOT, capture_output=True, text=True, timeout=900)
+    evs = [json.loads(ln) for ln in p.stdout.splitlines() if ln.startswith('{"og": 1')]
+    return p, evs
+
+
+def test_cpu_checkpoint_resume_real_mnist():
+    """LOCAL CPU verification: real trainer saves a checkpoint, a second process (a 'new machine') resumes from it."""
+    py = _torch_python()
+    if not py:
+        print("  SKIP test_cpu_checkpoint_resume_real_mnist: no CPU torch venv (set OG_TORCHENV)")
+        return
+    data = os.environ.get("OG_MNIST_DATA") or str(_SCRATCH / "cpu_run" / "data")
+    with tempfile.TemporaryDirectory() as d:
+        a, b = Path(d) / "a", Path(d) / "b"
+        p, evs = _trainer(py, a, data, "--epochs", "3", "--checkpoint-every-epochs", "1")
+        assert p.returncode == 0, (p.stderr[-3000:], [e for e in evs if e["type"] == "error"])
+        saved = [e["data"] for e in evs if e["type"] == "phase" and e["data"]["phase"] == "checkpoint_saved"]
+        assert [s["epoch"] for s in saved] == [1, 2], "every epoch before the last"
+        files = sorted(x.name for x in (a / "checkpoints").iterdir())
+        assert files == ["ckpt-e0001.pt", "ckpt-e0002.pt"], files
+        ck = a / "checkpoints" / "ckpt-e0001.pt"
+        assert R.sha256_file(ck) == saved[0]["sha256"]
+        manifest = json.loads((a / "manifest.json").read_text())
+        assert not any(n.startswith("ckpt-") for n in manifest), "checkpoints are not results"
+        # tampered pin -> refused before anything is loaded
+        p, evs = _trainer(py, b, data, "--epochs", "3", "--resume", str(ck), "--resume-sha256", "0" * 64)
+        assert p.returncode == 2 and any(e["type"] == "error" and e["data"]["code"] == "resume_failed" for e in evs)
+        # resume on a "new machine" (fresh out dir) from epoch 1
+        p, evs = _trainer(py, b, data, "--epochs", "3", "--resume", str(ck), "--resume-sha256", saved[0]["sha256"])
+        assert p.returncode == 0, p.stderr[-3000:]
+        (res,) = [e["data"] for e in evs if e["type"] == "phase" and e["data"]["phase"] == "resumed"]
+        assert res["from_epoch"] == 1 and res["next_epoch"] == 2 and res["sha256"] == saved[0]["sha256"]
+        assert [e["data"]["epoch"] for e in evs if e["type"] == "metric"] == [2, 3]
+        (r,) = [e["data"] for e in evs if e["type"] == "result"]
+        assert r["outcome"] == "succeeded" and r["resumed_from_epoch"] == 1 and r["param_l2_change"] > 0
+        m = json.loads((b / "metrics.json").read_text())
+        assert m["resumed_from"]["from_epoch"] == 1 and [e["epoch"] for e in m["prior_epochs"]] == [1]
+        print(f"  cpu resume: from epoch 1 -> acc={r['test_accuracy']:.4f} l2(this run)={r['param_l2_change']:.3f}")
+
+
 if __name__ == "__main__":
     for t in (test_parse_line, test_spool_seq_is_monotonic_and_durable, test_artifact_hashing,
               test_backoff_has_jitter_and_cap, test_events_batch_seq_and_retry, test_offline_spool_then_recover,
               test_auth_and_terminal_stop_delivery, test_permanent_rejection_is_moved_aside,
               test_artifact_upload_and_complete, test_undelivered_complete_is_retried, test_supervisor_success,
               test_supervisor_oom_and_timeout, test_supervisor_upload_failure_fails_job,
+              test_supervisor_uploads_checkpoints_not_as_results, test_fetch_resume_is_sha256_pinned,
+              test_trainer_checkpoint_pure_parts,
               test_cli_emit_and_complete_never_print_token, test_mnist_module_importable_without_torch,
-              test_cpu_smoke_real_mnist):
+              test_cpu_smoke_real_mnist, test_cpu_checkpoint_resume_real_mnist):
         t(); print(t.__name__, "ok")

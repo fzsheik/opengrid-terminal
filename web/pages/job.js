@@ -104,12 +104,21 @@
           OG.head(h("span", { class: "dep-title" }, job.name || "Job"), h("span", {}, where),
             ca ? h("button", { class: "btn w4-danger", type: "button", onclick: () => cancel(ca) }, ca.button) : null),
           h("div", { class: "jb-bigline" }, J.lineEl(job), J.modeTag(sandbox())),
+          resumeNote(),
           sandbox() ? h("div", { class: "jb-simban", role: "note" }, h("b", {}, "SIMULATED"), h("span", {}, "No GPU was used and nothing was charged. Every number on this page is synthetic.")) : null,
           flash,
           billingAlarm(),
           errorBlock(),
           glanceBlock(),
         ];
+      }
+      // "Resumed from epoch N of job X" (job.resume: pinned at submission, confirmed by the runner's `resumed` phase).
+      function resumeNote() {
+        const rl = J.resumeLine(job);
+        if (!rl) return null;
+        const i = rl.text.indexOf(rl.job_id);   // the source job id becomes a link
+        return h("p", { class: "note" + (rl.tone ? " t-" + rl.tone : ""), role: "note" }, rl.text.slice(0, i),
+          h("a", { class: "lnk mono", href: "/jobs/" + encodeURIComponent(rl.job_id) }, rl.job_id), rl.text.slice(i + rl.job_id.length));
       }
       // At a glance: simulation or real, status, result, GPU, cost, outputs; then the one next step.
       function glanceBlock() {
@@ -125,7 +134,7 @@
             cell("Result", ps.success.a, ps.success.detail, ps.success.tone),
             cell("GPU", ps.gpu.a, ps.gpu.detail, ps.gpu.tone),
             cell("Cost", ps.cost.a, ps.cost.detail, ps.cost.tone),
-            cell("Outputs", arr.length ? `${arr.length} file${arr.length === 1 ? "" : "s"}` : "None yet", arr.length ? arr.map(a => a && a.name).filter(Boolean).join(", ") : ps.outputs.detail, arr.length ? "good" : "")),
+            cell("Outputs", arr.length ? `${arr.length} file${arr.length === 1 ? "" : "s"}` : "None yet", arr.length ? arr.map(a => a && J.artifactLabel(a)).filter(Boolean).join(", ") : ps.outputs.detail, arr.length ? "good" : "")),
           h("div", { class: "cx-next", role: "status" }, h("b", {}, "Next: "), h("span", {}, ns.text), ns.href ? h("a", { class: "btn sm pri", href: ns.href }, ns.label) : null,
             sandbox() && !J.isTerminal(job) ? h("span", { class: "dim" }, "Simulations finish on their own; there's nothing to stop.") : null),
         ];
@@ -269,16 +278,21 @@
 
       function artifactsBlock() {
         if (artErr) return OG.section("Artifacts", J.notYet("GET /v1/jobs/{id}/artifacts", artErr));
-        const rows = arts || [];
+        const so = J.splitOutputs(arts);
+        const rows = so.results.concat(so.checkpoints);
         const href = n => `/v1/jobs/${enc}/artifacts/${encodeURIComponent(n)}`;
-        return OG.section(`Artifacts · ${rows.length}` + (sandbox() ? " · SIMULATED" : ""), rows.length ? OG.table({
+        const cp = job.checkpoints || {};
+        // checkpoints: resumable state, not results; a sandbox only reports them (it stores none)
+        const ckNote = so.checkpoints.length ? h("p", { class: "note" }, `Checkpoints are saved training progress a new job can resume from (not results); only the newest ${cp.keep || so.checkpoints.length} are kept.`)
+          : sandbox() && (cp.reported_epochs || []).length ? h("p", { class: "note" }, `SIMULATED: checkpoints after epoch ${cp.reported_epochs.join(", ")} were reported but not stored; nothing here can be resumed.`) : null;
+        return OG.section(`Artifacts · ${rows.length}` + (sandbox() ? " · SIMULATED" : ""), rows.length ? [OG.table({
           columns: [
-            { key: "name", label: "Name", fmt: (v, r) => h("span", { title: r.created_at ? "stored " + exact(r.created_at) : null }, h("a", { class: "lnk mono", href: r.download || href(v), download: v, rel: "external" }, v), r.source === "simulated" ? [" ", OG.badge("simulated", "warn")] : null) },
+            { key: "name", label: "Name", fmt: (v, r) => h("span", { title: (r.created_at ? "stored " + exact(r.created_at) : "") + (J.isCheckpoint(r) ? " · " + v : "") || null }, h("a", { class: "lnk" + (J.isCheckpoint(r) ? "" : " mono"), href: r.download || href(v), download: v, rel: "external" }, J.artifactLabel(r)), r.source === "simulated" ? [" ", OG.badge("simulated", "warn")] : null) },
             { key: "size_bytes", label: "Size", num: true, value: r => r.size_bytes ?? r.size ?? null, fmt: v => J.bytes(v) },
             { key: "sha256", label: "sha256", cls: "mono dim", fmt: v => v ? h("span", { class: "jb-sha", title: v }, String(v).slice(0, 10) + "…", " ", OG.copy(v, { label: "copy", title: "Copy the full sha256" })) : "-" },
             { key: "dl", label: "", sort: false, csv: false, fmt: (v, r) => h("a", { class: "btn sm", href: r.download || href(r.name), download: r.name, rel: "external" }, "Download") },
           ], rows, compact: true, csv: false, rowKey: r => r.name,
-        }) : h("p", { class: "note" }, J.isTerminal(job) ? "No artifacts were stored." : "model.pt, config.json, metrics.json and env.json are uploaded when training ends (sha256 verified on receipt)."));
+        }), ckNote] : [h("p", { class: "note" }, J.isTerminal(job) ? "No artifacts were stored." : "model.pt, config.json, metrics.json and env.json are uploaded when training ends (sha256 verified on receipt); checkpoints between epochs."), ckNote]);
       }
 
       function terminationBlock() {

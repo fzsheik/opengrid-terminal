@@ -140,6 +140,11 @@ class Settings(BaseSettings):
     metrics_recompute_seconds: int = 300
     # --- OpenGrid Jobs (jobs/, api/jobs.py; methodology/jobs.md) ---
     job_artifact_max_mb: int = 64                # one runner artifact upload at most this many MB
+    # Training checkpoints (artifact names ckpt-eNNNN.pt; jobs/artifacts.py): resumable state, NOT results. One upload
+    # at most this many MB (pytorch-mnist model + Adam state ~14 MB); a job keeps only its newest N (1-4), so
+    # checkpoints use at most N x this of the job's artifact quota (which still applies to everything).
+    job_checkpoint_max_mb: int = 32
+    job_checkpoint_keep: int = 2
     job_artifact_store: str = "postgres"         # 'postgres' (bytea in job_artifacts) | 's3' (needs job_artifact_s3_*)
     job_artifact_s3_endpoint: str | None = None  # S3-compatible endpoint URL (server-side upload only)
     job_artifact_s3_bucket: str | None = None

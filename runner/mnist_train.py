@@ -13,6 +13,14 @@ Evidence produced (methodology/runner.md maps each to a founder check):
   - manifest.json sha256 + size of every artifact
 CUDA is REQUIRED unless --allow-cpu (tests / local verification only; recorded as device=cpu everywhere).
 
+Checkpoints (resumable state, NOT results; never in manifest.json): every `checkpoint_every_epochs` epochs before
+the last, OUT/checkpoints/ckpt-eNNNN.pt = {format, template, epoch, config, model, optimizer, torch_rng, loader_rng,
+history} (tensors + plain containers only, so it loads with torch.load(weights_only=True)), written atomically,
+then a `checkpoint_saved` phase {epoch, name, sha256, bytes}; the reporter uploads the newest one. The two newest
+stay on disk. --resume PATH [--resume-sha256 HEX]: verify the file's sha256, load it weights-only, check it is this
+template's checkpoint for an epoch < config.epochs, restore model/optimizer/RNG and continue at epoch+1 (phase
+`resumed` {from_epoch, next_epoch}); param_l2_change then measures THIS run's change from the loaded weights.
+
 stdout protocol: one JSON object per line {"og": 1, "type": phase|metric|result|error|log, "at": iso, "data": {..}}.
 Anything else on stdout/stderr is forwarded by the reporter as a plain log line.
 Exit codes: 0 succeeded, 2 failed, 3 oom, 4 timeout, 5 cuda unavailable (bootstrap problem, not training).
@@ -38,9 +46,13 @@ OUTCOME_BY_EXIT = {EXIT_OK: "succeeded", EXIT_FAILED: "failed", EXIT_OOM: "oom",
                    EXIT_NO_CUDA: "failed"}
 
 # Bounds mirror the workload validation on the app side; enforced again here so the GPU never trusts input.
-DEFAULTS = {"epochs": 3, "batch_size": 128, "learning_rate": 0.001, "seed": 42}
-BOUNDS = {"epochs": (1, 20), "batch_size": (16, 1024), "learning_rate": (1e-5, 0.1), "seed": (0, 2**31 - 1)}
+DEFAULTS = {"epochs": 3, "batch_size": 128, "learning_rate": 0.001, "seed": 42, "checkpoint_every_epochs": 1}
+BOUNDS = {"epochs": (1, 20), "batch_size": (16, 1024), "learning_rate": (1e-5, 0.1), "seed": (0, 2**31 - 1),
+          "checkpoint_every_epochs": (0, 20)}
 ARTIFACTS = ("model.pt", "config.json", "metrics.json", "env.json")
+CKPT_FORMAT = "opengrid-ckpt-1"
+CKPT_DIR = "checkpoints"
+CKPT_KEEP_LOCAL = 2
 
 
 class TrainingTimeout(Exception):
@@ -91,6 +103,68 @@ def validate_config(raw: dict) -> dict:
         if v is not None and (isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 60000):
             raise ValueError(f"{k} must be an integer in [1, 60000]")
     return cfg
+
+
+# ---------------------------------------------------------------------------------------------- checkpoints (pure)
+def checkpoint_name(epoch: int) -> str:
+    """ckpt-eNNNN.pt: the server's checkpoint name pattern (jobs/artifacts.CHECKPOINT_RE)."""
+    return f"ckpt-e{int(epoch):04d}.pt"
+
+
+def should_checkpoint(epoch: int, every: int, total: int) -> bool:
+    """Every `every` epochs, never after the last one (that state is model.pt, a result)."""
+    return bool(every) and every > 0 and epoch < total and epoch % every == 0
+
+
+def resume_start(ck: dict, cfg: dict) -> int:
+    """The epoch to continue at, from a loaded checkpoint dict; ValueError if it is not resumable here."""
+    if not isinstance(ck, dict) or ck.get("format") != CKPT_FORMAT or ck.get("template") != TEMPLATE:
+        raise ValueError(f"not a {TEMPLATE} checkpoint ({CKPT_FORMAT})")
+    ep = ck.get("epoch")
+    if isinstance(ep, bool) or not isinstance(ep, int) or ep < 1:
+        raise ValueError("checkpoint has no valid epoch")
+    if ep >= cfg["epochs"]:
+        raise ValueError(f"checkpoint is after epoch {ep}; config.epochs {cfg['epochs']} leaves nothing to train")
+    for k in ("model", "optimizer"):
+        if not isinstance(ck.get(k), dict):
+            raise ValueError(f"checkpoint has no {k} state")
+    return ep + 1
+
+
+def prune_local(ckpt_dir, keep: int = CKPT_KEEP_LOCAL) -> list:
+    """Delete all but the newest `keep` local checkpoint files (the reporter may still be reading the previous one)."""
+    files = sorted(p for p in Path(ckpt_dir).glob("ckpt-e[0-9][0-9][0-9][0-9].pt") if p.is_file())
+    gone = files[:-keep] if keep > 0 else files
+    for p in gone:
+        try:
+            p.unlink()
+        except OSError:
+            pass
+    return [p.name for p in gone]
+
+
+def save_checkpoint(ckpt_dir, epoch: int, state: dict) -> dict:
+    """torch.save to a temp file, then an atomic rename: the reporter never sees a half-written checkpoint."""
+    import torch
+    d = Path(ckpt_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    name = checkpoint_name(epoch)
+    tmp = d / f".{name}.tmp"
+    torch.save(state, tmp)
+    os.replace(tmp, d / name)
+    prune_local(d)
+    return {"epoch": epoch, "name": name, "sha256": sha256_file(d / name), "bytes": (d / name).stat().st_size}
+
+
+def load_checkpoint(path, device="cpu", sha256: str | None = None) -> dict:
+    """Verify (sha256, when given) and load a checkpoint weights-only: no pickled code runs."""
+    import torch
+    if sha256 and sha256_file(path) != sha256.strip().lower():
+        raise ValueError("resume checkpoint sha256 does not match the one OpenGrid pinned")
+    try:
+        return torch.load(str(path), map_location=device, weights_only=True)
+    except TypeError:  # torch < 1.13: no weights_only; never fall back to a full unpickle of uploaded bytes
+        raise ValueError("this PyTorch cannot load a checkpoint weights-only; refusing to resume") from None
 
 
 # ---------------------------------------------------------------------------------------------- model / data
@@ -234,7 +308,8 @@ def _param_vector(model):
 
 
 # ---------------------------------------------------------------------------------------------- training
-def train(cfg: dict, *, out_dir, data_dir, allow_cpu=False, max_seconds=None, num_workers=2) -> int:
+def train(cfg: dict, *, out_dir, data_dir, allow_cpu=False, max_seconds=None, num_workers=2, resume=None,
+          resume_sha256=None) -> int:
     import numpy as np
     import torch
     import torch.nn.functional as F
@@ -298,17 +373,35 @@ def train(cfg: dict, *, out_dir, data_dir, allow_cpu=False, max_seconds=None, nu
 
     model = build_model().to(device)
     opt = torch.optim.Adam(model.parameters(), lr=cfg["learning_rate"])
+    start_epoch, prior, resumed = 1, [], None
+    if resume:
+        try:
+            ck = load_checkpoint(resume, device, resume_sha256)
+            start_epoch = resume_start(ck, cfg)
+            model.load_state_dict(ck["model"])
+            opt.load_state_dict(ck["optimizer"])
+            if ck.get("torch_rng") is not None:
+                torch.set_rng_state(ck["torch_rng"].cpu())
+            if ck.get("loader_rng") is not None:
+                g.set_state(ck["loader_rng"].cpu())
+        except Exception as e:  # noqa: BLE001  (wrong file, tampered bytes, other architecture...)
+            emit("error", code="resume_failed", message=f"{type(e).__name__}: {str(e)[:1000]}")
+            return EXIT_FAILED
+        prior = [r for r in (ck.get("history") or []) if isinstance(r, dict)]
+        resumed = {"from_epoch": start_epoch - 1, "sha256": sha256_file(resume)}
+        phase("resumed", from_epoch=start_epoch - 1, next_epoch=start_epoch, of=cfg["epochs"],
+              sha256=resumed["sha256"])
     initial = _param_vector(model)
     n_params = int(initial.numel())
     first_param_device = str(next(model.parameters()).device)
 
     phase("training_started", device=str(device), param_device=first_param_device, parameters=n_params,
           epochs=cfg["epochs"], batch_size=cfg["batch_size"], learning_rate=cfg["learning_rate"],
-          train_samples=len(train_ds), test_samples=len(test_ds), optimizer="Adam")
+          train_samples=len(train_ds), test_samples=len(test_ds), optimizer="Adam", start_epoch=start_epoch)
 
     epochs = []
     train_seconds = 0.0
-    for epoch in range(1, cfg["epochs"] + 1):
+    for epoch in range(start_epoch, cfg["epochs"] + 1):
         model.train()
         if device.type == "cuda":
             torch.cuda.reset_peak_memory_stats()
@@ -341,6 +434,15 @@ def train(cfg: dict, *, out_dir, data_dir, allow_cpu=False, max_seconds=None, nu
         emit("metric", **row)
         phase("epoch_completed", epoch=epoch, of=cfg["epochs"], train_loss=row["train_loss"],
               test_accuracy=row["test_accuracy"], test_loss=row["test_loss"])
+        if should_checkpoint(epoch, cfg.get("checkpoint_every_epochs", 0), cfg["epochs"]):
+            try:   # a checkpoint is a convenience: failing to write one never fails the training
+                ck = save_checkpoint(out_dir / CKPT_DIR, epoch, {
+                    "format": CKPT_FORMAT, "template": TEMPLATE, "epoch": epoch, "config": dict(cfg),
+                    "model": model.state_dict(), "optimizer": opt.state_dict(), "torch_rng": torch.get_rng_state(),
+                    "loader_rng": g.get_state(), "history": prior + epochs})
+                emit("phase", phase="checkpoint_saved", **ck)   # ck carries `name`: not phase()
+            except OSError as e:
+                phase("checkpoint_failed", epoch=epoch, message=f"{type(e).__name__}: {str(e)[:300]}")
 
     final = _param_vector(model)
     l2 = float(torch.linalg.vector_norm(final - initial).item())
@@ -349,9 +451,10 @@ def train(cfg: dict, *, out_dir, data_dir, allow_cpu=False, max_seconds=None, nu
     # Reload check on the saved file itself: the accuracy we report must be reproducible from model.pt.
     reloaded = evaluate(load_model(out_dir / "model.pt", device), test_loader_, device)
 
-    losses = [e["train_loss"] for e in epochs]
+    losses = [e["train_loss"] for e in prior + epochs if isinstance(e.get("train_loss"), (int, float))]
     metrics = {
         "template": TEMPLATE, "device": str(device), "epochs": epochs,
+        "resumed_from": resumed, "prior_epochs": prior,
         "final": {"train_loss": losses[-1], "test_loss": epochs[-1]["test_loss"],
                   "test_accuracy": epochs[-1]["test_accuracy"],
                   "reloaded_test_accuracy": reloaded["test_accuracy"],
@@ -364,7 +467,7 @@ def train(cfg: dict, *, out_dir, data_dir, allow_cpu=False, max_seconds=None, nu
         "runtime_seconds": round(time.monotonic() - t_start, 3), "dataset_files": fingerprint,
     }
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2, sort_keys=True), encoding="utf-8")
-    (out_dir / "config.json").write_text(json.dumps({"template": TEMPLATE, "config": cfg,
+    (out_dir / "config.json").write_text(json.dumps({"template": TEMPLATE, "config": cfg, "resumed_from": resumed,
                                                      "architecture": "conv32-conv64-maxpool-dropout-fc128-fc10",
                                                      "optimizer": "Adam", "loss": "cross_entropy"},
                                                     indent=2, sort_keys=True), encoding="utf-8")
@@ -373,7 +476,8 @@ def train(cfg: dict, *, out_dir, data_dir, allow_cpu=False, max_seconds=None, nu
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
     emit("result", outcome="succeeded", **metrics["final"], param_l2_change=l2,
          samples_per_second=metrics["samples_per_second"], runtime_seconds=metrics["runtime_seconds"],
-         device=str(device), gpu_name=env.get("gpu_name"), artifacts=manifest)
+         device=str(device), gpu_name=env.get("gpu_name"), artifacts=manifest,
+         resumed_from_epoch=resumed and resumed["from_epoch"])
     # `training_completed` is emitted by the reporter AFTER the artifacts are uploaded and hash-checked.
     return EXIT_OK
 
@@ -387,6 +491,9 @@ def _parse_args(argv=None):
     ap.add_argument("--batch-size", type=int)
     ap.add_argument("--learning-rate", type=float)
     ap.add_argument("--seed", type=int)
+    ap.add_argument("--checkpoint-every-epochs", type=int)
+    ap.add_argument("--resume", help="checkpoint file to continue from (bootstrap downloads it)")
+    ap.add_argument("--resume-sha256", help="the sha256 OpenGrid pinned for --resume")
     ap.add_argument("--limit-train", type=int, help="tests only: train on a seeded subset")
     ap.add_argument("--limit-test", type=int, help="tests only: evaluate on a seeded subset")
     ap.add_argument("--max-seconds", type=float, help="wall-clock limit for this process")
@@ -401,7 +508,8 @@ def main(argv=None) -> int:
         raw = json.loads(base64.b64decode(a.config_b64, validate=True)) if a.config_b64 else {}
         if not isinstance(raw, dict):
             raise ValueError("config must be a JSON object")
-        for k in ("epochs", "batch_size", "learning_rate", "seed", "limit_train", "limit_test"):
+        for k in ("epochs", "batch_size", "learning_rate", "seed", "checkpoint_every_epochs", "limit_train",
+                  "limit_test"):
             if getattr(a, k) is not None:
                 raw[k] = getattr(a, k)
         cfg = validate_config(raw)
@@ -415,7 +523,7 @@ def main(argv=None) -> int:
         return EXIT_FAILED
     try:
         return train(cfg, out_dir=a.out, data_dir=a.data, allow_cpu=a.allow_cpu, max_seconds=a.max_seconds,
-                     num_workers=a.num_workers)
+                     num_workers=a.num_workers, resume=a.resume, resume_sha256=a.resume_sha256)
     except TrainingTimeout as e:
         emit("error", code="timeout", message=str(e))
         return EXIT_TIMEOUT
