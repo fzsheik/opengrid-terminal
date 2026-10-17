@@ -4,18 +4,21 @@
    decorates it: a left table of contents from the headings, anchor links, scrollable tables.
    The index groups /v1/methodology by topic; one-line descriptions are each entry's `summary` (served by
    api/pages.py from methodology_index.methodology_summaries()), falling back to the first paragraph of the
-   doc's raw markdown (/v1/methodology/{name}) only for entries without one. Unknown docs land in "Other". */
+   doc's raw markdown (/v1/methodology/{name}) only for entries without one. Every document in methodology/ has a
+   group (tests/test_web_core.js checks it); a new, ungrouped one lands in "Other". */
 (() => {
   const { h } = OG;
   const GROUPS = [
-    ["Market data & indices", ["data-kinds", "indices", "historical-context", "dispersion"]],
-    ["Market structure", ["provider-value", "hardware", "families", "opportunities"]],
-    ["Events & news", ["events", "news"]],
-    ["Data trust & quality", ["data-quality", "data-trust"]],
-    ["Routing & execution", ["routing", "best-execution"]],
-    ["Accounts & billing", ["billing", "alerts", "accounts"]],
+    ["Prices & data", ["data-kinds", "data-trust", "data-quality", "historical-context", "dispersion", "families", "hardware"]],
+    ["Indices & settlement", ["indices", "settlement"]],
+    ["Market signals", ["events", "opportunities", "news", "provider-value", "reliability"]],
+    ["Recommendations", ["recommendations", "workloads", "best-execution"]],
+    ["Running jobs", ["jobs", "execution-safety", "runner", "routing", "routing-quality", "provider-capabilities", "reservations", "first-live-route"]],
+    ["Accounts, billing & security", ["security", "billing", "reconciliation", "economics", "alerts"]],
   ];
   const groupOf = name => (GROUPS.find(g => g[1].includes(name)) || ["Other"])[0];
+  OG.methodology = { GROUPS, groupOf };
+  if (typeof OG.page !== "function" || typeof document === "undefined") return;   // node tests: pure part only
 
   // First prose paragraph of a markdown doc, markup stripped: the one-line description.
   function firstParagraph(md) {
@@ -49,8 +52,8 @@
     const root = h("div", { class: "md-ix" });
     el.append(root);
     const ssr = ctx.ssr ? [...ctx.ssr.childNodes] : null;
-    root.append(OG.head("Methodology", "How OpenGrid computes every number it publishes. Every endpoint cites its document in meta.methodology.",
-      h("a", { class: "btn", href: "/v1/methodology", target: "_blank" }, "JSON"), h("a", { class: "btn", href: "/api" }, "API docs")));
+    const filter = h("input", { class: "field md-filter", type: "search", placeholder: "Filter documents", "aria-label": "Filter documents" });
+    root.append(OG.head("Methodology", "How OpenGrid computes every number it publishes.", filter));
     const body = h("div", {}, OG.loading("Loading documents…"));
     root.append(body);
     let docs;
@@ -66,13 +69,24 @@
         h("ul", { class: "md-docs" }, ds.map(d => {
           const de = h("span", { class: "md-desc" }, d.summary || "…");
           descEls.set(d.name, de);
-          return h("li", {}, h("a", { class: "md-doc", href: "/methodology/" + d.name },
-            h("span", { class: "md-t" }, d.title), h("span", { class: "md-name" }, d.name), de));
+          return h("li", { "data-q": (d.title + " " + d.name + " " + (d.summary || "")).toLowerCase() }, h("a", { class: "md-doc", href: "/methodology/" + d.name },
+            h("span", { class: "md-t" }, d.title), de));
         })));
     });
-    body.replaceChildren(h("div", { class: "md-grid" }, sections),
-      h("p", { class: "note" }, `${docs.length} documents. Data kinds (observed / derived / estimated / transaction) and the four price concepts are defined in `,
-        h("a", { class: "lnk", href: "/methodology/data-kinds" }, "data-kinds"), "; every figure on the site carries one of those labels."));
+    const none = h("p", { class: "note", hidden: true }, "No document matches.");
+    body.replaceChildren(h("div", { class: "md-grid" }, sections), none,
+      h("p", { class: "note" }, "Every figure on the site is labelled observed, estimated or transaction: see ",
+        h("a", { class: "lnk", href: "/methodology/data-kinds" }, "Data kinds and price concepts"), "."));
+    filter.addEventListener("input", () => {
+      const q = filter.value.trim().toLowerCase();
+      let shown = 0;
+      for (const sec of sections) {
+        let n = 0;
+        sec.querySelectorAll("li").forEach(li => { const hit = !q || li.dataset.q.includes(q); li.hidden = !hit; if (hit) n++; });
+        sec.hidden = !n; shown += n;
+      }
+      none.hidden = shown > 0;
+    });
     await Promise.all(docs.filter(d => !d.summary).map(async d => {
       const t = await describe(d.name);
       if (!ctx.alive()) return;
@@ -87,9 +101,8 @@
     el.append(root);
     const article = h("article", { class: "methodology md-article" });
     const toc = h("nav", { class: "md-toc", "aria-label": "On this page" });
-    const crumbs = h("div", { class: "md-crumbs" }, h("a", { class: "lnk", href: "/methodology" }, "Methodology"), h("span", { class: "dimmer" }, " / "), h("span", { class: "mono dim" }, params.name),
-      h("span", { class: "spacer" }), h("span", { class: "md-group" }, groupOf(params.name)),
-      h("a", { class: "btn sm", href: "/v1/methodology/" + encodeURIComponent(params.name), target: "_blank" }, "raw markdown"));
+    const crumbs = h("div", { class: "md-crumbs" }, h("a", { class: "lnk", href: "/methodology" }, "Methodology"), h("span", { class: "dimmer" }, " / "),
+      h("span", { class: "dim" }, groupOf(params.name)));
     root.append(crumbs, h("div", { class: "md-layout" }, toc, article));
     article.append(OG.loading());
     let nodes;

@@ -38,14 +38,14 @@
 </header>
 <div class="app">
   <nav class="nav" id="main-nav" aria-label="Main">
-    <!-- Home, then the five primary destinations. "Explore" is public (no account); "Your workspace" needs an
-         OpenGrid account and its links carry a lock (data-access) until the visitor is signed in. Each group's
+    <!-- Home, then the five primary destinations. "Explore" is public (no account); "Your workspace" is invite only (an
+         OpenGrid account or API key) and its links carry a lock (data-access) until the visitor is signed in. Each group's
          secondary links stay in the DOM (the command bar's page suggestions scrape every .nav a[data-nav]); a group
          opens when one of its pages is current. Operator tools (Admin, Ops) stay hidden unless /v1/me says admin. -->
     <div class="nav-sec" data-group="home">
       <div class="nav-row"><a href="/" data-nav="home" class="nav-p" data-alias="Home start what is OpenGrid">Home</a></div>
     </div>
-    <div class="nav-g" title="Free to use, no account needed">Explore</div>
+    <div class="nav-g" title="Free to use, no account needed (except pages with a lock)">Explore</div>
     <div class="nav-sec" data-group="gpus">
       <div class="nav-row"><a href="/gpus" data-nav="gpus" class="nav-p" data-alias="GPU markets prices">GPUs</a><button type="button" class="nav-tg" aria-expanded="false" aria-label="Show GPU tools"></button></div>
       <div class="nav-sub">
@@ -68,24 +68,24 @@
         <a href="/opportunities" data-nav="opportunities">Opportunities</a>
         <a href="/events" data-nav="events">Events</a>
         <a href="/news" data-nav="news">News</a>
-        <a href="/watchlists" data-nav="watchlists" data-access="account" title="Needs an OpenGrid account" data-alias="Alerts price alerts">Watchlists</a>
+        <a href="/watchlists" data-nav="watchlists" data-access="account" title="Invite only: needs an OpenGrid account or API key" data-alias="Alerts price alerts">Watchlists</a>
       </div>
     </div>
     <div class="nav-sec" data-group="developers">
       <div class="nav-row"><a href="/developers" data-nav="developers" class="nav-p" data-alias="CLI MCP integrate AI assistant Claude Cursor">Developers</a><button type="button" class="nav-tg" aria-expanded="false" aria-label="Show developer pages"></button></div>
       <div class="nav-sub">
         <a href="/api" data-nav="api" data-alias="REST reference endpoints">API docs</a>
-        <a href="/keys" data-nav="keys" data-access="account" title="Needs an OpenGrid account">API keys</a>
-        <a href="/onboarding" data-nav="onboarding" data-access="account" title="Needs an OpenGrid account" data-alias="Design partner">Onboarding</a>
+        <a href="/keys" data-nav="keys" data-access="account" title="Invite only: needs an OpenGrid account or API key">API keys</a>
+        <a href="/onboarding" data-nav="onboarding" data-access="account" title="Invite only: needs an OpenGrid account or API key" data-alias="Design partner">Onboarding</a>
       </div>
     </div>
-    <div class="nav-g" title="Needs an OpenGrid account (invite only for now)"><i class="lock" aria-hidden="true"></i>Your workspace</div>
+    <div class="nav-g" title="Invite only: accounts and API keys are issued by the OpenGrid team"><i class="lock" aria-hidden="true"></i>Your workspace</div>
     <div class="nav-sec" data-group="jobs">
-      <div class="nav-row"><a href="/jobs" data-nav="jobs" class="nav-p" data-access="account" title="Needs an OpenGrid account" data-alias="Jobs training demo run">My Jobs</a><button type="button" class="nav-tg" aria-expanded="false" aria-label="Show execution pages"></button></div>
+      <div class="nav-row"><a href="/jobs" data-nav="jobs" class="nav-p" data-access="account" title="Invite only: needs an OpenGrid account or API key" data-alias="Jobs training demo run">My Jobs</a><button type="button" class="nav-tg" aria-expanded="false" aria-label="Show execution pages"></button></div>
       <div class="nav-sub">
-        <a href="/deployments" data-nav="deployments" data-access="account" title="Needs an OpenGrid account">Deployments</a>
-        <a href="/reserve" data-nav="reserve" data-access="account" title="Needs an OpenGrid account" data-alias="Reservations price lock">Reserve</a>
-        <a href="/route" data-nav="route" data-access="account" title="Needs an OpenGrid account" data-alias="Route preview best execution">Route</a>
+        <a href="/deployments" data-nav="deployments" data-access="account" title="Invite only: needs an OpenGrid account or API key">Deployments</a>
+        <a href="/reserve" data-nav="reserve" data-access="account" title="Invite only: needs an OpenGrid account or API key" data-alias="Reservations price lock">Reserve</a>
+        <a href="/route" data-nav="route" data-access="account" title="Invite only: needs an OpenGrid account or API key" data-alias="Route preview best execution">Route</a>
       </div>
     </div>
     <div class="nav-util">

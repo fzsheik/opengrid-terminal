@@ -81,6 +81,26 @@ def _deny(status: int, detail: str, headers: dict | None = None) -> Response:
 
 LOGIN_PATH = "/login"
 
+# Paths that are never a web page: API, assets, the hosted MCP endpoint, the login, health and the first UI's
+# JSON reads (some of them private). An unknown path under these keeps its normal answer (401 / 404 JSON).
+_NOT_PAGES = ("/v1", "/static", "/mcp", LOGIN_PATH, "/health", "/docs", "/redoc", "/openapi", "/classic", "/market",
+              "/listings", "/changes", "/history", "/reference-prices", "/polling", "/mapping", "/unmapped", "/raw",
+              "/fetch", "/normalize", "/robots.txt", "/sitemap.xml")
+
+
+def _unknown_page(request) -> bool:
+    """A browser asking for a path that is no page and no API: it gets the app's own "Page not found" (404),
+    not a plain-text 401. Only GET/HEAD that accept HTML; the shell carries public data only (the boot block)."""
+    if request.method not in ("GET", "HEAD") or "text/html" not in request.headers.get("accept", ""):
+        return False
+    path = request.url.path
+    if path.startswith("/openapi") or any(path == p or path.startswith(p + "/") for p in _NOT_PAGES):
+        return False
+    from starlette.routing import Match
+    # anything a non-page route answers (a JSON endpoint added later, say) is not ours to replace
+    return not any(r.matches(request.scope)[0] == Match.FULL for r in app.routes if getattr(r, "endpoint", None)
+                   and not getattr(r.endpoint, "__name__", "").startswith("page_"))
+
 
 @app.middleware("http")
 async def require_password(request, call_next):
@@ -125,6 +145,8 @@ async def require_password(request, call_next):
             public = True
     elif settings.public_pages and pages_api.is_public(request):
         public = True
+    elif settings.public_pages and _unknown_page(request):
+        return pages_api.not_found(path, "No page at this address.")
     elif settings.public_pages and path != LOGIN_PATH:
         # Open site: a visitor must never get the browser's password popup from a background call (every page
         # asks /v1/me). Only /login challenges for the site login; the rest says "use a key" (Bearer: no popup).
