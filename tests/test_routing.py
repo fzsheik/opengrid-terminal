@@ -244,7 +244,7 @@ def test_factors_and_explanations():
     assert "5% below current market median ($1.05)" in ch["explanation"], ch["explanation"]
     assert "14% above current market median" in st["explanation"], st["explanation"]
     assert "available now (explicit)" in st["explanation"] and "priced availability 100% of last 30 days" in st["explanation"]
-    assert "availability unknown" in ch["explanation"]
+    assert "stock not published by the provider" in ch["explanation"]
     assert "old)" in st["explanation"] and "OpenGrid can provision via API (level 3)" in st["explanation"]
     assert "market data only" in ch["explanation"]
     top = r["candidates"][0]

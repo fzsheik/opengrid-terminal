@@ -332,7 +332,7 @@ def seo_family(slug: str, fam: dict):
                          "highPrice": round(r["high"]["price"], 4), "offerCount": r["n"]}} for r in priced]
     ld = _jsonld({"@context": "https://schema.org", "@graph": graph}) if graph else ""
     body = (f"<h1>{esc(fid)} cloud price by variant</h1><p>{esc(note)} As of {esc(when)}; observed on-demand list prices, "
-            f"in stock or stock unknown, one price per provider (its lowest).</p>"
+            f"in stock or stock not published, one price per provider (its lowest).</p>"
             "<table><thead><tr><th>Variant</th><th>From $/GPU-hour</th><th>at</th><th>Median</th><th>High</th><th>Providers</th>"
             f"</tr></thead><tbody>{trs}</tbody></table>"
             '<p><a href="/methodology/families">How GPU families are defined</a> · '
@@ -404,7 +404,7 @@ def seo_gpu(params: dict):
     body = (f"<h1>{esc(name)} cloud price</h1>"
             f"<p>From <strong>{esc(_price(low['price']))}</strong> per GPU-hour on demand across {n} provider{plural} "
             f"(median {esc(_price(mid))}, high {esc(_price(high['price']))}), as of {esc(when)}. Observed list prices, "
-            f"in stock or stock unknown.</p>" + idx_p +
+            f"in stock or stock not published.</p>" + idx_p +
             f"<table><thead><tr><th>Provider</th><th>$/GPU-hour</th><th>GPUs</th><th>Region</th></tr></thead><tbody>{rows}</tbody></table>"
             + _hw_rows(name) + f"<h2>{esc(short)} price FAQ</h2>" + faq_html +
             f'<p><a href="/compare?a={esc(slug)}">Compare the {esc(short)}</a> · <a href="/route?gpu={esc(slug)}">Route a workload</a> · '

@@ -427,7 +427,7 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
                        if perf["runtime"].get("known") else
                        "runtime not benchmarked: no measured benchmark for this workload on this GPU")
         if cd["available"] is None:
-            lim.append("availability not reported by provider")
+            lim.append("stock not published by the provider")
         if x["cost"]["billing_unit"] == "unknown":
             lim.append("billing unit unknown: per-hour billing assumed in the cost scenarios")
         if n > 1 and not x["nvlink"]:

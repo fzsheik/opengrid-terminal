@@ -103,7 +103,7 @@
   function priceRows(data) {
     if (!data) return [];
     const one = d => (d.cheapest || []).map(c => ({ gpu: d.gpu, slug: d.slug, provider: c.provider_display || c.provider, region: c.region || c.country || null,
-      price: c.price_per_gpu_hour, kind: kindOf(c.price_kind), available: c.available === true ? "yes" : c.available === false ? "no" : "not reported" }));
+      price: c.price_per_gpu_hour, kind: kindOf(c.price_kind), available: c.available === true ? "yes" : c.available === false ? "no" : "stock not published" }));
     return data.variants ? data.variants.flatMap(one) : one(data);
   }
   function compareRows(data) {

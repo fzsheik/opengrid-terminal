@@ -122,7 +122,7 @@ anonymous caller is reported as "sign in / API key required", never assumed.
               "budget_hours": 16.7,            // hours the budget buys, when budget given
               "unknown_costs": ["storage", "egress", "startup time"], "kind": "estimated" },
     "why": ["fits 29 GB estimate with 64% headroom", "cheapest fresh H100 SXM listing"],
-    "limitations": ["runtime not benchmarked", "availability not reported by provider"],
+    "limitations": ["runtime not benchmarked", "stock not published by the provider"],
     "count_choice": "minimum" | "scale_up",     // scale_up: 2n GPUs of a model that fits on n (one per GPU model)
     "performance": {                             // ESTIMATED from spec sheets + stated assumptions; never a benchmark
       "basis": { "metric": "tflops" | "memory_bandwidth", "per_gpu": 989.5, "unit": "TFLOPS", "label": "..." } | null,

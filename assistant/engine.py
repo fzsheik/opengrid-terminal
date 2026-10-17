@@ -185,7 +185,7 @@ def _price_line(d: dict) -> str:
         where = top.get("provider_display") or top.get("provider")
         reg = f" ({top['region']})" if top.get("region") else ""
         avail = ("the provider reports it available" if top.get("available") is True
-                 else "availability not reported by the provider")
+                 else "the provider publishes prices but not live stock")
         s = (f"Cheapest available {name} right now: {_money(top['price_per_gpu_hour'])}/GPU-hour on {where}{reg}; "
              f"observed market price, not a quote; {avail}.")
         nxt, seen = [], {top.get("provider")}

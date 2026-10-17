@@ -45,7 +45,7 @@
     over_max_price: "over max price", wrong_region: "wrong region", sold_out: "sold out", not_on_demand: "not on-demand",
     single_host_ask: "single-host ask", floor_price: "floor price", ineligible: "ineligible", no_price: "no price", stale: "stale",
     wrong_count: "wrong GPU count", excluded_by_preference: "excluded by you", below_required_level: "not provisionable",
-    availability_unknown: "availability unknown", region_not_confirmed: "region unconfirmed", region_unconfirmed: "region unconfirmed",
+    availability_unknown: "stock not published", region_not_confirmed: "region unconfirmed", region_unconfirmed: "region unconfirmed",
     wrong_variant: "other variant", variant_not_allowed: "other variant",
   };
 

@@ -164,7 +164,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
           { label: "High", value: live ? fmt.price(m.high) : null, reason: "no priced providers", sub: live ? OG.providerName(m.by_provider[m.by_provider.length - 1].provider) : null },
           { label: "Spread", value: spread != null ? fmt.pct(spread) : null, reason: live ? "one provider: no spread" : "no priced providers", sub: spread != null ? fmt.price(m.stats.spread_abs) + " high − low" : null },
           { label: "Providers", value: String(m ? m.providers : 0), sub: "priced now" },
-          { label: "Available", value: m ? String(m.listings.available) : null, sub: m ? `${m.listings.availability_unknown} unknown · ${m.listings.sold_out} sold out` : null, title: m ? `listings with explicit availability now; ${m.listings.availability_unknown} with availability unknown, ${m.listings.sold_out} sold out` : null },
+          { label: "Available", value: m ? String(m.listings.available) : null, sub: m ? `${m.listings.availability_unknown} stock not published · ${m.listings.sold_out} sold out` : null, title: m ? `listings with explicit availability now; ${m.listings.availability_unknown} with availability unknown, ${m.listings.sold_out} sold out` : null },
           ch("24h"), ch("7d"), ch("30d"), ch("90d"),
           { label: "Volatility", value: vol && vol[1].annualized != null ? fmt.pct(vol[1].annualized) : null, reason: vol ? vol[1].reason : idx === undefined ? "loading" : "index unavailable", sub: vol && vol[1].annualized != null ? vol[0] + " annualized" : shortReason(vol ? vol[1].reason : "index unavailable") },
           { label: "Hist. low", value: hist && hist.low ? fmt.price(hist.low.value) : null, reason: cx === undefined ? "loading" : cx ? "no history" : "context endpoint unavailable", sub: hist && hist.low ? "of lowest · " + fmt.date(hist.low.hour) : null, title: hist ? `lowest market price recorded since ${when(hist.since)} (${hist.samples} hourly samples)` : null },
@@ -246,7 +246,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
             onHover: r => chart && st.view === "providers" && chart.highlight(r ? r.provider : null), csv: `opengrid-${slug}-providers.csv`,
             title: `${rows.length} providers · each at its lowest price` });
           provTable.cols24 = rows.some(r => r.chg24k);
-          provBox.replaceChildren(provTable, h("p", { class: "note" }, "On-demand list prices, in stock or stock unknown. ",
+          provBox.replaceChildren(provTable, h("p", { class: "note" }, "On-demand list prices, in stock or stock not published. ",
             m.listings.sold_out ? `${m.listings.sold_out} sold-out listing${m.listings.sold_out === 1 ? "" : "s"} excluded. ` : "", h("a", { class: "lnk", href: "/methodology/dispersion" }, "Method")));
         } else provTable.update(rows);
       }

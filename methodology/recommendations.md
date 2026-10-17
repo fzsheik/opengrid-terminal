@@ -84,7 +84,7 @@ These figures are estimates in the open: every input, assumption and source is i
    - **FP8 on other vendors:** the GPU must support FP8.
    - **Assumed precision:** never excludes hardware. A T4 still runs fp16 mixed precision.
    - **VRAM:** the GPU must hold the per-GPU need at its fitting count.
-2. **Market (read-only).** `routing.scoring.rank_listings(gpu, count=n)` runs for each fitting GPU. The same rules as `/v1/best` apply: canonical, on-demand, priced, not sold out, seen within the provider's freshness window (`market.stale_after`), and exactly `n` GPUs per instance. Listings with unknown availability are kept and labelled "availability not reported by provider". Spot capacity is never ranked, even with `allow_spot`. Region, maximum price and provider include/exclude lists come from the request.
+2. **Market (read-only).** `routing.scoring.rank_listings(gpu, count=n)` runs for each fitting GPU. The same rules as `/v1/best` apply: canonical, on-demand, priced, not sold out, seen within the provider's freshness window (`market.stale_after`), and exactly `n` GPUs per instance. Listings with unknown availability are kept and labelled "stock not published by the provider". Spot capacity is never ranked, even with `allow_spot`. Region, maximum price and provider include/exclude lists come from the request.
 3. **Exclusions.** Everything left out is listed with a code:
    - `insufficient_vram`: too little memory even at the largest count.
    - `wrong_vendor`, `compute_capability_too_low`, `precision_unsupported`: hardware checks.

@@ -303,7 +303,7 @@ def factors(row: dict, *, median: float, hist: dict, want_group: str | None, now
                                           f"available now ({word})")
     else:
         out["availability_now"] = _factor(0.5, {"available": None, "basis": basis or "unknown"}, "observed",
-                                          "availability unknown (provider does not report stock)")
+                                          "stock not published by the provider")
 
     if want_group:
         groups, ok = _region_groups(row["provider"], row["region"], row["country"])
@@ -541,7 +541,7 @@ def rank_listings(gpu: str, *, count: int = 1, region_group: str | None = None, 
                                                                     f"{adapters.level(prov)} < required {require_level}"))
             continue
         if require_available and r["available"] is not True:
-            exclusions.append(_exclusion(r, "availability_unknown", "availability not reported; explicit "
+            exclusions.append(_exclusion(r, "availability_unknown", "stock not published by the provider; explicit "
                                                                     "availability required"))
             continue
         (exact if shape == "exact" else multi).append(r)

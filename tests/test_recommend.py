@@ -350,7 +350,7 @@ def test_h_stale_sold_out_and_spot_never_deployable():
     assert all(o["fresh"] and o["available"] is not False for o in out["options"])
     assert all(o["age_seconds"] < 3600 for o in out["options"])
     unk = next(o for o in out["options"] if o["provider"] == "syn_c" and o["gpu"] == A40)
-    assert unk["available"] is None and "availability not reported by provider" in unk["limitations"]
+    assert unk["available"] is None and "stock not published by the provider" in unk["limitations"]
     assert opt(out, "cheapest_market")["listing_id"] not in (STALE_ID, SOLD_ID, SPOT_ID)
     # allow_spot does not smuggle spot in
     out = rec({**LORA7, "constraints": {"allow_spot": True}}, limit=20)

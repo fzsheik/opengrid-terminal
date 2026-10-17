@@ -377,14 +377,14 @@
     if (o && o.available === false) return { code: "sold_out", label: "Sold out, not deployable", tone: "bad", deployable: false, detail: "The provider reported no capacity at the last observation.", reasons };
     if (o && o.fresh === false) return { code: "stale", label: "Price is stale, not deployable", tone: "warn", deployable: false, detail: "Not observed recently; the price and availability may have changed.", reasons };
     if (ex.executable === true) return { code: "executable", label: "OpenGrid can run this", tone: "good", deployable: true,
-      detail: "Launch goes through a quote and an OpenGrid approval." + (o.available == null ? " Availability is not reported by the provider." : ""), reasons };
+      detail: "Launch goes through a quote and an OpenGrid approval." + (o.available == null ? " The provider publishes prices but not live stock; OpenGrid checks availability before launching." : ""), reasons };
     if (ex.workload_supported === false) return { code: "recommendation_only", label: "Recommendation only: OpenGrid can't run this workload yet", tone: "", deployable: false,
       detail: `Rent it from ${pname} directly. OpenGrid only launches its PyTorch MNIST training demo today.`, reasons };
     const r0 = reasons[0];
     return { code: "blocked", label: "Recommendation only: OpenGrid can't launch this for you yet", tone: "", deployable: false, detail: r0 ? r0.reason || r0.code : "Not marked executable by the server.", reasons };
   }
   function availability(o) {
-    if (!o || o.available == null) return { label: "Availability not reported", tone: "" };
+    if (!o || o.available == null) return { label: "Stock not published", tone: "", title: "This provider publishes prices but not live stock. OpenGrid checks availability with the provider before launching." };
     return o.available ? { label: "Available", tone: "good" } : { label: "Sold out", tone: "bad" };
   }
   const round1 = v => Math.round(v * 10) / 10;
@@ -656,7 +656,7 @@
         o.gpu_count > 1 && finite(o.price_per_instance_hour) ? h("span", { class: "dim mono" }, `${o.gpu_count} GPUs = ${usd(o.price_per_instance_hour)}/h`) : h("span", { class: "dim" }, "1 GPU"),
         o.age_seconds != null || o.observed_at ? OG.freshBadge(o.age_seconds != null ? o.age_seconds : o.observed_at, { provider: o.provider }) : null,
         o.fresh === false ? OG.badge("stale", "warn", "Not observed recently: not presented as deployable") : null,
-        (a => OG.badge(a.label, a.tone))(availability(o))),
+        (a => OG.badge(a.label, a.tone, a.title))(availability(o))),
       fitBar(o, e),
       perfBlock(o),
       opts.compact ? h("details", { class: "fd-more" }, h("summary", {}, "Cost, why and limitations"), costBlock(o), lists) : [costBlock(o), lists],
@@ -879,7 +879,7 @@
         { key: "rel", label: "Rel. perf", num: true, title: "estimated total throughput vs the balanced pick (spec sheet, not a benchmark)", value: o => (perfInfo(o).relative || {}).value ?? null, fmt: v => (finite(v) ? v + "×" : "-") },
         { key: "job", label: "Est. job $", num: true, title: "estimated whole-job cost: theoretical runtime x observed price", value: o => (perfInfo(o).jobCost || {}).usd ?? null, fmt: v => (finite(v) ? usd(v) : "-") },
         { key: "fit", label: "Memory fit", value: o => memoryFit(o, e).headroom_pct, num: true, fmt: (v, o) => { const f = memoryFit(o, e); return f.known ? (f.over ? h("span", { class: "down" }, "does not fit") : `${fmtGb(f.needed).replace(" GB", "")}/${fmtGb(f.vram)} · ${Math.round(f.headroom_pct)}%`) : "-"; } },
-        { key: "available", label: "Available", value: o => availability(o).label, fmt: (v, o) => OG.badge(availability(o).label.replace("Availability not reported", "not reported"), availability(o).tone) },
+        { key: "available", label: "Available", value: o => availability(o).label, fmt: (v, o) => (a => OG.badge(a.label, a.tone, a.title))(availability(o)) },
         { key: "age_seconds", label: "Seen", num: true, fmt: (v, o) => v != null || o.observed_at ? OG.freshBadge(v != null ? v : o.observed_at, { provider: o.provider }) : "-" },
         { key: "ready", label: "OpenGrid", value: o => readiness(o).code, fmt: (v, o) => { const r = readiness(o); return h("span", { class: "fd-tr t-" + (r.tone || "plain"), title: r.detail }, r.code === "executable" ? "can run" : r.code === "stale" ? "stale" : r.code === "sold_out" ? "sold out" : "recommendation only"); } },
         { key: "acts", label: "", sort: false, csv: false, fmt: (v, o) => h("span", { class: "fd-tacts" }, h("a", { class: "btn sm", href: gpuHref(o) }, "GPU"), h("a", { class: "btn sm", href: routeHref(o), title: "Preview a route (needs an OpenGrid account; spends nothing)" }, "Route")) },

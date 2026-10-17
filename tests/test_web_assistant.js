@@ -63,7 +63,7 @@ eq(["/gpu/h100", "//evil.com/x", "https://evil.com", "javascript:alert(1)", "/a 
 // ---------- prices / compare / context ----------
 const priceCard = { gpu: "NVIDIA L40S 48GB", slug: "l40s-48gb", cheapest: [{ provider: "syn_a", provider_display: "Syn A", region: "us-east", price_per_gpu_hour: 0.8, price_kind: "observed_market_price", available: true },
   { provider: "syn_b", price_per_gpu_hour: 0.9, price_kind: "observed_market_price", available: null, country: "DE" }], market: {} };
-eq(A.priceRows(priceCard).map(r => [r.provider, r.region, r.price, r.kind, r.available]), [["Syn A", "us-east", 0.8, "observed", "yes"], ["syn_b", "DE", 0.9, "observed", "not reported"]], "price rows: observed, unknown availability said so");
+eq(A.priceRows(priceCard).map(r => [r.provider, r.region, r.price, r.kind, r.available]), [["Syn A", "us-east", 0.8, "observed", "yes"], ["syn_b", "DE", 0.9, "observed", "stock not published"]], "price rows: observed, unknown availability said so");
 const fam = { family: "H100", variants: [Object.assign({}, priceCard, { gpu: "NVIDIA H100 80GB PCIe", slug: "h100-80gb-pcie" }), { gpu: "NVIDIA H100 80GB SXM5", slug: "h100-80gb-sxm5", cheapest: [] }] };
 const fr = A.priceRows(fam);
 ok(fr.length === 2 && fr.every(r => r.gpu === "NVIDIA H100 80GB PCIe"), "family: rows stay per variant (a variant without listings adds none)");

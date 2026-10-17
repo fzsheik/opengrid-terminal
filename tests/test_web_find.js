@@ -173,10 +173,10 @@ const exe = clone(byId("a100-80gb-sxm4:lambda:us-east-1:1")); exe.execution = { 
 ok(F.readiness(exe).deployable && F.readiness(exe).code === "executable", "executable + fresh + available → deployable");
 ok(!F.readiness(Object.assign(clone(exe), { fresh: false })).deployable, "executable but STALE → never deployable");
 ok(!F.readiness(Object.assign(clone(exe), { available: false })).deployable, "executable but SOLD OUT → never deployable");
-ok(F.readiness(Object.assign(clone(exe), { available: null })).deployable && /not reported/.test(F.readiness(Object.assign(clone(exe), { available: null })).detail), "unknown availability: deployable, said so");
+ok(F.readiness(Object.assign(clone(exe), { available: null })).deployable && /not live stock/.test(F.readiness(Object.assign(clone(exe), { available: null })).detail), "unknown availability: deployable, said so");
 ok(!F.readiness(Object.assign(clone(exe), { execution: {} })).deployable, "no executable flag → not deployable");
 ok(REC.options.every(o => !F.readiness(o).deployable), "nothing in the fixture is labelled deployable");
-eq([F.availability({ available: true }).label, F.availability({ available: false }).label, F.availability({ available: null }).label], ["Available", "Sold out", "Availability not reported"], "availability labels");
+eq([F.availability({ available: true }).label, F.availability({ available: false }).label, F.availability({ available: null }).label], ["Available", "Sold out", "Stock not published"], "availability labels");
 
 // ---------- memory fit ----------
 const mf = F.memoryFit(byId("l40s-48gb:runpod:us-ks-2:1"), REC.estimate);

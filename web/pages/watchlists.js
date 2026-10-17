@@ -113,7 +113,7 @@
           out.chgReason = "per-provider 24h change is not exposed by the API yet";
           const mk = await softGet("/v1/markets/" + OG.slug(i.gpu));
           const bp = mk && mk.by_provider ? mk.by_provider.find(b => b.provider === i.provider) : null;
-          out.avail = bp ? (bp.available === true ? "available" : bp.available === false ? "sold out" : "not reported") : i.current && !i.current.listed_now ? "not listed now" : null;
+          out.avail = bp ? (bp.available === true ? "available" : bp.available === false ? "sold out" : "stock not published") : i.current && !i.current.listed_now ? "not listed now" : null;
           out.detail = bp && bp.premium_vs_others_median != null ? `${fmt.pct(bp.premium_vs_others_median)} vs others' median · rank ${bp.rank}` : i.current && !i.current.listed_now ? "no live priced listing" : null;
         } else if (i.kind === "provider") {
           const p = await softGet("/v1/providers/" + encodeURIComponent(i.provider));
