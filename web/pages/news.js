@@ -25,12 +25,14 @@
 
       const viewSeg = OG.seg([["feed", "Feed"], ["timeline", "Timeline"]], st.view, v => { st.view = v; OG.qs.set({ view: v === "feed" ? null : v }); drawView(); });
       const famLabel = new Map();
-      const fbar = h("div", { class: "bar nw-f" }), chipsEl = h("div", { class: "nw-chips" }), activeEl = h("div", { class: "nw-active" });
+      const fbar = h("div", { class: "bar nw-f" }), chipsEl = h("div", { class: "nw-chips" });
       const feedEl = h("div", {}), moreEl = h("div", { class: "nw-more" }), countEl = h("span", { class: "dim nw-count" });
       const tlEl = h("div", {}), srcEl = h("div", {}, OG.loading()), topicEl = h("div", {}, OG.loading());
-      const left = h("div", {}), right = h("div", {}, OG.section("Source health", srcEl), OG.section("Topics · 30d", topicEl));
-      el.append(OG.head("News & signals", "GPU-compute news, story-clustered, tagged with the GPUs, providers and regions it mentions. Related to market moves by time and entity only, never presented as a cause.", viewSeg),
-        fbar, chipsEl, activeEl, h("div", { class: "cols nw-cols" }, left, right));
+      // topics are filtered by the chip row; the topic counts and the source list are reference, folded away
+      const left = h("div", {}), right = h("div", {},
+        h("details", { class: "sec nw-details" }, h("summary", { class: "sec-h" }, "Details: topics and sources"), topicEl, h("div", { class: "lbl nw-gap" }, "Sources"), srcEl));
+      el.append(OG.head("News & signals", "GPU-compute news, tagged with the GPUs, providers and regions it mentions. Shown next to prices by time only, never as a cause.", viewSeg),
+        fbar, chipsEl, h("div", { class: "cols nw-cols" }, left, right));
 
       // ------------------------------------------------------------ filters
       const input = (k, ph, w, list) => h("input", { class: "field", value: f[k], placeholder: ph, style: `width:${w}px`, list: list || null, "aria-label": ph,
@@ -48,14 +50,13 @@
           h("span", { class: "flt" }, h("span", {}, "Provider"), select("provider", "any", provs)),
           h("span", { class: "flt" }, h("span", {}, "Region"), select("region", "any", REGIONS.map(r => [r, r]))),
           h("span", { class: "flt" }, h("span", {}, "Source"), select("source", "any", srcs)),
-          h("span", { class: "flt" }, h("span", {}, "Min rel."), OG.seg([["1", "all"], ["", "20"], ["40", "40"], ["60", "60"]], f.min, v => setF({ min: v }), "seg")),
+          h("span", { class: "flt", title: "How closely a story is about GPU compute (0 to 100). The default hides general chip news below 20." }, h("span", {}, "Relevance"),
+            OG.seg([["1", "Any"], ["", "20+"], ["40", "40+"], ["60", "60+"]], f.min, v => setF({ min: v }), "seg")),
           h("span", { class: "flt" }, h("span", {}, "Search"), input("q", "words in title / summary", 190)),
           h("span", { class: "spacer" }),
-          FILTERS.some(k => f[k]) ? h("button", { class: "btn sm", onclick: () => setF(Object.fromEntries(FILTERS.map(k => [k, ""]))) }, "Clear") : null].filter(Boolean));
+          FILTERS.some(k => f[k]) ? h("button", { class: "btn sm", onclick: () => setF(Object.fromEntries(FILTERS.map(k => [k, ""]))) }, "Reset") : null].filter(Boolean));
         chipsEl.replaceChildren(...(st.topics || []).filter(t => t.items_30d > 0 || t.id === f.topic).map(t => h("button", { class: "chip", "aria-pressed": String(f.topic === t.id), title: `${t.description} · weight ${t.weight} · ${t.items_30d} items in 30 days`,
           onclick: () => setF({ topic: f.topic === t.id ? "" : t.id }) }, t.id.replace(/_/g, " "), h("span", { class: "dimmer" }, " " + t.items_30d))));
-        const act = FILTERS.filter(k => f[k]);
-        activeEl.replaceChildren(...(act.length ? [h("span", { class: "dim" }, "Link to this view: "), h("a", { class: "lnk mono", href: location.pathname + location.search }, location.pathname + location.search)] : []));
       }
       function setF(patch) {
         Object.assign(f, patch);
@@ -75,11 +76,12 @@
         p.min_relevance = f.min || DEFAULT_MIN;
         return p;
       }
-      async function loadFeed(append) {
-        if (!append) { st.offset = 0; feedEl.replaceChildren(OG.loading("Loading news…")); }
+      // quiet: a timed refresh keeps the stories on screen until the new ones arrive
+      async function loadFeed(append, quiet) {
+        if (!append) { st.offset = 0; if (!quiet) feedEl.replaceChildren(OG.loading("Loading news…")); }
         let res;
-        try { res = await ctx.api("/v1/news", { params: apiParams(st.offset), full: true, slot: "news" }); }
-        catch (e) { if (!e.stale) feedEl.replaceChildren(OG.error(e, () => loadFeed())); moreEl.replaceChildren(); return; }
+        try { res = await ctx.api("/v1/news", { params: apiParams(append ? st.offset : 0), full: true, slot: "news" }); }
+        catch (e) { if (!e.stale && !quiet) { feedEl.replaceChildren(OG.error(e, () => loadFeed())); moreEl.replaceChildren(); } return; }
         const items = res.data || [];
         st.total = (res.meta && res.meta.pagination && res.meta.pagination.total) || items.length;
         st.items = append ? st.items.concat(items) : items;
@@ -151,7 +153,8 @@
           f.provider ? h("span", { class: "dim" }, "provider: " + OG.providerName(f.provider)) : null);
         const body = h("div", {}, OG.loading());
         tlEl.replaceChildren(ctl, body);
-        if (!f.gpu) { body.replaceChildren(OG.empty("Pick one GPU variant: prices are per canonical variant, so a family (e.g. “H100”) cannot be charted.")); return; }
+        if (!f.gpu) { body.replaceChildren(OG.empty("Pick one GPU variant to chart its prices.")); return; }
+        if (!OG.data.gpuName(f.gpu)) { body.replaceChildren(OG.empty(`"${f.gpu}" is a GPU family. Pick one variant above: each variant has its own price.`)); return; }
         let d;
         try { d = await ctx.api("/v1/timeline", { params: { gpu: f.gpu, provider: f.provider || null, window: st.win }, slot: "nw-tl" }); }
         catch (e) { if (!e.stale) body.replaceChildren(OG.error(e)); return; }
@@ -162,7 +165,7 @@
           ...((d.price_moves && d.price_moves.moves) || []).map(m => ({ t: m.at, label: `lowest ${fmt.price(m.from)} → ${fmt.price(m.to)} (${fmt.pct(m.change_pct / 100)})`, kind: "move", severity: "notable",
             detail: m.provider_set_changed ? "the set of priced providers changed this hour (may be coverage, not a market move)" : null })),
           ...((d.availability_changes && d.availability_changes.changes) || []).map(c => ({ t: c.at || c.hour, label: `${OG.providerName(c.provider)}: ${c.from || "?"} → ${c.to || "?"}`, kind: "availability", color: "#c9b5ff" })),
-          ...((d.news && d.news.items) || []).map(n => ({ t: n.published_at, label: n.title, kind: "news · " + n.source_name + " · rel " + n.relevance, color: "#8fc3ff", detail: "related by entity and time, not necessarily causal" })),
+          ...((d.news && d.news.items) || []).map(n => ({ t: n.published_at, label: n.title, kind: "news · " + n.source_name, color: "#8fc3ff", detail: "related by entity and time, not necessarily causal" })),
         ].filter(e => e.t);
         const priceBox = h("div", { class: "box box-p" }), availBox = h("div", { class: "box box-p nw-avail" });
         body.replaceChildren(h("p", { class: "nw-nc" }, h("b", {}, "Related, not necessarily causal. "), d.note || ""),
@@ -191,7 +194,7 @@
       function drawSources() {
         const rows = (st.sources || []).filter(s => s.enabled);
         const bad = rows.filter(s => s.health !== "ok");
-        srcEl.replaceChildren(h("div", { class: "dim nw-sh" }, `${rows.length} enabled · ${rows.length - bad.length} ok · ${bad.length} not ok`),
+        srcEl.replaceChildren(h("div", { class: "dim nw-sh" }, `${rows.length} sources · ${bad.length} not reading right now`),
           OG.table({ compact: true, limit: 60, rows, sort: { key: "health", dir: "asc" },
             rowClass: s => (s.id === f.source ? "hl" : ""), onRow: s => setF({ source: f.source === s.id ? "" : s.id }),
             columns: [
@@ -206,7 +209,7 @@
         const max = Math.max(1, ...t.map(x => x.items_30d));
         topicEl.replaceChildren(h("div", { class: "box nw-tp" }, t.map(x => h("button", { class: "nw-tpi", "aria-pressed": String(f.topic === x.id), title: x.description, onclick: () => setF({ topic: f.topic === x.id ? "" : x.id }) },
           h("span", {}, x.id.replace(/_/g, " ")), h("span", { class: "nw-tpb" }, h("i", { style: { width: (x.items_30d / max) * 100 + "%" } })), h("span", { class: "n" }, String(x.items_30d))))),
-          h("p", { class: "note" }, "Topics and relevance by deterministic rules. ", h("a", { class: "lnk", href: "/methodology/news" }, "Methodology →")));
+          h("p", { class: "note" }, "Topics and relevance come from fixed rules. ", h("a", { class: "lnk", href: "/methodology/news" }, "Methodology →")));
       }
 
       function drawView() {
@@ -230,7 +233,7 @@
       if (!sources) srcEl.replaceChildren(OG.na("sources unavailable"));
       else drawSources();
       drawFilters();
-      ctx.every(300000, () => { if (st.view === "feed" && st.offset <= PAGE) loadFeed(); });
+      ctx.every(300000, () => { if (st.view === "feed" && st.offset <= PAGE) loadFeed(false, true); });
     },
   });
 })();

@@ -33,7 +33,7 @@
       const daySeg = OG.seg([["7", "7D"], ["30", "30D"], ["90", "90D"]], String(st.days), v => { st.days = +v; OG.qs.set({ days: v === "30" ? null : v }); load(); });
       const subEl = h("span", {}, m0 ? `${(m0.provider_class || "").replace("_", " ")} · prices read from ${m0.source || "?"} (${V().providerSourceLabel ? V().providerSourceLabel(m0.source_type) : m0.source_type})` : "");
       el.append(OG.head(h("span", { class: "gpu-title" }, OG.logo(p, 18), name, m0 && m0.provider_class ? h("span", { class: "eyebrow" }, m0.provider_class.replace("_", " ")) : null), subEl,
-        h("span", { class: "flt" }, h("span", {}, "Window"), daySeg), cmpSel,
+        h("span", { class: "flt", title: "the period for the averages, ranks and history below (the price chart has its own range)" }, h("span", {}, "Stats over"), daySeg), cmpSel,
         h("a", { class: "btn", href: "/explorer?provider=" + encodeURIComponent(p) }, "Listings →"),
         h("a", { class: "btn", href: "/news?provider=" + encodeURIComponent(p) }, "News →"),
         m0 && m0.website ? h("a", { class: "btn", href: m0.website, target: "_blank", rel: "noopener external" }, "Website ↗") : null));
@@ -51,7 +51,8 @@
       const evEl = h("div", {}, OG.loading()), newsEl = h("div", {}, OG.loading());
       const mapEl = h("div", {}, OG.loading()), listEl = h("div", {}, OG.loading());
 
-      el.append(statsEl,
+      const mapSec = h("details", { class: "sec pd-map", id: "field-map" }, h("summary", { class: "sec-h" }, "Details: source field map"), mapEl);
+      const body = h("div", {}, statsEl,
         h("div", { class: "cols pd-cols" },
           h("div", {},
             OG.section("Facts", box(factsEl)),
@@ -66,8 +67,9 @@
             OG.section("Regions covered", regEl),
             OG.section("Market events", evEl),
             OG.section(h("span", { class: "pd-sh" }, "Related news", h("a", { class: "lnk dim", href: "/news?provider=" + encodeURIComponent(p) }, "all →")), newsEl))),
-        OG.section("Source field map", mapEl),
-        OG.section("Current listings", listEl));
+        OG.section("Current listings", listEl),
+        mapSec);
+      el.append(body);
 
       // ------------------------------------------------------------ main payload
       async function load() {
@@ -75,8 +77,10 @@
         try { res = await ctx.api(`/v1/providers/${encodeURIComponent(p)}`, { params: { days: st.days }, full: true, slot: "provider" }); }
         catch (e) {
           if (e.stale) return;
-          statsEl.replaceChildren(); catEl.replaceChildren(OG.error(e, load));
-          if (e.status === 404) { subEl.textContent = "Not a provider OpenGrid tracks"; ctx.setTitle("Unknown provider"); }
+          // an unknown provider: one clear message instead of a page of empty sections
+          if (e.status === 404) { st.notFound = true; subEl.textContent = "Not a provider OpenGrid tracks"; ctx.setTitle("Unknown provider");
+            body.replaceChildren(OG.error(e), h("a", { class: "lnk", href: "/providers" }, "All providers →")); return; }
+          if (!st.d) { statsEl.replaceChildren(); catEl.replaceChildren(OG.error(e, load)); }
           return;
         }
         st.d = res.data; st.meta = res.meta;
@@ -100,11 +104,11 @@
           { label: "Listings", value: fmt.num(c.live_listings), sub: `${fmt.num(c.priced_listings)} priced`, kind: "observed" },
           { label: "Regions", fold: true, value: (c.region_groups || []).length ? String(c.region_groups.length) : null, reason: c.live_listings ? "no listing location maps to a region group" : "no live listings", sub: (c.region_groups || []).join(" · ") },
           { label: "Cheapest now", value: ranked.length ? `${first}/${ranked.length}` : null, reason: "no GPU here has a second provider to compare with", sub: "GPUs where it is rank 1" },
-          { label: "Median prem. now", value: medPrem == null ? null : prem(medPrem), reason: "no GPU with another provider priced", sub: `across ${prems.length} GPU${prems.length === 1 ? "" : "s"}`, title: "Median over its GPUs of: own lowest / median of other providers' lowest − 1, now" },
-          { label: `Avg prem. ${st.days}d`, fold: true, value: rv.premium_avg == null ? null : prem(rv.premium_avg), reason: rs.premium_avg || "no rollup history" },
+          { label: "vs market now", value: medPrem == null ? null : prem(medPrem), reason: "no GPU with another provider priced", sub: `median across ${prems.length} GPU${prems.length === 1 ? "" : "s"}`, title: "How its lowest price compares with the other providers' median, now. Negative = cheaper" },
+          { label: `Avg vs market ${st.days}d`, fold: true, value: rv.premium_avg == null ? null : prem(rv.premium_avg), reason: rs.premium_avg || "no rollup history" },
           { label: "% cheapest", fold: true, value: rv.cheapest_share == null ? null : share(rv.cheapest_share), reason: rs.cheapest_share || "no rollup history" },
           { label: "Availability", fold: true, value: rv.availability == null ? null : share(rv.availability), reason: rs.availability || "no rollup history", title: "Share of tracked hours with a priced listing" },
-          { label: "Volatility", fold: true, value: rv.volatility_daily == null ? null : (rv.volatility_daily * 100).toFixed(1) + "%", reason: rs.volatility_daily || "no rollup history", title: "Median across its GPUs of the stdev of daily log price changes" },
+          { label: "Volatility", fold: true, value: rv.volatility_daily == null ? null : (rv.volatility_daily * 100).toFixed(1) + "%", reason: rs.volatility_daily || "no rollup history", title: "Typical daily price change across its GPUs" },
         ]));
       }
 
@@ -114,34 +118,33 @@
         const priced = d.catalog.filter(c => c.best_price != null).sort((a, b) => a.best_price - b.best_price);
         if (priced.length) {
           const top = priced.filter(c => c.market_providers >= 2).sort((a, b) => b.market_providers - a.market_providers)[0] || priced[0];
-          out.push(h("li", {}, OG.kindBadge("observed"), ` ${name} lists ${d.coverage.gpus} GPU model${d.coverage.gpus === 1 ? "" : "s"} across ${fmt.num(d.coverage.live_listings)} live listings; its most widely traded is `, OG.gpuLink(top.gpu),
+          out.push(h("li", {}, `${name} lists ${d.coverage.gpus} GPU model${d.coverage.gpus === 1 ? "" : "s"} across ${fmt.num(d.coverage.live_listings)} live listings; its most widely traded is `, OG.gpuLink(top.gpu),
             ` at ${fmt.price(top.best_price)}/GPU-hr${top.rank_now ? `, rank ${top.rank_now} of ${top.market_providers}` : ""}.`));
           const one = d.catalog.filter(c => c.market_providers >= 2 && c.rank_now === 1);
-          if (one.length) out.push(h("li", {}, OG.kindBadge("observed"), ` Cheapest provider right now for `, one.slice(0, 6).map((c, i) => [i ? ", " : "", OG.gpuLink(c.gpu)]), one.length > 6 ? ` and ${one.length - 6} more` : "", "."));
+          if (one.length) out.push(h("li", {}, `Cheapest provider right now for `, one.slice(0, 6).map((c, i) => [i ? ", " : "", OG.gpuLink(c.gpu)]), one.length > 6 ? ` and ${one.length - 6} more` : "", "."));
           const solo = d.catalog.filter(c => c.market_providers === 1 && c.best_price != null);
-          if (solo.length) out.push(h("li", {}, OG.kindBadge("observed"), ` Only provider OpenGrid sees selling `, solo.slice(0, 5).map((c, i) => [i ? ", " : "", OG.gpuLink(c.gpu)]), solo.length > 5 ? ` and ${solo.length - 5} more` : "", ". No comparison possible."));
-        } else out.push(h("li", { class: "dim" }, `No priced live listings from ${name} on this server.`));
-        if (!(d.facts || []).length) out.push(h("li", { class: "dim" }, `Window statistics (cheapest share, average premium) need ≥ 24 compared hours in the last ${st.days} days.`));
+          if (solo.length) out.push(h("li", {}, `Only provider OpenGrid sees selling `, solo.slice(0, 5).map((c, i) => [i ? ", " : "", OG.gpuLink(c.gpu)]), solo.length > 5 ? ` and ${solo.length - 5} more` : "", "."));
+        } else out.push(h("li", { class: "dim" }, `No priced live listings from ${name} right now.`));
         factsEl.replaceChildren(...out);
       }
 
       function drawCatalog() {
         const rows = st.d.catalog.map(c => ({ ...c, avail: c.listings ? c.available_listings / c.listings : null, w: c.window || {} }));
-        if (!rows.length) { catEl.replaceChildren(OG.insufficient(`OpenGrid has no live listings from ${name} on this server. On servers without this provider's API key, its feed does not run.`, "No catalog")); return; }
+        if (!rows.length) { catEl.replaceChildren(OG.insufficient(`OpenGrid has no live listings from ${name} right now.`, "No catalog")); return; }
         catEl.replaceChildren(OG.table({
           columns: [
             { key: "gpu", label: "GPU", fmt: v => OG.gpuLink(v), value: r => L.shortGpu(r.gpu), csv: r => r.gpu },
             { key: "best_price", label: "Best $/GPU·h", num: true, fmt: v => v == null ? OG.na("no priced in-stock listing") : h("b", {}, fmt.price(v)) },
-            { key: "market_median", label: "Mkt median", num: true, fmt: v => fmt.price(v), title: "Median of every provider's lowest price for this GPU now" },
-            { key: "premium_now", label: "Prem. now", num: true, fmt: (v, r) => prem(v, r.market_providers < 2 ? "only provider selling it: nothing to compare with" : "not priced now"), title: "Own lowest / median of the OTHER providers' lowest − 1. Negative = cheaper than the market" },
+            { key: "market_median", label: "Market median", num: true, fmt: v => fmt.price(v), title: "Median of every provider's lowest price for this GPU now" },
+            { key: "premium_now", label: "vs market", num: true, fmt: (v, r) => prem(v, r.market_providers < 2 ? "only provider selling it: nothing to compare with" : "not priced now"), title: "Its lowest price vs the other providers' median, now. Negative = cheaper than the market" },
             { key: "rank_now", label: "Rank", num: true, fmt: (v, r) => v == null ? "-" : h("span", { class: v === 1 && r.market_providers > 1 ? "up" : "" }, `${v}/${r.market_providers}`), title: "1 = cheapest of the providers selling it now" },
-            { key: "wprem", label: `Avg ${st.days}d`, num: true, value: r => r.w.premium_avg, fmt: (v, r) => prem(r.w.premium_avg, (r.w.reasons || {}).premium_avg) },
+            { key: "wprem", label: `Avg vs market ${st.days}d`, num: true, value: r => r.w.premium_avg, fmt: (v, r) => prem(r.w.premium_avg, (r.w.reasons || {}).premium_avg) },
             { key: "wcheap", label: "% cheapest", num: true, desc: true, value: r => r.w.cheapest_share, fmt: (v, r) => OG.value(r.w.cheapest_share, share, (r.w.reasons || {}).cheapest_share) },
             { key: "avail", label: "In stock", num: true, desc: true, fmt: (v, r) => h("span", { title: `${r.available_listings} of ${r.listings} listings explicitly in stock (others sold out or unknown)` }, `${r.available_listings}/${r.listings}`) },
             { key: "region_groups", label: "Regions", value: r => r.region_groups.join(" "), fmt: v => h("span", { class: "dim" }, v.join(" · ")) },
           ],
           rows, sort: { key: "premium_now", dir: "asc" }, rowKey: r => r.slug, compact: true, csv: `opengrid-${p}-catalog.csv`,
-          title: `${rows.length} GPUs · market = every provider's lowest live price now`,
+          title: `${rows.length} GPUs · click one to chart it`,
           onRow: r => { st.gpu = r.slug; OG.qs.set({ gpu: r.slug }); drawPriceCtl(); loadPrice(); priceEl.scrollIntoView({ block: "center", behavior: "smooth" }); },
         }));
       }
@@ -159,24 +162,24 @@
       let histChart = null;
       function drawHist() {
         const pts = st.d.rank_history || [];
-        histSeg.replaceChildren(OG.seg([["premium", "Avg premium"], ["rank", "Rank"], ["share", "Cheapest share"], ["avail", "Availability"]], st.hist, v => { st.hist = v; OG.qs.set({ hist: v === "premium" ? null : v }); drawHist(); }));
+        histSeg.replaceChildren(OG.seg([["premium", "vs market"], ["rank", "Rank"], ["share", "Cheapest share"], ["avail", "Availability"]], st.hist, v => { st.hist = v; OG.qs.set({ hist: v === "premium" ? null : v }); drawHist(); }));
         if (histChart) { histChart.destroy(); histChart = null; }
         if (pts.length < 2) {
-          histEl.replaceChildren(OG.insufficient(`${pts.length} day${pts.length === 1 ? "" : "s"} of rollup history for ${name} in this window; a history line needs at least 2.` +
+          histEl.replaceChildren(OG.insufficient(`${pts.length} day${pts.length === 1 ? "" : "s"} of history for ${name} in this window; a line needs at least 2.` +
             (pts.length ? ` Today so far: premium ${pts[0].premium_avg == null ? "n/a" : fmt.pct(pts[0].premium_avg)}, mean rank ${pts[0].mean_rank == null ? "n/a" : pts[0].mean_rank.toFixed(1)}, cheapest ${share(pts[0].cheapest_share)} of ${pts[0].hours_market} market hours.` : ""), "History building"));
           histNote.textContent = "";
           return;
         }
         const times = pts.map(x => x.day + "T12:00:00Z"), color = L.providerColor(p);
         const S = {
-          premium: { series: [{ key: "premium", label: "Avg premium vs others' median", values: pts.map(x => x.premium_avg), color, width: 2, step: false }], yFmt: fmt.pct, yZero: true },
+          premium: { series: [{ key: "premium", label: "Avg price vs others' median", values: pts.map(x => x.premium_avg), color, width: 2, step: false }], yFmt: fmt.pct, yZero: true },
           rank: { series: [{ key: "rank", label: "Mean rank (1 = cheapest)", values: pts.map(x => x.mean_rank), color, width: 2, step: false }], yFmt: v => v.toFixed(1) },
           share: { series: [{ key: "c", label: "Cheapest share", values: pts.map(x => x.cheapest_share), color, width: 2, step: false }, { key: "t", label: "Top-3 share", values: pts.map(x => x.top3_share), color: "#7d8895", dash: "3 3", step: false }], yFmt: share, yZero: true },
           avail: { series: [{ key: "a", label: "Priced availability", values: pts.map(x => x.availability), color, width: 2, step: false }], yFmt: share, yZero: true },
         }[st.hist];
         histEl.textContent = "";
         histChart = OG.charts.timeseries(histEl, { times, height: 180, legend: true, ...S, label: `${name} relative value history` });
-        histNote.replaceChildren(`One point per day over that day's compared hours (hours where at least one other provider priced the same GPU), all GPUs pooled. Last ${st.days} days. `, h("a", { class: "lnk", href: "/methodology/provider-value" }, "Methodology →"));
+        histNote.replaceChildren(`One point per day, all GPUs pooled, last ${st.days} days. `, h("a", { class: "lnk", href: "/methodology/provider-value" }, "Methodology →"));
       }
 
       // ------------------------------------------------------------ price history for one GPU
@@ -186,20 +189,24 @@
         const sel = h("select", { class: "field", "aria-label": "GPU", onchange: e => { st.gpu = e.target.value; OG.qs.set({ gpu: st.gpu }); loadPrice(); } },
           cat.slice().sort((a, b) => L.shortGpu(a.gpu).localeCompare(L.shortGpu(b.gpu), undefined, { numeric: true })).map(c => h("option", { value: c.slug, selected: c.slug === st.gpu ? "" : null }, L.shortGpu(c.gpu) + (c.best_price != null ? "  " + fmt.price(c.best_price) : ""))));
         priceCtl.replaceChildren(h("span", { class: "flt" }, h("span", {}, "GPU"), sel),
-          h("span", { class: "flt" }, h("span", {}, "Window"), OG.seg([["24h", "24H"], ["7d", "7D"], ["30d", "30D"]], st.win, v => { st.win = v; OG.qs.set({ window: v === "7d" ? null : v }); loadPrice(); })),
+          h("span", { class: "flt" }, h("span", {}, "Chart range"), OG.seg([["24h", "24H"], ["7d", "7D"], ["30d", "30D"]], st.win, v => { st.win = v; OG.qs.set({ window: v === "7d" ? null : v }); loadPrice(); })),
           st.gpu ? h("a", { class: "lnk dim", href: "/gpu/" + st.gpu }, "GPU market →") : null);
       }
       let priceChart = null;
       async function loadPrice() {
         if (!st.gpu) { priceEl.replaceChildren(OG.empty("No GPU to chart.")); return; }
-        priceEl.replaceChildren(OG.loading());
+        // a timed refresh redraws in place; only a new GPU or range shows the spinner
+        const key = st.gpu + "|" + st.win;
+        if (!priceChart || st.priceKey !== key) priceEl.replaceChildren(OG.loading());
+        st.priceKey = key;
         let mine, mkt, cx;
         try {
           [mine, mkt, cx] = await Promise.all([
             ctx.api("/v1/timeline", { params: { gpu: st.gpu, provider: p, window: st.win }, slot: "pd-tl" }),
             ctx.api("/v1/timeline", { params: { gpu: st.gpu, window: st.win } }).catch(() => null),
             ctx.api(`/v1/providers/${encodeURIComponent(p)}/gpus/${st.gpu}/context`).catch(() => null)]);
-        } catch (e) { if (!e.stale) priceEl.replaceChildren(OG.error(e, loadPrice)); return; }
+        } catch (e) { if (!e.stale && !priceChart) priceEl.replaceChildren(OG.error(e, loadPrice)); return; }
+        if (key !== st.gpu + "|" + st.win) return;
         const own = new Map(mine.prices.points.map(x => [x.hour, x.lowest]));
         const ml = new Map(((mkt && mkt.prices.points) || []).map(x => [x.hour, x]));
         const times = [...new Set([...own.keys(), ...ml.keys()])].sort();
@@ -225,7 +232,7 @@
         const sums = (cx && cx.summaries) || [];
         ctxEl.replaceChildren(...sums.map(s => h("li", {}, OG.kindBadge("observed"), " ", s)),
           ...(cx ? Object.values(cx.windows || {}).filter(w => w.reason).slice(0, 1).map(w => h("li", { class: "dim" }, `Percentile vs its own history: ${w.reason}.`)) : []));
-        priceNote.replaceChildren(OG.kindBadge("observed"), ` Hourly lowest eligible on-demand price per GPU-hour from the rollup; market lines are every provider's lowest. Markers: market events, price moves (≥ ${mine.price_moves.threshold_pct}%) and news mentioning this GPU (related in time, not necessarily causal).`);
+        priceNote.replaceChildren(`Hourly lowest on-demand price. Markers: events, price moves of ${mine.price_moves.threshold_pct}% or more, and news (related in time, not necessarily causal).`);
       }
 
       // ------------------------------------------------------------ right column
@@ -237,8 +244,9 @@
           : c.level_implemented === 2 ? "launch through the API" : c.level_implemented === 1 ? "check availability live" : null;
         intEl.replaceChildren(
           h("div", { class: "pd-int" }, V().integration ? V().integration(c, { long: true }) : lv(c.level_implemented), c.verified_live ? OG.badge("verified live", "good") : OG.badge("not verified live", "warn", "no adapter has made a real call against a provider account yet")),
-          h("p", { class: "pd-can" }, can ? `OpenGrid's adapter can ${can}. It was tested against mocked HTTP built from the documented API only; no real provisioning call has been made.`
-            : `OpenGrid reads ${name}'s prices only. It cannot check stock live, quote or provision here${c.level_supported_by_provider_api ? ` (the provider's API documents L${c.level_supported_by_provider_api}; OpenGrid has no adapter)` : ""}.`),
+          h("p", { class: "pd-can" }, can ? `OpenGrid can ${can}.${c.verified_live ? "" : " Tested against a simulated API only; not yet run against a real account."}`
+            : `OpenGrid reads ${name}'s prices only. It cannot check stock live or launch here.`),
+          h("details", { class: "pd-more" }, h("summary", {}, "Details"),
           kv([["Provider API documents", lv(c.level_supported_by_provider_api), c.docs_checked],
             ["OpenGrid implements", lv(c.level_implemented)],
             ["Verified live", c.verified_live ? "yes" : h("span", { class: "pv-unv" }, "no")],
@@ -248,7 +256,7 @@
             ["Configured here", c.credentials_configured ? "yes" : "no", "whether OpenGrid-managed credentials are set on this server"],
             ["Stop supported", c.supports_stop ? "yes" : "no"],
             ["API docs", c.docs_url ? h("a", { class: "lnk", href: c.docs_url, target: "_blank", rel: "noopener external" }, (c.docs_checked || "docs") + " ↗") : null]]),
-          c.notes ? h("p", { class: "note" }, c.notes) : null);
+          c.notes ? h("p", { class: "note" }, c.notes) : null));
       }
 
       async function loadFeed() {
@@ -258,17 +266,17 @@
         feedEl.replaceChildren(
           h("div", { class: "pd-int" }, V().feedStatus ? V().feedStatus(t, fh) : null, t || fh ? OG.freshBadge((t && t.last_ok_fetch) || (fh && fh.last_ok_fetch), { intervalSeconds: t && t.polling_interval_seconds, provider: p }) : null,
             h("span", { class: "dim" }, t && t.polling_interval_seconds ? `polled every ${mins(t.polling_interval_seconds)}` : "")),
-          kv([["Source host", m.source ? h("span", { class: "mono" }, m.source) : null],
-            ["Source type", V().providerSourceLabel ? V().providerSourceLabel(m.source_type) : m.source_type],
-            ["Last ok fetch", (t && t.last_ok_fetch) || (fh && fh.last_ok_fetch) ? fmt.dateTime((t && t.last_ok_fetch) || fh.last_ok_fetch) + " · " + fmt.age((t && t.last_ok_fetch) || fh.last_ok_fetch) + " ago" : h("span", { class: "dim" }, "never on this server")],
-            fh ? ["Fetches 24h", `${fh.fetches_24h}${fh.failure_rate_24h != null ? ` · ${share(fh.failure_rate_24h)} failed` : ""}`] : null,
+          kv([["Source", [m.source ? h("span", { class: "mono" }, m.source) : null, " ", h("span", { class: "dim" }, V().providerSourceLabel ? V().providerSourceLabel(m.source_type) : m.source_type)]],
+            ["Last good read", (t && t.last_ok_fetch) || (fh && fh.last_ok_fetch) ? fmt.dateTime((t && t.last_ok_fetch) || fh.last_ok_fetch) + " · " + fmt.age((t && t.last_ok_fetch) || fh.last_ok_fetch) + " ago" : h("span", { class: "dim" }, "never")],
+            life ? ["Listing lifetime (median)", OG.value(life.median_hours, x => x < 48 ? x.toFixed(1) + " h" : (x / 24).toFixed(1) + " d", life.reason), life.label] : null]),
+          h("details", { class: "pd-more" }, h("summary", {}, "Details"),
+          kv([fh ? ["Fetches 24h", `${fh.fetches_24h}${fh.failure_rate_24h != null ? ` · ${share(fh.failure_rate_24h)} failed` : ""}`] : null,
             t ? ["Latency p50 / p95", `${fmt.num(t.latency_ms_p50_24h, 0)} / ${fmt.num(t.latency_ms_p95_24h, 0)} ms`] : fh && fh.avg_latency_ms_24h != null ? ["Latency avg", fmt.num(fh.avg_latency_ms_24h, 0) + " ms"] : null,
             t ? ["Listings now / 24h ago", [fmt.num(t.listings_now), " / ", t.listings_24h_ago == null ? OG.na(t.listings_24h_ago_note) : fmt.num(t.listings_24h_ago)]] : null,
             t ? ["Schema changes 7d", String(t.schema_changes_7d)] : null,
             t ? ["Quarantined values", String(t.quarantined)] : null,
-            t && t.consecutive_failures ? ["Consecutive failures", h("span", { class: "down" }, String(t.consecutive_failures))] : null,
-            life ? ["Listing lifetime (median)", OG.value(life.median_hours, x => x < 48 ? x.toFixed(1) + " h" : (x / 24).toFixed(1) + " d", life.reason), life.label] : null]),
-          h("p", { class: "note" }, OG.kindBadge("observed"), " from OpenGrid's own fetch log. ", h("a", { class: "lnk", href: "#field-map" }, "Field map ↓"), " · ", h("a", { class: "lnk", href: "/methodology/data-trust" }, "Data trust →")));
+            t && t.consecutive_failures ? ["Consecutive failures", h("span", { class: "down" }, String(t.consecutive_failures))] : null]),
+          h("p", { class: "note" }, "From OpenGrid's own fetch log. ", h("a", { class: "lnk", href: "/methodology/data-trust" }, "Data trust →"))));
       }
 
       function drawRegions() {
@@ -316,11 +324,11 @@
             { key: "market_type", label: "Type", cls: "dim", fmt: (v, r) => v + (r.interruptible ? " · interruptible" : "") + (r.provider_tier ? " · " + r.provider_tier : "") },
             { key: "region", label: "Region", cls: "dim" },
             { key: "available", label: "Stock", fmt: (v, r) => { const b = (trustBy.get(r.listing_id) || {}).availability_basis; const t = b ? `availability ${b}` : null; return v === true ? h("span", { title: t }, "in stock") : v === false ? h("span", { class: "down", title: t }, "sold out") : h("span", { class: "dim", title: t }, "unknown"); } },
-            { key: "fresh", label: "Fresh", value: r => (trustBy.get(r.listing_id) || {}).freshness || null, fmt: (v, r) => OG.freshBadge(v || r.observed_at, { provider: p }), csv: r => (trustBy.get(r.listing_id) || {}).freshness },
-            { key: "conf", label: "Conf.", value: r => (trustBy.get(r.listing_id) || {}).confidence || null, cls: "dim", title: "Data-trust confidence (quality layer)", fmt: (v, r) => v ? h("span", { title: ((trustBy.get(r.listing_id) || {}).confidence_reasons || []).join("; ") || null }, v) : "-" },
+            { key: "fresh", label: "Seen", value: r => (trustBy.get(r.listing_id) || {}).freshness || null, fmt: (v, r) => OG.freshBadge(v || r.observed_at, { provider: p }), csv: r => (trustBy.get(r.listing_id) || {}).freshness },
+            { key: "conf", label: "Confidence", value: r => (trustBy.get(r.listing_id) || {}).confidence || null, cls: "dim", title: "Data-trust confidence (quality layer)", fmt: (v, r) => v ? h("span", { title: ((trustBy.get(r.listing_id) || {}).confidence_reasons || []).join("; ") || null }, v) : "-" },
           ],
-          rows: mine, sort: { key: "price_per_gpu_hour", dir: "asc" }, compact: true, limit: 50, csv: `opengrid-${p}-listings.csv`, title: `${mine.length} listings incl. sold-out and ineligible rows`,
-        }) : OG.empty("No current listings from this provider on this server."));
+          rows: mine, sort: { key: "price_per_gpu_hour", dir: "asc" }, compact: true, limit: 50, csv: `opengrid-${p}-listings.csv`, title: `${mine.length} listings, including sold out`,
+        }) : OG.empty("No current listings from this provider."));
       }
 
       async function loadEvents() {
@@ -336,15 +344,17 @@
         if (!items) { newsEl.replaceChildren(OG.na("news unavailable")); return; }
         newsEl.replaceChildren(items.length ? h("div", { class: "box pd-ev" }, items.map(n => h("div", { class: "pd-ni" },
           h("a", { class: "lnk", href: n.url, target: "_blank", rel: "noopener external" }, n.title),
-          h("div", { class: "dim pd-nm" }, fmt.date(n.published_at), " · ", n.source_name, n.source_count > 1 ? ` +${n.source_count - 1}` : "", " · rel ", String(n.relevance), (n.topics || []).length ? " · " + n.topics.join(", ") : "")))) :
-          OG.empty(`No stored news mentions ${name}.`), h("p", { class: "note" }, "Matched by entity rules; shown as related, never as a cause of a price move."));
+          h("div", { class: "dim pd-nm" }, fmt.date(n.published_at), " · ", n.source_name, n.source_count > 1 ? ` +${n.source_count - 1}` : "", (n.topics || []).length ? " · " + n.topics.join(", ") : "")))) :
+          OG.empty(`No stored news mentions ${name}.`));
       }
 
+      // /mapping is internal: visitors (401/403) do not see this panel at all
       async function loadMapping() {
-        const m = await ctx.api("/mapping").catch(() => null);
+        let m = null;
+        try { m = await ctx.api("/mapping"); }
+        catch (e) { if (e.status === 401 || e.status === 403) { mapSec.remove(); return; } }
         const entry = m && (m.providers || []).find(x => x.provider === p);
-        if (!entry) { mapEl.replaceChildren(OG.empty("No field map for this provider.")); return; }
-        mapEl.id = "field-map";
+        if (!entry) { mapEl.replaceChildren(OG.empty(m ? "No field map is recorded for this provider." : "The field map could not be loaded.")); return; }
         mapEl.replaceChildren(h("div", { class: "cols-2" },
           h("div", {}, h("div", { class: "lbl" }, "Endpoints read"), box(kv(Object.entries(entry.endpoints || {}).map(([k, v]) => [h("span", { class: "mono" }, k), v])))),
           h("div", {}, h("div", { class: "lbl" }, "Quirks"), box(h("ul", { class: "pv-list" }, (entry.quirks || []).map(q => h("li", {}, q)))))),
@@ -354,10 +364,11 @@
             { key: "kind", label: "Kind", fmt: v => OG.badge(v, v === "raw" ? "good" : v === "absent" ? "bad" : v === "derived" || v === "lookup" ? "" : "warn") },
             { key: "source", label: "Source", cls: "mono dim wrap" },
             { key: "note", label: "Note", cls: "dim wrap" }],
-          rows: entry.fields || [], compact: true, csv: `opengrid-${p}-field-map.csv`, title: "Where each normalized field comes from (/mapping)" }));
+          rows: entry.fields || [], compact: true, csv: `opengrid-${p}-field-map.csv`, title: "Where each normalized field comes from" }));
       }
 
       await load();
+      if (st.notFound) return;
       loadIntegration(); loadFeed(); loadListings(); loadEvents(); loadNews(); loadMapping();
       ctx.every(120000, () => { load().then(loadFeed); loadListings(); });
     },

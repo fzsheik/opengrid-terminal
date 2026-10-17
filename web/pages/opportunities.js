@@ -11,21 +11,21 @@
   };
   const label = t => LABEL[t] || String(t).replace(/_/g, " ");
   const pctAbs = v => v == null ? "-" : fmt.pct(v).replace(/^\+/, "");
-  const MIN = [["0", "ANY"], ["25", "25+"], ["50", "50+"], ["75", "75+"]];
+  const MIN = [["0", "Any"], ["25", "25+"], ["50", "50+"], ["75", "75+"]];
 
   // The numbers behind each type, as [label, value-node] pairs.
   function nums(it) {
     const n = it.numbers || {}, P = fmt.price, pv = p => p ? OG.providerLink(p, { logo: false }) : null;
     switch (it.type) {
       case "wide_spread": return [["spread", pctAbs(n.spread)], ["low", [P(n.lowest), " ", pv(n.lowest_provider)]], ["median", P(n.median)], ["high", [P(n.highest), " ", pv(n.highest_provider)]],
-        n.p90_30d != null ? ["30d p90", pctAbs(n.p90_30d)] : ["baseline", h("span", { class: "dim" }, n.baseline || "none")], ["providers", String(n.providers)]];
-      case "price_cut": return [["24h ago", P(n.price_24h_ago)], ["now", P(n.price)], ["chg", OG.chg(n.pct)]];
-      case "new_cheap_inventory": return [["price", P(n.price)], ["mkt median", P(n.market_median)], ["vs median", OG.chg(n.discount)], ["region", n.region || "-"], ["GPUs", String(n.gpu_count ?? "-")], ["first seen", fmt.dateTime(n.first_seen)]];
+        n.p90_30d != null ? ["usual high (30d)", pctAbs(n.p90_30d)] : ["baseline", h("span", { class: "dim" }, n.baseline || "none")], ["providers", String(n.providers)]];
+      case "price_cut": return [["24h ago", P(n.price_24h_ago)], ["now", P(n.price)], ["change", OG.chg(n.pct)]];
+      case "new_cheap_inventory": return [["price", P(n.price)], ["market median", P(n.market_median)], ["vs median", OG.chg(n.discount)], ["region", n.region || "-"], ["GPUs", String(n.gpu_count ?? "-")], ["first seen", fmt.dateTime(n.first_seen)]];
       case "regional_dislocation": return [["group median", P(n.group_median)], ["global median", P(n.global_median)], ["gap", OG.chg(n.gap)], ["providers", `${n.group_providers}/${n.providers}`]];
-      case "below_usual_premium": return [["price", P(n.price)], ["mkt median", P(n.market_median)], ["premium now", fmt.pct(n.premium_now)], ["30d avg", fmt.pct(n.premium_30d)], ["Δ pts", fmt.num((n.delta || 0) * 100, 1)], ["samples", String(n.samples)]];
-      case "scarcity": return [["available", String(n.available_listings)], ["30d avg", fmt.num(n.average_30d, 1)], ["ratio", pctAbs(n.ratio)], ["providers avail", String(n.providers_available ?? "-")]];
+      case "below_usual_premium": return [["price", P(n.price)], ["market median", P(n.market_median)], ["vs market now", fmt.pct(n.premium_now)], ["usual (30d)", fmt.pct(n.premium_30d)], ["gap (pts)", fmt.num((n.delta || 0) * 100, 1)], ["hours", String(n.samples)]];
+      case "scarcity": return [["available", String(n.available_listings)], ["30d avg", fmt.num(n.average_30d, 1)], ["vs 30d avg", pctAbs(n.ratio)], ["providers in stock", String(n.providers_available ?? "-")]];
       case "new_cheapest_provider": return [["price", P(n.price)], ["was", [P(n.previous_price), " ", pv(n.previous_provider)]], ["since", fmt.dateTime(n.since)]];
-      case "supply_change": return [["providers", `${n.providers_priced_then} → ${n.providers_priced_now}`], ["listings", `${n.available_listings_then} → ${n.available_listings_now}`], ["matched", String(n.providers_matched)]];
+      case "supply_change": return [["providers", `${n.providers_priced_then} → ${n.providers_priced_now}`], ["listings", `${n.available_listings_then} → ${n.available_listings_now}`], ["providers compared", String(n.providers_matched)]];
       default: return Object.entries(n).filter(([, v]) => typeof v === "number" || typeof v === "string").slice(0, 6).map(([k, v]) => [k.replace(/_/g, " "), typeof v === "number" ? fmt.num(v, 3) : v]);
     }
   }
@@ -48,7 +48,8 @@
         { key: "kind", label: "Kind", width: "92px", hidden: uniform, fmt: v => OG.kindBadge(v) },
         { key: "links", label: "", width: "92px", sort: false, csv: false, fmt: (v, r) => h("span", { class: "op-lk" },
           r.gpu_slug ? h("a", { class: "lnk", href: "/events?gpu=" + r.gpu_slug + (r.provider ? "&provider=" + encodeURIComponent(r.provider) : ""), title: "events for this market" }, "events") : null,
-          r.gpu_slug ? h("a", { class: "lnk", href: "/route?gpu=" + r.gpu_slug, title: "preview routing for this GPU" }, "route") : null) },
+          // /route needs an account: offered only once signed in
+          r.gpu_slug && OG.signedIn() ? h("a", { class: "lnk", href: "/route?gpu=" + r.gpu_slug, title: "preview where this GPU would run" }, "route") : null) },
       ],
       rows: items, sort: { key: "score", dir: "desc" }, compact: true, csv: "opengrid-opportunities.csv", title,
       empty: "Nothing of this type right now.",
@@ -69,7 +70,7 @@
       const provSel = h("select", { class: "field", "aria-label": "Provider", onchange: e => set({ provider: e.target.value }) }, h("option", { value: "" }, "All providers"));
       const minSeg = OG.seg(MIN, st.min, v => set({ min: v }));
       el.append(
-        OG.head("Opportunity monitor", "Where listed prices or supply look unusual right now, ranked by score. Observations about listed prices, not advice or quotes: a listing can change or sell out before you act.",
+        OG.head("Opportunity monitor", "Where listed prices or supply look unusual right now. Not advice or quotes: a listing can change or sell out.",
           asof, h("a", { class: "btn", href: "/methodology/opportunities" }, "Methodology")),
         h("div", { class: "bar" },
           h("label", { class: "flt" }, h("span", {}, "GPU"), gpuSel),
@@ -89,8 +90,8 @@
       const desc = t => { const c = st.cat && st.cat.find(x => x.type === t); return c ? c.description : ""; };
       const allTypes = () => st.cat ? st.cat.map(c => c.type) : Object.keys(LABEL);
 
-      const groupTitle = (t, n, link) => h("span", { class: "op-gh" },
-        link ? h("button", { class: "lnk op-gt", title: "Show only this type", onclick: () => set({ type: t }) }, label(t)) : h("span", { class: "op-gt" }, label(t)),
+      // the tabs above pick a type; block titles just name it
+      const groupTitle = (t, n) => h("span", { class: "op-gh" }, h("span", { class: "op-gt" }, label(t)),
         h("span", { class: "op-gn" }, String(n)), h("span", { class: "op-gd" }, desc(t)));
       function draw() {
         const d = st.data; if (!d) return;
@@ -109,7 +110,7 @@
         } else {
           // grouped: one block per type that has items, in order of its best score
           const groups = types.filter(t => counts.get(t)).sort((a, b) => Math.max(...items.filter(x => x.type === b).map(x => x.score)) - Math.max(...items.filter(x => x.type === a).map(x => x.score)));
-          body.replaceChildren(...groups.map(t => h("section", { class: "op-g" }, table(items.filter(x => x.type === t), false, groupTitle(t, counts.get(t), true)))));
+          body.replaceChildren(...groups.map(t => h("section", { class: "op-g" }, table(items.filter(x => x.type === t), false, groupTitle(t, counts.get(t))))));
         }
         const evaluatedEmpty = types.filter(t => !unav.has(t) && !counts.get(t));
         unBox.replaceChildren(...[
@@ -129,7 +130,7 @@
           asof.textContent = r.data.as_of_hour ? `hour ${fmt.dateTime(r.data.as_of_hour)} · ${r.data.total} item${r.data.total === 1 ? "" : "s"}` : "no market history";
           if (r.meta) OG.status.asOf(r.meta.as_of);
           draw();
-        } catch (e) { if (!e.stale) body.replaceChildren(OG.error(e, load)); }
+        } catch (e) { if (!e.stale && !st.data) body.replaceChildren(OG.error(e, load)); }
       }
 
       const [cat, gpus] = await Promise.all([ctx.api("/v1/events/types").catch(() => null), OG.data.gpus().catch(() => [])]);

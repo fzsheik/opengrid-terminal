@@ -36,7 +36,7 @@
     const name = fam.name || fam.slug;
     ctx.setTitle(name + " prices");
     const isArch = fam.kind === "architecture";
-    const variants = fam.variants || [];
+    let variants = fam.variants || [];
     const colorOf = new Map(variants.map((v, i) => [vslug(v), COLORS[i % COLORS.length]]));
     const st = { win: ["24h", "7d", "30d", "90d"].includes(OG.qs.get("w")) ? OG.qs.get("w") : "7d" };
 
@@ -46,26 +46,31 @@
     const winSeg = OG.seg(WINDOWS, st.win, v => { st.win = v; OG.qs.set({ w: v === "7d" ? null : v }); loadChart(); });
 
     const badges = [isArch ? null : fam.architecture].filter(Boolean).map(t => OG.badge(String(t).replace(/_/g, " ")));
-    const cheap = fam.cheapest_variant_now;
-    const priced = variants.filter(v => v.low != null);
-    el.append(
-      OG.head(h("span", { class: "gpu-title" }, h("span", { class: "eyebrow" }, isArch ? "GPU architecture" : "GPU family"), name, h("span", { class: "gp-badges" }, badges),
-        h("span", { class: "full" }, `${variants.length} variant${variants.length === 1 ? "" : "s"}`)), null,
-        variants.length >= 2 ? h("a", { class: "btn", href: `/compare/${vslug(variants[0])}-vs-${vslug(variants[1])}` }, "Compare variants") : null,
-        h("a", { class: "btn pri", href: "/route?gpu=" + encodeURIComponent(fam.slug || fam.id), title: "Route with this family: pick a variant or allow variants" }, "Route →")),
-      h("div", { class: "fam-note", role: "note" }, h("b", {}, "Variants are different products. "),
-        "Memory size, form factor and interconnect differ, so OpenGrid never merges their prices into one family price; each row below is its own market.",
-        fam.note && !/never merged/i.test(fam.note) ? " " + fam.note : "",
-        isArch && fam.member_families && fam.member_families.length ? h("span", { class: "dim" }, " Model families in this architecture: ", fam.member_families.map((m, i) => [i ? ", " : "", h("a", { class: "lnk", href: "/gpu/" + OG.slug(m) }, m)])) : null),
-      OG.stats([
+    const statsBox = h("div", {});
+    const drawStats = f => {
+      const cheap = f.cheapest_variant_now, priced = variants.filter(v => v.low != null);
+      statsBox.replaceChildren(OG.stats([
         { label: "Variants", value: String(variants.length), sub: `${priced.length} priced now` },
         { label: "Cheapest variant now", value: cheap && cheap.low != null ? fmt.price(cheap.low) : null, kind: "observed",
           reason: priced.length ? "not reported" : "no variant is priced now",
           sub: cheap ? OG.shortGpu(cheap.gpu || cheap.slug || "") + (cheap.provider ? " · " + OG.providerName(cheap.provider) : "") : null,
-          title: "The lowest observed on-demand price of one variant, not a family price" },
+          title: "The lowest on-demand price of one variant, not a family price" },
         { label: "Indexed variants", value: String(variants.filter(v => v.index_level != null).length), sub: "each with its own index" },
-      ]),
-      OG.section("Variants side by side", variantsTable(variants)),
+      ]));
+    };
+    drawStats(fam);
+    const table = variantsTable(variants);
+    el.append(
+      OG.head(h("span", { class: "gpu-title" }, h("span", { class: "eyebrow" }, isArch ? "GPU architecture" : "GPU family"), name, h("span", { class: "gp-badges" }, badges),
+        h("span", { class: "full" }, `${variants.length} variant${variants.length === 1 ? "" : "s"}`)), null,
+        variants.length >= 2 ? h("a", { class: "btn", href: `/compare/${vslug(variants[0])}-vs-${vslug(variants[1])}` }, "Compare variants") : null,
+        h("a", { class: "btn pri acct-lnk", href: "/route?gpu=" + encodeURIComponent(fam.slug || fam.id), title: "Needs an OpenGrid account (invite-only). Previews where a job would run with this family." }, h("i", { class: "lock acct-lock", "aria-hidden": "true" }), "Route →")),
+      h("div", { class: "fam-note", role: "note" }, h("b", {}, "Variants are different products. "),
+        "Each row is its own market; prices are never merged into one family price.",
+        fam.note && !/never merged/i.test(fam.note) ? " " + fam.note : "",
+        isArch && fam.member_families && fam.member_families.length ? h("span", { class: "dim" }, " Model families in this architecture: ", fam.member_families.map((m, i) => [i ? ", " : "", h("a", { class: "lnk", href: "/gpu/" + OG.slug(m) }, m)])) : null),
+      statsBox,
+      OG.section("Variants side by side", table),
       h("section", { class: "sec" }, h("div", { class: "gp-sh" }, h("h2", { class: "sec-h" }, "Lowest price per variant"), h("span", { class: "spacer" }), winSeg), chartEl, chartNote),
       OG.section(`News mentioning the ${name}`, newsBox));
 
@@ -77,7 +82,7 @@
           { key: "low_provider", label: "at", hidden: !rows.some(r => r.low_provider), fmt: v => (v ? OG.providerLink(v) : "-") },
           { key: "median", label: "Median", num: true, fmt: v => OG.value(v, fmt.price, "no priced providers") },
           { key: "high", label: "High", num: true, fmt: v => OG.value(v, fmt.price, "no priced providers") },
-          { key: "change_24h", label: "24h", num: true, value: r => chgPct(r), fmt: (v, r) => OG.chg(chgPct(r), { reason: (r.change_24h && r.change_24h.reason) || "not enough history" }), title: "24-hour change of this variant's own index level" },
+          { key: "change_24h", label: "Index 24h", num: true, value: r => chgPct(r), fmt: (v, r) => OG.chg(chgPct(r), { reason: (r.change_24h && r.change_24h.reason) || "not enough history" }), title: "24h change of this variant's own index" },
           { key: "providers", label: "Providers", num: true, desc: true },
           { key: "available_listings", label: "Available", num: true, desc: true, title: "Listings with explicit availability now" },
           { key: "index_level", label: "Index", num: true, fmt: (v, r) => (v != null && r.index_id ? h("a", { class: "lnk", href: "/indices/" + r.index_id }, fmt.price(v)) : OG.na("no published index for this variant")), title: "The variant's own OpenGrid index level" },
@@ -107,7 +112,7 @@
       chart = OG.charts.timeseries(chartEl, { times, series, height: 240, label: `Lowest price per ${name} variant`, emptyText: "No history in this window",
         gapReason: i => { const miss = series.filter(s => s.values[i] == null).map(s => s.label); return miss.length ? "no recorded price: " + miss.join(", ") : null; } });
       const missing = variants.length - withData.length;
-      chartNote.replaceChildren(OG.kindBadge("observed"), " One line per variant: its own lowest observed on-demand price per GPU-hour, hourly. Lines are never averaged into a family line. ",
+      chartNote.replaceChildren("Each line is one variant's lowest on-demand price per GPU-hour, hourly. ",
         missing ? `${missing} variant${missing === 1 ? "" : "s"} without history in this window. ` : "", h("a", { class: "lnk", href: "/methodology/indices" }, "Method"));
     }
 
@@ -120,12 +125,18 @@
         h("span", { class: "mono dim" }, fmt.date(n.published_at)), h("span", { class: "tier-t t-" + (n.trust_tier || "source"), title: "source tier" }, n.trust_tier || "source"),
         h("span", {}, h("a", { class: "lnk", href: n.url, target: "_blank", rel: "external noopener" }, n.title),
           h("span", { class: "dim" }, " · " + (n.source_name || n.source_id || "") + (n.source_count > 1 ? ` +${n.source_count - 1}` : "")))))),
-        h("p", { class: "note" }, "Linked by mention of the family or one of its variants (matched by rules); not a claim about any price. ",
+        h("p", { class: "note" }, "Mentions the family or one of its variants. ",
           h("a", { class: "lnk", href: "/news?gpu=" + encodeURIComponent(fam.slug || fam.id) }, "More →")));
     }
 
+    // the table and stats refresh with the chart, so a page left open never shows two different moments
+    async function refresh() {
+      const f = await OG.data.family(fam.slug || fam.id, ctx.api).catch(() => null);
+      if (f && Array.isArray(f.variants) && f.variants.length) { variants = f.variants; drawStats(f); table.update(variants); }
+      loadChart();
+    }
     loadChart(); loadNews();
-    ctx.every(300000, loadChart);
+    ctx.every(300000, refresh);
   }
 
   OG.views = OG.views || {};

@@ -77,13 +77,24 @@
     async mount(el, params, query, ctx) {
       const root = h("div", { class: "ops" });
       el.append(root);
+      // Staff only. A visitor (or a signed-in non-operator) gets one access note, and nothing is polled.
+      const head0 = () => OG.head("Ops · data quality", "Feed health, held values, incidents and background jobs.");
+      let stopped = false;
+      const denied = () => {
+        stopped = true;
+        root.replaceChildren(head0(), OG.accessNote("operator", "Sign in with the OpenGrid site login to use them."),
+          h("p", { class: "note" }, h("a", { class: "btn sm", href: OG.loginHref() }, "Operator sign-in"), " ", h("a", { class: "lnk", href: "/" }, "Explore free pages")));
+      };
+      const me = await OG.me();
+      if (!ctx.alive()) return;
+      if (!OG.isAdmin(me)) { denied(); return; }
       const st = { provider: OG.qs.get("provider", null), qStatus: OG.qs.get("q", "pending"), incStatus: OG.qs.get("inc", "open"), incKind: OG.qs.get("kind", null),
         confirming: null, flash: null, sum: null, health: null, lastAt: null };
       const upd = h("span", { class: "ops-upd mono" }, "loading…");
       const provPick = h("select", { class: "field", "aria-label": "Filter by provider", onchange: e => setProvider(e.target.value || null) });
-      root.append(OG.head("Ops · data quality", "Internal: feed health, held values, incidents and pipeline jobs. Every figure is read from the quality layer; nothing is estimated.",
+      root.append(OG.head("Ops · data quality", "Feed health, held values, incidents and background jobs.",
         h("span", { class: "flt" }, h("span", {}, "Provider"), provPick), upd,
-        h("button", { class: "btn", onclick: () => refresh(true) }, "Refresh")));
+        h("button", { class: "btn", onclick: () => refresh(true) }, "Refresh")), OG.accessNote("operator"));
       const box = id => h("div", { class: "ops-b", id });
       const B = {
         stats: box("ops-stats"), matrix: box("ops-matrix"), health: box(), latency: box(), errors: box(), jobs: box(), quar: box(), inc: box(),
@@ -103,13 +114,14 @@
         h("div", { class: "ops-grid2 even" },
           sec("Unmapped GPUs", "the mapping to-do", B.unmapped, h("a", { class: "lnk ops-a", href: "/v1/ops/unmapped", target: "_blank" }, "JSON →")),
           sec("Stale listings", "not seen within the stale window", B.stale)),
-        sec("Schema changes", "source JSON shape changes per endpoint", B.schema),
-        h("div", { class: "ops-grid2" },
-          sec("Background jobs", "jobs.JOBS on this server process", B.jobs),
-          sec("Routing & provisioning", "probes of the routing tables", B.routing)),
-        sec("News ingestion", "per source, last 24h", B.news),
+        h("details", { class: "ops-more" }, h("summary", { class: "sec-h" }, "Details: schema changes, background jobs, routing probes, news ingestion"),
+          sec("Schema changes", "source JSON shape changes per endpoint", B.schema),
+          h("div", { class: "ops-grid2" },
+            sec("Background jobs", "on this server process", B.jobs),
+            sec("Routing & provisioning", "probes of the routing tables", B.routing)),
+          sec("News ingestion", "per source, last 24h", B.news)),
         h("p", { class: "note" }, "Rules and thresholds: ", h("a", { class: "lnk", href: "/methodology/data-quality" }, "data quality"), " · ",
-          h("a", { class: "lnk", href: "/methodology/data-trust" }, "data trust"), ". Auto-refreshes every 30 s while this tab is visible."));
+          h("a", { class: "lnk", href: "/methodology/data-trust" }, "data trust"), ". Refreshes every 30 s while this tab is visible."));
       for (const k of ["matrix", "health", "quar", "inc"]) B[k].append(OG.loading());
 
       function setProvider(p) {
@@ -133,6 +145,7 @@
           upd.textContent = "updated " + fmt.time(st.lastAt) + " · auto 30s";
           upd.classList.remove("bad");
         } catch (e) {
+          if (e.status === 401 || e.status === 403) { denied(); return; }   // signed out meanwhile: stop, say so once
           upd.textContent = "refresh failed " + fmt.time(new Date()); upd.classList.add("bad");
           if (!st.sum) { for (const k of ["matrix", "health"]) B[k].replaceChildren(OG.error(e, () => refresh(true))); B.stats.replaceChildren(); }
           return;
@@ -454,6 +467,7 @@
       }
 
       function refresh(force) {
+        if (stopped) return;
         loadCore(force); loadQuarantine(force); loadIncidents(force); loadSchema(force); loadUnmapped(force); loadStale(force); loadNews(force);
       }
       refresh(false);

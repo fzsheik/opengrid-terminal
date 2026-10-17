@@ -20,14 +20,14 @@
     const lines = [
       `OpenGrid implements: L${impl} ${cap.level_implemented_label}`,
       `Provider API documents: ${api == null ? "not established" : "L" + api + " " + cap.level_supported_label}${cap.docs_checked ? " (" + cap.docs_checked + ")" : ""}`,
-      "Verified live against a real account: no (adapters tested against mocked HTTP)",
+      `Verified live against a real account: ${cap.verified_live ? "yes" : "no (tested against a simulated API only)"}`,
       `Availability check verified live: ${cap.availability_check_verified_live ? "yes (read-only, public endpoint)" : "no"}`,
       cap.via ? `Routed via ${cap.via} (aggregator; ${cap.via} is the counterparty)` : null,
       `OpenGrid credentials configured on this server: ${cap.credentials_configured ? "yes" : "no"}`,
     ].filter(Boolean).join("\n");
     return h("span", { class: "pv-int l" + impl, title: lines },
       h("b", {}, "L" + impl), " ", LEVEL_SHORT[impl] || "",
-      impl > 0 ? h("span", { class: "pv-unv" }, " ·mock") : null,
+      impl > 0 && !cap.verified_live && !(opts && opts.long) ? h("span", { class: "pv-unv", title: "built and tested against a simulated provider API, not yet against a real account" }, " ·untested") : null,
       opts && opts.long && cap.via ? h("span", { class: "dim" }, " via " + cap.via) : null);
   }
   // Feed status: the quality layer's word if we have it, else derived from the last 24h of fetches.
@@ -54,14 +54,16 @@
       el.classList.add("pv-page");
       const statsEl = h("div", {}, OG.stats([{ label: "Providers", value: null, reason: "loading" }]));
       const tblBox = h("div", {}, OG.loading("Loading providers…"));
+      let tbl = null, tblKey = null;
       const factsEl = h("div", { class: "box box-p pv-facts" });
       const capsNote = h("p", { class: "note" });
       const clsSeg = h("div", { class: "pv-hold" });
       const daySeg = OG.seg([["7", "7D"], ["30", "30D"], ["90", "90D"]], String(st.days), v => { st.days = +v; OG.qs.set({ days: v === "30" ? null : v }); load(); });
-      el.append(OG.head("Providers", "Every GPU cloud OpenGrid reads: coverage, pricing vs the rest of the market, feed health and how far OpenGrid can route to it",
-        h("span", { class: "flt" }, h("span", {}, "Class"), clsSeg), h("span", { class: "flt" }, h("span", {}, "Window"), daySeg)),
+      el.append(OG.head("Providers", "Every GPU cloud OpenGrid reads: what it lists and how its prices compare with the rest of the market",
+        h("span", { class: "flt" }, h("span", {}, "Type"), clsSeg), h("span", { class: "flt" }, h("span", {}, "Window"), daySeg)),
         statsEl, tblBox, capsNote,
-        h("div", { class: "cols-2 pv-lower" }, OG.section("Facts", factsEl), OG.section("Integration levels", levelsBox())));
+        h("div", { class: "cols-2 pv-lower" }, OG.section("Facts", factsEl),
+          h("details", { class: "sec pv-details" }, h("summary", { class: "sec-h" }, "Details: integration levels"), levelsBox())));
 
       function levelsBox() {
         return h("div", { class: "box box-p pv-levels" },
@@ -69,28 +71,30 @@
             [1, "availability check", "a live per-request stock check"], [2, "provisioning", "OpenGrid can launch an instance through the provider API"],
             [3, "full lifecycle", "launch, inspect status, terminate (stop where the API has it)"]].map(([n, l, d]) =>
             h("tr", {}, h("td", { class: "mono" }, "L" + n), h("td", {}, l), h("td", { class: "dim" }, d))))),
-          h("p", { class: "note" }, h("b", {}, "·mock"), " = implemented in OpenGrid's adapter and tested against mocked HTTP built from the provider's documented API. ",
-            "No adapter has been run against a real provider account yet (verified_live = false for every provider), so no provisioning claim here is verified. ",
+          h("p", { class: "note" }, h("b", {}, "·untested"), " = built in OpenGrid and tested against a simulated copy of the provider's API, not yet against a real account. ",
             h("a", { class: "lnk", href: "/methodology/routing" }, "Routing methodology →")));
       }
 
       function drawClassSeg(rows) {
         const present = CLASSES.filter(c => rows.some(r => r.meta && r.meta.provider_class === c));
-        const opts = [["all", "All"], ...present.map(c => [c, c.replace("_", " ")])];
+        const cap1 = s => s.charAt(0).toUpperCase() + s.slice(1);
+        const opts = [["all", "All"], ...present.map(c => [c, cap1(c.replace("_", " "))])];
         if (!opts.some(o => o[0] === st.cls)) st.cls = "all";
         clsSeg.replaceChildren(OG.seg(opts, st.cls, v => { st.cls = v; OG.qs.set({ class: v === "all" ? null : v }); draw(); }));
       }
 
+      // a refresh keeps the table on screen until the new data arrives; only a window change shows the spinner
       async function load() {
-        tblBox.replaceChildren(OG.loading("Loading providers…"));
+        const days = st.days;
+        if (!st.data || st.loadedDays !== days) { tblBox.replaceChildren(OG.loading("Loading providers…")); tbl = null; }
         try {
           const [res, caps, trust] = await Promise.all([
             ctx.api("/v1/providers", { params: { days: st.days }, full: true, slot: "providers" }),
             st.caps ? Promise.resolve(st.caps) : ctx.api("/v1/capabilities").catch(() => null),
             ctx.api("/v1/trust/providers").catch(() => null), OG.data.intervals()]);
-          st.data = res.data; st.meta = res.meta; st.caps = caps; st.trust = trust;
+          st.data = res.data; st.meta = res.meta; st.caps = caps; st.trust = trust; st.loadedDays = days;
           OG.status.asOf(res.meta && res.meta.as_of);
-        } catch (e) { if (!e.stale) tblBox.replaceChildren(OG.error(e, load)); return; }
+        } catch (e) { if (!e.stale && !(st.data && st.loadedDays === days)) tblBox.replaceChildren(OG.error(e, load)); return; }
         draw();
       }
 
@@ -122,27 +126,29 @@
           { label: "Live listings", value: fmt.num(all.reduce((a, r) => a + r.listings, 0)), sub: fmt.num(all.reduce((a, r) => a + r.priced, 0)) + " priced", kind: "observed" },
           { label: "GPU models", value: String(gpuSet.size), sub: "canonical, across providers" },
           { label: "Feeds healthy", value: `${healthy}/${all.filter(r => r.fh || r.tr).length}`, sub: "last 24h of fetches" },
-          { label: "Rel. value", value: withPremium ? `${withPremium} rated` : null, reason: `needs ≥ 24 compared hours in the last ${st.days}d; no provider has them yet`, sub: withPremium ? `of ${all.length}, last ${st.days}d` : null },
-          { label: "Routable (impl.)", value: String(all.filter(r => r.level >= 2).length), sub: "L≥2 implemented · 0 verified live" },
+          { label: "Price vs market", value: withPremium ? `${withPremium} rated` : null, reason: `needs 24+ compared hours in the last ${st.days}d; no provider has them yet`, sub: withPremium ? `of ${all.length}, last ${st.days}d` : null },
+          { label: "OpenGrid can launch on", value: String(all.filter(r => r.level >= 2).length), sub: `${all.filter(r => r.level >= 2 && r.cap && r.cap.verified_live).length} verified live`, title: "providers where OpenGrid implements provisioning (level 2+)" },
         ]));
         const cols = [
           { key: "name", label: "Provider", fmt: (v, r) => OG.providerLink(r.provider), width: "150px" },
           { key: "cls", label: "Class", cls: "dim", fmt: v => (v || "-").replace("_", " "), minor: 2 },
           { key: "source_type", label: "Source", cls: "dim", fmt: v => SRC[v] || v || "-", title: "How OpenGrid reads this provider's prices", minor: 3 },
-          { key: "level", label: "Integration", value: r => r.level, fmt: (v, r) => integration(r.cap), title: "Integration level OpenGrid implements (0 to 3). Hover for API vs implemented vs verified. ·mock = adapter tested against mocked HTTP only", desc: true },
+          { key: "level", label: "Integration", value: r => r.level, fmt: (v, r) => integration(r.cap), title: "What OpenGrid can do with this provider: L0 read prices, L1 check stock, L2 launch, L3 full lifecycle. ·untested = not yet run against a real account", desc: true },
           { key: "gpus", label: "GPUs", num: true, desc: true, title: "Canonical GPU models listed now" },
           { key: "listings", label: "Listings", num: true, desc: true, title: "Live listings now (priced in title)", fmt: (v, r) => h("span", { title: `${r.priced} priced` }, fmt.num(v)) },
           { key: "regions", label: "Regions", value: r => r.regions.length, desc: true, ell: 190, fmt: (v, r) => r.regions.length ? h("span", { class: "pv-regs", title: r.regions.join(", ") }, r.regions.join(" · ")) : r.listings ? h("span", { class: "dim", title: "listings carry no location OpenGrid can assign to a region group" }, "unassigned") : "-" },
-          { key: "premium", label: "Avg prem.", num: true, title: `Mean premium vs the median of other providers, same GPU, same hour (last ${st.days}d). Negative = cheaper.`,
+          { key: "premium", label: "Avg vs market", num: true, title: `Mean premium vs the median of other providers, same GPU, same hour (last ${st.days}d). Negative = cheaper.`,
             fmt: (v, r) => v == null ? OG.na(r.premium_r) : h("span", { class: v < 0 ? "up" : v > 0 ? "down" : "" }, fmt.pct(v)) },
           { key: "cheapest", label: "% cheapest", num: true, desc: true, title: "Share of market hours this provider was the cheapest", fmt: (v, r) => OG.value(v, share, r.cheapest_r) },
-          { key: "avail", label: "Avail.", num: true, desc: true, title: "Share of tracked hours with a priced listing", fmt: (v, r) => OG.value(v, share, r.avail_r) },
-          { key: "vol", label: "Vol (1d)", num: true, title: "Median across its GPUs of the stdev of daily log price changes", fmt: (v, r) => OG.value(v, x => (x * 100).toFixed(1) + "%", r.vol_r) },
-          { key: "life", label: "Lifetime", num: true, value: r => r.lifetime && r.lifetime.median_hours, desc: true, title: "Median observed listing lifetime (first seen → last seen by OpenGrid; understates true lifetime)",
+          { key: "avail", label: "Availability", num: true, desc: true, title: "Share of tracked hours with a priced listing", fmt: (v, r) => OG.value(v, share, r.avail_r) },
+          { key: "vol", label: "Volatility", num: true, minor: 1, title: "Typical daily price change across its GPUs", fmt: (v, r) => OG.value(v, x => (x * 100).toFixed(1) + "%", r.vol_r) },
+          { key: "life", label: "Listing life", num: true, minor: 1, value: r => r.lifetime && r.lifetime.median_hours, desc: true, title: "Median observed listing lifetime (first seen → last seen by OpenGrid; understates true lifetime)",
             fmt: (v, r) => r.lifetime ? OG.value(r.lifetime.median_hours, x => x < 48 ? x.toFixed(1) + "h" : (x / 24).toFixed(0) + "d", r.lifetime.reason) : "-" },
           { key: "feed", label: "Feed", value: r => r.tr ? r.tr.status : r.fh ? (r.fh.failure_rate_24h === 0 ? "ok" : "x") : null, fmt: (v, r) => feedStatus(r.tr, r.fh) },
           { key: "last_ok", label: "Last ok", num: true, value: r => r.last_ok ? -new Date(r.last_ok) : null, title: "Age of the last successful fetch", fmt: (v, r) => r.last_ok ? OG.freshBadge(r.last_ok, { intervalSeconds: r.tr && r.tr.polling_interval_seconds, provider: r.provider }) : h("span", { class: "dim" }, "never") },
         ];
+        const key = st.days + "|" + st.cls;
+        if (tbl && tblKey === key) { tbl.update(rows); drawFacts(all); return; }
         const t = OG.table({ columns: cols, rows, sort: { key: st.sort, dir: st.dir }, stickyLast: 2, rowHref: r => "/provider/" + encodeURIComponent(r.provider), rowKey: r => r.provider,
           rowClass: r => (r.listings ? "" : "out"), csv: `opengrid-providers-${st.days}d.csv`, title: `${rows.length} providers · window ${st.days}d`,
           onSort: s => { st.sort = s.key; st.dir = s.dir; OG.qs.set({ sort: s.key === "listings" ? null : s.key, dir: s.dir === "desc" ? null : s.dir }); } });
@@ -151,9 +157,10 @@
           feed: r => r.tr ? r.tr.status : r.fh ? `failure_rate_24h=${r.fh.failure_rate_24h}` : "", last_ok: r => r.last_ok, name: r => r.name,
           life: r => r.lifetime && r.lifetime.median_hours };
         for (const c of cols) if (csvOf[c.key]) c.csv = csvOf[c.key];
+        tbl = t; tblKey = key;
         tblBox.replaceChildren(t);
-        capsNote.replaceChildren(OG.kindBadge("observed"), " coverage and feed health. ",
-          `Relative value: each provider vs the median of the other providers' lowest price for the same GPU in the same hour, from the hourly rollup. Figures stay n/a (hover for the reason) until there are ≥ 24 compared hours. Greyed rows: no live listings on this server. `,
+        capsNote.replaceChildren(OG.kindBadge("observed"), " ",
+          `"Avg vs market": each provider's price vs the other providers' median for the same GPU and hour; n/a until there are 24 compared hours. Greyed rows have no live listings. `,
           h("a", { class: "lnk", href: "/methodology/provider-value" }, "Methodology →"));
         drawFacts(all);
       }
@@ -174,13 +181,13 @@
           if (noLoc.length) out.push(h("li", {}, `${noLoc.length} of ${live.length} live providers publish no location OpenGrid can map to a region group.`));
         }
         const dead = all.filter(r => !r.listings);
-        if (dead.length) out.push(h("li", { class: "dim" }, `No live listings on this server from: ${dead.map(r => r.name).join(", ")} (no API key configured here, or the feed has not run).`));
-        if (!all.some(r => r.facts.length)) out.push(h("li", { class: "dim" }, `Relative-value facts (cheapest share, average premium) appear once a provider has ≥ 24 compared hours in the last ${st.days} days.`));
+        if (dead.length) out.push(h("li", { class: "dim" }, `No live listings right now from: ${dead.map(r => r.name).join(", ")}.`));
+        if (!all.some(r => r.facts.length)) out.push(h("li", { class: "dim" }, `Price-vs-market facts appear once a provider has 24 compared hours in the last ${st.days} days.`));
         // observed counts first, then the inferred relative-value facts (8 shown, the rest on request)
         const N = 8, list = h("ul", { class: "pv-list" }), more = h("div", { class: "pv-more" });
         const fill = () => {
           list.replaceChildren(out.length ? h("li", { class: "pv-lh" }, OG.kindBadge("observed"), " right now") : null, ...out,
-            inferred.length ? h("li", { class: "pv-lh" }, `Relative value, last ${st.days} days`) : null, ...(factsOpen ? inferred : inferred.slice(0, N)));
+            inferred.length ? h("li", { class: "pv-lh" }, `Price vs market, last ${st.days} days`) : null, ...(factsOpen ? inferred : inferred.slice(0, N)));
           more.replaceChildren(inferred.length > N ? h("button", { class: "btn sm", onclick: () => { factsOpen = !factsOpen; fill(); } }, factsOpen ? "Show fewer" : `Show all ${inferred.length} facts`) : "");
         };
         fill();

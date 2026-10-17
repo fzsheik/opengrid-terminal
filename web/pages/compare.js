@@ -29,6 +29,11 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
     return { type: "unknown", id: sl, name: s, label: s };
   }
   const pairHref = (a, b, gpu) => `/compare/${a}-vs-${b}` + (gpu ? "?gpu=" + gpu : "");
+  // one list of suggested pairs (shown on the empty page)
+  const PRESETS = [["h100-80gb-sxm5", "h200-141gb-sxm5"], ["h100-80gb-pcie", "h100-80gb-sxm5"], ["a100-80gb-sxm4", "h100-80gb-sxm5"], ["h200-141gb-sxm5", "b200-180gb-sxm"],
+    ["l40s-48gb", "a100-80gb-pcie"], ["rtx-4090-24gb", "rtx-5090-32gb"], ["runpod", "lambda", "RunPod vs Lambda"], ["us", "europe", "US vs Europe"]];
+  // the shared reading rule for every "B vs A" cell
+  const RULE = "B vs A: green means B is cheaper.";
 
   function picker(a, b, gpu) {
     const dl = h("datalist", { id: "cmp-opts" },
@@ -44,12 +49,9 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
     };
     const keyGo = e => { if (e.key === "Enter") go(); };
     ia.addEventListener("keydown", keyGo); ib.addEventListener("keydown", keyGo);
-    const presets = [["h100-80gb-sxm5", "h200-141gb-sxm5", "H100 vs H200"], ["h100-80gb-pcie", "h100-80gb-sxm5", "H100 PCIe vs SXM"], ["a100-80gb-sxm4", "h100-80gb-sxm5", "A100 vs H100"],
-      ["b200-180gb-sxm", "h200-141gb-sxm5", "B200 vs H200"], ["runpod", "lambda", "RunPod vs Lambda"], ["lium", "aws", "Lium vs AWS"], ["us", "europe", "US vs Europe"]];
     return h("div", { class: "bar cmp-pick" }, dl, h("span", { class: "flt" }, h("span", {}, "A"), ia),
-      h("button", { class: "btn sm", title: "swap", onclick: () => { const t = ia.value; ia.value = ib.value; ib.value = t; go(); } }, "⇄"),
-      h("span", { class: "flt" }, h("span", {}, "B"), ib), h("button", { class: "btn pri", onclick: go }, "Compare"),
-      h("span", { class: "spacer" }), h("span", { class: "cmp-presets" }, presets.map(([x, y, t]) => h("a", { class: "lnk dim", href: pairHref(x, y) }, t))));
+      h("button", { class: "btn sm", type: "button", title: "Swap A and B (the inputs only; press Compare to apply)", onclick: () => { const t = ia.value; ia.value = ib.value; ib.value = t; ia.focus(); } }, "⇄ Swap"),
+      h("span", { class: "flt" }, h("span", {}, "B"), ib), h("button", { class: "btn pri", onclick: go }, "Compare"));
   }
 
   // Overlay chart. lines: [{key,label,color,dash,points:[{t,v}]}] on a merged time axis
@@ -77,7 +79,7 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
     el.append(body);
     let c;
     try { c = await ctx.api("/v1/compare", { params: { a: A.id, b: B.id }, full: true }); }
-    catch (e) { body.replaceChildren(e.status === 400 ? OG.insufficient(e.message, "These two cannot be compared") : OG.error(e)); return; }
+    catch (e) { body.replaceChildren(e.status === 400 ? OG.insufficient(e.message, "These two cannot be compared") : OG.error(e, () => { body.remove(); gpuVsGpu(el, A, B, ctx); })); return; }
     OG.status.asOf(c.meta && c.meta.as_of);
     const d = c.data, a = d.a, b = d.b;
     const ha = a.hardware || {}, hb = b.hardware || {};
@@ -164,20 +166,19 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
         { key: "am", label: sa + " median", color: CA, points: la.median, width: 2 }, { key: "al", label: sa + " lowest", color: CA, dash: "4 3", points: la.low },
         { key: "bm", label: sb + " median", color: CB, points: lb.median, width: 2 }, { key: "bl", label: sb + " lowest", color: CB, dash: "4 3", points: lb.low },
       ], { label: `${sa} vs ${sb} price history`, thin: "Not enough recorded history for either GPU in this window." });
-      chartNote.replaceChildren(OG.kindBadge("observed"), (la.hourly && lb.hourly) ? " Hourly cross-section of provider prices (one vote per provider)." : " Fine-grained replay of recorded listings (hourly history is short).",
-        " Solid: median of provider lows. Dashed: lowest. A line starts when recording of that GPU began; a provider joining can move it.");
+      chartNote.replaceChildren(OG.kindBadge("observed"), " Solid: median price. Dashed: lowest.", (la.hourly && lb.hourly) ? "" : " Hourly history is short, so this replays recorded listings.");
     }
     ctx.onCleanup(() => chart && chart.destroy());
 
     body.replaceChildren(
       h("div", { class: "cmp-heads" }, sideHead(a.name, "/gpu/" + a.slug, CA, `${ma.providers} providers · ${a.listings.priced} priced listings`, ma.low),
         sideHead(b.name, "/gpu/" + b.slug, CB, `${mb.providers} providers · ${b.listings.priced} priced listings`, mb.low)),
-      h("p", { class: "note cmp-caveat" }, d.note, ". Shared dimensions: ", d.shared_dimensions && d.shared_dimensions.length ? d.shared_dimensions.map(x => OG.badge(x.replace(/_/g, " "))) : h("span", { class: "dim" }, "none")),
+      h("p", { class: "note cmp-caveat" }, "Different GPUs are different products. ", RULE, d.shared_dimensions && d.shared_dimensions.length ? [" Shared: ", d.shared_dimensions.map(x => OG.badge(x.replace(/_/g, " ")))] : null),
       h("div", { class: "cmp-grid" },
-        h("div", {}, OG.section("Verdicts", verdicts, h("p", { class: "note" }, "† theoretical: price / vendor peak spec (dense, no sparsity); not a benchmark. PFLOP·h = 1,000 TFLOP·h.")), h("section", { class: "sec" }, h("div", { class: "cmp-sh" }, h("h2", { class: "sec-h" }, "Price history"), h("span", { class: "spacer" }), winSeg), chartEl, chartNote),
+        h("div", {}, OG.section("Verdicts", verdicts, h("p", { class: "note" }, "† theoretical: price divided by the vendor peak spec, not a benchmark.")), h("section", { class: "sec" }, h("div", { class: "cmp-sh" }, h("h2", { class: "sec-h" }, "Price history"), h("span", { class: "spacer" }), winSeg), chartEl, chartNote),
           OG.section("Same provider, both GPUs", provT)),
-        h("div", {}, OG.section("Market and capability pricing", sideTable(mrows, sa, sb), h("p", { class: "note" }, "B vs A on prices: green means B is cheaper. $ per capability is theoretical (vendor peak, dense).")),
-          OG.section("Spec diff", specT, h("p", { class: "note" }, "Highlighted rows differ. Vendor peak figures, dense (no sparsity); not benchmarks. ", h("a", { class: "lnk", href: "/methodology/hardware" }, "Method"))))));
+        h("div", {}, OG.section("Market and capability pricing", sideTable(mrows, sa, sb)),
+          OG.section("Spec diff", specT, h("p", { class: "note" }, "Highlighted rows differ. Vendor peak figures. ", h("a", { class: "lnk", href: "/methodology/hardware" }, "Method"))))));
     drawChart();
   }
   function sideHead(name, href, color, sub, low) {
@@ -192,7 +193,7 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
     el.append(body);
     let c;
     try { c = await ctx.api("/v1/compare", { params: { a: A.id, b: B.id }, full: true }); }
-    catch (e) { body.replaceChildren(e.status === 400 ? OG.insufficient(e.message, "These two cannot be compared") : OG.error(e)); return; }
+    catch (e) { body.replaceChildren(e.status === 400 ? OG.insufficient(e.message, "These two cannot be compared") : OG.error(e, () => { body.remove(); providerVsProvider(el, A, B, ctx, query); })); return; }
     OG.status.asOf(c.meta && c.meta.as_of);
     const d = c.data, a = d.a, b = d.b, na = OG.providerName(a.name), nb = OG.providerName(b.name);
     const rv = (s, k) => s.relative_value ? s.relative_value[k] : null;
@@ -221,8 +222,8 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
     const mdiff = med(common.map(g => g.b_vs_a));
     let focus = common.find(g => g.slug === (query.gpu || OG.qs.get("gpu"))) || common[0] || null;
     const chartEl = h("div", { class: "cmp-chart" }), chartNote = h("p", { class: "note" }), chartHead = h("h2", { class: "sec-h" });
-    let chart = null, win = WINDOWS.find(w => w[0] === OG.qs.get("w", "7d")) || WINDOWS[0];
-    const winSeg = OG.seg(WINDOWS.map(w => [w[0], w[1]]), win[0], v => { win = WINDOWS.find(w => w[0] === v); OG.qs.set({ w: v === "7d" ? null : v }); drawChart(); });
+    let chart = null, win = WINDOWS.find(w => w[0] === OG.qs.get("w", "30d")) || WINDOWS[1];
+    const winSeg = OG.seg(WINDOWS.map(w => [w[0], w[1]]), win[0], v => { win = WINDOWS.find(w => w[0] === v); OG.qs.set({ w: v === "30d" ? null : v }); drawChart(); });
     const commonT = OG.table({
       columns: [
         { key: "gpu", label: "GPU", fmt: v => h("b", {}, OG.shortGpu(v)), value: r => OG.shortGpu(r.gpu) },
@@ -248,7 +249,7 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
       if (chart) chart.destroy();
       chart = overlay(chartEl, [line(a.name, CA, na), line(b.name, CB, nb), { key: "mkt", label: "market lowest", color: "#7d8895", dash: "2 3", width: 1, points: det.times.map((t, i) => ({ t, v: det.lowest[i] })).filter(x => x.v != null) }],
         { label: "provider price history", height: 240 });
-      chartNote.replaceChildren(OG.kindBadge("observed"), " Each provider's lowest eligible price for this GPU; step-held between recorded changes. Dotted: market lowest across all providers.");
+      chartNote.replaceChildren(OG.kindBadge("observed"), " Each provider's lowest price for this GPU. Dotted: lowest across all providers.");
     }
     ctx.onCleanup(() => chart && chart.destroy());
     body.replaceChildren(
@@ -260,8 +261,8 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
         { label: "Median B vs A", value: mdiff != null ? fmt.pct(mdiff) : null, reason: "no common GPU", sub: mdiff == null ? null : mdiff < 0 ? nb + " cheaper" : mdiff > 0 ? na + " cheaper" : "same" },
       ]),
       h("div", { class: "cmp-grid" },
-        h("div", {}, OG.section(null, commonT), h("section", { class: "sec" }, h("div", { class: "cmp-sh" }, chartHead, h("span", { class: "spacer" }), winSeg), chartEl, chartNote)),
-        h("div", {}, OG.section("Side by side", tbl, h("p", { class: "note" }, "Relative value needs at least 24 recorded hours; until then it shows the reason. ", h("a", { class: "lnk", href: "/methodology/provider-value" }, "Method"))),
+        h("div", {}, OG.section(null, commonT, h("p", { class: "note" }, RULE)), h("section", { class: "sec" }, h("div", { class: "cmp-sh" }, chartHead, h("span", { class: "spacer" }), winSeg), chartEl, chartNote)),
+        h("div", {}, OG.section("Side by side", tbl, h("p", { class: "note" }, "Price-vs-market figures need 24 recorded hours. ", h("a", { class: "lnk", href: "/methodology/provider-value" }, "Method"))),
           onlyA.length || onlyB.length ? OG.section("Only one sells", h("table", { class: "cmp-t" }, h("tbody", {},
             h("tr", {}, h("th", { style: `color:${CA}` }, "only " + na), h("td", { class: "wrap" }, onlyA.map(g => OG.gpuLink(g)).flatMap((x, i) => i ? [", ", x] : [x]))),
             h("tr", {}, h("th", { style: `color:${CB}` }, "only " + nb), h("td", { class: "wrap" }, onlyB.map(g => OG.gpuLink(g)).flatMap((x, i) => i ? [", ", x] : [x])))))) : null)));
@@ -308,7 +309,7 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
         rows, sort: { key: "d", dir: "asc" }, compact: true, rowKey: r => r.slug, rowClass: r => (r.slug === focusSlug ? "hl" : r.both ? "" : "out"),
         title: "Same GPU across two region groups", csv: `opengrid-${A.id}-vs-${B.id}.csv`,
       }),
-      h("p", { class: "note" }, OG.kindBadge("observed"), " Region groups come from each listing's stated location, never guessed; listings without a location are not in either group. ", h("a", { class: "lnk", href: "/heatmaps" }, "Regional heatmaps →")));
+      h("p", { class: "note" }, OG.kindBadge("observed"), " ", RULE, " Regions come from each listing's stated location; listings without one are in neither group. ", h("a", { class: "lnk", href: "/heatmaps" }, "Regional heatmaps →")));
   }
   function regHead(R, color, missing, n) {
     return h("div", { class: "cmp-side", style: `border-top-color:${color}` }, h("div", {}, h("span", { class: "cmp-name" }, R.label), h("div", { class: "dim" }, "region group")),
@@ -322,15 +323,14 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
     const A = resolve(a), B = resolve(b);
     const title = A && B ? `${A.label} vs ${B.label}` : "Compare";
     ctx.setTitle(title);
-    el.append(OG.head(title, A && B ? (A.type === "gpu" && B.type === "gpu" ? "GPU vs GPU: price, availability, capability pricing and specs, side by side"
-      : A.type === "provider" && B.type === "provider" ? "Provider vs provider: coverage, pricing on common GPUs, relative value and feed health"
-      : A.type === "region" && B.type === "region" ? "Region vs region: the cheapest price of each GPU in two region groups" : "Pick two GPUs, two providers or two regions")
-      : "Two GPUs (H100 vs H200), two providers (RunPod vs Lambda), or two regions (US vs Europe)"), picker(A && A.id, B && B.id, query.gpu));
+    el.append(OG.head(title, A && B ? (A.type === "gpu" && B.type === "gpu" ? "Price, availability and specs, side by side"
+      : A.type === "provider" && B.type === "provider" ? "Prices on the GPUs both providers sell"
+      : A.type === "region" && B.type === "region" ? "The cheapest price of each GPU in two regions" : "Pick two GPUs, two providers or two regions")
+      : "Two GPUs, two providers or two regions"), picker(A && A.id, B && B.id, query.gpu));
     if (!A || !B) {
       el.append(OG.section("Popular comparisons", h("div", { class: "cmp-start" },
-        [["h100-80gb-sxm5", "h200-141gb-sxm5"], ["h100-80gb-pcie", "h100-80gb-sxm5"], ["a100-80gb-sxm4", "h100-80gb-sxm5"], ["h200-141gb-sxm5", "b200-180gb-sxm"], ["l40s-48gb", "a100-80gb-pcie"], ["rtx-4090-24gb", "rtx-5090-32gb"]]
-          .filter(([x, y]) => OG.data.gpuName(x) && OG.data.gpuName(y)).map(([x, y]) => h("a", { class: "btn", href: pairHref(x, y) }, OG.shortGpu(OG.data.gpuName(x)) + " vs " + OG.shortGpu(OG.data.gpuName(y)))))),
-        h("p", { class: "note" }, "Or type ", h("kbd", {}, "c h100 h200"), " in the command bar."));
+        PRESETS.filter(([x, y, t]) => t || (OG.data.gpuName(x) && OG.data.gpuName(y)))
+          .map(([x, y, t]) => h("a", { class: "btn", href: pairHref(x, y) }, t || OG.shortGpu(OG.data.gpuName(x)) + " vs " + OG.shortGpu(OG.data.gpuName(y)))))));
       return;
     }
     const bad = [A, B].filter(x => x.type === "unknown");
