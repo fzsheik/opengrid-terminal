@@ -167,9 +167,15 @@ Rules every interface must keep:
   "files_inspected": [ { "path": "train.py", "bytes": 4210, "reason": "training script" } ],
   "files_skipped": [ { "path": ".env", "reason": "secret file" } ],
   "signals": [ { "kind": "framework", "value": "peft", "source": "requirements.txt:4" } ],
-  "questions": [ ... ], "warnings": [ ... ], "analyzer_version": "1"
+  "questions": [ ... ], "warnings": [ ... ], "analyzer_version": "1",
+  "omitted": { "files_skipped": { "not in allowlist": 49 }, "signals": 193, "note": "..." }   // compact output only
 }
 ```
+The CLI prints this inside its envelope, `{"ok": true, "command": "analyze", "data": {...}}`; the Find Compute
+paste box accepts either form. By default `--json` is compact: every file read and all of `requirements` are
+kept, `files_skipped` lists up to 5 files per reason, `signals` keeps one entry per (kind, value), and `omitted`
+counts what was left out (absent when nothing was). `--json --full` prints every entry, without `omitted`.
+Small flat objects print on one line.
 The analyzer never executes project code, never installs anything, never reads secrets, weights or datasets,
 and never sends file contents anywhere: only `requirements` leaves the machine (and only when the user asks
 for a recommendation).

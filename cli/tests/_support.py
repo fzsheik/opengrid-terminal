@@ -39,9 +39,12 @@ os.environ.pop("OPENGRID_ALLOWED_ROOTS", None)
 def install_analyzer_stub() -> types.ModuleType:
     m = types.ModuleType("opengrid_cli.analyze")
     m.calls = []
+    m.result = None  # a test may set a full analyzer result to return instead of the default one
 
     def analyze(root, *, exclude=(), max_file_bytes=256000, max_files=400, dry_run=False):
         m.calls.append(("analyze", str(root), tuple(exclude), dry_run))
+        if m.result is not None:
+            return json.loads(json.dumps(m.result))
         n = int(os.environ.get("STUB_FILES", "2"))
         return {
             "root": str(Path(root).resolve()),

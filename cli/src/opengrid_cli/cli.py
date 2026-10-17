@@ -44,6 +44,22 @@ def stdin_is_tty() -> bool:
 
 # ---------------------------------------------------------------- output helpers
 
+def pretty(v: Any, indent: str = "") -> str:
+    """Indented JSON, except a flat object or list (no nesting, short) stays on one line: a list of
+    {path, bytes, reason} rows reads as one row per line instead of five."""
+    one = json.dumps(v, default=str)
+    flat = not any(isinstance(x, (dict, list)) for x in (v.values() if isinstance(v, dict) else v)) \
+        if isinstance(v, (dict, list)) else True
+    width = 200 if isinstance(v, dict) else 120   # a flat object is one row even with a long path in it
+    if (flat and len(one) + len(indent) <= width) or not v or not isinstance(v, (dict, list)):
+        return one
+    inner = indent + "  "
+    if isinstance(v, dict):
+        body = [f"{inner}{json.dumps(str(k))}: {pretty(x, inner)}" for k, x in v.items()]
+        return "{\n" + ",\n".join(body) + "\n" + indent + "}"
+    return "[\n" + ",\n".join(inner + pretty(x, inner) for x in v) + "\n" + indent + "]"
+
+
 class Out:
     def __init__(self, args):
         self.json = bool(getattr(args, "json", False))
@@ -51,7 +67,7 @@ class Out:
 
     def emit(self, data: Any, human=None) -> None:
         if self.json:
-            print(json.dumps({"ok": True, "command": self.command, "data": data}, indent=2, default=str))
+            print(pretty({"ok": True, "command": self.command, "data": data}))
         elif human is not None:
             human(data)
 
@@ -399,6 +415,44 @@ def cmd_providers(args) -> int:
 
 # ---------------------------------------------------------------- analyze / estimate / recommend
 
+SKIP_EXAMPLES = 5   # files listed per skip reason in compact output; the rest are counted under "omitted"
+
+
+def group_skipped(fs: list) -> dict[str, list]:
+    """reason -> paths, in the analyzer's order (secrets, weights and datasets come first)."""
+    groups: dict[str, list] = {}
+    for f in fs:
+        if isinstance(f, dict):
+            groups.setdefault(str(f.get("reason") or "skipped"), []).append(f.get("path"))
+    return groups
+
+
+def compact_analysis(d: dict) -> dict:
+    """The analyzer output without its repetition, so `analyze --json` fits a terminal and the Find Compute
+    paste box: every file read and all of `requirements` (with evidence) are kept; skipped files keep
+    SKIP_EXAMPLES per reason and signals one per (kind, value). What was dropped is counted in `omitted`."""
+    if not isinstance(d.get("files_skipped"), list) and not isinstance(d.get("signals"), list):
+        return d   # dry run or an unexpected shape: nothing to shorten
+    out = dict(d)
+    skipped, more = [], {}
+    for reason, paths in group_skipped(d.get("files_skipped") or []).items():
+        skipped += [{"path": p, "reason": reason} for p in paths[:SKIP_EXAMPLES]]
+        if len(paths) > SKIP_EXAMPLES:
+            more[reason] = len(paths) - SKIP_EXAMPLES
+    signals, seen = [], set()
+    for s in d.get("signals") or []:
+        k = (s.get("kind"), json.dumps(s.get("value"), default=str)) if isinstance(s, dict) else (None, repr(s))
+        if k not in seen:
+            seen.add(k)
+            signals.append(s)
+    out["files_skipped"], out["signals"] = skipped, signals
+    dropped_signals = len(d.get("signals") or []) - len(signals)
+    if more or dropped_signals:
+        out["omitted"] = {"files_skipped": more, "signals": dropped_signals,
+                          "note": "repeats left out; `opengrid analyze <dir> --json --full` lists everything"}
+    return out
+
+
 def show_analysis(d: dict, *, dry_run: bool) -> None:
     if dry_run:
         print(f"dry run: nothing was read. Files that WOULD be read under {d.get('root')}:")
@@ -422,10 +476,9 @@ def show_analysis(d: dict, *, dry_run: bool) -> None:
     if len(fi) > 50:
         print(f"  ... {len(fi) - 50} more (--json for all)")
     print(f"skipped {len(fs)}:")
-    for f in fs[:30]:
-        print(f"  - {f.get('path')}  ({f.get('reason', '')})")
-    if len(fs) > 30:
-        print(f"  ... {len(fs) - 30} more")
+    for reason, paths in group_skipped(fs).items():
+        print(f"  - {reason}: " + ", ".join(map(str, paths[:SKIP_EXAMPLES]))
+              + (f" ... {len(paths) - SKIP_EXAMPLES} more" if len(paths) > SKIP_EXAMPLES else ""))
     show_requirements(d.get("requirements") or {})
     if d.get("questions"):
         print("\nopen questions:")
@@ -449,7 +502,7 @@ def show_requirements(req: dict, title: str = "extracted requirements") -> None:
 def cmd_analyze(args) -> int:
     d = actions.analyze_local(args.dir, exclude=args.exclude or (), max_files=args.max_files,
                               max_file_bytes=args.max_file_bytes, dry_run=args.dry_run)
-    Out(args).emit(d, lambda d: show_analysis(d, dry_run=args.dry_run))
+    Out(args).emit(d if args.full else compact_analysis(d), lambda d: show_analysis(d, dry_run=args.dry_run))
     return EXIT_OK
 
 
@@ -909,6 +962,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--exclude", action="append", metavar="GLOB")
     s.add_argument("--max-files", type=int, default=400)
     s.add_argument("--max-file-bytes", type=int, default=256000)
+    s.add_argument("--full", action="store_true", help="with --json: every skipped file and every signal, "
+                                                       "repeats included (default: repeats are counted)")
 
     s = add("estimate", "memory / GPU-count estimate (sends only the requirements)", cmd_estimate)
     _req_flags(s)

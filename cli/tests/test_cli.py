@@ -495,6 +495,42 @@ def test_recommendation_shows_multi_gpu_performance():
     assert "[higher_performance, scale-up]" in t
 
 
+def test_analyze_json_is_compact_by_default():
+    from opengrid_cli import cli
+    reason = "Python file whose name does not suggest training/serving code"
+    d = {"root": "/p", "requirements": {"workload_type": "training", "evidence": [{"field": "f", "value": 1}]},
+         "files_inspected": [{"path": f"t{i}.py", "bytes": 1, "reason": "training script"} for i in range(9)],
+         "files_skipped": [{"path": ".env", "reason": "secret or credential file (never read)"}]
+                          + [{"path": f"m{i}.py", "reason": reason} for i in range(40)],
+         "signals": [{"kind": "framework", "value": "pytorch", "source": f"a.py:{i}"} for i in range(30)]
+                    + [{"kind": "gpu_mentioned", "value": "H100", "source": "b.py:1"}],
+         "questions": [], "warnings": [], "analyzer_version": "1"}
+    c = cli.compact_analysis(d)
+    assert c["requirements"] == d["requirements"] and c["files_inspected"] == d["files_inspected"]  # all reads kept
+    assert c["files_skipped"][0]["path"] == ".env" and len(c["files_skipped"]) == 1 + cli.SKIP_EXAMPLES
+    assert [s["value"] for s in c["signals"]] == ["pytorch", "H100"] and c["signals"][0]["source"] == "a.py:0"
+    assert c["omitted"]["files_skipped"] == {reason: 40 - cli.SKIP_EXAMPLES} and c["omitted"]["signals"] == 29
+    assert "omitted" not in cli.compact_analysis({**d, "signals": [], "files_skipped": []})
+    plan = {"root": "/p", "would_read": [{"path": "a"}]}
+    assert cli.compact_analysis(plan) is plan  # a dry run is left alone
+    STUB.result = d
+    try:
+        code, out, _ = run_cli(["analyze", PROJECT, "--json"], MockAPI())
+        assert code == 0 and js(out)["data"]["omitted"]["signals"] == 29
+        assert max(len(line) for line in out.splitlines()) <= 200, "flat rows stay on one line"
+        assert '{"path": "t0.py", "bytes": 1, "reason": "training script"}' in out
+        code, out, _ = run_cli(["analyze", PROJECT, "--json", "--full"], MockAPI())
+        assert code == 0 and js(out)["data"] == d
+    finally:
+        STUB.result = None
+
+
+def test_pretty_json_round_trips():
+    from opengrid_cli import cli
+    v = {"a": [], "b": {}, "c": [1, [2, {"x": None}]], "d": {"k": "v" * 300}, "e": ["s" * 50] * 5, "f": 1.5}
+    assert json.loads(cli.pretty(v)) == v and json.loads(cli.pretty([])) == [] and cli.pretty("x") == '"x"'
+
+
 if __name__ == "__main__":
     os.chdir(PROJECT)
     run_tests([v for k, v in list(globals().items()) if k.startswith("test_") and callable(v)])

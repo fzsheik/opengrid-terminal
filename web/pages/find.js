@@ -47,7 +47,7 @@
     source: E("analyzer", "form", "assistant", "api"),
   });
   // `opengrid analyze <dir> --json` (§4): only `requirements` is ever sent
-  const ANALYZER_KEYS = ["root", "requirements", "files_inspected", "files_skipped", "signals", "questions", "warnings", "analyzer_version"];
+  const ANALYZER_KEYS = ["root", "requirements", "files_inspected", "files_skipped", "signals", "questions", "warnings", "analyzer_version", "omitted"];
   const MAX_PASTE = 64 * 1024;   // characters; the server's JSON body limit is 64 KB
   const MAX_ERRORS = 20;
 
@@ -114,6 +114,8 @@
     let obj;
     try { obj = JSON.parse(t); } catch (e) { return fail("Not valid JSON: " + String(e && e.message || e).slice(0, 160)); }
     if (!isPlain(obj)) return fail("Expected a JSON object ({ … })");
+    // `opengrid analyze . --json` prints the CLI envelope {ok, command, data}; the analyzer output is its data
+    if (obj.ok === true && obj.command === "analyze" && isPlain(obj.data) && Object.keys(obj).every(k => ["ok", "command", "data"].includes(k))) obj = obj.data;
     let req = obj, analyzer = null;
     const errors = [];
     if (Object.prototype.hasOwnProperty.call(obj, "requirements")) {
