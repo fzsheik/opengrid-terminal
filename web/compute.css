@@ -175,3 +175,4 @@
 /* one job: the status line, its tag and the Refresh button wrap on small screens */
 .pg-job .jb-bigline { flex-wrap: wrap; }
 .pg-job .jb-bigline .btn { margin-left: auto; }
+.fd-sum { font-size: var(--fs-sm); margin: 2px 0 4px; }

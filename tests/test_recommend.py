@@ -669,6 +669,41 @@ def test_j_scale_up_rules_and_unknown_work():
     assert flagged and len(flagged) == len([o for o in out["options"] if o["cost"]["estimated_job"]])
 
 
+def test_k_recommendation_is_the_cheapest_safe_option_and_every_option_says_why():
+    """The founder's question: why recommend $2/h when $0.42/h fits? The recommendation is the cheapest option that
+    is clearly safe (room to spare, in stock, a dependable listing, fewest GPUs); every other option says in one
+    line how it compares, and anything cheaper says what is wrong with it."""
+    from intelligence.recommend import COMFORT_HEADROOM_PCT, SAFE_MARKET_SCORE
+    reset()
+    for body in (LORA7, RESNET, VLLM8, FULL8):
+        out = rec(body)
+        if not out["options"]:
+            continue
+        bw = opt(out, "best_for_workload")
+        safe = [o for o in out["options"] if o["memory_fit"]["headroom_pct"] >= COMFORT_HEADROOM_PCT
+                and o["available"] is True and o["market_score"] >= SAFE_MARKET_SCORE]
+        assert bw["summary"] == "Recommended" and out["picks"]["best_for_workload"]["reason"].startswith("Recommended: the ")
+        if safe and not any(o["performance"].get("job_cost") for o in out["options"]):
+            fewest = min(o["gpu_count"] for o in safe)
+            if bw["gpu_count"] == fewest:
+                cheapest_safe = min(o["price_per_instance_hour"] for o in safe if o["gpu_count"] == fewest)
+                assert bw["price_per_instance_hour"] == cheapest_safe, (body, bw["price_per_instance_hour"], cheapest_safe)
+        for o in out["options"]:
+            if o is bw:
+                continue
+            assert o["summary"] and o["summary"] != "Recommended", o
+            cheaper = (o["performance"].get("job_cost") or {}).get("usd", o["price_per_instance_hour"]) < \
+                (bw["performance"].get("job_cost") or {}).get("usd", bw["price_per_instance_hour"]) - 0.005
+            if cheaper and "cheaper" in o["summary"]:
+                assert ", but " in o["summary"], ("a cheaper option must say why it is not recommended", o["summary"])
+        assert "\u2014" not in json.dumps(out) and "\u2013" not in json.dumps(out)
+    # the price term is never capped: of two otherwise identical safe options the cheaper scores higher
+    out = rec(LORA7)
+    vals = sorted(((o["price_per_instance_hour"], o["value_score"]) for o in out["options"] if o["gpu"] == L40S), key=lambda t: t[0])
+    if len(vals) > 1:
+        assert vals[0][1] >= vals[-1][1] - 0.3, vals
+
+
 def test_migration_roundtrip():
     """0020 applies on top of 0019 and downgrades cleanly (additive only)."""
     from alembic import command

@@ -550,7 +550,7 @@
     checkRequirements, validatePaste, prune, modelFromText, formErrors, requirementsFromForm, stateFromQuery, queryFromState,
     applyAnswers, answersFromQuery, answersToQuery, controlFor, leafSpec,
     pickCards, readiness, availability, memoryFit, fmtGb, runtimeInfo, componentRows, tiersOf, noGpu, costLines, gpuHref, routeHref,
-    JOB_PICK, perfInfo, hoursText, tokensFromText,
+    JOB_PICK, perfInfo, hoursText, tokensFromText, summaryOf,
     questionsOf, noExecutableReason, optionById, heroOf, alternativesOf, budgetHelp, runStatus, runtimeFact, isTraining };
 
   if (typeof OG.page !== "function" || typeof document === "undefined") return;   // node tests: pure part only
@@ -648,6 +648,7 @@
         opts.hideTier || !tier ? null : OG.badge(tier[1], "", tier[2])),
       h("div", { class: "fd-card-p" }, OG.logo(o.provider, 16), h("a", { class: "lnk", href: "/provider/" + encodeURIComponent(o.provider || "") }, o.provider_display || OG.providerName(o.provider)),
         o.region ? h("span", { class: "dim" }, "· " + o.region) : null),
+      summaryOf(o) ? h("div", { class: "fd-sum dim" }, summaryOf(o)) : null,
       h("div", { class: "fd-px" },
         OG.kindBadge(o.price_kind === "observed" || !o.price_kind ? "observed" : o.price_kind),
         h("b", { class: "mono fd-price" }, perH(o.price_per_gpu_hour)),
@@ -761,6 +762,9 @@
         h("a", { class: "btn pri", href: gpuHref(o) }, "View prices for this GPU"),
         routeLink(o, opts.signedIn)));
   }
+  // The server's one line comparing an option with the recommended one ("$0.12/h more, with no advantage..."); never
+  // shown on the recommended option itself.
+  function summaryOf(o) { return o && typeof o.summary === "string" && o.summary && o.summary !== "Recommended" ? o.summary : null; }
   function altRow(a, e) {
     const o = a.option, f = memoryFit(o, e), rs = runStatus(o), jc = perfInfo(o).jobCost;
     return h("div", { class: "cx-alt" },
@@ -773,7 +777,8 @@
         rs.tone === "good" ? h("span", { class: "up", title: rs.detail }, "OpenGrid can run this") : null),
       h("div", { class: "cx-alt-r" }, h("b", {}, perH(o.price_per_gpu_hour)),
         jc ? h("div", { class: "dim", title: "Estimated whole-job cost: theoretical runtime x observed price" }, "≈ " + jc.text + " for the job")
-          : o.gpu_count > 1 && finite(o.price_per_instance_hour) ? h("div", { class: "dim" }, `${usd(o.price_per_instance_hour)}/h total`) : null));
+          : o.gpu_count > 1 && finite(o.price_per_instance_hour) ? h("div", { class: "dim" }, `${usd(o.price_per_instance_hour)}/h total`) : null),
+      summaryOf(o) ? h("div", { class: "cx-alt-x" }, summaryOf(o)) : null);
   }
   function budgetBlock(bh, opts) {
     const limit = bh.by_price && bh.by_budget ? "your max price and budget" : bh.by_price ? "your max price per GPU-hour" : "your budget";
