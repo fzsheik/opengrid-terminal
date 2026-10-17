@@ -290,6 +290,48 @@ def test_weight_validation():
             raise AssertionError(f"{kw} should be rejected")
 
 
+def test_reliability_weighs_in_once_scored():
+    """No provider has enough launches: reliability is weight 0 (rankings exactly as before). Once one does,
+    BALANCED / FASTEST / MOST_STABLE weigh it, interruptions lower the score, and an unproven provider is a
+    neutral, labelled 0.5."""
+    from routing import reliability
+
+    def deps(provider, n, interrupted):
+        t = NOW - timedelta(days=1)
+        return [{"provider": provider, "deployment_id": f"{provider}-{i}", "status": "terminated",
+                 "termination_reason": None, "interruptions": 1 if i < interrupted else 0,
+                 "events": [{"at": t, "to_status": "running"}], "attempts": [{"started_at": t, "ok": True}]}
+                for i in range(n)]
+
+    before = scoring.rank_listings(G, mode="BALANCED", now=NOW)
+    assert before["weights"]["reliability"] == 0 and "reliability" in before["not_used"]
+    real_load = reliability.load
+    reliability.load = lambda **kw: deps("syn_cheap", 10, 0) + deps("syn_stable", 10, 5) + deps("syn_mid", 3, 0)
+    scoring.reliability_scores.cache_clear()
+    try:
+        r = scoring.rank_listings(G, mode="BALANCED", now=NOW)
+        assert abs(r["weights"]["reliability"] - 0.10 / 1.10) < 1e-4 and "reliability" not in r["not_used"], r["weights"]
+        by = {c["provider"]: c for c in r["candidates"]}
+        assert by["syn_cheap"]["factors"]["reliability"]["value"] == 1.0
+        assert by["syn_stable"]["factors"]["reliability"]["value"] == 0.5, "5 of 10 runs interrupted"
+        mid = by["syn_mid"]["factors"]["reliability"]
+        assert mid["value"] is None and "unproven (3 OpenGrid launches, need 10)" in mid["note"] and \
+            by["syn_mid"]["factors"]["reliability"]["imputed"], mid
+        assert "reliability 100/100 over 10 OpenGrid launches" in by["syn_cheap"]["explanation"]
+        for c in r["candidates"]:
+            assert abs(c["score"] - sum(f["contribution"] for f in c["factors"].values())) < 1e-3
+        old = {c["provider"]: c["score"] for c in before["candidates"]}
+        assert by["syn_cheap"]["score"] - by["syn_stable"]["score"] > old["syn_cheap"] - old["syn_stable"]
+        assert scoring.rank_listings(G, mode="CHEAPEST", now=NOW)["weights"]["reliability"] == 0
+        assert scoring.rank_listings(G, mode="MOST_STABLE", now=NOW)["weights"]["reliability"] > 0
+        u = scoring.rank_listings(G, mode="USER_DEFINED", weights={"reliability": 1}, now=NOW)
+        assert u["candidates"][0]["provider"] == "syn_cheap" and u["weights"]["reliability"] == 1.0
+    finally:
+        reliability.load = real_load
+        scoring.reliability_scores.cache_clear()
+    assert scoring.rank_listings(G, mode="BALANCED", now=NOW)["weights"]["reliability"] == 0
+
+
 def test_thin_history_is_neutral_not_invented():
     scoring.history.cache_clear()
     with normalize.SessionLocal.begin() as s:

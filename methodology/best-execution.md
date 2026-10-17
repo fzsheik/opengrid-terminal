@@ -52,7 +52,7 @@ Each factor is normalized to 0..1.
 | `availability_persistence` | derived | Share of hourly samples in the last 30 days (from `market_hourly`) in which this provider had at least one priced, not-sold-out listing for this GPU. Denominator: hours from when OpenGrid first recorded the provider for this GPU (or 30 days ago, if later) to the newest rollup hour; an hour with no rollup row means no live listing and counts as unavailable. 7-day share is reported alongside. Per provider, collapsed over regions. Unknown-stock listings count as "priced availability". |
 | `price_stability` | derived | `clamp(1 − CV / 0.25)` where CV is the coefficient of variation (population stdev / mean) of the provider's hourly lowest price over 30 days. |
 | `integration_level` | registry | OpenGrid adapter level / 3 (`routing/capabilities.py`): can OpenGrid actually provision there? |
-| `reliability` | n/a | **No data, not used.** Weight 0, value null. |
+| `reliability` | transaction | The provider's reliability score / 100 (`methodology/reliability.md`): launch success × (1 − unexpected-termination share) × termination success, from OpenGrid's own customer launches. A provider below `reliability_min_samples` (10) launches has no score: null, imputed 0.5 when weighted, note "reliability unproven". |
 | `performance` | n/a | **No data, not used.** Weight 0, value null. |
 
 **Thin history.** Persistence and stability need at least 24 hourly samples. With less, the value is
@@ -60,9 +60,14 @@ null and the note says "insufficient". If a mode gives that factor weight, it sc
 and is flagged `imputed: true`, never an invented number. Locally, history is hours deep, so expect
 these factors to be imputed; production has weeks.
 
-**Reliability and performance** will be computed only from OpenGrid's own transaction records
-(`execution_records`: provisioning success, latency, uptime, interruptions) once enough exist. Until
-then they are listed with weight 0 and cannot be weighted by users (a non-zero weight is rejected).
+**Reliability** comes only from OpenGrid's own launches, never provider marketing. It is weighted only
+once **at least one** provider has a score; until then it has weight 0 in every mode, `not_used` lists
+it, a user weight on it is rejected, and rankings are exactly what they were without it. Once active it
+is added (before normalization) at 0.10 in `FASTEST_AVAILABLE` and `BALANCED` and 0.20 in `MOST_STABLE`;
+`CHEAPEST` stays price-only. Every ranking in a period uses the same weights (the switch is global, not
+per GPU), so merged family rankings stay comparable. A provider without a score scores a neutral 0.5:
+a proven provider above 50/100 ranks ahead of an unproven one, one with frequent interruptions behind it.
+Scores are cached for 5 minutes. **Performance** has no data yet: weight 0, cannot be weighted.
 
 ## Modes and weights
 
@@ -72,13 +77,13 @@ Weights are normalized to sum to 1. When a region group is requested, `region_ma
 | Mode | Weights | Order |
 |---|---|---|
 | `CHEAPEST` | price 1.0 | Lowest price; ties by freshness. |
-| `FASTEST_AVAILABLE` | availability_now .35, integration_level .30, freshness .20, availability_persistence .10, price .05 | Score. |
-| `BALANCED` (default) | price .40, availability_now .20, price_stability .15, availability_persistence .15, freshness .05, integration_level .05 | Score. |
-| `MOST_STABLE` | availability_persistence .45, price_stability .25, availability_now .15, price .10, freshness .05 | Score. |
+| `FASTEST_AVAILABLE` | availability_now .35, integration_level .30, freshness .20, availability_persistence .10, price .05 (+ reliability .10 once active) | Score. |
+| `BALANCED` (default) | price .40, availability_now .20, price_stability .15, availability_persistence .15, freshness .05, integration_level .05 (+ reliability .10 once active) | Score. |
+| `MOST_STABLE` | availability_persistence .45, price_stability .25, availability_now .15, price .10, freshness .05 (+ reliability .20 once active) | Score. |
 | `USER_DEFINED` | from the request's `weights` | Score. |
 
 `USER_DEFINED` validation: keys must be factor names; values finite and ≥ 0; not all zero;
-`reliability` / `performance` must be 0; `region_match` needs a region. `weights` with any other mode
+`performance` must be 0, and `reliability` too until it is active; `region_match` needs a region. `weights` with any other mode
 is rejected. Ties in score are broken by lower price, then fresher data. A complete tie (same price and
 data age; for CHEAPEST, same price and age) resolves to the alphabetically first provider, then listing id,
 so the same market always produces the same decision (tests/test_routing_benchmark.py).
@@ -97,6 +102,6 @@ A factor counts as stronger/weaker when its normalized value differs by at least
 
 - Candidate prices are **observed market prices** (OpenGrid's normalized reading of list prices). A
   **quote** exists only for a specific route; an **execution price** only once a deployment runs.
-- No reliability, uptime-SLA or benchmark performance data is used.
+- No provider uptime SLA or benchmark performance data is used; reliability is OpenGrid's own record only.
 - The ranking does not imply OpenGrid can provision a candidate; `provisionable` and
   `integration_level` say whether it can.

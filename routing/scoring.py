@@ -17,7 +17,12 @@ Each factor is normalized to 0..1 and reported with its raw value and data kind:
     availability_persistence  inferred   share of hours (30d) with priced availability, market_hourly
     price_stability           inferred   1 - CV(30d hourly lowest price)/0.25, clamped
     integration_level         registry   OpenGrid adapter level / 3 (can OpenGrid provision it?)
-    reliability, performance  no data -- not used (weight 0, value null) until transaction records exist
+    reliability               transaction  the provider's reliability score / 100 from OpenGrid's own launches
+                              (routing/reliability.py: launch success x (1 - unexpected terminations) x
+                              termination success). Weighted only once at least one provider has a score
+                              (>= reliability_min_samples launches); until then weight 0, exactly as before.
+                              A provider without a score is imputed neutral 0.5 and says so.
+    performance               no data -- not used (weight 0, value null) until benchmark records exist
 
 A factor with weight but no value (thin history) scores a neutral 0.5 and says so ("imputed").
 See methodology/best-execution.md.
@@ -42,7 +47,7 @@ METHODOLOGY_VERSION = "routing-1.0"
 MODES = ("CHEAPEST", "FASTEST_AVAILABLE", "BALANCED", "MOST_STABLE", "USER_DEFINED")
 FACTORS = ("price", "availability_now", "region_match", "freshness", "availability_persistence",
            "price_stability", "integration_level", "reliability", "performance")
-NO_DATA = ("reliability", "performance")
+NO_DATA = ("performance",)
 LABEL = {
     "price": "price", "availability_now": "availability now", "region_match": "region match",
     "freshness": "data freshness", "availability_persistence": "availability history",
@@ -58,6 +63,8 @@ MODE_WEIGHTS = {
     "MOST_STABLE": {"availability_persistence": 0.45, "price_stability": 0.25, "availability_now": 0.15,
                     "price": 0.10, "freshness": 0.05},
 }
+# Added (before normalization) once any provider has a reliability score. CHEAPEST stays price-only.
+RELIABILITY_WEIGHTS = {"FASTEST_AVAILABLE": 0.10, "BALANCED": 0.10, "MOST_STABLE": 0.20}
 REGION_WEIGHT = 0.10
 MIN_HISTORY_HOURS = 24
 CV_ZERO = 0.25          # a 25% coefficient of variation scores 0 stability
@@ -71,6 +78,35 @@ class ScoringError(ValueError):
 # --------------------------------------------------------------------------
 # Weights
 # --------------------------------------------------------------------------
+
+@ttl_cache(300)
+def reliability_scores() -> dict:
+    """{provider: {"value": 0..1 or None, "n", "status"}} from OpenGrid's own launches (customer, not validation)."""
+    from routing import reliability
+    try:
+        provs = reliability.compute(reliability.load())
+    except Exception:  # noqa: BLE001 - reliability data must never break routing; it is then simply not used
+        return {}
+    return {p: {"value": None if m["score"]["value"] is None else round(m["score"]["value"] / 100, 4),
+                "n": m["score"]["n"], "status": m["score"]["status"]} for p, m in provs.items()}
+
+
+def reliability_active() -> bool:
+    """True once at least one provider has a reliability score: only then does the factor carry weight."""
+    return any(v["value"] is not None for v in reliability_scores().values())
+
+
+def not_used() -> dict:
+    out = {f: "no data: OpenGrid has no execution history for this yet" for f in NO_DATA}
+    if not reliability_active():
+        out["reliability"] = f"no data: no provider has {_min_samples()}+ OpenGrid launches yet"
+    return out
+
+
+def _min_samples() -> int:
+    from routing import reliability
+    return reliability.min_samples()
+
 
 def validate_weights(weights: dict) -> dict:
     """User weights -> normalized weights over FACTORS. Raises ScoringError with the reason."""
@@ -86,7 +122,7 @@ def validate_weights(weights: dict) -> dict:
             raise ScoringError(f"weight for {k!r} must be a number")
         if not math.isfinite(v) or v < 0:
             raise ScoringError(f"weight for {k!r} must be a finite number >= 0")
-        if k in NO_DATA and v > 0:
+        if v > 0 and (k in NO_DATA or (k == "reliability" and not reliability_active())):
             raise ScoringError(f"{k!r} has no data yet (no execution history) and cannot be weighted")
         out[k] = v
     total = sum(out.values())
@@ -106,6 +142,8 @@ def effective_weights(mode: str, weights: dict | None, region_requested: bool) -
         raise ScoringError("weights are only accepted with mode USER_DEFINED")
     else:
         base = dict(MODE_WEIGHTS[mode])
+        if mode in RELIABILITY_WEIGHTS and reliability_active():
+            base["reliability"] = RELIABILITY_WEIGHTS[mode]
         if region_requested and mode != "CHEAPEST":
             base["region_match"] = REGION_WEIGHT
     if not region_requested:
@@ -311,9 +349,22 @@ def factors(row: dict, *, median: float, hist: dict, want_group: str | None, now
     out["integration_level"] = _factor(lvl / 3, {"level": lvl}, "registry",
                                        f"OpenGrid can provision via API (level {lvl})" if lvl >= 2
                                        else "market data only: OpenGrid cannot provision here")
+    out["reliability"] = _reliability_factor(row["provider"])
     for f in NO_DATA:
         out[f] = _factor(None, None, None, "no data: not used")
     return out
+
+
+def _reliability_factor(provider: str) -> dict:
+    if not reliability_active():
+        return _factor(None, None, None, "no data: not used")
+    r = reliability_scores().get(provider)
+    if r is None or r["value"] is None:
+        n = r["n"] if r else 0
+        return _factor(None, {"n": n, "min_samples": _min_samples()}, "transaction",
+                       f"reliability unproven ({n} OpenGrid launch{'es' if n != 1 else ''}, need {_min_samples()})")
+    return _factor(r["value"], {"score": round(r["value"] * 100, 1), "n": r["n"]}, "transaction",
+                   f"reliability {r['value'] * 100:.0f}/100 over {r['n']} OpenGrid launches")
 
 
 def score(fs: dict, weights: dict) -> float:
@@ -342,6 +393,8 @@ def explanation(c: dict) -> str:
     if fs["price_stability"]["value"] is not None:
         parts.append(fs["price_stability"]["note"])
     parts.append(fs["integration_level"]["note"])
+    if fs["reliability"]["weight"]:
+        parts.append(fs["reliability"]["note"])
     return "; ".join(parts)
 
 
@@ -353,7 +406,7 @@ def versus(alt: dict, top: dict) -> str:
              f"+{pct:.0%} more expensive" if pct > 0 else f"{abs(pct):.0%} cheaper")
     better, worse = [], []
     for name in ("availability_now", "availability_persistence", "price_stability", "freshness",
-                 "integration_level", "region_match"):
+                 "integration_level", "region_match", "reliability"):
         a, t = alt["factors"][name]["value"], top["factors"][name]["value"]
         if a is None or t is None:
             continue
@@ -542,7 +595,7 @@ def rank_listings(gpu: str, *, count: int = 1, region_group: str | None = None, 
         "multi_instance_alternatives": multis[:limit],
         "exclusions_total": len(exclusions), "exclusions_by_code": by_code,
         "exclusions": exclusions[:MAX_EXCLUSIONS],
-        "not_used": {f: "no data: OpenGrid has no execution history for this yet" for f in NO_DATA},
+        "not_used": not_used(),
     }
 
 

@@ -18,7 +18,7 @@
   const MODES = [
     ["CHEAPEST", "Cheapest", "Lowest observed price wins; no other factor counts"],
     ["FASTEST_AVAILABLE", "Soonest available", "Availability now, OpenGrid integration and freshness first (not a speed claim)"],
-    ["BALANCED", "Balanced", "Price 40%, availability 20%, stability 15%, availability history 15%, freshness, integration"],
+    ["BALANCED", "Balanced", "Price 40%, availability 20%, stability 15%, availability history 15%, freshness, integration, and reliability once providers have a track record"],
     ["MOST_STABLE", "Most stable", "Availability history and price stability first"],
     ["USER_DEFINED", "Custom", "Your own weights over the factors that have data"],
   ];
@@ -30,10 +30,12 @@
     { key: "availability_persistence", label: "Availability history", short: "hist", color: "#f5a524", kind: "inferred" },
     { key: "price_stability", label: "Price stability", short: "stab", color: "#e0729e", kind: "inferred" },
     { key: "integration_level", label: "OpenGrid integration", short: "integ", color: "#4fc3d0", kind: "registry" },
-    { key: "reliability", label: "Reliability", short: "rel", color: "#555", kind: null, nodata: true },
+    { key: "reliability", label: "Reliability", short: "rel", color: "#91c61d", kind: "transaction", nodata: true },
     { key: "performance", label: "Performance", short: "perf", color: "#555", kind: null, nodata: true },
   ];
   const FACTOR = Object.fromEntries(FACTORS.map(f => [f.key, f]));
+  // Reliability is weighted once any provider has enough OpenGrid launches; the server says so via not_used.
+  const syncNoData = d => { if (d && d.not_used) FACTOR.reliability.nodata = "reliability" in d.not_used; };
   const BALANCED_W = { price: 40, availability_now: 20, price_stability: 15, availability_persistence: 15, freshness: 5, integration_level: 5, region_match: 10 };
   const LEVEL = { 0: "market data only", 1: "availability check", 2: "provisioning", 3: "full lifecycle" };
   const EXCL = {
@@ -502,6 +504,7 @@
               h("div", { class: "cx-alt-r" }, h("b", {}, fmt.price(a.price_per_gpu_hour)), h("div", { class: "dim" }, "/GPU·h observed"))))) : null);
       }
       function renderPreview(d, meta) {
+        syncNoData(d);
         const kids = [];
         const req = [`${d.count}× ${OG.shortGpu(d.gpu)}`, d.region_group || "any region", st.lastBody.max_price_per_gpu_hour ? "≤ " + fmt.price(st.lastBody.max_price_per_gpu_hour) + "/GPU·h" : "no max",
           st.lastBody.duration_hours ? st.lastBody.duration_hours + " h" : st.lastBody.deadline_hours ? "deadline " + st.lastBody.deadline_hours + " h" : "open-ended", d.mode];
@@ -628,6 +631,7 @@
       }
 
       function renderRouted(r) {
+        syncNoData(r);
         if (r.status === "pending_approval" && r.deployment) {
           OG.qs.set({ rr: r.route_request_id });
           renderTicket({ rr: r.route_request_id, quote: r.quote, dep: r.deployment, reason: r.reason, request: st.routeBody || null,
