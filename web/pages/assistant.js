@@ -1,8 +1,10 @@
 /* The OpenGrid Assistant: a compact chat panel over POST /v1/assistant (api/assistant.py, contract §5).
 
-   OG.views.assistantPanel(el, {onRequirements, initial, compact}) -> {send(text), reset(), root}
-       Embeddable (the /find page mounts it when present). onRequirements(requirements, response) is called when a
-       reply carries a recommendation, so the host can fill its own form with the same WorkloadRequirements.
+   OG.views.assistantPanel(el, {requirements, onRequirements, initial, compact}) -> {send(text), reset(), root}
+       Embeddable (the /find page mounts it when present). requirements() is the host form's WorkloadRequirements: a
+       new conversation starts from it. onRequirements(requirements, response, recommendation) is called when a reply
+       carries a recommendation, so the host can fill its form and draw that recommendation; returning {ok: false,
+       errors} makes the reply say the form could not take it.
    OG.page("/assistant")  the same panel on its own page (?q= asks a first question).
 
    The browser talks only to this server (CSP connect-src 'self'); the server answers from OpenGrid's live market
@@ -11,7 +13,7 @@
 
    The engine (deterministic, or a model when one is configured) is not shown to people; it stays on the reply's
    data-engine attribute for debugging. A reply the server did not understand brings the example questions back.
-   Actions and route previews say when they need sign-in (the only browser sign-in is the operator's).
+   Actions and route previews say when they need an OpenGrid account (customers have no browser sign-in).
 
    Pure helpers on OG.assistant (tested by tests/test_web_assistant.js and tests/test_web_developers.js): cardKind,
    recView, optionLinks, findHref, priceRows, compareRows, contextRows, questionButtons, safeHref, boundContext,
@@ -31,17 +33,19 @@
   ];
   const MAX_MESSAGE = 2000, MAX_CONTEXT = 8000;
   const PICKS = [["cheapest_market", "Cheapest that fits"], ["best_for_workload", "Best for this workload"], ["best_executable", "Launchable through OpenGrid"]];
+  // The fourth answer, only when the server returned it (training with a known data size): theoretical runtime x price.
+  const JOB_PICK = ["lowest_estimated_job_cost", "Lowest cost for the whole job"];
   const KINDS = { recommendation: "recommendation", gpu_prices: "prices", compare: "compare", specs: "specs", market_context: "context", questions: "questions", link: "link",
     action: "action", jobs: "jobs", job: "job", template: "template" };
   // What the assistant answers (assistant/intents.py INTENTS), as shown on /assistant: [title, what, example]
   const CAPABILITIES = [
     ["Cheapest GPU", "the cheapest fresh, in-stock listing of a GPU, per variant", "Cheapest available H100"],
-    ["Which GPU fits", "memory, GPU count and three picks for a training, fine-tuning or inference job", "What GPU should I use to fine-tune Llama 3 8B with LoRA?"],
+    ["Which GPU fits", "memory, GPU count and up to four answers for a training, fine-tuning or inference job", "What GPU should I use to fine-tune Llama 3 8B with LoRA?"],
     ["Within a budget", "whether a workload fits a budget, with cost scenarios", "Can I fine-tune a 13B model with QLoRA within $50?"],
     ["Compare GPUs", "specs and current prices side by side", "Compare H100 SXM and H200"],
     ["Specs", "vendor peak specs and the current market of one GPU", "Specs of the L40S"],
     ["Price moves", "recent moves and news in the same window (correlation, not causation)", "Why did H200 prices change?"],
-    ["Free demo and your jobs", "the simulated MNIST demo, your jobs, a cancel for you to confirm (needs sign-in)", "Try a free training demo"],
+    ["Free demo and your jobs", "the simulated MNIST demo, your jobs, a cancel for you to confirm (needs an OpenGrid account)", "Try a free training demo"],
   ];
   // Replies the server marks as not understood: show the examples again instead of a dead end.
   const isUnknown = r => !!r && (r.intent === "unknown" || r.intent == null && !(r.cards || []).length);
@@ -70,15 +74,22 @@
     if (pv) out.push({ label: "Route preview", href: pv });
     return out;
   }
+  // option.performance -> {runtime_h, runtime_range, job_usd, job_range} (theoretical, server-estimated) or null
+  function perfOf(o) {
+    const p = (o && o.performance) || {}, rt = p.runtime || {}, jc = p.job_cost || {};
+    const pair = a => (Array.isArray(a) && a.length === 2 && a.every(Number.isFinite) ? a : null);
+    if (rt.known !== true || !Number.isFinite(rt.hours)) return null;
+    return { runtime_h: rt.hours, runtime_range: pair(rt.range_hours), job_usd: Number.isFinite(jc.usd) ? jc.usd : null, job_range: pair(jc.range_usd) };
+  }
   function recView(rec) {
     rec = rec || {};
     const est = rec.estimate || {}, mem = est.memory || {};
     const opts = Array.isArray(rec.options) ? rec.options : [];
     const byId = new Map(opts.map(o => [o.option_id, o]));
-    const picks = PICKS.map(([key, label]) => {
+    const picks = PICKS.concat(rec.picks && rec.picks[JOB_PICK[0]] ? [JOB_PICK] : []).map(([key, label]) => {
       const ref = rec.picks && rec.picks[key];
       const option = ref && byId.get(ref.option_id) || null;
-      return { key, label, option, reason: (ref && ref.reason) || null };
+      return { key, label, option, reason: (ref && ref.reason) || null, perf: option ? perfOf(option) : null };
     });
     return {
       needsGpu: est.needs_gpu, needsGpuReason: est.needs_gpu_reason || null,
@@ -140,7 +151,13 @@
         created_at: j.created_at || null, cancellable: j.cancellable === true, href: "/jobs/" + encodeURIComponent(String(j.job_id)) };
     });
   }
-  OG.assistant = { EXAMPLES, MAX_MESSAGE, PICKS, ACTIONS, CAPABILITIES, isUnknown, safeHref, cardKind, kindOf, findHref, optionLinks, recView, priceRows, compareRows, contextRows, questionButtons, boundContext, actionView, jobItems };
+  // The form's requirements -> a context to start a conversation from (null when there is nothing to carry over).
+  function seedContext(req) {
+    if (!req || typeof req !== "object" || Array.isArray(req)) return null;
+    if (!Object.keys(req).some(k => k !== "source")) return null;
+    return boundContext({ requirements: req, pending: null, asked: [] });
+  }
+  OG.assistant = { EXAMPLES, MAX_MESSAGE, PICKS, JOB_PICK, ACTIONS, perfOf, seedContext, CAPABILITIES, isUnknown, safeHref, cardKind, kindOf, findHref, optionLinks, recView, priceRows, compareRows, contextRows, questionButtons, boundContext, actionView, jobItems };
 
   if (typeof OG.page !== "function" || typeof document === "undefined" || !OG.h) return;   // node tests: pure part only
 
@@ -156,6 +173,12 @@
     const v = recView(data);
     if (v.needsGpu === false) return h("div", { class: "ag-card" }, h("b", {}, "No GPU needed"), " ", v.needsGpuReason || "", " ", badge("estimated"));
     const signedIn = !!(hooks && hooks.signedIn);
+    const memLine = v.memory ? h("div", { class: "ag-mem" }, "Needs about ", h("b", {}, num(v.memory.gb), " GB"), " of GPU memory", v.gpuCount > 1 ? ` across ${v.gpuCount} GPUs` : "",
+      v.memory.confidence ? h("span", { class: "dim" }, ` · ${v.memory.confidence} confidence `) : " ", badge("estimated")) : null;
+    // On Find Compute the page itself draws this recommendation in full: the reply only says so (no second copy).
+    if (hooks && hooks.formFilled === true) return h("div", { class: "ag-card" }, memLine,
+      h("div", { class: "dim" }, "Find Compute's form and result now show this recommendation in full."));
+    const hrs = x => (x < 1 ? Math.max(1, Math.round(x * 60)) + " min" : (x < 10 ? x.toFixed(1) : String(Math.round(x))) + " h");
     const pick = p => h("div", { class: "dx-ag-pc" },
       h("span", { class: "dx-ag-pc-l" }, p.label),
       p.option ? [
@@ -164,11 +187,13 @@
         h("span", {}, h("span", { class: "dx-ag-pc-p" }, money(p.option.price_per_gpu_hour)), h("span", { class: "dim" }, " per GPU-hour "), badge(p.option.price_kind),
           p.option.fresh === false ? [" ", OG.badge("stale", "warn")] : null),
         p.option.memory_fit && p.option.memory_fit.headroom_pct != null ? h("span", { class: "dim" }, `fits in memory · ${num(Math.round(p.option.memory_fit.headroom_pct))}% headroom`) : null,
+        p.perf ? h("span", { class: "dim" }, `est. runtime ≈ ${hrs(p.perf.runtime_h)}`, p.perf.job_usd != null ? ` · whole job ≈ ${money(p.perf.job_usd)}` : "", " ", badge("estimated")) : null,
         p.reason ? h("span", { class: "dim ag-why" }, p.reason) : null,
         h("span", { class: "ag-links" }, optionLinks(p.option).map(l => l.label === "Route preview" && !signedIn
-          ? h("a", { class: "btn sm", href: safeHref(l.href), title: "Route previews need the operator sign-in on this site, or an API key with route:preview" }, "Route preview (sign-in)")
+          ? h("a", { class: "btn sm", href: safeHref(l.href), title: "Route previews need an OpenGrid account (invite-only for now)" }, h("i", { class: "lock", "aria-hidden": "true" }), " Route preview")
           : lnk(l, "btn sm")))]
         : h("span", { class: "dim" }, p.key === "best_executable" ? "Nothing OpenGrid can launch for this workload today." : "Nothing available right now."));
+    const anyRuntime = v.picks.some(p => p.perf);
     const top = v.top.length ? tbl([
       { key: "gpu", label: "GPU", fmt: (x, r) => gpuA(r.gpu, r.gpu_slug) },
       { key: "provider_display", label: "Provider", fmt: (x, r) => x || r.provider },
@@ -177,13 +202,13 @@
       { key: "fit", label: "Fits in memory", value: r => r.memory_fit ? (r.memory_fit.fits ? "yes" : "no") : null },
       { key: "exec", label: "Launch via OpenGrid", value: r => r.execution ? (r.execution.executable ? "yes" : "not yet") : null },
     ], v.top) : null;
-    return h("div", { class: "ag-card" },
-      v.memory ? h("div", { class: "ag-mem" }, "Needs about ", h("b", {}, num(v.memory.gb), " GB"), " of GPU memory", v.gpuCount > 1 ? ` across ${v.gpuCount} GPUs` : "",
-        v.memory.confidence ? h("span", { class: "dim" }, ` · ${v.memory.confidence} confidence `) : " ", badge("estimated")) : null,
-      h("div", { class: "dx-ag-pick" }, v.picks.map(pick)), top,
+    return h("div", { class: "ag-card" }, memLine,
+      h("div", { class: "dx-ag-pick" }, v.picks.map(pick)),
+      top ? h("details", { class: "ag-more" }, h("summary", {}, `Top ${v.top.length} options`), top) : null,
       v.notes.length ? h("ul", { class: "ag-notes" }, v.notes.map(n => h("li", {}, String(n)))) : null,
-      h("div", { class: "dx-ag-legend" }, "Memory and cost are estimates; prices are observed provider listings, not quotes; runtime is unknown without a benchmark."),
-      hooks && hooks.fillsForm ? null : h("div", { class: "ag-links" }, h("a", { class: "btn sm pri", href: findHref(ctx && ctx.requirements) }, "Open in Find Compute →")));
+      h("div", { class: "dx-ag-legend" }, "Prices are observed provider listings, not quotes. Memory and cost are estimates",
+        anyRuntime ? "; runtimes are theoretical, not benchmarks." : "."),
+      h("div", { class: "ag-links" }, h("a", { class: "btn sm pri", href: findHref(ctx && ctx.requirements) }, "Open in Find Compute →")));
   }
   // template card ("run on a real GPU"): what the one allowlisted template is and its hard limits
   function templateCard(d) {
@@ -195,7 +220,7 @@
         h("li", {}, "Only this allowlisted template runs; your own code, containers and datasets are not accepted."),
         h("li", {}, "Every launch is approved by the OpenGrid operator first."),
         Number.isFinite(lim.max_total_cost_usd) ? h("li", {}, `Hard caps: at most ${money(lim.max_total_cost_usd)} in total, ${num(lim.max_runtime_minutes)} minutes, ${money(lim.max_price_per_gpu_hour_usd)} per GPU-hour.`) : null,
-        Array.isArray(rt.default_band_minutes) && rt.default_band_minutes.length === 2 ? h("li", {}, `Expected runtime ${rt.default_band_minutes[0]}–${rt.default_band_minutes[1]} minutes `, badge("estimated")) : null));
+        Array.isArray(rt.default_band_minutes) && rt.default_band_minutes.length === 2 ? h("li", {}, `Expected runtime ${rt.default_band_minutes[0]} to ${rt.default_band_minutes[1]} minutes `, badge("estimated")) : null));
   }
   function pricesCard(data) {
     const rows = priceRows(data);
@@ -265,13 +290,13 @@
         if (typeof hooks.onJobsChanged === "function") { try { hooks.onJobsChanged(); } catch (e) { console.error(e); } }
       } catch (e) {
         btn.disabled = false;
-        msgEl.replaceChildren(e && (e.status === 401 || e.status === 403) ? h("span", { class: "warn-t" }, "Starting or cancelling jobs on this website needs the operator sign-in. From your terminal or AI assistant it needs an API key with route:execute. ",
-            h("a", { class: "btn sm", href: OG.loginHref ? OG.loginHref() : "/login" }, "Sign in"), " ", h("a", { class: "lnk", href: "/developers#access" }, "How keys work →"))
+        msgEl.replaceChildren(e && (e.status === 401 || e.status === 403) ? h("span", { class: "warn-t" }, "Starting or cancelling jobs needs an OpenGrid account (invite-only for now). From your terminal or AI assistant it needs an API key from OpenGrid. ",
+            h("a", { class: "lnk", href: "/developers#access" }, "How keys work →"))
           : OG.error ? OG.error(e) : h("span", {}, "Something went wrong."));
       }
     });
     return h("div", { class: "ag-card ag-act" }, h("div", { class: "ag-act-r" }, btn, a.note ? h("span", { class: "dim" }, a.note) : null,
-      hooks.signedIn === false ? h("span", { class: "dx-ag-auth" }, "Needs sign-in") : null), msgEl);
+      hooks.signedIn === false ? h("span", { class: "dx-ag-auth" }, "Needs an account") : null), msgEl);
   }
   function renderCard(card, ask, ctx, hooks) {
     const k = cardKind(card), d = card && card.data;
@@ -294,8 +319,9 @@
   OG.views.assistantPanel = (el, opts) => {
     opts = opts || {};
     let context = boundContext(opts.context || null), busy = false;
-    // signedIn: null until known; false makes action cards and route-preview links say they need sign-in
-    const hooks = { cancelIntent: {}, onJobsChanged: opts.onJobsChanged, signedIn: null, fillsForm: typeof opts.onRequirements === "function" };
+    // signedIn: null until known; false makes action cards and route-preview links say they need an account.
+    // formFilled: per reply, true once the host page took the recommendation (the card then stays short).
+    const hooks = { cancelIntent: {}, onJobsChanged: opts.onJobsChanged, signedIn: null, formFilled: null };
     if (typeof OG.me === "function") OG.me().then(me => { hooks.signedIn = !!me; }).catch(() => { hooks.signedIn = false; });
     const examples = Array.isArray(opts.examples) && opts.examples.length ? opts.examples : EXAMPLES;
     const log = h("div", { class: "ag-log", role: "log", "aria-live": "polite", "aria-relevant": "additions", "aria-label": "Conversation" });
@@ -328,20 +354,33 @@
       msg("user", text);
       const wait = msg("bot", OG.loading ? OG.loading("Thinking…") : "…");
       try {
+        // A new conversation starts from what the host page already knows (Find Compute's form), so a follow-up
+        // like "what about with QLoRA?" refines that workload instead of starting from nothing.
+        if (!context && typeof opts.requirements === "function") { try { context = seedContext(opts.requirements()); } catch (e) { context = null; } }
         const r = await OG.api("/v1/assistant", { method: "POST", body: { message: text, context: boundContext(context) } });
         context = boundContext(r.context);
         const links = (r.cards || []).filter(c => cardKind(c) === "link").map(c => lnk(c.data || {}, "btn sm")).filter(Boolean);
+        // Hand the requirements and the recommendation to the host first, so the card can say where the full
+        // answer is (or that the form could not take it).
+        const rec = (r.cards || []).find(c => cardKind(c) === "recommendation");
+        let handNote = null;
+        hooks.formFilled = null;
+        if (rec && typeof opts.onRequirements === "function" && r.context && r.context.requirements) {
+          try {
+            const res = opts.onRequirements(r.context.requirements, r, rec.data || null);
+            hooks.formFilled = !(res && res.ok === false);
+            if (!hooks.formFilled) handNote = h("div", { class: "ag-meta warn-t" }, "Find Compute's form could not take these requirements, so the form is unchanged",
+              res.errors && res.errors.length ? ": " + res.errors.slice(0, 2).join("; ") : ".");
+          } catch (e) { console.error(e); hooks.formFilled = false; }
+        }
         // the engine (deterministic or a model) is kept as a data attribute for debugging, not shown to people
         wait.dataset.engine = String(r.engine || "");
         wait.replaceChildren(h("p", { class: "ag-reply" }, r.reply),
           (r.cards || []).map(c => renderCard(c, ask, r.context, hooks)),
+          handNote,
           links.length ? h("div", { class: "ag-links" }, links) : null,
           r.grounded === false ? h("div", { class: "ag-meta dim" }, "Some wording above could not be matched to the data; rely on the figures in the cards.") : null);
         if (isUnknown(r)) { chips.hidden = false; showEx.hidden = true; }
-        const rec = (r.cards || []).find(c => cardKind(c) === "recommendation");
-        if (rec && typeof opts.onRequirements === "function" && r.context && r.context.requirements) {
-          try { opts.onRequirements(r.context.requirements, r); } catch (e) { console.error(e); }
-        }
       } catch (e) {
         wait.replaceChildren(e && e.status === 429 ? h("p", { class: "ag-reply" }, "Too many questions in a short time; wait a minute and try again.")
           : e && e.status === 422 ? h("p", { class: "ag-reply" }, "That question or conversation is too long. Start a new conversation.")
@@ -376,8 +415,8 @@
         h("div", { class: "box" }, h("h2", {}, "Reading the answers"), h("ul", {},
           h("li", {}, badge("observed"), " prices are what providers list now, not quotes."),
           h("li", {}, badge("estimated"), " memory, GPU count and cost scenarios come with their assumptions."),
-          h("li", {}, "Runtime is never guessed without a benchmark."),
-          h("li", {}, "Buttons that start or cancel jobs, and route previews, need sign-in."))));
+          h("li", {}, "Runtime is estimated only for training with a known data size, as a theoretical range, never a benchmark."),
+          h("li", {}, "Buttons that start or cancel jobs, and route previews, need an OpenGrid account (invite-only for now)."))));
     },
   });
 })();

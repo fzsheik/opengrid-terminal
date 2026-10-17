@@ -35,6 +35,21 @@ ok(A.recView(null).picks.every(p => p.option === null), "an empty recommendation
 const pickRef = A.recView({ picks: { cheapest_market: { option_id: "missing" } }, options: [] });
 ok(pickRef.picks[0].option === null, "a pick pointing at an unknown option is not shown");
 
+// the fourth answer and per-option theoretical runtime / job cost
+const rec4 = JSON.parse(JSON.stringify(rec));
+rec4.options[1].performance = { runtime: { known: true, hours: 5.5, range_hours: [3.7, 10.6] }, job_cost: { usd: 27.2, range_usd: [18, 52] } };
+rec4.picks.lowest_estimated_job_cost = { option_id: "o2", reason: "lowest estimated cost for the whole job" };
+const v4 = A.recView(rec4);
+eq(v4.picks.map(p => p.key), ["cheapest_market", "best_for_workload", "best_executable", "lowest_estimated_job_cost"], "the whole-job pick is a fourth answer when the server returned it");
+eq([v4.picks[3].perf.runtime_h, v4.picks[3].perf.job_usd], [5.5, 27.2], "per-pick theoretical runtime and job cost come from option.performance");
+ok(A.perfOf({ performance: { runtime: { known: false, hours: 3 } } }) === null && A.perfOf({}) === null, "no known runtime: no runtime shown (never invented)");
+// the form's requirements seed a new conversation
+eq(A.seedContext({ source: "form", workload_type: "fine_tuning", model: { parameters_b: 8 } }), { requirements: { source: "form", workload_type: "fine_tuning", model: { parameters_b: 8 } }, pending: null, asked: [] }, "form requirements become the starting context");
+ok(A.seedContext({ source: "form" }) === null && A.seedContext(null) === null, "an empty form starts a fresh conversation");
+const asrc = require("fs").readFileSync(require("path").join(__dirname, "..", "web", "pages", "assistant.js"), "utf8");
+ok(!/runtime is unknown without a benchmark|Runtime is never guessed/.test(asrc) && !/[–—]/.test(asrc), "legend matches theoretical runtimes; no en or em dashes");
+ok(!/loginHref|"Sign in"/.test(asrc), "no operator sign-in offered to customers in the panel");
+
 // ---------- links ----------
 eq(A.optionLinks(rec.options[0]), [{ label: "Market", href: "/gpu/l40s-48gb" }, { label: "Route preview", href: "/route?gpu=l40s-48gb&count=1" }], "option links: market + route preview");
 eq(A.optionLinks({ gpu: "NVIDIA H100 80GB SXM5", gpu_count: 2, execution: { route_preview_url: "javascript:alert(1)" } }).map(l => l.href),

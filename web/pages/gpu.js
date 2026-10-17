@@ -27,6 +27,9 @@ Nothing is computed here that the API does not state, except display arithmetic 
   const shortReason = r => !r ? null : /does not cover|insufficient history|not enough/i.test(r) ? "not enough history" : /not published/i.test(r) ? "not published" : /unavailable/i.test(r) ? "unavailable" : r.length > 28 ? r.slice(0, 26) + "…" : r;
   const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
   const ext = (href, label) => h("a", { class: "lnk", href, target: "_blank", rel: "external noopener" }, label);
+  // /route needs an account: the link says so (the lock hides once signed in)
+  const ACCT = "Needs an OpenGrid account (invite-only). Previews where this would run; nothing is rented without confirmation.";
+  const routeBtn = (href, label, cls) => h("a", { class: cls + " acct-lnk", href, title: ACCT }, h("i", { class: "lock acct-lock", "aria-hidden": "true" }), label);
 
   function section(id, title, right, ...kids) {
     return h("section", { class: "sec gp-sec", id: "gp-" + id, "data-sec": id },
@@ -87,6 +90,8 @@ Nothing is computed here that the API does not state, except display arithmetic 
       const hwBox = slot();
       const capBox = slot();
       const listingsBox = h("div", {});
+      // shown only once the GPU is known to have an index (an unindexed GPU would land on "Not found")
+      const idxBtn = h("a", { class: "btn", href: "/indices/" + slug, hidden: "" }, "Index");
 
       const winSeg = OG.seg(WINDOWS.map(w => [w[0], w[1]]), st.win, v => { st.win = v; OG.qs.set({ w: v === "7d" ? null : v }); loadChart(); loadTimeline(); });
       const viewSeg = OG.seg([["market", "Market", "low-high band, median, lowest, index"], ["providers", "Providers", "one step line per provider"]], st.view,
@@ -117,9 +122,9 @@ Nothing is computed here that the API does not state, except display arithmetic 
 
       el.append(
         OG.head(h("span", { class: "gpu-title" }, h("span", { class: "eyebrow" }, L.vendorOf(name)), short, hdrBadges, h("span", { class: "full" }, name)), null,
-          h("a", { class: "btn pri", href: "/route?gpu=" + slug, title: "Preview where this would run (no provisioning without confirmation)" }, "Route this →"),
+          routeBtn("/route?gpu=" + slug, "Route this →", "btn pri"),
           h("a", { class: "btn", href: "/compare?a=" + slug }, "Compare"),
-          h("a", { class: "btn", href: "/indices/" + slug }, "Index"),
+          idxBtn,
           h("a", { class: "btn", href: "/explorer?gpu=" + encodeURIComponent(name) }, "Listings")),
         quote, ctxLine, navEl, h("div", { class: "gp-grid" }, main, rail));
 
@@ -135,11 +140,12 @@ Nothing is computed here that the API does not state, except display arithmetic 
         const hw = g.hardware || {};
         hdrBadges.replaceChildren([hw.architecture, hw.vram_gb ? hw.vram_gb + " GB " + (hw.memory_type || "") : null, hw.form_factor, hw.workload_class].filter(Boolean).join(" · "));
         const ch = k => {
-          if (idx === undefined) return { label: k + " chg", value: null, reason: "loading" };
-          if (!idx) return { label: k + " chg", value: null, reason: "index unavailable" };
+          const label = "Index " + k;
+          if (idx === undefined) return { label, value: null, reason: "loading" };
+          if (!idx) return { label, value: null, reason: "index unavailable" };
           const c = (idx.changes || {})[k] || {};
-          return { label: k + " chg", value: c.pct == null ? null : OG.chg(c.pct), reason: c.reason || "no change data", sub: c.pct == null ? shortReason(c.reason) : "index",
-            title: c.pct == null ? c.reason : `index ${fmt.price(c.from_level)} at ${when(c.from_hour)} → ${fmt.price(idx.level)}` };
+          return { label, value: c.pct == null ? null : OG.chg(c.pct), reason: c.reason || "no change data", sub: c.pct == null ? shortReason(c.reason) : "index change",
+            title: c.pct == null ? c.reason : `${k} change of the OpenGrid index: ${fmt.price(c.from_level)} at ${when(c.from_hour)} → ${fmt.price(idx.level)}` };
         };
         const vol = idx && idx.volatility ? (idx.volatility["30d"] && idx.volatility["30d"].annualized != null ? ["30d", idx.volatility["30d"]] : ["7d", idx.volatility["7d"] || {}]) : null;
         const lowM = cx && cx.metrics && cx.metrics.lowest, hist = lowM && lowM.historical;
@@ -158,7 +164,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
           { label: "High", value: live ? fmt.price(m.high) : null, reason: "no priced providers", sub: live ? OG.providerName(m.by_provider[m.by_provider.length - 1].provider) : null },
           { label: "Spread", value: spread != null ? fmt.pct(spread) : null, reason: live ? "one provider: no spread" : "no priced providers", sub: spread != null ? fmt.price(m.stats.spread_abs) + " high − low" : null },
           { label: "Providers", value: String(m ? m.providers : 0), sub: "priced now" },
-          { label: "Available", value: m ? String(m.listings.available) : null, sub: m ? `${m.listings.availability_unknown} unkn. · ${m.listings.sold_out} out` : null, title: m ? `listings with explicit availability now; ${m.listings.availability_unknown} with availability unknown, ${m.listings.sold_out} sold out` : null },
+          { label: "Available", value: m ? String(m.listings.available) : null, sub: m ? `${m.listings.availability_unknown} unknown · ${m.listings.sold_out} sold out` : null, title: m ? `listings with explicit availability now; ${m.listings.availability_unknown} with availability unknown, ${m.listings.sold_out} sold out` : null },
           ch("24h"), ch("7d"), ch("30d"), ch("90d"),
           { label: "Volatility", value: vol && vol[1].annualized != null ? fmt.pct(vol[1].annualized) : null, reason: vol ? vol[1].reason : idx === undefined ? "loading" : "index unavailable", sub: vol && vol[1].annualized != null ? vol[0] + " annualized" : shortReason(vol ? vol[1].reason : "index unavailable") },
           { label: "Hist. low", value: hist && hist.low ? fmt.price(hist.low.value) : null, reason: cx === undefined ? "loading" : cx ? "no history" : "context endpoint unavailable", sub: hist && hist.low ? "of lowest · " + fmt.date(hist.low.hour) : null, title: hist ? `lowest market price recorded since ${when(hist.since)} (${hist.samples} hourly samples)` : null },
@@ -168,12 +174,13 @@ Nothing is computed here that the API does not state, except display arithmetic 
         ];
         // history-based cells (7d…90d change, volatility, historical range, percentile) that have no value yet are
         // folded into one line under the strip, instead of a row of n/a cells
-        const HIST = new Set(["7d chg", "30d chg", "90d chg", "Volatility", "Hist. low", "Hist. high", "Percentile"]);
+        const HIST = new Set(["Index 7d", "Index 30d", "Index 90d", "Volatility", "Hist. low", "Hist. high", "Percentile"]);
         const missing = cells.filter(c => HIST.has(c.label) && (c.value == null || c.value === ""));
         const loading = idx === undefined || cx === undefined;
         const shown = loading ? cells.filter(c => !HIST.has(c.label)) : cells.filter(c => !missing.includes(c));
         quote.replaceChildren(big, OG.stats(shown));
-        st.histMissing = loading ? null : missing.map(c => ({ label: c.label.replace(" chg", " change"), reason: c.reason || "unavailable" }));
+        idxBtn.hidden = !idx;
+        st.histMissing = loading ? null : missing.map(c => ({ label: c.label.replace(/^Index (\w+)$/, "index $1 change"), reason: c.reason || "unavailable" }));
         const sum = cx && cx.summaries && cx.summaries.length ? cx.summaries : null;
         const hm = st.histMissing || [];
         const histNote = hm.length ? h("span", { class: "gp-ctx-n", title: hm.map(x => x.label + ": " + x.reason).join("; ") },
@@ -224,12 +231,12 @@ Nothing is computed here that the API does not state, except display arithmetic 
           { key: "provider", label: "Provider", fmt: v => h("span", { class: "lnk prov" }, h("i", { class: "sw", style: `background:${L.providerColor(v)}` }), OG.providerLink(v)), value: r => OG.providerName(r.provider) },
           { key: "price", label: "Best $/GPU·h", num: true, fmt: v => h("b", {}, fmt.price(v)) },
           { key: "premium_vs_others_median", label: "vs median", num: true, title: "own lowest / median of the other providers' lowest − 1", fmt: v => h("span", { class: signedCls(-v) === "up" ? "up" : signedCls(v) === "up" ? "down" : "" }, pctTxt(v)) },
-          { key: "chg24", label: "24h", num: true, hidden: !rows.some(r => r.chg24k), title: "this provider's lowest price vs 24 hours earlier", fmt: (v, r) => OG.chg(v, { reason: r.chg24r || "no price 24 hours ago" }) },
-          { key: "listings", label: "Lst", num: true, title: "priced eligible listings" },
+          { key: "chg24", label: "24h", num: true, hidden: !rows.some(r => r.chg24k), title: "24h change of this provider's lowest price", fmt: (v, r) => OG.chg(v, { reason: r.chg24r || "no price 24 hours ago" }) },
+          { key: "listings", label: "Listings", num: true, title: "priced listings that count toward the market" },
           { key: "available", label: "Stock", fmt: v => v === true ? h("span", { class: "up" }, "in stock") : v === false ? h("span", { class: "down" }, "sold out") : h("span", { class: "dim", title: "provider does not publish availability" }, "unknown") },
           { key: "region", label: "Region", cls: "dim", fmt: v => v || "-", minor: 2 },
-          { key: "freshness", label: "Fresh", title: "from the trust endpoint: age of the observation", fmt: (v, r) => r.trust ? OG.freshBadge(r.age != null ? r.age : v, { provider: r.provider }) : trust === null ? h("span", { class: "dim" }, "…") : OG.na("trust data unavailable"), value: r => r.age },
-          { key: "confidence", label: "Trust", value: r => r.trust && r.trust.confidence, fmt: (v, r) => r.trust ? h("span", { class: "gp-trust t-" + (r.trust.confidence || "unknown"), title: (r.trust.confidence_reasons || []).join("; ") || "no issues" }, r.trust.confidence || "?") : "-" },
+          { key: "freshness", label: "Seen", title: "when this price was last read", fmt: (v, r) => r.trust ? OG.freshBadge(r.age != null ? r.age : v, { provider: r.provider }) : trust === null ? h("span", { class: "dim" }, "…") : OG.na("trust data unavailable"), value: r => r.age },
+          { key: "confidence", label: "Confidence", value: r => r.trust && r.trust.confidence, fmt: (v, r) => r.trust ? h("span", { class: "gp-trust t-" + (r.trust.confidence || "unknown"), title: (r.trust.confidence_reasons || []).join("; ") || "no issues" }, r.trust.confidence || "?") : "-" },
           { key: "source_type", label: "Source", cls: "dim", fmt: v => (v || "-").replace(/_/g, " "), minor: 3 },
           { key: "website", label: "", sort: false, csv: false, fmt: v => v ? ext(v, "site ↗") : "" },
         ];
@@ -237,9 +244,9 @@ Nothing is computed here that the API does not state, except display arithmetic 
         if (!provTable) {
           provTable = OG.table({ columns: cols, rows, sort: { key: "rank", dir: "asc" }, rowKey: r => r.provider, compact: true,
             onHover: r => chart && st.view === "providers" && chart.highlight(r ? r.provider : null), csv: `opengrid-${slug}-providers.csv`,
-            title: `${rows.length} providers · one vote each (its lowest eligible price)` });
+            title: `${rows.length} providers · each at its lowest price` });
           provTable.cols24 = rows.some(r => r.chg24k);
-          provBox.replaceChildren(provTable, h("p", { class: "note" }, OG.kindBadge("observed"), " Observed list prices, on-demand, not interruptible, in stock or stock unknown. ",
+          provBox.replaceChildren(provTable, h("p", { class: "note" }, "On-demand list prices, in stock or stock unknown. ",
             m.listings.sold_out ? `${m.listings.sold_out} sold-out listing${m.listings.sold_out === 1 ? "" : "s"} excluded. ` : "", h("a", { class: "lnk", href: "/methodology/dispersion" }, "Method")));
         } else provTable.update(rows);
       }
@@ -282,11 +289,14 @@ Nothing is computed here that the API does not state, except display arithmetic 
         dispBox.replaceChildren(
           h("div", { class: "gp-score" }, h("div", {}, h("div", { class: "gp-score-v" }, sc.efficiency.toFixed(0)), h("div", { class: "dim" }, "efficiency / 100")),
             h("div", {}, h("div", { class: "gp-score-l " + (sc.fragmentation >= 50 ? "down" : sc.fragmentation >= 25 ? "warn" : "up") }, sc.label),
-              h("div", { class: "dim" }, `fragmentation ${sc.fragmentation} · confidence ${sc.confidence}`))),
+              h("div", { class: "dim" }, "How closely providers agree on price. Not a hardware score."))),
+          h("table", { class: "gp-kv" }, h("tbody", {}, kv("Spread", `${fmt.price(s.spread_abs)} (${fmt.pct(s.spread_pct_of_low)} of low)`))),
+          h("details", { class: "gp-more" }, h("summary", {}, "Details"),
+          h("div", { class: "dim" }, `fragmentation ${sc.fragmentation} · confidence ${sc.confidence}`),
           h("table", { class: "gp-kv gp-comp" }, h("thead", {}, h("tr", {}, h("th", {}, "component"), h("th", { class: "n" }, "raw"), h("th", {}, "saturation"), h("th", { class: "n" }, "w"), h("th", { class: "n" }, "pts"))),
             h("tbody", {}, bar("CV (adj.)", comp.cv_adj, comp.c_cv, w.cv, v => v.toFixed(3)), bar("IQR / median", comp.iqr_rel, comp.c_iqr, w.iqr, v => v.toFixed(3)), bar("High / low − 1", comp.range, comp.c_range, w.range, v => fmt.pct(v)))),
-          h("table", { class: "gp-kv" }, h("tbody", {}, kv("Spread", `${fmt.price(s.spread_abs)} (${fmt.pct(s.spread_pct_of_low)} of low)`), kv("IQR", fmt.price(s.iqr)), kv("Std dev", fmt.price(s.stdev)))),
-          h("p", { class: "note" }, "Fragmentation = 100 × Σ w·min(raw / saturation, 1); efficiency = 100 − fragmentation. ", h("a", { class: "lnk", href: "/methodology/dispersion" }, "Method")));
+          h("table", { class: "gp-kv" }, h("tbody", {}, kv("IQR", fmt.price(s.iqr)), kv("Std dev", fmt.price(s.stdev)))),
+          h("p", { class: "note" }, "Fragmentation = 100 × Σ w·min(raw / saturation, 1); efficiency = 100 − fragmentation. ", h("a", { class: "lnk", href: "/methodology/dispersion" }, "Method"))));
       }
 
       /* ---------- hardware ---------- */
@@ -321,7 +331,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
           h("thead", {}, h("tr", {}, h("th", {}, "$"), h("th", { class: "n" }, "spec"), h("th", { class: "n" }, "at low"), h("th", { class: "n" }, "at median"))),
           h("tbody", {}, Object.entries(ms).map(([k, v]) => h("tr", { title: (v.unit || "") + (k1000(k) > 1 ? " · shown ×1,000: per PFLOP·h" : "") }, h("th", {}, LBL[k] || k), h("td", { class: "n dim" }, v.spec_value != null ? fmt.num(v.spec_value, v.spec_value >= 100 || Number.isInteger(v.spec_value) ? 0 : 2) : "-"),
             v.low == null ? h("td", { class: "n", colspan: 2 }, OG.na(v.reason)) : [h("td", { class: "n" }, small(v.low * k1000(k))), h("td", { class: "n" }, small(v.median * k1000(k)))])))),
-          h("p", { class: "note" }, c.label, ". Price / vendor peak figure; spec in GB, TFLOPS or TB/s, FLOP rates priced per PFLOP·h. ", h("a", { class: "lnk", href: "/methodology/hardware" }, "Method")));
+          h("p", { class: "note" }, "Price divided by the vendor peak spec. ", h("a", { class: "lnk", href: "/methodology/hardware" }, "Method")));
       }
 
       /* ---------- alternatives ---------- */
@@ -344,11 +354,14 @@ Nothing is computed here that the API does not state, except display arithmetic 
             { key: "cmp", label: "", sort: false, csv: false, fmt: (v, r) => h("a", { class: "lnk dim", href: `/compare/${slug}-vs-${OG.slug(r.gpu)}` }, "compare →") },
           ],
           rows: a.alternatives, compact: true, limit: 12, empty: "No priced GPU shares a dimension with this one.",
-          title: "Shares the listed dimensions, not equivalent products", csv: `opengrid-${slug}-alternatives.csv`,
+          title: "Similar on the listed points, not equivalent products", csv: `opengrid-${slug}-alternatives.csv`,
         }), h("p", { class: "note" }, a.note, ". Deltas are the alternative relative to the ", short, ".", " ", h("a", { class: "lnk", href: "/methodology/hardware" }, "Method")));
       }
 
       /* ---------- regions ---------- */
+      // a region row links to a comparison with the US (or Europe for the US row); the label names the pair
+      const regionCmp = rg => { if (rg === "Unassigned") return ""; const other = rg === "US" ? "Europe" : "US";
+        return h("a", { class: "lnk dim", href: `/compare/${OG.slug(rg)}-vs-${OG.slug(other)}?gpu=${slug}` }, "vs " + other + " →"); };
       async function loadRegions() {
         const rg = await ctx.api("/v1/markets/" + slug + "/regions", { full: true }).catch(() => null);
         const rl = rg && (Array.isArray(rg.data) ? rg.data : rg.data && (rg.data.regions || rg.data.items));
@@ -367,10 +380,10 @@ Nothing is computed here that the API does not state, except display arithmetic 
             { key: "bar", label: "", sort: false, csv: false, fmt: (v, r) => r.cheapest == null ? "" : h("span", { class: "gp-rbar" }, h("i", { style: `width:${hi > lo ? 8 + 92 * (r.cheapest - lo) / (hi - lo) : 50}%` })) },
             { key: "premium", label: "Regional median vs global", num: true, fmt: v => h("span", { class: signedCls(v) === "up" ? "down" : signedCls(v) === "down" ? "up" : "" }, pctTxt(v)), title: "median of provider lowest prices in region / global median − 1" },
             { key: "listings", label: "Priced listings", num: true },
-            { key: "cmp", label: "", sort: false, csv: false, fmt: (v, r) => r.region === "Unassigned" ? "" : h("a", { class: "lnk dim", href: `/compare/${OG.slug(r.region)}-vs-${OG.slug(r.region === "US" ? "Europe" : "US")}?gpu=${slug}` }, "compare →") },
+            { key: "cmp", label: "", sort: false, csv: false, fmt: (v, r) => regionCmp(r.region) },
           ],
           rows, sort: { key: "cheapest", dir: "asc" }, compact: true, csv: `opengrid-${slug}-regions.csv`,
-        }), h("p", { class: "note" }, OG.kindBadge("observed"), " Region groups from each listing's stated location; never guessed. ", h("a", { class: "lnk", href: "/heatmaps" }, "All regional heatmaps →")));
+        }), h("p", { class: "note" }, "Regions come from each listing's stated location. ", h("a", { class: "lnk", href: "/heatmaps" }, "All regional heatmaps →")));
       }
 
       function drawRegionRows(rl, meta) {
@@ -396,11 +409,11 @@ Nothing is computed here that the API does not state, except display arithmetic 
             { key: "providers", label: "Providers", num: true, hidden: !rows.some(r => r.providers != null) },
             { key: "listings", label: "Priced listings", num: true, hidden: !rows.some(r => r.listings != null) },
             { key: "available", label: "Available", num: true, hidden: !rows.some(r => r.available != null) },
-            { key: "cmp", label: "", sort: false, csv: false, fmt: (v, r) => r.region === "Unassigned" ? "" : h("a", { class: "lnk dim", href: `/compare/${OG.slug(r.region)}-vs-${OG.slug(r.region === "US" ? "Europe" : "US")}?gpu=${slug}` }, "compare →") },
+            { key: "cmp", label: "", sort: false, csv: false, fmt: (v, r) => regionCmp(r.region) },
           ],
           rows: priced, sort: { key: "cheapest", dir: "asc" }, compact: true, csv: `opengrid-${slug}-regions.csv`, empty: "No priced listing in any region group now.",
         }), h("p", { class: "note" }, none.length ? [h("span", { class: "dim" }, "No listing now in: "), none.map(r => r.region).join(", "), ". "] : null,
-          OG.kindBadge("observed"), " Region groups from each listing's stated location; never guessed.", meta.as_of ? ` As of ${when(meta.as_of)}. ` : " ",
+          "Regions come from each listing's stated location.", meta.as_of ? ` As of ${when(meta.as_of)}. ` : " ",
           h("a", { class: "lnk", href: "/heatmaps?kind=gpu-region-cheapest" }, "All regional heatmaps →")));
       }
 
@@ -416,7 +429,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
           const why = Object.entries(b.exclusions_by_code || {}).map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`).join(", ");
           bestBox.replaceChildren(OG.insufficient(`No eligible ${st.count}-GPU listing now${why ? " (" + why + ")" : ""}.`, "Nothing to route"),
             b.multi_instance_alternatives && b.multi_instance_alternatives.length ? h("p", { class: "note" }, `${b.multi_instance_alternatives.length} multi-instance shape(s) exist; see Route.`) : null,
-            h("a", { class: "btn", href: routeHref }, "Open route preview →"));
+            routeBtn(routeHref, "Open route preview →", "btn"));
           return;
         }
         const factors = Object.entries(c0.factors).filter(([, f]) => f.weight > 0);
@@ -425,15 +438,15 @@ Nothing is computed here that the API does not state, except display arithmetic 
             h("div", { class: "gp-best-h" }, OG.logo(c0.provider, 18), h("b", {}, c0.provider_display || OG.providerName(c0.provider)), h("span", { class: "dim" }, [c0.region, c0.country].filter(Boolean).join(", ") || "location not given"),
               h("span", { class: "spacer" }), h("span", { class: "gp-best-p" }, fmt.price(c0.price_per_gpu_hour)), h("span", { class: "dim" }, "/GPU·h")),
             h("div", { class: "gp-best-s" }, `score ${c0.score.toFixed(2)} · ${b.mode.toLowerCase()} · ${c0.gpu_count}× ${c0.sku || ""}`, " ", c0.provisionable ? OG.badge("provisionable", "good") : OG.badge("market data only", "", "OpenGrid cannot provision at this provider yet")),
+            h("details", { class: "gp-more" }, h("summary", {}, "Why this listing"),
             h("table", { class: "gp-kv gp-fac" }, h("tbody", {}, factors.map(([k, f]) => h("tr", { title: f.note },
               h("th", {}, k.replace(/_/g, " ")), h("td", { class: "gp-barc" }, h("span", { class: "gp-bar" + (f.imputed ? " imp" : ""), style: `width:${Math.round((f.value == null ? 0.5 : f.value) * 100)}%` })),
               h("td", { class: "n dim" }, "×" + f.weight), h("td", { class: "n" }, f.contribution.toFixed(3)), h("td", {}, f.imputed ? OG.badge("neutral", "warn", "no data: scored 0.5") : f.kind ? h("span", { class: "dim" }, f.kind) : ""))))),
-            h("p", { class: "note" }, c0.explanation),
-            h("div", { class: "gp-best-a" }, h("a", { class: "btn pri", href: routeHref }, "Route this →"), h("a", { class: "lnk dim", href: "/methodology/best-execution" }, "how it is scored"))),
+            h("p", { class: "note" }, c0.explanation)),
+            h("div", { class: "gp-best-a" }, routeBtn(routeHref, "Route this →", "btn pri"), h("a", { class: "lnk dim", href: "/methodology/best-execution" }, "how it is scored"))),
           b.candidates.length > 1 ? h("table", { class: "gp-kv gp-runners" }, h("tbody", {}, b.candidates.slice(1, 6).map(c => h("tr", {},
             h("td", { class: "n dim" }, c.rank), h("td", {}, OG.providerLink(c.provider)), h("td", { class: "dim" }, c.region || "-"), h("td", { class: "n" }, fmt.price(c.price_per_gpu_hour)), h("td", { class: "n dim" }, c.score.toFixed(2)))))) : null,
-          h("p", { class: "note" }, `${b.candidates_total} candidates, ${b.exclusions_total} excluded (`, Object.entries(b.exclusions_by_code || {}).map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`).join(", "), "). ",
-            "Prices are observed market prices, not quotes. Reliability and performance are not used: no execution history yet."));
+          h("p", { class: "note", title: Object.entries(b.exclusions_by_code || {}).map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`).join(", ") }, `${b.candidates_total} candidates, ${b.exclusions_total} excluded. Market prices, not quotes.`));
       }
 
       /* ---------- chart ---------- */
@@ -490,9 +503,9 @@ Nothing is computed here that the API does not state, except display arithmetic 
           ];
           if (idxPts.size) series.push({ key: "index", label: "OG index", values: times.map(t => idxPts.get(t) ?? null), color: "#f5a524", width: 1.25, dash: "4 3" });
           opts = { times, series, band: { lo: s.map(p => p.lowest), hi: s.map(p => p.highest), label: "low-high" }, hatchBefore: hst.coherent_from };
-          chartNote.replaceChildren(OG.kindBadge("observed"), ` Hourly cross-section of provider prices (one vote per provider), ${s.length} hours. `,
-            hst.coherent_from ? `Hatched: before ${when(hst.coherent_from)} not every current provider was being recorded, so a level change there can be a provider joining, not a market move. ` : "",
-            idxPts.size ? "Dashed: OpenGrid index. " : "", events.length ? `${events.length} markers on the time axis (hover). ` : "", h("a", { class: "lnk", href: "/methodology/indices" }, "Method"));
+          chartNote.replaceChildren(OG.kindBadge("observed"), ` Hourly, one price per provider. `,
+            hst.coherent_from ? h("span", { title: `before ${when(hst.coherent_from)} not every current provider was recorded, so a jump there can be a provider joining, not a market move` }, "Hatched: partial coverage. ") : "",
+            idxPts.size ? "Dashed: OpenGrid index. " : "", events.length ? `${events.length} markers (hover). ` : "", h("a", { class: "lnk", href: "/methodology/indices" }, "Method"));
         } else {
           const d = data.d;
           if (!d.times || !d.providers.length) { chartEl.replaceChildren(OG.empty("No price history for this GPU in this window.")); chart = null; chartNote.replaceChildren(); return; }
@@ -551,7 +564,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
             ] });
           ctx.onCleanup(() => availChart && availChart.destroy());
         }
-        availNote.replaceChildren(OG.kindBadge("observed"), " Hourly samples from the market rollup. Available = explicit availability; many providers publish none (counted as unknown, not available). ",
+        availNote.replaceChildren("Hourly. Providers that publish no stock count as unknown, not available. ",
           (t.availability_changes && t.availability_changes.changes || []).length ? `${t.availability_changes.changes.length} provider availability transitions in this window.` : "");
         drawMoves(t);
       }
@@ -617,7 +630,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
         newsBox.replaceChildren(h("ul", { class: "gp-list gp-news" }, items.map(n => h("li", {},
           h("span", { class: "mono dim" }, fmt.date(n.published_at)), h("span", { class: "tier-t t-" + (n.trust_tier || "source"), title: "source tier" }, n.trust_tier || "source"),
           h("span", {}, ext(n.url, n.title), h("span", { class: "dim" }, " · " + (n.source_name || n.source_id) + (n.source_count > 1 ? ` +${n.source_count - 1}` : "")))))),
-          h("p", { class: "note" }, "Linked by mention of this GPU (matched by rules). Appearing near a price move does not mean it caused it. ", h("a", { class: "lnk", href: "/news?gpu=" + slug }, "More →")));
+          h("p", { class: "note" }, "News near a price move did not necessarily cause it. ", h("a", { class: "lnk", href: "/news?gpu=" + slug }, "More →")));
       }
       async function loadListings() {
         try {
@@ -646,7 +659,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
       const onScroll = () => {
         const top = navEl.getBoundingClientRect().bottom + 8;
         let cur = null;
-        for (const s of el.querySelectorAll(".gp-main > .gp-sec")) if (s.getBoundingClientRect().top <= top + 40) cur = s.dataset.sec;
+        for (const s of el.querySelectorAll(".gp-main > .gp-sec, .gp-rail > .gp-sec")) if (s.getBoundingClientRect().top <= top + 40) cur = s.dataset.sec;
         navEl.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.for === cur));
       };
       if (scroller) { scroller.addEventListener("scroll", onScroll, { passive: true }); ctx.onCleanup(() => scroller.removeEventListener("scroll", onScroll)); }
@@ -654,10 +667,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
       loadSummary(); loadIndex(); loadMarketChanges(); loadChart(); loadTimeline(); loadTrust(); loadRegions(); loadBest(); loadEvents(); loadNews(); loadListings();
       ctx.every(60000, () => { loadSummary(); loadBest(); });
       ctx.every(300000, () => { loadIndex(); loadChart(); loadTimeline(); loadTrust(); loadRegions(); loadEvents(); });
-      const esc = e => { const hp = document.getElementById("help");
-        if (e.key === "Escape" && !/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && (!hp || hp.hidden)) OG.go("/gpus"); };
-      document.addEventListener("keydown", esc);
-      ctx.onCleanup(() => document.removeEventListener("keydown", esc));
+
     },
   });
 })();

@@ -60,6 +60,17 @@ ok(/no self-service sign-up/.test(dev) && dev.includes("issues/new"), "access: h
 ok(!/Every \/v1 endpoint needs a key/i.test(api) && !/signed-in operator; your key is not needed/.test(api), "api: no 'every endpoint needs a key', no 'runs as the operator' for visitors");
 ok(/if \(operator\) fullList\(/.test(api) && !/ctx\.api\("\/openapi\.json"\)[^;]*;\s*\n\s*const ops/.test(api.split("async function fullList")[0]), "api: /openapi.json is read only for the operator");
 
+// ---------- plain-words form errors and one access state (no "Could not reach OpenGrid" for a validation message) ----------
+const keysSrc = src("keys.js"), obSrc = src("onboarding.js");
+for (const [f, t] of [["api.js", api], ["keys.js", keysSrc], ["onboarding.js", obSrc]])
+  ok(!/OG\.error\(\{\s*message/.test(t), `${f}: no OG.error({message}) (it has no status, so it reads as a network failure)`);
+ok(/function formError/.test(dev) && /\[400, 409, 422\]/.test(dev), "OG.dx.formError: client checks and 400/409/422 render the server's message");
+ok(obSrc.includes("formError(err)") && /OG\.accessNote\("operator"\)/.test(obSrc) && !/status: 403/.test(obSrc), "/onboarding and /admin/partners: validation in plain words; non-operators get one access note");
+ok(/OG\.accessNote\("account"/.test(dev), "visitor access uses the shared account note");
+ok(/missing\.length/.test(api), "api Try it: empty required parameters are asked for, not sent");
+for (const f of ["developers.js", "api.js", "keys.js", "onboarding.js"]) ok(!/[–—]/.test(src(f)), `${f}: no en or em dashes`);
+ok(!/[–—]/.test(fs.readFileSync(path.join(WEB, "devx.css"), "utf8")), "devx.css: no en or em dashes");
+
 // ---------- access states ----------
 const A = OG.developers.accessState;
 ok(A(null) === "anonymous" && A({ principal: "operator", scopes: ["*"] }) === "operator" && A({ principal: "api_key", scopes: ["data:read"] }) === "key", "accessState: anonymous / operator / key");

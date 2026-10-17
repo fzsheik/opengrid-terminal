@@ -70,12 +70,6 @@
 .cx-alt-r { text-align: right; }
 .cx-alt-r b { font-family: var(--mono); color: var(--text); font-size: var(--fs-base); }
 
-.cx-three { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px; }
-.cx-three > div { border: 1px solid var(--line); border-radius: 3px; padding: 6px 8px; font-size: var(--fs-sm); min-width: 0; }
-.cx-three .cx-fact-k { margin-bottom: 2px; }
-.cx-three .cx-3v { color: var(--text); }
-.cx-three .cx-3s { color: var(--muted); font-size: var(--fs-xs); }
-
 .cx-qs { border: 1px solid var(--line); border-radius: 3px; padding: 8px 10px; }
 .cx-qs-h { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; margin-bottom: 6px; }
 .cx-qs-h b { color: var(--text); font-size: var(--fs-base); }
@@ -114,9 +108,11 @@
 .cx-walk th, .cx-walk td { padding: 2px 10px 2px 0; text-align: left; font-variant-numeric: tabular-nums; }
 .cx-walk th { color: var(--muted); font-weight: 500; }
 
+/* signed out on New job: the shared account note plus a small staff link */
+.jb-acc { display: flex; flex-direction: column; gap: 4px; }
+.jb-staff { font-size: var(--fs-xs); align-self: flex-start; }
+
 /* ---- My Jobs ---- */
-.cx-jobs-start { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; background: var(--surface); }
-.cx-jobs-start p { margin: 0; font-size: var(--fs-base); color: var(--text-2); flex: 1 1 260px; }
 .cx-group { margin-top: 12px; }
 .cx-group-h { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; font-size: var(--fs-base); font-weight: 600; color: var(--text); }
 .cx-group-h .dim { font-weight: 400; }
@@ -161,7 +157,7 @@
 .cx-access p { margin: 0; font-size: var(--fs-base); color: var(--text-2); }
 
 @media (max-width: 900px) {
-  .cx-choices, .cx-three, .cx-time { grid-template-columns: 1fr; }
+  .cx-choices, .cx-time { grid-template-columns: 1fr; }
   .cx-alt { grid-template-columns: 1fr; }
   .cx-alt-r { text-align: left; }
   .cx-step-hint, .cx-step-b { margin-left: 0; }
@@ -175,4 +171,7 @@
 .cx-perf-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cx-perf-r { display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; color: var(--text-2); }
 .cx-perf-r b { color: var(--text); }
-.cx-perf-n { font-size: var(--fs-xs); }
+
+/* one job: the status line, its tag and the Refresh button wrap on small screens */
+.pg-job .jb-bigline { flex-wrap: wrap; }
+.pg-job .jb-bigline .btn { margin-left: auto; }

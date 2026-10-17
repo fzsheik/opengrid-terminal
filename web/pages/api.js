@@ -1,9 +1,9 @@
 /* /api: the API reference.
 
-   Everyone sees a curated reference: quickstart, authentication (which endpoints are public and which need a key),
-   every PUBLIC endpoint (PUBLIC catalogue below, checked against the server's real public routes by
-   tests/test_api_docs.py) with a "Try it" that runs in the browser without a key, the authenticated endpoints by
-   scope (summaries only), the {data, meta} envelope, data kinds and rate limits.
+   Everyone sees a short public reference first: one curl call, then every PUBLIC endpoint (PUBLIC catalogue below,
+   checked against the server's real public routes by tests/test_developer_docs.py) with a "Try it" that runs in
+   the browser without a key. Folded below: authentication, the endpoints that need a key (by scope), the
+   {data, meta} envelope, data kinds and rate limits.
    The full machine-readable schema (/openapi.json, /docs) is deliberately operator-only (api/pages.py denies
    both; it lists admin and ops routes), so it is loaded and rendered only when the viewer is the operator. */
 (() => {
@@ -98,23 +98,21 @@
   OG.apiDocs = { PUBLIC, PRIVATE, publicOps, SAMPLE };
   if (typeof OG.page !== "function" || typeof document === "undefined") return;
 
+
   OG.page("/api", {
     title: "API reference",
     async mount(el, params, query, ctx) {
       const root = h("div", { class: "pg-dx pg-api" });
       el.append(root);
+      root.append(OG.loading("Loading the API reference…"));
       const base = ((OG.boot && OG.boot.base_url) || location.origin).replace(/\/$/, "");
-      const D = OG.dx || { code: (t, l) => h("pre", { class: "w4-code" }, t), p: (...k) => h("p", { class: "note" }, k), c: t => h("code", { class: "mono" }, t), call: (t, ...k) => h("div", { class: "note" }, k), accessCall: () => null };
-      const { code, p, c } = D;
-      const head = h("div");
-      const toc = h("nav", { class: "dx-api-toc box", "aria-label": "API reference contents" });
-      const body = h("div", { class: "dx-api-body" });
-      root.append(head, h("div", { class: "dx-api-grid" }, toc, body));
-      const sec = (id, title, ...kids) => h("section", { class: "dx-sec", id, style: "margin-top:0;border-top:0;padding-top:0;margin-bottom:22px" }, h("div", { class: "dx-sec-h" }, h("h2", { class: "dx-h2" }, title)), kids);
+      const D = OG.dx;
+      const { code, p, c, fold } = D;
       const me = await OG.me();
       if (!ctx.alive()) return;
+      root.replaceChildren();
       const operator = OG.isAdmin(me);
-      head.replaceChildren(OG.head("API reference", "JSON over HTTPS. Public market data and recommendations need no key; everything else needs an OpenGrid API key.",
+      root.append(OG.head("API reference", "JSON over HTTPS. The public endpoints below need no key.",
         h("a", { class: "btn", href: "/developers" }, "Developer guide"),
         operator ? h("a", { class: "btn", href: "/docs", rel: "external" }, "Interactive docs (operator) ↗") : null,
         operator ? h("a", { class: "btn", href: "/openapi.json", rel: "external" }, "openapi.json (operator)") : null));
@@ -126,67 +124,50 @@ curl -s "${base}/v1/me" -H "Authorization: Bearer $${KEY_VAR}"`;
   -H "Authorization: Bearer $${KEY_VAR}" \\
   -H "Content-Type: application/json" \\
   -d '{"gpu": "h100-80gb-sxm5", "count": 8, "region": "US", "max_price_per_gpu_hour": 2.5, "duration_hours": 24, "mode": "BALANCED"}'`;
+      const sec = (id, title, sub, ...kids) => h("section", { class: "dx-sec", id }, h("div", { class: "dx-sec-h" }, h("h2", { class: "dx-h2" }, title), sub ? h("span", { class: "dx-sec-sub" }, sub) : null), kids);
       const pubList = h("div");
 
-      body.append(
-        sec("quickstart", "Quickstart",
-          p("No key, no sign-up: the cheapest fresh, in-stock listing of each H100 variant right now."), code(curlPub, "curl", "GET /v1/best/{gpu} · public"),
-          p("Look at ", c("data.by_variant[].top[0]"), ": provider, region and ", c("price_per_gpu_hour"), " (an observed list price, not a quote). More first steps, including GPU recommendations for your own project: ", h("a", { class: "lnk", href: "/developers#quickstart" }, "Developer quickstart →"))),
-        sec("auth", "Authentication",
-          h("div", { class: "dx-scroll" }, h("table", { class: "dx-tbl" },
-            h("thead", {}, h("tr", {}, h("th", {}, ""), h("th", {}, "Public"), h("th", {}, "Needs an API key"))),
-            h("tbody", {},
-              h("tr", {}, h("th", {}, "Which endpoints"), h("td", {}, "GET market data (", h("a", { class: "lnk", href: "#public" }, "every public endpoint below"), ") and three read-only computations: ", c("POST /v1/recommend"), ", ", c("/v1/recommend/estimate"), ", ", c("/v1/assistant"), "."),
-                h("td", {}, "Routing previews, jobs, deployments, your account, keys, watchlists, billing, reservations (", h("a", { class: "lnk", href: "#private" }, "by scope below"), "), and the hosted MCP endpoint ", c("/mcp"), ".")),
-              h("tr", {}, h("th", {}, "How"), h("td", {}, "Just call it. Anonymous requests are rate limited per IP address."), h("td", {}, c("Authorization: Bearer opg_live_…"), ", from the ", c(KEY_VAR), " environment variable. Never in a URL.")),
-              h("tr", {}, h("th", {}, "Errors"), h("td", {}, h("b", {}, "429"), " over the anonymous budget (", c("Retry-After"), ")."), h("td", {}, h("b", {}, "401"), " missing, invalid, revoked or expired key · ", h("b", {}, "403"), " the key lacks the scope (the message names it) or the account is suspended · ", h("b", {}, "429"), " over the key's budget."))))),
-          code(curlKey, "shell", "check a key"),
-          operator ? D.accessCall(me) : D.accessCall(me, { title: "Keys are issued by the OpenGrid team.", lead: "Every public endpoint works without one." })),
-        h("section", { class: "dx-sec", id: "public", style: "margin-top:0;border-top:0;padding-top:0;margin-bottom:22px" },
-          h("div", { class: "dx-sec-h" }, h("h2", { class: "dx-h2" }, "Public endpoints"), h("span", { class: "dx-sec-sub" }, `${publicOps().length} operations · no key · Try it runs from this browser ${operator ? "as the signed-in operator" : "without a key"}`)),
-          h("input", { class: "field", type: "search", placeholder: "Filter public endpoints", "aria-label": "Filter public endpoints", value: query.q || "", style: "max-width:320px;margin-bottom:8px", oninput: e => { OG.qs.set({ q: e.target.value || null }); drawPublic(e.target.value); } }),
-          pubList),
-        sec("private", "Endpoints that need a key",
-          p("Summaries by scope. A key holds only the scopes it was issued with; ask for the ones you need. The full schema with every parameter is available to the operator."),
-          h("div", { class: "dx-scroll" }, h("table", { class: "dx-tbl" },
-            h("thead", {}, h("tr", {}, h("th", {}, "Endpoints"), h("th", {}, "Scope"), h("th", {}, "What they do"))),
-            h("tbody", {}, PRIVATE.map(([a, s, d]) => h("tr", {}, h("td", { class: "mono", style: "white-space:normal" }, a), h("td", {}, OG.badge(s, s.includes("execute") ? "warn" : "")), h("td", {}, d)))))),
-          h("h3", { class: "dx-h3" }, "Example: route preview"),
-          p("“I need 8 H100s in the US under $2.50/hr for a day.” Free, never calls a provider; returns the selected listing, its quote, alternatives with per-factor scores, exclusions with reasons and an audit id (", c("GET /v1/route/{route_request_id}"), ")."),
-          code(curlPreview, "curl", "POST /v1/route/preview · scope route:preview"),
-          operator ? p(h("a", { class: "lnk", href: "/route" + OG.qs.stringify({ gpu: "h100-80gb-sxm5", count: 8, region: "US", max: 2.5, dur: 24 }) }, "Open this preview on the Route page →")) : null),
-        sec("envelope", "Response envelope",
-          h("div", { class: "dx-wins" },
-            code(JSON.stringify({ data: { "…": "the payload" }, meta: { as_of: "2026-10-15T01:08:25Z", kind: "observed", methodology: "/methodology/data-kinds", price_concept: "observed_market_price", note: "…" } }, null, 2), "json", "every response"),
-            h("div", {},
-              p(c("meta.as_of"), " is when the response was built; ", c("meta.kind"), " is the data kind; ", c("meta.methodology"), " links the method behind every number. Lists page with ", c("limit"), " / ", c("offset"), " where offered."),
-              p("A statistic OpenGrid cannot compute honestly is ", c("null"), " with a ", c("reason"), ", never a placeholder number."),
-              p("Errors: ", c('{"detail": "…"}'), " with the HTTP status.")))),
-        sec("kinds", "Data kinds & price concepts",
-          h("div", { class: "dx-wins" },
-            h("table", { class: "dx-tbl" }, h("tbody", {},
-              h("tr", {}, h("th", {}, OG.kindBadge("observed")), h("td", {}, "read directly from a provider and normalized")),
-              h("tr", {}, h("th", {}, OG.kindBadge("estimated")), h("td", {}, "a model or assumption fills a gap (memory, GPU count, cost scenarios)")),
-              h("tr", {}, h("th", {}, OG.kindBadge("transaction")), h("td", {}, "what an OpenGrid execution actually quoted or paid")))),
-            h("table", { class: "dx-tbl" }, h("tbody", {},
-              h("tr", {}, h("th", {}, OG.conceptBadge("list")), h("td", {}, "the provider's published catalogue price")),
-              h("tr", {}, h("th", {}, OG.conceptBadge("observed")), h("td", {}, "OpenGrid's normalized reading of a live listing")),
-              h("tr", {}, h("th", {}, OG.conceptBadge("quote")), h("td", {}, "the price a route would transact at")),
-              h("tr", {}, h("th", {}, OG.conceptBadge("execution")), h("td", {}, "what the provider charged a real deployment"))))),
-          p("The four price concepts are never mixed in one field. ", h("a", { class: "lnk", href: "/methodology/data-kinds" }, "Data kinds methodology →"))),
-        sec("limits", "Rate limits",
-          p("Anonymous requests share a per-IP budget. With a key, the budget is per key and per request class: ", h("b", {}, "read"), " (GET/HEAD/OPTIONS), ", h("b", {}, "write"), " (other methods) and ", h("b", {}, "execute"),
-            " (non-GET under /v1/route and /v1/deployments), each a token bucket refilled continuously, plus an account-wide budget so extra keys add nothing. Key responses carry ",
-            c("X-RateLimit-Limit"), ", ", c("-Remaining"), ", ", c("-Reset"), ", ", c("-Class"), "; a 429 adds ", c("Retry-After"), ". ", c("GET /v1/me"), " shows the key's current budget.")));
+      root.append(
+        sec("quickstart", "Quickstart", null,
+          code(curlPub, "curl", "no key"),
+          p("The cheapest in-stock listing of each H100 variant: read ", c("data.by_variant[].top[0]"), " (an observed list price, not a quote). Every response is ", c("{data, meta}"), ". Endpoints not listed below need an API key: ", h("a", { class: "lnk", href: "#auth" }, "authentication"), ".")),
+        sec("public", "Public endpoints", `${publicOps().length} · no key · Try it runs ${operator ? "as the signed-in operator" : "from this browser without a key"}`,
+          h("input", { class: "field dx-filter", type: "search", placeholder: "Filter public endpoints", "aria-label": "Filter public endpoints", value: query.q || "", oninput: e => { OG.qs.set({ q: e.target.value || null }); drawPublic(e.target.value); } }),
+          pubList));
 
       const opsHolder = h("div");
-      if (operator) body.append(h("section", { class: "dx-sec", id: "all", style: "margin-top:0;border-top:0;padding-top:0" },
-        h("div", { class: "dx-sec-h" }, h("h2", { class: "dx-h2" }, "Full endpoint list"), OG.badge("operator only", "warn")),
-        p("Generated from /openapi.json, which only the operator can read. It includes admin and ops routes that are not part of the public API."), opsHolder));
+      const allFold = operator ? fold("all", h("span", {}, "Full endpoint list ", OG.badge("operator only", "warn")),
+        p("Generated from /openapi.json, which only the operator can read. It includes admin and ops routes that are not part of the public API."), opsHolder) : null;
+      root.append(sec("more", "More", null,
+        fold("auth", "Authentication and API keys",
+          p("Send a key as ", c("Authorization: Bearer $" + KEY_VAR), ", never in a URL. ", h("b", {}, "401"), " missing, invalid, revoked or expired key · ", h("b", {}, "403"), " the key lacks the scope (the message names it) · ", h("b", {}, "429"), " over the budget (see ", c("Retry-After"), ")."),
+          code(curlKey, "shell", "check a key"),
+          D.accessCall(me, { noStart: true })),
+        fold("private", "Endpoints that need a key",
+          h("div", { class: "dx-scroll" }, h("table", { class: "dx-tbl" },
+            h("thead", {}, h("tr", {}, h("th", {}, "Endpoints"), h("th", {}, "Scope"), h("th", {}, "What they do"))),
+            h("tbody", {}, PRIVATE.map(([a, s, d]) => h("tr", {}, h("td", { class: "mono dx-wrap" }, a), h("td", {}, OG.badge(s, s.includes("execute") ? "warn" : "")), h("td", {}, d)))))),
+          code(curlPreview, "curl", "example: POST /v1/route/preview · free, never calls a provider"),
+          operator ? p(h("a", { class: "lnk", href: "/route" + OG.qs.stringify({ gpu: "h100-80gb-sxm5", count: 8, region: "US", max: 2.5, dur: 24 }) }, "Open this preview on the Route page →")) : null),
+        fold("envelope", "Response envelope",
+          code(JSON.stringify({ data: { "…": "the payload" }, meta: { as_of: "2026-10-15T01:08:25Z", kind: "observed", methodology: "/methodology/data-kinds" } }, null, 2), "json", "every response"),
+          p(c("meta.as_of"), " is when the response was built, ", c("meta.kind"), " the data kind. A number OpenGrid cannot compute honestly is ", c("null"), " with a ", c("reason"), ". Errors are ", c('{"detail": "…"}'), " with the HTTP status.")),
+        fold("kinds", "Data kinds and price concepts",
+          h("table", { class: "dx-tbl" }, h("tbody", {},
+            h("tr", {}, h("th", {}, OG.kindBadge("observed")), h("td", {}, "read directly from a provider and normalized")),
+            h("tr", {}, h("th", {}, OG.kindBadge("estimated")), h("td", {}, "a model or assumption fills a gap (memory, GPU count, cost scenarios)")),
+            h("tr", {}, h("th", {}, OG.kindBadge("transaction")), h("td", {}, "what an OpenGrid execution actually quoted or paid")),
+            h("tr", {}, h("th", {}, OG.conceptBadge("list")), h("td", {}, "the provider's published catalogue price")),
+            h("tr", {}, h("th", {}, OG.conceptBadge("quote")), h("td", {}, "the price a route would transact at")))),
+          p(h("a", { class: "lnk", href: "/methodology/data-kinds" }, "Data kinds methodology →"))),
+        fold("limits", "Rate limits",
+          p("Anonymous requests share a per-IP budget. A key gets its own budget per request class (read, write, execute), plus an account-wide cap. Responses carry ",
+            c("X-RateLimit-Remaining"), "; a 429 adds ", c("Retry-After"), ". ", c("GET /v1/me"), " shows a key's current budget.")),
+        allFold));
 
       // ---------- public list + Try it ----------
       function tryIt(m, path, params) {
-        if (m !== "GET") return p(h("span", { class: "dim" }, "Try it covers GET endpoints. Use the curl examples for POST: "), h("a", { class: "lnk", href: "/developers#rest" }, "REST examples →"));
+        if (m !== "GET") return p(h("span", { class: "dim" }, "Try it covers GET endpoints. Use curl for POST: "), h("a", { class: "lnk", href: "/developers#rest" }, "REST examples →"));
         const names = String(params || "").split(",").map(s => s.trim()).filter(Boolean).map(s => ({ name: s.replace(/\*$/, ""), required: /\*$/.test(s), inPath: path.includes("{" + s.replace(/\*$/, "") + "}") }));
         const inputs = names.map(n => [n, h("input", { class: "field", value: n.inPath ? (SAMPLE[n.name] || "") : n.name === "limit" ? "5" : n.required ? (SAMPLE[n.name] || "") : "", placeholder: n.name, "aria-label": n.name })]);
         const urlEl = h("span", { class: "dx-try-url" }), out = h("div", { class: "dx-try-out" });
@@ -198,8 +179,9 @@ curl -s "${base}/v1/me" -H "Authorization: Bearer $${KEY_VAR}"`;
         const upd = () => { urlEl.textContent = "GET " + build(); };
         inputs.forEach(([, i]) => i.addEventListener("input", upd)); upd();
         const send = async () => {
+          const missing = inputs.filter(([n, i]) => n.required && !i.value.trim()).map(([n]) => n.name);
+          if (missing.length) { out.replaceChildren(D.formError(new Error("Fill in the required " + (missing.length > 1 ? "parameters: " : "parameter: ") + missing.join(", ") + "."))); return; }
           const u = build();
-          if (/\{[^}]+\}/.test(u)) { out.replaceChildren(OG.error({ message: "fill every path parameter" })); return; }
           out.replaceChildren(OG.loading("GET " + u));
           const t0 = performance.now();
           try {
@@ -212,15 +194,15 @@ curl -s "${base}/v1/me" -H "Authorization: Bearer $${KEY_VAR}"`;
               OG.copy(`curl -s "${base}${u}"`, { label: "Copy as curl" })),
               r.status === 429 ? p("Anonymous requests are rate limited per IP; wait a minute.") : null,
               code(cut ? pr.slice(0, 60000) + "\n…" : pr, "response", "JSON"));
-          } catch (e) { out.replaceChildren(OG.error({ message: "network error" })); }
+          } catch (e) { out.replaceChildren(OG.error({ status: 0, message: "network error", path: u })); }
         };
-        return h("div", { class: "dx-try" }, h("div", { class: "lbl" }, "Try it ", h("span", { class: "dimmer" }, operator ? "· runs as the signed-in operator" : "· runs from this browser with no key, like any anonymous client")),
+        return h("div", { class: "dx-try" }, h("div", { class: "lbl" }, "Try it"),
           inputs.length ? h("div", { class: "dx-try-f" }, inputs.map(([n, i]) => h("label", {}, h("span", { class: "mono dim" }, n.name + (n.required ? " *" : "")), i))) : null,
           h("div", { class: "dx-row" }, h("button", { class: "btn pri", type: "button", onclick: send }, "Send"), urlEl), out);
       }
       function epRow(m, path, summary, params) {
         const det = h("details", { class: "dx-ep" },
-          h("summary", {}, h("span", { class: "dx-m " + m.toLowerCase() }, m), h("span", { class: "dx-ep-p" }, path), h("span", { class: "dx-ep-s" }, summary), OG.badge("public", "good")));
+          h("summary", {}, h("span", { class: "dx-m " + m.toLowerCase() }, m), h("span", { class: "dx-ep-p" }, path), h("span", { class: "dx-ep-s" }, summary)));
         det.addEventListener("toggle", () => {
           if (!det.open || det.children.length > 1) return;
           det.append(h("div", { class: "dx-ep-b" }, p(summary), params ? p(h("span", { class: "dim" }, "Parameters: "), c(params), h("span", { class: "dim" }, "  (* required)")) : p(h("span", { class: "dim" }, "No parameters.")), tryIt(m, path, params)));
@@ -229,24 +211,20 @@ curl -s "${base}/v1/me" -H "Authorization: Bearer $${KEY_VAR}"`;
       }
       function drawPublic(q) {
         q = String(q || "").trim().toLowerCase();
-        const list = pubList;
         const groups = PUBLIC.map(([g, anchor, ops]) => {
           const rows = ops.filter(([m, path, s]) => !q || path.toLowerCase().includes(q) || s.toLowerCase().includes(q));
-          return rows.length ? h("div", { id: anchor, style: "margin-bottom:12px" }, h("h3", { class: "dx-h3" }, g, " ", h("span", { class: "dimmer" }, rows.length)), h("div", { class: "box" }, rows.map(r => epRow(...r)))) : null;
+          return rows.length ? h("div", { id: anchor, class: "dx-group" }, h("h3", { class: "dx-h3" }, g, " ", h("span", { class: "dimmer" }, rows.length)), h("div", { class: "box" }, rows.map(r => epRow(...r)))) : null;
         }).filter(Boolean);
-        list.replaceChildren(...(groups.length ? groups : [OG.empty("No public endpoint matches.")]));
+        pubList.replaceChildren(...(groups.length ? groups : [OG.empty("No public endpoint matches.")]));
       }
       drawPublic(query.q || "");
+      if (allFold) {
+        let loaded = false;
+        allFold.addEventListener("toggle", () => { if (!allFold.open || loaded) return; loaded = true; if (operator) fullList(opsHolder); });
+      }
+      D.wireAnchors(root);
 
-      toc.replaceChildren(h("div", { class: "eyebrow" }, "Guide"),
-        ...[["quickstart", "Quickstart"], ["auth", "Authentication"], ["public", "Public endpoints"], ["private", "Endpoints with a key"], ["envelope", "Envelope"], ["kinds", "Data kinds"], ["limits", "Rate limits"]].map(([a, l]) => h("a", { href: "#" + a }, l)),
-        h("div", { class: "eyebrow" }, "Public · " + publicOps().length),
-        ...PUBLIC.map(([g, a, ops]) => h("a", { href: "#" + a }, g, h("span", { class: "dim mono" }, ops.length))),
-        operator ? h("div", { class: "eyebrow" }, "Operator") : null, operator ? h("a", { href: "#all" }, "Full endpoint list") : null);
-      if (location.hash) { const t = document.getElementById(location.hash.slice(1)); if (t) t.scrollIntoView(); }
-      if (operator) fullList(opsHolder);
-
-      // ---------- operator: the full schema, as before ----------
+      // ---------- operator: the full schema, read only when the fold is opened ----------
       async function fullList(holder) {
         holder.replaceChildren(OG.loading("Reading /openapi.json…"));
         let spec;
@@ -261,7 +239,7 @@ curl -s "${base}/v1/me" -H "Authorization: Bearer $${KEY_VAR}"`;
           for (const [m, op] of Object.entries(item)) if (["get", "post", "put", "patch", "delete"].includes(m)) ops.push({ m: m.toUpperCase(), path, op });
         }
         ops.sort((a, b) => a.path.localeCompare(b.path) || a.m.localeCompare(b.m));
-        const filter = h("input", { class: "field", type: "search", placeholder: "Filter all endpoints", "aria-label": "Filter all endpoints", style: "max-width:320px;margin-bottom:8px" });
+        const filter = h("input", { class: "field dx-filter", type: "search", placeholder: "Filter all endpoints", "aria-label": "Filter all endpoints" });
         const list = h("div", { class: "box" });
         const draw = () => {
           const q = filter.value.trim().toLowerCase();
@@ -280,7 +258,7 @@ curl -s "${base}/v1/me" -H "Authorization: Bearer $${KEY_VAR}"`;
           }) : [OG.empty("No endpoint matches.")]));
         };
         filter.addEventListener("input", draw);
-        holder.replaceChildren(h("div", { class: "dim", style: "font-size:11.5px;margin-bottom:6px" }, `${ops.length} operations in ${spec.info ? spec.info.title + " " + (spec.info.version || "") : "the schema"}`), filter, list);
+        holder.replaceChildren(h("div", { class: "dim dx-count" }, `${ops.length} operations in ${spec.info ? spec.info.title + " " + (spec.info.version || "") : "the schema"}`), filter, list);
         draw();
       }
     },

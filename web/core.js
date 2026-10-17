@@ -324,9 +324,10 @@ Full docs: web/README.md.
   /* ================= pure: plain-language shell copy ================= */
   // Who can use what. One vocabulary for the access indicator, nav locks and sign-in states (shared with the
   // Jobs, Keys and Developers pages: OG.accessNote(kind)).
+  // The browser sign-in is the OpenGrid staff login (/login); customers use an API key issued by OpenGrid.
   const ACCESS = {
     public: { label: "Free, no account", text: "Anyone can use this. No account needed." },
-    account: { label: "Needs an account", text: "This needs an OpenGrid account. Accounts are invite-only for now; there is no self-serve sign-up yet." },
+    account: { label: "Invite only", text: "This needs an OpenGrid account, and accounts are invite-only for now (no self-serve sign-up). The OpenGrid team issues API keys for code, the CLI and AI assistants." },
     operator: { label: "OpenGrid staff only", text: "These are OpenGrid's internal operator tools." },
     simulated: { label: "Simulation", text: "A simulation: no GPU is rented and nothing is charged." },
   };
@@ -336,7 +337,7 @@ Full docs: web/README.md.
     const st = err && typeof err.status === "number" ? err.status : null;
     const tech = [st ? "HTTP " + st : null, err && err.message, err && err.path ? String(err.path).replace(/^https?:\/\/[^/]+/, "") : null].filter(Boolean).join(" · ");
     const base = { tech: tech || String(err || ""), action: "retry" };
-    if (st === 401) return Object.assign(base, { title: "Sign-in required", text: ACCESS.account.text, action: "signin" });
+    if (st === 401) return Object.assign(base, { title: "Invite only", text: ACCESS.account.text, action: "signin" });
     if (st === 403) return Object.assign(base, { title: "Not included in your access", text: "You are signed in, but your account or API key does not cover this. An OpenGrid admin can add it.", action: null });
     if (st === 404) return Object.assign(base, { title: "Not found", text: "We could not find this. It may have been removed, or the link is wrong.", action: null });
     if (st === 429) return Object.assign(base, { title: "Too many requests", text: "You are going a little fast. Wait a few seconds, then try again." });
@@ -357,11 +358,21 @@ Full docs: web/README.md.
   function freshnessText(asOf, nowMs, ok, failText) {
     if (ok === false) return { tone: "down", text: failText || "Can't reach OpenGrid", title: "The price service did not answer. Prices on this page may be out of date." };
     const t = asOf ? Date.parse(asOf) : NaN;
+    if (!isFinite(t) && ok === true) return { tone: "", text: "Prices loaded", title: "OpenGrid could not tell when providers were last read." };
     if (!isFinite(t)) return { tone: "", text: "Connecting…", title: "" };
     const sec = Math.max(0, ((nowMs == null ? Date.now() : nowMs) - t) / 1000);
     const when = new Date(t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium" });
     if (sec > 600) return { tone: "stale", text: "Prices may be out of date: last read " + ago(sec), title: "Prices were last read from providers at " + when + " (your time). They are normally refreshed every few minutes." };
     return { tone: "live", text: "Prices updated " + ago(sec), title: "Prices were last read from providers at " + when + " (your time)." };
+  }
+  // When prices were last read: the newest successful provider fetch in /v1/trust/providers (null if none).
+  function lastReadOf(providers) {
+    let best = null, bt = -Infinity;
+    for (const p of Array.isArray(providers) ? providers : []) {
+      const t = p && p.last_ok_fetch ? Date.parse(p.last_ok_fetch) : NaN;
+      if (isFinite(t) && t > bt) { bt = t; best = p.last_ok_fetch; }
+    }
+    return best;
   }
   // How many tape items fit whole in `avail` px (gap between items; `more` px reserved for "+N more" when not all fit).
   function tapeFit(widths, avail, gap, more) {
@@ -503,7 +514,7 @@ Full docs: web/README.md.
   }
 
   Object.assign(OG, { compile, matchRoute, legacyHash, navKeyFor, slug, fmt, freshness, freshLimits, cleanKids, familyTarget, shortReason, sortRows, csvCell, csvString,
-    fuzzy, fuzzyScore, parseCommand, command, findCommand, COMMANDS, commandParts, ACCESS, explainError, freshnessText, tapeFit, unwrap, withParams, reasonOf,
+    fuzzy, fuzzyScore, parseCommand, command, findCommand, COMMANDS, commandParts, ACCESS, explainError, freshnessText, lastReadOf, tapeFit, unwrap, withParams, reasonOf,
     randomId, stableJson, outcomeUnknown, intentFor, settleIntent, makeTracker, TRACK_EVENTS,
     dep: { FLOW: DEP_FLOW, UNCERTAIN: DEP_UNCERTAIN, FAILED: DEP_FAILED, LIVE: DEP_LIVE, tone: depTone, strip: depStrip },
     qs: { parse: qsParse, stringify: qsStringify } });
@@ -707,8 +718,8 @@ Full docs: web/README.md.
   OG.loading = text => h("div", { class: "state loading", role: "status" }, h("i", { class: "spin" }), text || "Loading…");
   OG.empty = text => h("div", { class: "state empty" }, text || "Nothing to show.");
   // Errors read as a sentence and a next step; the HTTP status and endpoint stay in "Technical details".
-  // A 401 is an access state, not a failure: it explains accounts and offers the operator sign-in (the only
-  // browser login that exists; customers use API keys).
+  // A 401 is an access state, not a failure: invite only, how to get an API key, and (small) the staff sign-in,
+  // the only browser login that exists.
   OG.error = (err, retry) => {
     const x = explainError(err);
     const signin = x.action === "signin";
@@ -717,8 +728,9 @@ Full docs: web/README.md.
         h("b", {}, signin ? [h("i", { class: "lock", "aria-hidden": "true" }), " ", x.title] : x.title),
         h("p", {}, x.text),
         h("div", { class: "st-acts" },
+          signin ? h("a", { class: "btn sm", href: "/developers#access" }, "How to get an API key") : null,
           signin ? h("a", { class: "btn sm", href: "/" }, "Explore free pages") : null,
-          signin ? h("a", { class: "lnk st-op", href: OG.loginHref() }, "OpenGrid staff: operator sign-in") : null,
+          signin ? h("a", { class: "lnk st-op", href: OG.loginHref() }, "OpenGrid staff: sign in") : null,
           retry && x.action === "retry" ? h("button", { class: "btn sm", type: "button", onclick: retry }, "Try again") : null),
         x.tech ? h("details", { class: "st-tech" }, h("summary", {}, "Technical details"), h("code", { class: "mono" }, x.tech)) : null));
   };
@@ -1326,6 +1338,12 @@ Full docs: web/README.md.
       el.append(more);
     }
   }
+  // When prices were last read from providers (the newest successful fetch), shared for 30 s. Never rejects.
+  let readP = null, readT = 0;
+  OG.data.lastRead = () => {
+    if (!readP || Date.now() - readT > 30000) { readT = Date.now(); readP = api.soft("/v1/trust/providers", { nocache: true }).then(lastReadOf); }
+    return readP;
+  };
   let pollingP = null;
   // Poll intervals per provider: resolves to the Map used by freshBadge({provider}). Never rejects.
   OG.data.intervals = () => {
@@ -1345,18 +1363,21 @@ Full docs: web/README.md.
       el.title = `OpenGrid reads prices from ${p.providers.length} cloud providers, the busiest every ${mins} min${p.running ? "" : " (price checks are paused on this server)"}`;
     }
   }
-  // Tape: GPU prices from /market (lowest on-demand $/GPU-hr), then the latest notable moves from
-  // /v1/tape (events: title, pct, value). Real prices only; the two are never mixed in one item.
+  // Tape (the same on every page): GPU prices from /market (lowest on-demand $/GPU-hr), then the latest notable
+  // moves from /v1/tape. The status bar's "Prices updated" is the last provider read, not the response time.
+  const EVENT_WORDS = { sold_out: "sold out", capacity_returned: "back in stock", provider_added_gpu: "now listed", provider_removed_gpu: "delisted",
+    new_cheapest_provider: "new cheapest", new_30d_low: "30-day low", new_30d_high: "30-day high", new_all_time_low: "all-time low", new_all_time_high: "all-time high" };
   async function loadTape() {
-    const [m, v1] = await Promise.all([OG.data.market(24).catch(() => null), api.soft("/v1/tape")]);
+    const [m, v1, read] = await Promise.all([OG.data.market(24).catch(() => null), api.soft("/v1/tape"), OG.data.lastRead()]);
     if (!m) { OG.status.live(false); return; }
-    OG.status.asOf(m.t1);
+    if (read) OG.status.asOf(read); else OG.status.live(true);
     const top = m.gpus.filter(g => g.providers >= 2).slice(0, 16);
     const prices = top.map(g => h("a", { class: "tk", href: "/gpu/" + slug(g.gpu), title: `${g.gpu}: lowest on-demand price per GPU-hour across ${g.providers} providers, change over 24 hours` },
       h("b", {}, L.shortGpu(g.gpu)), " ", fmt.price(g.lowest), " ", OG.chg(g.change_pct)));
     const events = (Array.isArray(v1) ? v1 : []).slice(0, 12).map(e => h("a", {
       class: "tk tk-ev", href: e.gpu_slug ? "/gpu/" + e.gpu_slug : "/events", title: e.title || "",
-    }, h("b", {}, e.provider ? L.providerName(e.provider) : "Market"), " ", e.gpu ? L.shortGpu(e.gpu) : (e.type || ""), " ", OG.chg(e.pct)));
+    }, h("b", {}, e.provider ? L.providerName(e.provider) : "Market"), " ", e.gpu ? L.shortGpu(e.gpu) : "", " ",
+      e.pct != null ? OG.chg(e.pct) : h("span", { class: "dim" }, EVENT_WORDS[e.type] || String(e.type || "event").replace(/_/g, " "))));
     OG.status.tape([...prices, ...events]);
   }
 
@@ -1410,12 +1431,13 @@ Full docs: web/README.md.
   // The places a first-time visitor needs, shown when the bar is empty (all clickable).
   const START = [["Home", "/"], ["GPUs: every price", "/gpus"], ["Find Compute for my project", "/find"], ["Ask the assistant", "/assistant"],
     ["Markets", "/markets"], ["Developers", "/developers"], ["My Jobs", "/jobs", true]];
+  const LOCKED = "invite only";
   const EXAMPLES = [["h100", "open the H100 market"], ["c h100 h200", "compare two GPUs"], ["ask cheapest gpu for fine-tuning llama 8b", "ask in plain English"]];
   async function suggestions(text) {
     const t = text.trim();
     if (!t) {
       return [
-        ...START.map(([label, href, lock], i) => ({ group: i ? null : "Go to", label, hint: lock ? "needs an account" : "page", lock: !!lock, run: () => OG.go(href) })),
+        ...START.map(([label, href, lock], i) => ({ group: i ? null : "Go to", label, hint: lock ? LOCKED : "page", lock: !!lock, run: () => OG.go(href) })),
         ...EXAMPLES.map(([q, hint], i) => ({ group: i ? null : "Try typing", label: q, hint, code: true, insert: q })),
       ];
     }
@@ -1424,7 +1446,7 @@ Full docs: web/README.md.
     if (hit) out.push({ label: "↵ " + t, hint: commandParts(hit.cmd.usage).desc || "command", run: () => hit.cmd.handler(hit.match, t) });
     const q = t.replace(/^[gpc]\s+/i, "");
     const [gpus, provs, fams] = [await gpusForSearch(), OG.data.providers(), await OG.data.families()];
-    for (const n of fuzzy(t, navItems(), n => [n.label, n.alias].filter(Boolean)).slice(0, 3)) out.push({ label: n.label, hint: n.lock ? "page · needs an account" : "page", lock: n.lock, run: () => OG.go(n.href) });
+    for (const n of fuzzy(t, navItems(), n => [n.label, n.alias].filter(Boolean)).slice(0, 3)) out.push({ label: n.label, hint: n.lock ? "page · " + LOCKED : "page", lock: n.lock, run: () => OG.go(n.href) });
     for (const f of fuzzy(q, fams, f => [f.slug, f.id, f.name].filter(Boolean)).slice(0, 2)) {
       const n = Array.isArray(f.variants) ? f.variants.length : Number(f.variant_count ?? f.variants_count) || null;
       out.push({ label: f.name || f.slug, hint: "GPU family" + (n ? ` · ${n} variant${n === 1 ? "" : "s"}` : ""), run: () => OG.go("/gpu/" + (f.slug || f.id)) });
@@ -1438,7 +1460,7 @@ Full docs: web/README.md.
         out.push({ label: cp.syntax, hint: cp.desc, code: true, insert: cp.insert, run: cp.insert ? null : () => { const x = findCommand(cp.syntax); if (x) return x.cmd.handler(x.match, cp.syntax); } });
     }
     // more than one word and nothing exact: offer the assistant
-    if (!hit && /\s/.test(t) && !/^[a-z]\s/i.test(t)) out.push({ label: "Ask the assistant: \u201c" + t.slice(0, 60) + "\u201d", hint: "plain English", run: () => OG.go("/assistant?q=" + encodeURIComponent(t)) });
+    if (!hit && /\s/.test(t) && !/^[gpcr]\s/i.test(t)) out.push({ label: "Ask the assistant: \u201c" + t.slice(0, 60) + "\u201d", hint: "plain English", run: () => OG.go("/assistant?q=" + encodeURIComponent(t)) });
     return out.slice(0, 12);
   }
   function setupCommandBar() {
@@ -1549,15 +1571,12 @@ Full docs: web/README.md.
       h("p", { class: "dim" }, "To sign out, close this browser window: the site login is remembered until then."),
     ] : [
       h("h2", {}, "You are browsing as a visitor"),
-      h("p", {}, "Everything under Explore in the menu is free and needs no account."),
       h("ul", {},
-        li("Free now", "GPU prices, comparisons, market data, Find Compute recommendations and the assistant."),
-        li("Account", "My Jobs (including the free simulated demo), API keys and watchlists. Accounts are invite-only for now."),
-        li("Real GPU runs", "Early access: each real launch waits for OpenGrid to approve the price.")),
+        li("Free", "GPU prices, comparisons, market data, Find Compute and the assistant. No account needed."),
+        li("Invite only", "My Jobs (including the free simulated demo), API keys and watchlists (pages with a lock). The OpenGrid team issues accounts and API keys; there is no self-serve sign-up.")),
       h("div", { class: "acc-act" },
-        h("a", { class: "btn sm pri", href: "/gpus" }, "Explore GPU prices"),
-        h("a", { class: "btn sm", href: "/developers" }, "Use it from your AI assistant")),
-      h("p", { class: "note" }, "OpenGrid staff: ", h("a", { class: "lnk", href: OG.loginHref() }, "operator sign-in")),
+        h("a", { class: "btn sm pri", href: "/developers#access" }, "How to get an API key")),
+      h("p", { class: "note" }, "OpenGrid staff: ", h("a", { class: "lnk", href: OG.loginHref() }, "sign in")),
     ]));
   }
   function setupAccess() {

@@ -10,7 +10,7 @@
   const TYPE = {
     price_move: "PRICE", sold_out: "SOLD OUT", capacity_returned: "RESTOCK", provider_added_gpu: "ADDED",
     provider_removed_gpu: "REMOVED", new_cheapest_provider: "CHEAPEST", new_30d_low: "30D LOW", new_30d_high: "30D HIGH",
-    new_all_time_low: "ATL", new_all_time_high: "ATH", spread_anomaly: "SPREAD", regional_dislocation: "REGIONAL",
+    new_all_time_low: "LOW EVER", new_all_time_high: "HIGH EVER", spread_anomaly: "SPREAD", regional_dislocation: "REGIONAL",
     market_capacity: "CAPACITY", provider_feed_down: "FEED DOWN", provider_feed_recovered: "FEED UP", coverage_started: "COVERAGE",
   };
   const typeTag = t => TYPE[t] || String(t || "").replace(/_/g, " ").toUpperCase();
@@ -57,7 +57,7 @@
   };
 
   const SINCE = [["1", "24H"], ["7", "7D"], ["30", "30D"], ["90", "90D"], ["all", "ALL"]];
-  const SEV = [["", "ALL"], ["notable", "NOTABLE+"], ["major", "MAJOR"]];
+  const SEV = [["", "All"], ["notable", "Notable+"], ["major", "Major"]];
   const PAGE = 100;
   const dayKey = iso => { const d = new Date(iso); return d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(); };
   const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -77,8 +77,8 @@
       const provSel = h("select", { class: "field", "aria-label": "Provider", onchange: e => set({ provider: e.target.value }) }, h("option", { value: "" }, "All providers"));
       const sevSeg = OG.seg(SEV, st.sev, v => set({ sev: v }));
       const sinceSeg = OG.seg(SINCE, st.since, v => set({ since: v }));
-      const covBtn = h("button", { class: "chip", "aria-pressed": String(st.cov), title: "coverage_started marks when OpenGrid began recording a provider: not a market change",
-        onclick: () => set({ cov: !st.cov }) }, "Coverage starts");
+      const covBtn = h("button", { class: "chip", "aria-pressed": String(st.cov), title: "also show when OpenGrid began recording a provider (not a market change)",
+        onclick: () => set({ cov: !st.cov }) }, "Show tracking starts");
       const clear = h("button", { class: "btn sm", onclick: () => set({ type: "", sev: "", gpu: "", provider: "", since: "7", cov: false }) }, "Reset");
       const histEl = h("div", { class: "ev-hist" });
       const histNote = h("div", { class: "ev-hist-n mono dim" });
@@ -88,7 +88,7 @@
 
       el.classList.add("pg-events");
       el.append(
-        OG.head("Market events", "Structured changes detected in the hourly on-demand market record. Events say what changed, never why.",
+        OG.head("Market events", "Changes detected in hourly on-demand prices and stock. Events say what changed, never why.",
           count, h("a", { class: "btn", href: "/methodology/events" }, "Methodology")),
         h("div", { class: "bar" },
           h("label", { class: "flt" }, h("span", {}, "Type"), typeSel),
@@ -130,7 +130,7 @@
       function drawFeed() {
         if (!st.items.length) {
           const filtered = st.type || st.sev || st.gpu || st.provider;
-          feed.replaceChildren(OG.empty(filtered ? "No events match these filters in this window." : "No market events in this window. The detector runs hourly on the rollup; with little recorded history few events can fire."));
+          feed.replaceChildren(OG.empty(filtered ? "No events match these filters in this window." : "No market events in this window."));
           more.replaceChildren(); return;
         }
         const out = []; let day = null;
@@ -206,12 +206,13 @@
       st.cat = cat;
       if (cat) {
         typeSel.append(...cat.events.map(t => h("option", { value: t.type }, typeName(t.type))));
-        legend.replaceChildren(...cat.events.map(t => h("button", { class: "ev-lg", "data-t": t.type, title: "Show only " + typeName(t.type), onclick: () => set({ type: st.type === t.type ? "" : t.type }) },
+        // a reference list (the Type filter above picks a type)
+        legend.replaceChildren(...cat.events.map(t => h("div", { class: "ev-lg", "data-t": t.type },
           h("div", { class: "ev-lg-h" }, h("span", { class: "ev-ty" }, typeTag(t.type)), h("span", { class: "ev-lg-n" }, typeName(t.type)), OG.kindBadge(t.kind)),
           h("div", { class: "ev-lg-d" }, t.description),
           h("div", { class: "ev-lg-s" }, h("span", { class: "dimmer" }, "severity "), t.severity))),
           h("div", { class: "ev-lg-k" }, h("span", {}, sevMark("info"), " info"), h("span", {}, sevMark("notable"), " notable"), h("span", {}, sevMark("major"), " major")));
-      } else legend.replaceChildren(OG.insufficient("the event catalogue (/v1/events/types) could not be loaded", "Unavailable"));
+      } else legend.replaceChildren(OG.insufficient("The list of event types could not be loaded.", "Unavailable"));
       gpuSel.append(...gpus.filter(g => g.live || g.slug === st.gpu).sort((a, b) => a.short.localeCompare(b.short)).map(g => h("option", { value: g.slug }, g.short)));
       provSel.append(...OG.data.providers().sort((a, b) => a.display_name.localeCompare(b.display_name)).map(p => h("option", { value: p.name }, p.display_name)));
       syncControls();

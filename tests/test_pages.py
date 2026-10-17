@@ -284,6 +284,36 @@ def test_public_pages_through_the_middleware():
         settings.app_password, settings.public_pages = None, False
 
 
+def test_unknown_url_shows_the_apps_not_found_page():
+    """Public site: a browser opening an unknown page path gets the shell with 404 (the app's "Page not found"),
+    never a plain-text 401; API, asset, login and private legacy paths keep their answers."""
+    settings.app_password, settings.public_pages = "s3cret", True
+    html = {"accept": "text/html,application/xhtml+xml,*/*;q=0.8"}
+    try:
+        for p in ("/nope", "/nope/deeper", "/markets-old"):
+            r = client.get(p, headers=html)
+            assert r.status_code == 404, (p, r.status_code)
+            assert 'id="page"' in r.text and "/static/core.js" in r.text, f"{p}: the app shell"
+            assert 'name="robots" content="noindex"' in r.text and "www-authenticate" not in r.headers, p
+            assert "content-security-policy" in r.headers, f"{p}: same CSP as every page"
+        assert client.head("/nope", headers=html).status_code == 404
+        # not a browser page request: unchanged
+        assert client.get("/nope").status_code == 401, "no text/html: the API-style answer"
+        assert client.post("/nope", headers=html).status_code == 401, "only GET / HEAD"
+        # private and API paths never turn into a page, whatever the Accept header says
+        for p in ("/raw", "/raw/summary", "/v1/me", "/v1/jobs", "/v1/nope", "/openapi.json", "/docs", "/mapping", "/unmapped", "/history"):
+            r = client.get(p, headers=html)
+            assert r.status_code == 401, (p, r.status_code)
+            assert 'id="page"' not in r.text, p
+        r = client.get("/login", headers=html, follow_redirects=False)
+        assert r.status_code == 401 and r.headers["www-authenticate"].startswith("Basic"), "/login still challenges"
+        assert client.get("/gpus", headers=html).status_code == 200, "real pages unchanged"
+        settings.public_pages = False
+        assert client.get("/nope", headers=html).status_code == 401, "closed site: everything needs the password"
+    finally:
+        settings.app_password, settings.public_pages = None, False
+
+
 EXECUTION_PAGES = ["/deployments/dep-0123abcd", "/onboarding", "/admin/execution", "/admin/checklist", "/admin/partners", "/admin/value"]
 
 

@@ -195,6 +195,20 @@ ok(OG.reasonOf({ value: null, reason: "coverage below 3 providers" }) === "cover
   eq(C.thinLabels([{ x: 0, w: 20 }, { x: 15, w: 20 }, { x: 40, w: 20 }], 6), [true, false, true], "thinLabels drops colliding labels");
   ok(C.fitLabel("abcdefghijklmnop", 40, 6) === "abcde…" && C.fitLabel("short", 100, 6) === "short", "fitLabel");
 
+  // ---------- /methodology: every document in methodology/ has a group (none falls into "Other") ----------
+  {
+    const fs = require("fs"), path = require("path");
+    global.OG = OG;
+    require("../web/pages/methodology.js");
+    const docs = fs.readdirSync(path.join(__dirname, "..", "methodology")).filter(f => f.endsWith(".md") && f.toLowerCase() !== "readme.md").map(f => f.slice(0, -3));
+    const grouped = OG.methodology.GROUPS.flatMap(g => g[1]);
+    const other = docs.filter(d => OG.methodology.groupOf(d) === "Other");
+    ok(docs.length >= 30 && !other.length, `every methodology doc is grouped (${docs.length} docs; other: ${other.join(", ") || "none"})`);
+    const missing = grouped.filter(n => !docs.includes(n));
+    ok(!missing.length, `no group lists a document that does not exist (${missing.join(", ") || "none"})`);
+    ok(grouped.length === new Set(grouped).size, "each document is in exactly one group");
+  }
+
   console.log(failures ? `\n${failures} FAILED` : "\nall passed");
   process.exit(failures ? 1 : 0);
 })();

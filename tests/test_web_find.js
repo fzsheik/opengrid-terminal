@@ -84,7 +84,7 @@ eq(picks.map(p => p.label), ["Lowest advertised price", "Best fit for your workl
 eq([picks[0].option && picks[0].option.option_id, picks[1].option && picks[1].option.option_id, picks[2].option], ["l40s-48gb:runpod:us-ks-2:1", "a100-80gb-sxm4:lambda:us-east-1:1", null], "picks resolve option refs");
 ok(picks[2].empty && /MNIST/.test(picks[2].empty.text) && picks[2].empty.href === F.DEMO_HREF, "no executable pick explained: only the MNIST demo runs (links the demo)");
 const anon = clone(REC); anon.options.forEach(o => { o.execution.workload_supported = true; o.execution.reasons = [{ code: "auth_required", reason: "sign in / API key required" }]; });
-ok(/Sign in/.test(F.pickCards(anon)[2].empty.text) && /^\/login\?next=/.test(F.pickCards(anon)[2].empty.href), "anonymous caller: a sign-in prompt, never assumed executable");
+ok(/account/.test(F.pickCards(anon)[2].empty.text) && !F.pickCards(anon)[2].empty.href && !F.pickCards(anon)[2].option, "anonymous caller: an account note (no customer sign-in exists), never assumed executable");
 const none = clone(REC); none.picks = { cheapest_market: null, best_for_workload: null, best_executable: null }; none.options = [];
 ok(F.pickCards(none).every(p => !p.option && p.empty && p.empty.text), "every empty pick carries an explanation");
 
@@ -119,9 +119,13 @@ const exe1 = clone(REC.options[0]); exe1.execution = { executable: true, workloa
 eq([F.runStatus(exe1).label, F.runStatus(exe1).tone], ["Yes: OpenGrid can run this", "good"], "executable: yes, after a preview and approval");
 const so = clone(exe1); so.available = false;
 eq(F.runStatus(so).tone, "warn", "sold out is never 'can run'");
-const cl3 = F.conceptLines(REC);
-eq(cl3.map(c => c.key), ["cheapest_market", "best_for_workload", "best_executable"], "the three concepts, in order");
-eq(cl3[2].text, "None for this workload today", "no execution-ready option is said plainly");
+// the hero's runtime line: theoretical when estimated, the budget's hours, a training-only hint, nothing for inference
+const inferE = { workload_type: "inference" }, trainE = { workload_type: "fine_tuning" };
+ok(F.runtimeFact({ gpu_count: 1 }, inferE) === null, "inference: no runtime line (never 'add your dataset size')");
+eq([F.runtimeFact({ gpu_count: 1 }, trainE).value, /training data/.test(F.runtimeFact({ gpu_count: 1 }, trainE).sub)], ["Not estimated", true], "training without data: says which input unlocks the estimate");
+ok(F.runtimeFact({ gpu_count: 1, cost: { budget_hours: 38.8 } }, inferE).label === "Your budget", "a budget gives hours of runtime, for any workload");
+const rtf = F.runtimeFact({ gpu_count: 1, performance: { runtime: { known: true, hours: 5.54, range_hours: [3.68, 10.61] } } }, trainE);
+ok(rtf.label === "Est. runtime" && /theoretical, not a benchmark/.test(rtf.sub) && rtf.estimated, "an estimated runtime is labelled theoretical, not a benchmark");
 const dangling = clone(REC); dangling.picks.best_for_workload = { option_id: "missing", reason: "x" };
 ok(F.pickCards(dangling)[1].option === null && F.pickCards(dangling)[1].empty, "a pick pointing at no option renders as empty, not broken");
 
@@ -149,7 +153,7 @@ withJob.picks.lowest_estimated_job_cost = { option_id: o2.option_id, reason: "lo
 const pj = F.pickCards(withJob);
 eq(pj.map(p => p.key), ["cheapest_market", "best_for_workload", "best_executable", "lowest_estimated_job_cost"], "the job-cost pick is a fourth, separate answer");
 ok(/Estimated/.test(pj[3].blurb) && /per hour and less for the job/.test(pj[3].blurb), "the job-cost pick says it is estimated and why it can differ from the hourly price");
-ok(F.conceptLines(withJob)[3].text.includes("≈ $27.20 for the job"), "summary strip: the job pick shows the job cost, not the hourly price");
+eq(F.alternativesOf(withJob, 2)[0].label, "Lowest cost for the whole job", "the whole-job pick is the first alternative when the server returned one");
 const pi = F.perfInfo(o2);
 eq([pi.n, pi.multi, pi.memory, pi.link, pi.speedup.text, pi.relative.text], [2, true, "160 GB total, split across 2 GPUs", "NVLink / Infinity Fabric between every GPU", "≈ 1.86× one GPU", "1.86× the balanced pick"], "perfInfo: totals, link, scaling, relative");
 eq([pi.runtime.text, pi.runtime.range, pi.jobCost.text, pi.jobCost.range], ["≈ 5.5 h", "3.7 h to 11 h", "$27.20", "$18.05 to $52.02"], "perfInfo: runtime and job-cost ranges in words");
@@ -294,6 +298,12 @@ const src = fs.readFileSync(path.join(__dirname, "..", "web", "pages", "find.js"
 ok(/OG\.page\("\/find"/.test(src), "find.js registers /find");
 ok(fs.readFileSync(path.join(__dirname, "..", "web", "index.html"), "utf8").includes('<script src="/static/pages/find.js"></script>'), "index.html loads find.js");
 ok(!/fetch\(|XMLHttpRequest|https?:\/\//.test(src.replace(/https:\/\/[^\s"']*huggingface[^\s"']*/g, "")), "find.js talks only to its own API through OG.api (CSP connect-src self)");
+// copy matches the runtime estimates and the fourth answer
+ok(!/Runtime is never guessed|never estimated/i.test(src), "no 'runtime is never guessed' next to theoretical runtime estimates");
+ok(!/three picks|Three picks|Three different answers/.test(src), "no 'three picks' copy: there are up to four answers");
+ok(!/add your dataset size/.test(src), "no dataset hint aimed at inference users");
+ok(!/[–—]/.test(src), "no en or em dashes in find.js");
+ok(!/loginHref|\/login\?next/.test(src), "Find Compute never offers a customer the operator sign-in");
 
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);
