@@ -109,7 +109,7 @@
   const REGIONS = ["US", "Canada", "Europe", "UK", "APAC", "Middle East", "LATAM", "Africa"];
   // The routing modes (routing/scoring.py), one set of names for /jobs/new and /route (route.js reads this list).
   const STRATEGIES = [
-    ["BALANCED", "Balanced", "Price 40%, availability 20%, stability 15%, availability history 15%, freshness, integration"],
+    ["BALANCED", "Balanced", "Price 40%, availability 20%, stability 15%, availability history 15%, freshness, integration, and reliability once providers have a track record"],
     ["CHEAPEST", "Cheapest", "Lowest observed price wins; no other factor counts"],
     ["FASTEST_AVAILABLE", "Soonest available", "Availability now, OpenGrid integration and freshness first (not a speed claim)"],
     ["MOST_STABLE", "Most stable", "Availability history and price stability first"],
@@ -795,7 +795,7 @@
     { key: "price", label: "Price", color: "#4d94ff" }, { key: "availability_now", label: "Availability now", color: "#2fbf71" },
     { key: "region_match", label: "Region match", color: "#b39cff" }, { key: "freshness", label: "Data freshness", color: "#8a96a3" },
     { key: "availability_persistence", label: "Availability history", color: "#f5a524" }, { key: "price_stability", label: "Price stability", color: "#e0729e" },
-    { key: "integration_level", label: "OpenGrid integration", color: "#4fc3d0" },
+    { key: "integration_level", label: "OpenGrid integration", color: "#4fc3d0" }, { key: "reliability", label: "Reliability", color: "#91c61d" },
   ];
   J.scoreBar = (c, width) => h("span", { class: "rt-bar", style: width ? `width:${width}px` : null, title: "score " + (c && c.score != null ? (+c.score).toFixed(3) : "-") + " of 1.000" },
     FACTORS.map(f => {
@@ -813,7 +813,8 @@
         x.imputed ? h("span", { class: "badge warn" }, "imputed 0.5") : null, h("span", { class: "rt-contrib mono" }, "+" + (+x.contribution || 0).toFixed(3)));
     }).filter(Boolean);
     if (!items.length) return c && c.explanation ? h("p", { class: "note" }, c.explanation) : h("p", { class: "note" }, "No score breakdown in the response.");
-    return h("ul", { class: "rt-why" }, items, (c.not_used || ["reliability", "performance"]).length ? h("li", { class: "nodata" }, h("b", {}, "Reliability, performance"), ": no data, not used (no execution history yet)") : null);
+    const unused = fs.reliability && fs.reliability.weight ? "Performance" : "Reliability, performance";
+    return h("ul", { class: "rt-why" }, items, h("li", { class: "nodata" }, h("b", {}, unused), ": no data, not used (not enough execution history yet)"));
   };
   J.regionText = c => [c && c.region, c && c.country].filter(Boolean).join(", ") || "location not given";
 
