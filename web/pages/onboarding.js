@@ -74,7 +74,7 @@
       gpuList.replaceChildren(...gpus.filter(g => g.live).sort((a, b) => b.weight - a.weight).map(g => h("option", { value: g.short || g.name })));
       if (inputs.preferred_gpus.value === show(profile && profile.preferred_gpus)) inputs.preferred_gpus.value = shownGpus();
     }).catch(() => {});
-    const msg = h("span", { class: "dim" });
+    const msg = h("span", { class: "dim" }), errBox = h("div");
     const read = () => {
       const out = {};
       for (const [k, , t] of PROFILE) {
@@ -95,15 +95,15 @@
     const extra = opts.extra || [];
     return h("form", { class: "ob-form", onsubmit: async e => {
       e.preventDefault();
-      msg.className = "dim";
+      msg.className = "dim"; msg.textContent = ""; errBox.replaceChildren();
       let body;
-      try { body = read(); } catch (err) { msg.replaceChildren(OG.error({ message: err.message })); return; }
+      try { body = read(); } catch (err) { errBox.replaceChildren(OG.dx.formError(err)); return; }
       for (const x of extra) Object.assign(body, x.read());
       if (!Object.keys(body).length && profile) { msg.textContent = "nothing changed"; return; }
       msg.textContent = "saving…";
-      try { await onSave(body); msg.textContent = "saved"; msg.className = "up"; } catch (err) { msg.replaceChildren(OG.error(err)); }
-    } }, gpuList, grid, extra.map(x => x.el), h("div", { class: "bar" }, h("button", { class: "btn pri", type: "submit" }, opts.submit || (profile ? "Save profile" : "Create profile")), msg),
-      h("p", { class: "note" }, "What you pay today is partner-reported and never shown as an OpenGrid observation. The profile prefills the route preview and keeps savings comparisons honest."));
+      try { await onSave(body); msg.textContent = "saved"; msg.className = "up"; } catch (err) { msg.textContent = ""; errBox.replaceChildren(OG.dx.formError(err)); }
+    } }, gpuList, grid, extra.map(x => x.el), h("div", { class: "bar" }, h("button", { class: "btn pri", type: "submit" }, opts.submit || (profile ? "Save profile" : "Create profile")), msg), errBox,
+      h("p", { class: "note" }, "What you pay today is partner-reported, never shown as an OpenGrid observation."));
   }
   function keyReveal(k) {
     return h("div", { class: "ob-key" }, h("div", { class: "ky-warn" }, h("b", {}, "Copy this key now. "), "OpenGrid stores only a hash and cannot show it again."),
@@ -125,23 +125,24 @@
 
       /* ----- signed out: how onboarding works, no private calls ----- */
       if (!me) {
-        root.replaceChildren(OG.head("Onboarding", "How a team gets from first look to a first supervised GPU run with OpenGrid"),
-          D.accessCall(null, { title: "Onboarding is run with the OpenGrid team today." }),
+        root.replaceChildren(OG.head("Onboarding", "From a first look to a first supervised GPU run, with the OpenGrid team"),
+          D.accessCall(null),
           h("ol", { class: "ob-steps" }, [
-            ["Explore with no key", "Public market data, project analysis and GPU recommendations work today from the API, the CLI and your AI assistant.", h("a", { class: "lnk", href: "/developers#quickstart" }, "Developer quickstart →")],
-            ["Get an account and a key", "The OpenGrid team creates your account and first API key (design partners). There is no self-service sign-up or payment yet.", h("a", { class: "lnk", href: D.ACCESS_URL, target: "_blank", rel: "noopener noreferrer external" }, "Request API access ↗")],
-            ["Preview routes", "With a route:preview key, see which listing OpenGrid would pick for your workload and why. Free; never calls a provider.", h("a", { class: "lnk", href: "/api#private" }, "Route preview API →")],
-            ["A first supervised run", "Not available yet: every provider adapter is still simulated. When it opens, the OpenGrid operator approves each launch.", null],
-          ].map(([t, d, a], i) => h("li", { class: "ob-step" }, h("div", { class: "ob-n" }, String(i + 1)), h("div", { class: "ob-b" }, h("div", { class: "ob-t" }, h("b", {}, t)), h("p", { class: "dim", style: "margin:2px 0" }, d), a)))));
+            ["Explore with no key", "Prices, project analysis and GPU recommendations.", h("a", { class: "lnk", href: "/developers#quickstart" }, "Developer quickstart →")],
+            ["Get an account and a key", "The OpenGrid team creates them for design partners.", null],
+            ["Preview routes", "See which listing OpenGrid would pick for your workload, and why. Free.", null],
+            ["A first supervised run", "Not available yet: no real GPU runs today. When it opens, OpenGrid approves each launch.", null],
+          ].map(([t, d, a], i) => h("li", { class: "ob-step" }, h("div", { class: "ob-n" }, String(i + 1)), h("div", { class: "ob-b" }, h("div", { class: "ob-t" }, h("b", {}, t)), h("p", { class: "dim ob-d" }, d), a)))));
         return;
       }
 
-      let status = null, profile = null, partners = null, previewing = null;
+      let status = null, profile = null, partners = null, previewing = null, missing = null;
       async function load() {
         if (admin && query.account) {
           partners = partners || (await OG.api.soft("/v1/admin/partners", { nocache: true })) || [];
           const pp = partners.find(x => String(x.account_id) === String(query.account));
-          if (pp) { previewing = pp; status = pp.onboarding; profile = pp; return; }
+          if (pp) { previewing = pp; status = pp.onboarding; profile = pp; missing = null; return; }
+          missing = query.account;
         }
         previewing = null;
         try { status = await ctx.api("/v1/onboarding", { nocache: true }); } catch (e) { root.replaceChildren(OG.head("Onboarding"), OG.error(e, () => load().then(draw))); throw e; }
@@ -208,16 +209,16 @@
         root.replaceChildren(
           OG.head("Onboarding", previewing ? `Progress of ${previewing.company} (account #${previewing.account_id})` : "From an account to a first supervised route",
             pickP, h("span", { class: "mono dim" }, status.progress || ""), status.complete ? OG.badge("complete", "good") : null),
-          previewing ? D.call("warn", h("b", {}, "Previewing a partner. "), "The steps show their progress. Buttons on this page still act as you, the operator: a preview you run here is recorded on the operator account and does not complete their step.")
-            : admin ? D.call("info", h("b", {}, "This is the operator account's own checklist. "), "Design partners act with their API key, not this website. To follow a partner, pick them above; to onboard a new one, use ", h("a", { class: "lnk", href: "/admin/partners" }, "Design partners"), ".") : null,
+          missing ? D.call("warn", h("b", {}, "No partner with account #" + missing + ". "), "Showing the operator account's own checklist.") : null,
+          previewing ? D.call("warn", h("b", {}, "Previewing a partner. "), "Buttons here still act as you, the operator: a preview you run is recorded on the operator account.")
+            : admin ? D.call("info", h("b", {}, "The operator account's own checklist. "), "Partners act with their API key. Pick one above, or onboard a new one on ", h("a", { class: "lnk", href: "/admin/partners" }, "Design partners"), ".") : null,
           h("ol", { class: "ob-steps" },
-            stepBox(1, "account_created", "Account created", h("p", { class: "dim" }, previewing ? "Created with the partner on Design partners." : "The operator account exists from the first sign-in. It holds keys, limits, deployments and invoices.")),
+            stepBox(1, "account_created", "Account created", h("p", { class: "dim" }, previewing ? "Created with the partner on Design partners." : "The operator account exists from the first sign-in.")),
             stepBox(2, "key_created", "API key", previewing
-              ? h("p", { class: "dim" }, "A partner's first key is created with the partner on ", h("a", { class: "lnk", href: "/admin/partners" }, "Design partners"), " (shown once there). Their key can create narrower keys itself.")
-              : h("div", {}, h("p", { class: "dim" }, "Create keys in one place, with presets for assistants and scripts."), h("a", { class: "btn", href: "/keys" }, "API keys →"))),
+              ? h("p", { class: "dim" }, "Created with the partner on ", h("a", { class: "lnk", href: "/admin/partners" }, "Design partners"), ".")
+              : h("a", { class: "btn", href: "/keys" }, "API keys →")),
             stepBox(3, "credentials_connected", "Provider credentials", h("div", {},
-              h("p", {}, h("b", {}, "Managed (default): "), "OpenGrid launches on its own provider accounts and bills provider cost plus the published fee. ",
-                h("b", {}, "Bring your own: "), "store your own provider key; the provider bills you directly. Stored keys are encrypted; one that cannot be decrypted fails closed (never a fallback to OpenGrid's)."),
+              h("p", { class: "dim" }, "Managed by default: OpenGrid launches on its own provider accounts. Or bring your own key, and the provider bills you directly."),
               h("a", { class: "btn", href: "/keys#credentials" }, "Provider credentials →")), true),
             stepBox(4, "first_preview", "First route preview", h("div", {},
               h("p", { class: "dim" }, "From ", previewing ? previewing.company + "'s" : "the", " profile: ", h("span", { class: "mono" }, describe(b)), profile && (profile.preferred_gpus || []).length ? null : h("span", {}, " (no preferred GPU in the profile yet)")),
@@ -225,17 +226,16 @@
                 stale ? h("span", { class: "dx-stale" }, "The profile changed since this result; run again to update it.") : null),
               pvBox, whyBox)),
             stepBox(5, "first_supervised_deployment", "First supervised deployment", h("div", {},
-              h("p", {}, "On Route, ", h("b", {}, "Request route"), " issues a quote; the OpenGrid operator reviews provider, price, fees and limits and approves before ONE instance is launched, with an auto-terminate cap."),
-              D.call("warn", h("b", {}, "Not available yet. "), "Every provider adapter is still simulated, so no real deployment can run today."),
+              h("p", { class: "dim" }, "A quote from Route, approved by OpenGrid before one instance launches. ", h("b", { class: "warn-t" }, "Not available yet: no real GPU runs today.")),
               h("a", { class: "btn", href: routeHref(b) }, "Open the Route page →"))),
-            stepBox(6, "feedback_given", "Feedback on the deployment", h("p", { class: "dim" }, "After a deployment ends, its page asks four yes/no questions (provider choice, price, setup, next workload) plus what broke and free notes."))),
-          OG.section(previewing ? `Design-partner profile · ${previewing.company}` : "Design-partner profile",
-            profileForm(profile, async body => {
+            stepBox(6, "feedback_given", "Feedback on the deployment", h("p", { class: "dim" }, "After a deployment ends, its page asks four short questions."))),
+          h("details", { class: "dx-fold ob-prof", open: profile ? null : true }, h("summary", {}, previewing ? `Design-partner profile · ${previewing.company}` : "Design-partner profile", h("span", { class: "dim" }, " · prefills the route preview")),
+            h("div", { class: "dx-fold-b" }, profileForm(profile, async body => {
               if (previewing) await ctx.api("/v1/admin/partners/" + previewing.account_id, { method: "PATCH", body });
               else if (profile) await ctx.api("/v1/partners/me", { method: "PATCH", body });
               else await ctx.api("/v1/partners/me", { method: "POST", body });
               partners = null; await load(); draw();
-            })));
+            }))));
       }
       try { await load(); } catch (e) { return; }
       if (ctx.alive()) draw();
@@ -251,7 +251,7 @@
       el.append(root);
       const me = await OG.me();
       if (!ctx.alive()) return;
-      if (!OG.isAdmin(me)) { root.append(OG.head("Design partners"), OG.error({ status: 403, message: "admin scope required" })); return; }
+      if (!OG.isAdmin(me)) { root.append(OG.head("Design partners"), OG.accessNote("operator")); return; }
       const listBox = h("div", {}, OG.loading()), detail = h("div"), created = h("div");
       let sel = query.account || null, rows = [];
       root.append(OG.head("Design partners", "Accounts onboarding to a first real route",

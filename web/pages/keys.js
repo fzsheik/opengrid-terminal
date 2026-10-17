@@ -69,33 +69,28 @@
 
       /* ----- signed out: one intentional state ----- */
       if (!me0) {
-        root.append(OG.head("API keys", "Keys let your tools use OpenGrid as your account", h("a", { class: "btn", href: "/developers" }, "Developer guide")),
-          D.accessCall(null, { title: "API keys are issued by the OpenGrid team." }),
-          h("div", { class: "dx-wins" },
-            h("div", { class: "dx-win" }, h("h2", { class: "dx-h3", style: "margin-top:0" }, "Works without a key"),
-              h("ul", { class: "dx-ul" }, h("li", {}, "Public market data over REST, the CLI and the local MCP server"), h("li", {}, "Analyzing a project on your computer"), h("li", {}, "GPU recommendations for a workload"), h("li", {}, "The OpenGrid Assistant on this site")),
-              h("a", { class: "btn", href: "/developers#quickstart" }, "Quickstart →")),
-            h("div", { class: "dx-win" }, h("h2", { class: "dx-h3", style: "margin-top:0" }, "Already have a key?"),
-              p("Manage it from your terminal; this page is for the operator. Check it, or create a narrower key for one tool (your key needs ", c("account:manage"), "):"),
-              code(`curl -s "${base}/v1/me" -H "Authorization: Bearer $${KEY_VAR}"
-curl -s "${base}/v1/keys" -H "Authorization: Bearer $${KEY_VAR}"`, "curl", "your account's keys"),
-              h("a", { class: "lnk", href: "/developers#access" }, "Using your key with the CLI, MCP and curl →"))));
+        root.append(OG.head("API keys", "Keys let your tools (the CLI, an AI assistant, your scripts) act as your OpenGrid account.", h("a", { class: "btn", href: "/developers" }, "Developer guide")),
+          D.accessCall(null),
+          D.fold("have-key", "Already have a key?",
+            p("Use it from your terminal; this page manages keys for the operator. Check it, or list your account's keys (listing needs ", c("keys:read"), " or ", c("account:manage"), "):"),
+            code(`curl -s "${base}/v1/me" -H "Authorization: Bearer $${KEY_VAR}"
+curl -s "${base}/v1/keys" -H "Authorization: Bearer $${KEY_VAR}"`, "curl", "your account"),
+            h("a", { class: "lnk", href: "/developers#have-key" }, "Using your key with the CLI, MCP and curl →")));
         return;
       }
 
       /* ----- signed in ----- */
       const st = { keys: [], me: me0, hours: Number(query.h) || 24 };
       const isOperator = OG.isAdmin(me0);
-      root.append(OG.head("API keys", isOperator ? "Keys for the operator account. A key holds only the scopes you pick; the secret is shown once." : "Your account's keys",
-        isOperator ? h("a", { class: "btn", href: "/admin/partners", title: "Create a design partner: their own account and first key" }, "Issue a key to a developer →") : null,
-        h("a", { class: "btn", href: "/api#auth" }, "API reference")));
-      const reveal = h("div"), createBox = h("div"), keysBox = h("div", {}, OG.loading("Loading keys…")), meLine = h("div", { class: "dim", style: "font-size:11.5px;margin:-4px 0 10px" });
+      root.append(OG.head("API keys", "A key holds only the scopes you pick. The secret is shown once.",
+        isOperator ? h("a", { class: "btn", href: "/admin/partners", title: "Create a design partner: their own account and first key" }, "Issue a key to a developer →") : null));
+      const reveal = h("div"), createBox = h("div"), keysBox = h("div", {}, OG.loading("Loading keys…")), meLine = h("div", { class: "dim ky-me" });
       root.append(meLine, reveal, h("section", { class: "sec", id: "create" }, h("h2", { class: "sec-h" }, "Create a key"), createBox), OG.section("Your keys", keysBox));
 
       function drawMe() {
         const a = (st.me && st.me.account) || {};
-        meLine.replaceChildren(st.me.principal === "operator" ? "Signed in as the operator (site login): every scope · " : "Signed in with a key · ",
-          `account #${a.id != null ? a.id : "-"} ${a.name ? "· " + a.name : ""} · ${st.keys.filter(k => k.state === "active").length} active key(s)`);
+        meLine.replaceChildren(st.me.principal === "operator" ? "Operator account · " : "Signed in with a key · ",
+          `#${a.id != null ? a.id : "-"} ${a.name ? "· " + a.name : ""} · ${st.keys.filter(k => k.state === "active").length} active key(s)`);
       }
 
       /* ----- keys ----- */
@@ -133,7 +128,7 @@ curl -s "${base}/v1/keys" -H "Authorization: Bearer $${KEY_VAR}"`, "curl", "your
         let preset = PRESETS.some(x => x[0] === query.preset) ? query.preset : "read";
         const name = h("input", { class: "field", placeholder: "e.g. claude-code-laptop", maxlength: 200, "aria-label": "Key name", value: preset === "assistant" ? "ai-assistant" : null });
         const exp = h("select", { class: "field", "aria-label": "Expires" }, [["90", "90 days"], ["30", "30 days"], ["365", "1 year"], ["", "never"]].map(([v, l]) => h("option", { value: v }, l)));
-        const rl = h("input", { class: "field num", type: "number", min: 1, max: 100000, placeholder: "default", "aria-label": "Read limit per minute", style: "width:100px" });
+        const rl = h("input", { class: "field num", type: "number", min: 1, max: 100000, placeholder: "default", "aria-label": "Read limit per minute" });
         const boxes = new Map();
         const scopeEl = ([s, desc, tone]) => {
           const cb = h("input", { type: "checkbox", value: s });
@@ -142,10 +137,11 @@ curl -s "${base}/v1/keys" -H "Authorization: Bearer $${KEY_VAR}"`, "curl", "your
             tone === "money" ? OG.badge("spends money", "warn") : tone === "sensitive" ? OG.badge("sensitive", "bad") : null));
         };
         const normal = SCOPES.filter(s => !ELEVATED.includes(s[0])), elevated = SCOPES.filter(s => ELEVATED.includes(s[0]));
-        const grid = h("details", { class: "dx-fold" }, h("summary", {}, "Scopes ", h("span", { class: "dim" }, "· the exact permissions this key gets")),
+        const grid = h("details", { class: "dx-fold" }, h("summary", {}, "Scopes and limits ", h("span", { class: "dim" }, "· the exact permissions this key gets")),
           h("div", { class: "dx-fold-b" },
+            h("label", { class: "ky-rl", title: "Requests per minute for reads; also caps writes and executes" }, "Read limit per minute ", rl),
             h("div", { class: "dx-scopes" }, normal.map(scopeEl)),
-            elevated.length ? [h("div", { class: "lbl", style: "margin-top:8px" }, "Operator-level: not for assistants or scripts"), h("div", { class: "dx-scopes" }, elevated.map(scopeEl))] : null,
+            elevated.length ? [h("div", { class: "lbl ky-lbl" }, "Operator-level: not for assistants or scripts"), h("div", { class: "dx-scopes" }, elevated.map(scopeEl))] : null,
             h("p", { class: "note" }, "A key can never grant scopes its creator does not hold. ", h("a", { class: "lnk", href: "/api#private" }, "What each scope allows →"))));
         const setPreset = id => {
           preset = id;
@@ -167,7 +163,7 @@ curl -s "${base}/v1/keys" -H "Authorization: Bearer $${KEY_VAR}"`, "curl", "your
         const form = h("form", { class: "dx-form", onsubmit: async e => {
           e.preventDefault();
           const scopes = [...boxes].filter(([, cb]) => cb.checked).map(([s]) => s);
-          if (!scopes.length) { err.replaceChildren(OG.error({ message: "pick at least one scope" })); return; }
+          if (!scopes.length) { err.replaceChildren(D.formError(new Error("Pick at least one scope."))); return; }
           const risky = scopes.filter(s => ELEVATED.includes(s));
           if (risky.length) {
             const ok = await confirm({ title: "Create a key with " + risky.join(", ") + "?", danger: true, confirm: "Create key", ack: "I will store this key like a password",
@@ -184,13 +180,12 @@ curl -s "${base}/v1/keys" -H "Authorization: Bearer $${KEY_VAR}"`, "curl", "your
           try {
             const k = await ctx.api("/v1/keys", { method: "POST", body });
             showSecret(k); name.value = ""; await loadKeys();
-          } catch (e2) { err.replaceChildren(OG.error(e2)); }
+          } catch (e2) { err.replaceChildren(D.formError(e2)); }
           finally { go.disabled = false; }
         } },
           h("div", { class: "dx-presets", role: "radiogroup", "aria-label": "Key type" }, presetEls),
           h("div", { class: "dx-form-r" },
-            h("label", {}, "Name", name), h("label", {}, "Expires", exp),
-            h("label", { title: "Requests per minute for reads; also caps writes and executes" }, "Read limit / min", rl), go),
+            h("label", {}, "Name", name), h("label", {}, "Expires", exp), go),
           grid, err);
         createBox.replaceChildren(form);
         setPreset(preset);
@@ -198,18 +193,16 @@ curl -s "${base}/v1/keys" -H "Authorization: Bearer $${KEY_VAR}"`, "curl", "your
       function showSecret(k) {
         const cp = OG.copy(k.secret, { cls: "pri", title: "Copy the key", label: "Copy key" });
         reveal.replaceChildren(h("div", { class: "dx-secret", role: "alert" },
-          h("div", { class: "dx-row", style: "margin:0" }, OG.badge("shown once", "warn"), h("b", {}, `Key "${k.name}" created`), h("span", { class: "spacer" }),
+          h("div", { class: "dx-row ky-sh" }, OG.badge("shown once", "warn"), h("b", {}, `Key "${k.name}" created`), h("span", { class: "spacer" }),
             h("button", { class: "btn sm", type: "button", onclick: async () => {
               const ok = await confirm({ title: "Hide the key?", confirm: "I've stored it", body: h("p", {}, "OpenGrid keeps only a hash of this key. Once hidden it cannot be shown again; you would have to create a new key.") });
               if (ok) reveal.replaceChildren();
             } }, "Done")),
           p("Copy it now: OpenGrid cannot show it again. Anyone holding it acts as this account with ", h("b", {}, k.scopes.join(", ")), "."),
           h("div", { class: "dx-secret-v" }, h("code", {}, k.secret), cp),
-          h("div", { class: "lbl", style: "margin-top:8px" }, "Use it"),
-          code(`export ${KEY_VAR}=<paste the key>      # in ~/.zshrc or ~/.bashrc; for the hosted MCP endpoint and curl
-opengrid auth login                     # or store it for the CLI and the local MCP server (hidden prompt)`, "shell", "never in a URL or a committed file"),
-          code(`curl -s "${base}/v1/me" -H "Authorization: Bearer $${KEY_VAR}"`, "curl", "check it"),
-          p(h("a", { class: "lnk", href: "/developers#assistant" }, "Connect an assistant with it →"))));
+          code(`opengrid auth login                     # CLI and local MCP server: paste it at the hidden prompt
+export ${KEY_VAR}=<paste the key>      # hosted MCP endpoint and curl: in ~/.zshrc or ~/.bashrc`, "shell", "never in a URL or a committed file"),
+          p(h("a", { class: "lnk", href: "/developers#have-key" }, "Using your key →"))));
         reveal.scrollIntoView({ block: "nearest" });
       }
 
@@ -221,13 +214,18 @@ opengrid auth login                     # or store it for the CLI and the local 
         billing: { label: "Billing preview", load: loadBilling },
       };
       const paneBox = h("div");
-      const pick = k => { OG.qs.set({ pane: k === "usage" ? null : k }); paneBox.replaceChildren(OG.loading()); panes[k].load(paneBox); };
+      let current;
+      const pick = k => { current = k; OG.qs.set({ pane: k === "usage" ? null : k }); paneBox.replaceChildren(OG.loading()); panes[k].load(paneBox); };
       const initial = panes[(location.hash || "").slice(1)] ? location.hash.slice(1) : panes[query.pane] ? query.pane : "usage";
+      current = initial;
       const paneTabs = OG.tabs(Object.entries(panes).map(([k, v]) => [k, v.label]), initial, pick);
-      const acct = h("section", { class: "sec", id: "account", style: "margin-top:22px" }, h("h2", { class: "sec-h" }, "Account details"),
-        h("p", { class: "note", style: "margin:0 0 6px" }, "Usage, limits, provider credentials and billing. Not needed to create your first key."), paneTabs, paneBox);
-      // old anchors (/keys#credentials, /keys#billing) still land here
-      acct.append(h("span", { id: "credentials" }), h("span", { id: "billing" }));
+      // folded: not needed to create a key; nothing loads until it is opened
+      const acct = h("details", { class: "dx-fold ky-acct", id: "account" }, h("summary", {}, "Usage, rate limits, provider credentials and billing"),
+        h("div", { class: "dx-fold-b" }, paneTabs, paneBox),
+        // old anchors (/keys#usage, #limits, #credentials, #billing) open the fold
+        Object.keys(panes).map(k => h("span", { id: k })));
+      let opened = false;
+      acct.addEventListener("toggle", () => { if (acct.open && !opened) { opened = true; pick(current); } });
       root.append(acct);
 
       async function loadUsage(box) {
@@ -237,7 +235,7 @@ opengrid auth login                     # or store it for the CLI and the local 
           const names = new Map(st.keys.map(k => [k.id, k]));
           const keyName = id => { const k = names.get(id); return k ? h("span", {}, k.name, " ", h("span", { class: "mono dim" }, k.prefix + "…")) : h("span", { class: "mono" }, "#" + id); };
           box.replaceChildren(...[
-            h("div", { class: "bar" }, seg, h("span", { class: "dim", style: "font-size:11.5px" }, `since ${fmt.dateTime(u.since)} · kept ${u.retention_days} days · only API-key requests are counted (not this website)`)),
+            h("div", { class: "bar" }, seg, h("span", { class: "dim ky-since" }, `since ${fmt.dateTime(u.since)} · kept ${u.retention_days} days · only API-key requests are counted (not this website)`)),
             OG.stats([
               { label: "Requests", value: fmt.num(u.requests) }, { label: "OK", value: fmt.num(u.ok) },
               { label: "Rate limited", value: fmt.num(u.rate_limited), sub: "429" }, { label: "Errors", value: fmt.num(u.errors), sub: "4xx/5xx except 429" },
@@ -305,7 +303,7 @@ opengrid auth login                     # or store it for the CLI and the local 
         const err = h("div");
         const form = h("form", { class: "ky-row", onsubmit: async e => {
           e.preventDefault();
-          if (!provSel.value || !secret.value) { err.replaceChildren(OG.error({ message: "provider and secret are required" })); return; }
+          if (!provSel.value || !secret.value) { err.replaceChildren(D.formError(new Error("Pick a provider and paste its secret."))); return; }
           const existing = (cr.byo || []).find(x => x.provider === provSel.value && x.state === "active");
           if (existing) {
             const ok = await confirm({ title: `Replace your ${OG.providerName(provSel.value)} credential?`, confirm: "Replace", body: h("p", {}, `An account holds one active credential per provider; ${existing.hint} will be revoked.`) });
@@ -314,7 +312,7 @@ opengrid auth login                     # or store it for the CLI and the local 
           try {
             await ctx.api("/v1/credentials", { method: "POST", body: { provider: provSel.value, secret: secret.value, label: label.value.trim() || null } });
             secret.value = ""; label.value = ""; err.replaceChildren(); loadCreds(box);
-          } catch (e2) { err.replaceChildren(OG.error(e2)); }
+          } catch (e2) { err.replaceChildren(D.formError(e2)); }
         } }, provSel, secret, label, h("button", { class: "btn pri", type: "submit" }, "Store encrypted"), hint);
         const byoTbl = OG.table({
           columns: [
@@ -382,8 +380,8 @@ opengrid auth login                     # or store it for the CLI and the local 
           h("div", { class: "cols-2" },
             h("div", {}, h("div", { class: "lbl" }, "Fee policy in force"), h("div", { class: "box box-p" }, policyEl)),
             h("div", {}, h("div", { class: "lbl" }, "Credits"), credits.length ? OG.table({ columns: [{ key: "amount_usd", label: "Amount", num: true, fmt: v => money(v) }, { key: "remaining_usd", label: "Remaining", num: true, fmt: v => money(v) }, { key: "reason", label: "Reason", cls: "wrap dim" }, { key: "expires_at", label: "Expires", num: true, fmt: v => v ? fmt.date(v) : "never" }], rows: credits, compact: true, csv: false }) : OG.empty("No credits."))),
-          h("div", { class: "lbl", style: "margin-top:10px" }, "Metered usage"), usageEl,
-          h("div", { class: "lbl", style: "margin-top:10px" }, "Invoices (drafts)"), invEl);
+          h("div", { class: "lbl ky-lbl" }, "Metered usage"), usageEl,
+          h("div", { class: "lbl ky-lbl" }, "Invoices (drafts)"), invEl);
       }
 
       // scope catalogue: GET /v1/scopes (public), else /v1/me scopes_catalog, else the built-in fallback
@@ -393,8 +391,7 @@ opengrid auth login                     # or store it for the CLI and the local 
       drawCreate();
       await loadKeys();
       if (!ctx.alive()) return;
-      pick(initial);
-      if (panes[(location.hash || "").slice(1)]) acct.scrollIntoView();
+      if (panes[(location.hash || "").slice(1)] || panes[query.pane] || location.hash === "#account") { acct.open = true; acct.scrollIntoView(); }
     },
   });
 })();
