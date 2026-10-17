@@ -38,6 +38,8 @@ KINDS = {
     "unowned_provider_resource": "an og-* provider resource exists with no OpenGrid ownership record",
     "resource_delete_failed": "a temporary provider resource (ssh key) could not be deleted",
     "unexpected_ssh_key": "an instance lists SSH keys OpenGrid did not request (provider-forced access?)",
+    "relaunch_blocked": "an automatic job relaunch was due (previous GPU confirmed gone) but an internal error "
+                        "blocked it; nothing bills, the customer's job is not continuing",
 }
 
 # Kinds whose payload must carry the cost-exposure fields.

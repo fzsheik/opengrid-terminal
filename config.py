@@ -158,6 +158,12 @@ class Settings(BaseSettings):
     job_runner_silence_minutes: int = 10         # runner reported, then nothing this long -> runner_lost (+ terminate)
                                                  # (while still initializing: the bootstrap timeout, if longer)
     job_token_grace_minutes: int = 15            # runner token expires at the deployment deadline + this
+    # Automatic relaunch of an interrupted job (jobs/relaunch.py; methodology/jobs.md "Automatic relaunch"). OFF by
+    # default: with this off (or a job without retry.max_attempts > 1) nothing is ever relaunched. Even when on, a
+    # relaunch happens only after the provider CONFIRMED the previous machine is gone, through the normal submit /
+    # route / approval / cost-guard path, as the job's original owner, within the job's retry.max_total_usd.
+    job_auto_relaunch_enabled: bool = False
+    job_relaunch_interval_seconds: int = 60      # the job_relaunch background pass
     # --- OpenGrid Assistant (assistant/, api/assistant.py; POST /v1/assistant) ---
     # The deterministic engine always works. An LLM is OPTIONAL and off unless BOTH a provider and its key are
     # set: ASSISTANT_LLM_PROVIDER=anthropic + ANTHROPIC_API_KEY (and `uv sync --extra llm` for the SDK).

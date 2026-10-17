@@ -19,6 +19,8 @@
                                                 ckpt-eNNNN.pt are checkpoints (own size limit, latest-N retention)
     GET  /v1/jobs/{job_id}/runner/resume        the checkpoint this job was created to resume from (404 otherwise)
     POST /v1/jobs/{job_id}/runner/complete      {outcome: succeeded|failed|oom|timeout, summary}
+Automatic relaunch (jobs/relaunch.py, background job job_relaunch; off unless JOB_AUTO_RELAUNCH_ENABLED and the job's
+retry.max_attempts > 1) submits through the same orchestrator.submit; a job in a chain carries a `chain` block.
 (*) Idempotency-Key header REQUIRED (routing/idempotency.py): same key + same body replays; different body 422;
 in flight 409 + Retry-After. Approval of a real job is the EXISTING POST /v1/route/{route_request_id}/approve.
 Errors: HTTP 4xx/5xx with detail {code, message, ...} (422 for validation / refusals).
@@ -32,6 +34,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 
+import jobs.relaunch  # noqa: F401  registers the job_relaunch background job (a no-op unless enabled)
 import jobs.sync  # noqa: F401  registers the job_sync background job
 from accounts.auth import Principal, require_scope
 from api.common import ESTIMATED, INFERRED, TRANSACTION, envelope
@@ -39,7 +42,7 @@ from jobs import orchestrator as O
 from jobs import tokens
 from routing import control, idempotency
 
-control.install_job_heartbeats(names=("job_sync",))
+control.install_job_heartbeats(names=("job_sync", "job_relaunch"))
 
 router = APIRouter()
 READ = require_scope("deployments:read")

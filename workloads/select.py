@@ -8,7 +8,9 @@ Pipeline
     2. eligible canonical GPUs (workloads.hardware_req.resolve): vendor, compute capability, VRAM, host
     3. for each eligible GPU with listings: the EXISTING routing.scoring.rank_listings (count, region,
        max_price, mode=strategy, weights, strict_region); candidates merged, exclusions kept with reasons
-    4. workload filters: vCPU / RAM / disk minimums where the listing reports them, single-instance only
+    4. workload filters: vCPU / RAM / disk minimums where the listing reports them, single-instance only;
+       request.routing.exclude_providers (a relaunch: every provider that interrupted / lost an attempt) ->
+       excluded with code provider_excluded, and passed on to the route as preferences.exclude_providers
     5. cost bounds: billed minutes = runtime ceiling rounded UP to the provider's billing unit, at least its
        minimum commitment (adapter CAPABILITIES; unknown -> per-hour assumed, said so);
        est_max_total = price x gpu_count x billed hours (> max_total_cost -> excluded, with the numbers)
@@ -430,7 +432,12 @@ def select(spec, who, *, now: datetime | None = None) -> dict:
     rows = _resources([g["gpu"] for g in gpus["eligible"] if g["gpu"] in listed])
     kept = []
     bills: dict[str, dict] = {}
+    excluded_providers = set(rt.get("exclude_providers") or ())
     for c in pool:
+        if c["provider"] in excluded_providers:
+            excl.append(_excl(c, c["gpu"], "provider_excluded", f"{c['provider']} is excluded by "
+                                                                "routing.exclude_providers"))
+            continue
         c["resources"], fails = _resource_check(c, rows.get((c["provider"], c["listing_id"])), req)
         if fails:
             excl += [_excl(c, c["gpu"], code, why) for code, why in fails]
@@ -457,7 +464,9 @@ def select(spec, who, *, now: datetime | None = None) -> dict:
                                                                                      R["ssh_public_key"]))
         c["route_spec"] = {"gpu": c["gpu"], "count": count, "region_group": region, "strict_region": strict,
                            "max_price_per_gpu_hour": max_price, "mode": strategy, "weights": weights,
-                           "preferences": {"include_providers": [c["provider"]]},
+                           "preferences": {"include_providers": [c["provider"]],
+                                           **({"exclude_providers": sorted(excluded_providers)}
+                                              if excluded_providers else {})},
                            "max_runtime_minutes": lim["max_runtime_minutes"],
                            "duration_hours": round(c["cost"]["billed_minutes"] / 60, 6),
                            "listing_id": c["listing_id"]}

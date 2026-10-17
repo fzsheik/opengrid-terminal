@@ -6,7 +6,9 @@
    the cursor-paged log panel, the 12 verification checks with evidence, artifacts (download + sha256 + size),
    termination evidence, cost reconciliation (quote / expected / provider-reported / transaction), the routing
    decision, Cancel (one Idempotency-Key per intent, confirmed) and errors with their actionable message.
-   A SIMULATED job carries a persistent banner and never shows a real check mark. */
+   A SIMULATED job carries a persistent banner and never shows a real check mark. An automatically relaunched job
+   (job.chain, jobs/relaunch.py) shows "Attempt 2 of 3 · relaunched after … · resumed from epoch N" with links to
+   the previous / next attempt, the relaunch decision and the spend so far vs the ceiling. */
 (() => {
   if (typeof document === "undefined" || typeof OG.page !== "function") return;
   const { h, fmt } = OG;
@@ -111,6 +113,7 @@
             J.isTerminal(job) ? null : h("span", { class: "dim" }, "updates every few seconds"),
             h("button", { class: "btn sm", type: "button", onclick: () => load(), title: "Reload the job now" }, "Refresh")),
           resumeNote(),
+          chainNote(),
           sandbox() ? h("div", { class: "jb-simban", role: "note" }, h("b", {}, "SIMULATED"), h("span", {}, "No GPU was used and nothing was charged. Every number on this page is synthetic.")) : null,
           flash,
           billingAlarm(),
@@ -125,6 +128,18 @@
         const i = rl.text.indexOf(rl.job_id);   // the source job id becomes a link
         return h("p", { class: "note" + (rl.tone ? " t-" + rl.tone : ""), role: "note" }, rl.text.slice(0, i),
           h("a", { class: "lnk mono", href: "/jobs/" + encodeURIComponent(rl.job_id) }, rl.job_id), rl.text.slice(i + rl.job_id.length));
+      }
+      // The automatic-relaunch chain (job.chain; jobs/relaunch.py): "Attempt 2 of 3 · relaunched after the GPU on
+      // Lambda was interrupted · resumed from epoch 2", links to the previous / next attempt, the decision, the spend.
+      function chainNote() {
+        const cl = J.chainLine(job), cs = J.chainStatus(job), sp = J.chainSpend(job);
+        if (!cl && !cs) return null;
+        const link = (id, label) => id ? h("a", { class: "lnk", href: "/jobs/" + encodeURIComponent(id) }, label, " ", h("span", { class: "mono" }, id)) : null;
+        return h("div", { class: "note jb-chain", role: "note" },
+          cl ? h("p", {}, h("b", {}, cl.text)) : null,
+          cl && (cl.prev || cl.next) ? h("p", {}, link(cl.prev, "← previous attempt"), cl.prev && cl.next ? " · " : null, link(cl.next, "next attempt →")) : null,
+          cs && !(cl && cl.next && cs.href) ? h("p", { class: cs.tone ? "t-" + cs.tone : null }, cs.text) : null,
+          sp ? h("p", { class: "dim" }, sp) : null);
       }
       // At a glance: simulation or real, status, result, GPU, cost, outputs; then the one next step.
       function glanceBlock() {

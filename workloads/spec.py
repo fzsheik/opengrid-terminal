@@ -11,6 +11,11 @@ validate() refuses them with code `unsupported_workload_type`. Only allowlisted 
 command and no dataset URL can be supplied. See methodology/workloads.md.
 resume_from {job_id, artifact?} is shape-checked here; ownership, storage and sha256 are checked at submission
 (jobs/artifacts.resolve_resume), which pins {job_id, artifact, epoch, sha256, size} into the job's spec.
+retry {max_attempts 1..3 (default 1 = never relaunched), max_total_usd (REQUIRED when max_attempts > 1: the ceiling
+across ALL attempts, >= limits.max_total_cost_usd)} is the automatic-relaunch policy (jobs/relaunch.py); it only
+acts when settings.job_auto_relaunch_enabled is on. routing.exclude_providers [provider ids] removes providers
+from the selection (a relaunch fills it with every provider that interrupted / lost an attempt of the chain).
+Both keys appear in the validated request only when given, so an ordinary request keeps exactly its old shape.
 """
 
 from __future__ import annotations
@@ -67,6 +72,14 @@ class Resources(_M):
 class Routing(_M):
     strategy: str = "BALANCED"
     weights: dict[str, float] | None = None
+    exclude_providers: list[str] | None = None
+
+
+class Retry(_M):
+    """Automatic relaunch after an interruption (jobs/relaunch.py). max_attempts counts every attempt, the first
+    included (1 = never relaunched); max_total_usd caps the spend of ALL attempts together."""
+    max_attempts: int = 1
+    max_total_usd: float | None = None
 
 
 class Limits(_M):
@@ -95,6 +108,12 @@ class WorkloadSpec(_M):
     artifact_destination: str = "opengrid"
     dataset_ref: str | None = None
     resume_from: ResumeFrom | None = None
+    retry: Retry | None = None
+
+
+MAX_ATTEMPTS = 3
+PROVIDER_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}\Z")
+MAX_EXCLUDED_PROVIDERS = 32
 
 
 @dataclass
@@ -330,6 +349,44 @@ def validate(body) -> Validated:
                                 field="resume_from.artifact")
         resume = {"job_id": s.resume_from.job_id, "artifact": s.resume_from.artifact}
 
+    exclude = None
+    if s.routing.exclude_providers:
+        ex = [str(p).strip().lower() for p in s.routing.exclude_providers]
+        bad = [p for p in ex if not PROVIDER_RE.match(p)]
+        if bad or len(ex) > MAX_EXCLUDED_PROVIDERS:
+            raise WorkloadError("invalid_exclude_providers", f"routing.exclude_providers must be at most "
+                                                             f"{MAX_EXCLUDED_PROVIDERS} provider ids [a-z0-9_-]",
+                                field="routing.exclude_providers")
+        exclude = sorted(set(ex))
+    retry = None
+    if s.retry is not None:
+        n = s.retry.max_attempts
+        if isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= MAX_ATTEMPTS:
+            raise WorkloadError("invalid_retry", f"retry.max_attempts must be an integer 1..{MAX_ATTEMPTS} (1 = no "
+                                                 "automatic relaunch)", field="retry.max_attempts")
+        cap = s.retry.max_total_usd
+        if cap is not None and (not math.isfinite(float(cap)) or float(cap) <= 0):
+            raise WorkloadError("invalid_retry", "retry.max_total_usd must be a positive number",
+                                field="retry.max_total_usd")
+        if n > 1:
+            if cap is None:
+                raise WorkloadError("retry_budget_required", "retry.max_total_usd is required when "
+                                                             "retry.max_attempts > 1: it caps the spend of all "
+                                                             "attempts together", field="retry.max_total_usd")
+            if float(cap) < float(lim.max_total_cost_usd) - 1e-9:
+                raise WorkloadError("invalid_retry", f"retry.max_total_usd {float(cap):g} is below "
+                                                     f"limits.max_total_cost_usd {float(lim.max_total_cost_usd):g}: "
+                                                     "the ceiling across all attempts must cover the first one",
+                                    field="retry.max_total_usd")
+            hi = float(lb["max_total_cost_usd"]["max"]) * MAX_ATTEMPTS
+            if float(cap) > hi:
+                raise WorkloadError("invalid_retry", f"retry.max_total_usd must be at most {hi:g} USD",
+                                    field="retry.max_total_usd")
+        retry = {"max_attempts": int(n), "max_total_usd": None if cap is None else round(float(cap), 4)}
+        if n > 1 and s.sandbox:
+            notes.append("sandbox: a simulation is never interrupted, so the retry policy is recorded but never "
+                         "used (nothing is relaunched)")
+
     request = {
         "name": name, "job_type": s.job_type, "template": tmpl["id"], "config": config,
         "resources": {"gpu": gpu, "gpu_count": r.gpu_count, "min_vram_gb": r.min_vram_gb, "region": region,
@@ -344,6 +401,10 @@ def validate(body) -> Validated:
     }
     if resume is not None:   # only when asked: an ordinary request keeps exactly its old shape
         request["resume_from"] = resume
+    if exclude:
+        request["routing"]["exclude_providers"] = exclude
+    if retry is not None:
+        request["retry"] = retry
     requirements = {**req0, "min_vram_gb": vram, "min_vcpu": vcpu, "min_ram_gb": ram, "min_disk_gb": disk,
                     "gpu_count": r.gpu_count, "region": region, "strict_region": bool(r.strict_region)}
     return Validated(request=request, template=tmpl, requirements=requirements, notes=notes,

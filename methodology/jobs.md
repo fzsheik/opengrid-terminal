@@ -220,6 +220,82 @@ size, sha256, created_at} | None` answers "is there a resumable checkpoint"; a n
 with `resume_from = {"job_id": job_id, "artifact": <artifact>}` continues from it on any provider.
 `jobs.artifacts.resolve_resume(account_id, ref, epochs=)` is the same validation without creating a job.
 
+## 8b. Automatic relaunch (`jobs/relaunch.py`)
+
+**Off by default, twice.** Nothing is ever relaunched unless BOTH the deployment setting
+`JOB_AUTO_RELAUNCH_ENABLED` (default `false`) is on AND the job asked for it:
+
+```json
+"retry": {"max_attempts": 3, "max_total_usd": 6}
+```
+
+`max_attempts` counts every attempt including the first (1-3; default 1 = never relaunched). `max_total_usd` is
+REQUIRED when `max_attempts > 1`: the ceiling on the spend of ALL attempts together; it must cover the first
+attempt (`>= limits.max_total_cost_usd`). Validation codes: `invalid_retry`, `retry_budget_required`. Preview
+shows the policy under `submission.retry` (`applies`, `auto_relaunch_enabled`, a plain note). A sandbox job
+records the policy but is never relaunched: a simulation is never interrupted, so there is nothing to simulate.
+
+**Trigger.** Only an attempt whose `failure.code` is `gpu_interrupted` (the provider ended the machine without
+OpenGrid asking) or `runner_lost` (the GPU machine stopped reporting; OpenGrid terminated it). Never
+`training_failed`, `out_of_memory`, `bootstrap_failed` / `bootstrap_timeout` / `cuda_init_failed`,
+`training_timed_out`, `artifact_upload_failed`, a cancel, or a validation error: those would fail again, or were
+asked for.
+
+**The core rule: never relaunch while the previous machine might still be billing.** The attempt must be
+`termination_confirmed`, `reconciliation_pending` or `reconciled` AND its deployment `terminated` with the
+provider's evidence. Nothing happens from `terminating`, `degraded`, `termination_failed`, `orphan_suspected`,
+`credentials_unavailable`, `provider_timeout`, `provisioning_uncertain`, `launch_unknown` or any state where the
+machine's existence is unproven; the job simply waits (the chain block says "waiting for the provider to
+confirm the GPU is gone").
+
+**The successor** is a NEW job (new `job_id`) with `retry_of` (the failed attempt), `root_job_id` (attempt 1) and
+`attempt` (2, 3): the root's template, config, resources, strategy, price cap, runtime and retry policy, the same
+owner. It goes through the EXACT submit path a person's job takes (validate, workload-aware selection, quote,
+`engine.route`, cost guards, approval): in SUPERVISED mode it waits in `pending_approval` for an admin like any
+other job. Routing excludes every provider that interrupted or lost an attempt of the chain
+(`routing.exclude_providers`, which any request may also set); nothing eligible left ends the chain.
+`resume_from` is the failed attempt's latest verified checkpoint, else the newest one anywhere in the chain;
+without one the successor starts from scratch and says so.
+
+**Money.** Before submitting, spend so far = per attempt: once reconciled, the max of the transaction cost, the
+provider-reported cost and the metered usage; before that, the max of the metered usage and the attempt's
+`est_max_total_usd` (an upper bound). The successor's `limits.max_total_cost_usd` becomes
+`min(original, max_total_usd - spend so far)` (it can only go down), and the selection's estimate must satisfy
+`spend so far + est_max_total <= max_total_usd`; otherwise the chain stops with `retry_budget_exhausted` and
+nothing is quoted. The per-job and account cost guards apply on top, unchanged. Costs are compute cost (the basis
+of `max_total_cost_usd`); OpenGrid's fees are reported separately, as everywhere else.
+
+**Owner.** The relaunch submits as the job's original principal, re-verified at that moment: the API key still
+exists, is not revoked (nor any key above it), not expired, still holds `route:execute`, and the account is
+active. Otherwise the chain stops (`owner_key_revoked`, `owner_key_expired`, `owner_scope_missing`,
+`account_suspended`, `owner_unavailable`). A customer job never runs as the operator or with more scopes than its
+key; the operator's own job relaunches as the operator.
+
+**At most one successor.** Each decision is a `job_relaunches` row keyed by the failed attempt (PRIMARY KEY: one
+worker claims it), the submission runs inside the normal idempotency store with the deterministic key
+`relaunch:<failed job id>` (scope `jobs:relaunch`), and `jobs.retry_of` is UNIQUE: a second successor is refused
+by the database (`relaunch_exists`) before anything is quoted. A crashed pass is resumed by the next one, which
+finds the existing successor instead of submitting again.
+
+**Chain stop reasons** (`chain.stopped.code`): `max_attempts_reached`, `retry_budget_exhausted`,
+`no_eligible_provider`, the owner codes above, or the refusal code of the relaunch submission itself (for
+example `price_changed`). A stop is final for that attempt: a person can always submit again with `resume_from`.
+An internal error is not a stop: the decision is `blocked`, retried on the next pass, and the operator gets an
+ops alert `relaunch_blocked` (nothing bills: the previous machine is confirmed gone).
+
+**Visibility.** Jobs with a retry policy or in a chain carry `chain`: `attempt`, `max_attempts`,
+`max_total_usd`, `spend_so_far_usd`, `root_job_id`, `previous_job_id`, `next_job_id`, `relaunched_after` (`code`,
+`provider`, `resume_from_epoch`, `from_scratch`), `relaunch` (this attempt's decision: `relaunched` | `stopped` |
+`blocked` | `claimed` | `pending` | `not_relaunched` with the reason) and `stopped`. Ordinary jobs have no `chain`
+key. Events: the old job gets "relaunched as job-X on <provider> resuming from epoch N", the new one is created with
+"attempt N of M, relaunched after <cause> on <provider>"; both, and every chain stop, are posted to the jobs feed.
+The job page shows "Attempt 2 of 3 · relaunched after the GPU on Lambda was interrupted · resumed from epoch 2"
+with links both ways; My Jobs shows a chain as its newest attempt (an older attempt that may still bill is never
+hidden).
+
+**Reliability.** `routing/reliability.py` reads deployments, not jobs: the interrupted attempt's deployment is
+counted once (its own interruption) and the successor is a new deployment counted like any other launch.
+
 ## 9. Errors
 
 HTTP 4xx/5xx with `detail = {code, message, ...}`: validation (`workloads.spec` codes, 422), `execution_disabled`,
@@ -230,7 +306,7 @@ again), `idempotency_key_required` (428), `idempotency_key_reused` (422), `idemp
 are `failure.code`: `cuda_init_failed`, `bootstrap_failed`, `bootstrap_timeout`, `training_failed`,
 `out_of_memory`, `training_timed_out`, `artifact_upload_failed`, `result_missing`, `metrics_missing`,
 `gpu_unavailable`, `price_changed`, `approval_rejected`, `terminated_before_completion`, `gpu_interrupted`,
-`runner_lost`; an unconfirmed
+`runner_lost`; a relaunch submission may also be refused with `relaunch_exists` (409); an unconfirmed
 termination shows as `resource.termination_unconfirmed` with `disposition = possibly_billing`.
 
 ## 10. Endpoints

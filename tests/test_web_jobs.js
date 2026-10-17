@@ -274,5 +274,48 @@ eq(J.resumeLine({ status: "pending_approval", resume: { job_id: "job-aa", epoch:
 ok(/simulated/.test(J.resumeLine({ status: "training_completed", sandbox: true, finished: true, resume: { job_id: "job-aa", epoch: 2, confirmed: true, confirmed_from_epoch: 2, simulated: true } }).text), "a simulated resume says so");
 ok(J.resumeLine({ status: "training" }) === null && J.resumeLine({ resume: null }) === null, "no resume, no line");
 
+// ---------- automatic relaunch chain (jobs/relaunch.py chain block) ----------
+const att2 = { job_id: "job-b2", status: "pending_approval", created_at: "2026-10-16T10:05:00Z",
+  chain: { attempt: 2, max_attempts: 3, max_total_usd: 6, previous_job_id: "job-a1", next_job_id: null, spend_so_far_usd: 0.21,
+    relaunched_after: { code: "gpu_interrupted", provider: "lambda", resume_from_epoch: 2, from_scratch: false }, relaunch: null, stopped: null } };
+const att1 = { job_id: "job-a1", status: "reconciled", finished: true, outcome: "failed", created_at: "2026-10-16T10:00:00Z",
+  failure: { code: "gpu_interrupted" }, chain: { attempt: 1, max_attempts: 3, max_total_usd: 6, previous_job_id: null, next_job_id: "job-b2",
+    relaunch: { status: "relaunched" }, stopped: null } };
+eq(J.chainLine(att2).text, "Attempt 2 of 3 · relaunched after the GPU on Lambda was interrupted · resumed from epoch 2", "attempt line: number, cause, provider, resume epoch");
+eq([J.chainLine(att2).prev, J.chainLine(att1).next], ["job-a1", "job-b2"], "links both ways");
+ok(/stopped reporting/.test(J.chainLine({ chain: { attempt: 2, max_attempts: 2, relaunched_after: { code: "runner_lost", provider: "runpod", from_scratch: true } } }).text)
+  && /from scratch/.test(J.chainLine({ chain: { attempt: 2, max_attempts: 2, relaunched_after: { code: "runner_lost", from_scratch: true } } }).text), "runner_lost + no checkpoint said plainly");
+ok(J.chainLine({ status: "training" }) === null && J.chainLine({ chain: { attempt: 1, max_attempts: 3 } }) === null, "no chain line for an ordinary job / an untouched attempt 1");
+ok(J.chainStatus(att1).href === "/jobs/job-b2" && /attempt 2/.test(J.chainStatus(att1).text), "relaunched: link to the next attempt");
+const stopped = { status: "reconciled", finished: true, failure: { code: "gpu_interrupted" }, chain: { attempt: 1, max_attempts: 3, stopped: { code: "retry_budget_exhausted", reason: "x" }, relaunch: { status: "stopped", code: "retry_budget_exhausted" } } };
+ok(/Not relaunched: another attempt could cost more than the job's total budget/.test(J.chainStatus(stopped).text) && J.chainStatus(stopped).tone === "warn", "chain stop reason in plain words");
+ok(J.chainStatus({ ...stopped, chain: { ...stopped.chain, next_job_id: "job-r3" } }).tone === "warn" && /refused/.test(J.chainStatus({ ...stopped, chain: { ...stopped.chain, next_job_id: "job-r3" } }).label), "a stop wins over a refused successor row");
+ok(/Lambda|provider/.test(J.STOP_PLAIN.no_eligible_provider) && !/[A-Z_]{6,}/.test(Object.values(J.STOP_PLAIN).join(" ")), "stop reasons never show codes or env vars");
+ok(/nothing is billing/.test(J.chainStatus({ chain: { attempt: 1, max_attempts: 2, relaunch: { status: "blocked" } } }).text), "blocked: says nothing bills and the operator knows");
+ok(/Waiting for the provider/.test(J.chainStatus({ chain: { attempt: 1, max_attempts: 2, relaunch: { status: "pending", reason: "waiting for the provider to confirm the GPU is gone before relaunching" } } }).text), "pending: waits for the confirmed termination");
+eq(J.chainSpend(att2), "Spent so far $0.21 of $6.00 across all attempts", "spend so far vs the ceiling");
+ok(J.chainSpend({ chain: { attempt: 1, max_attempts: 3, max_total_usd: 6 } }) === null, "no spend line before a chain exists");
+// next step + timeline
+const ns1 = J.nextStep(att1);
+ok(ns1.href === "/jobs/job-b2" && /relaunched this job automatically/.test(ns1.text), "interrupted + relaunched: next step opens the next attempt");
+ok(J.nextStep(stopped).href === "/jobs/new" && /Not relaunched/.test(J.nextStep(stopped).text), "interrupted + chain stopped: says why, start a new job");
+const tlr = J.timeline({ status: "reconciled", events: [
+  { at: "2026-10-16T10:00:00Z", from: null, to: "created" },
+  { at: "2026-10-16T10:09:00Z", from: "reconciled", to: "reconciled", reason: "relaunched as job-b2 on lambdb resuming from epoch 2", evidence: { relaunch_event: "relaunched", attempt: 2, provider: "lambdb", successor_job_id: "job-b2" } },
+  { at: "2026-10-16T10:08:00Z", from: "reconciled", to: "reconciled", reason: "termination evidence" }] });
+eq(tlr.map(t => t.text), ["Job created", "Relaunched automatically as attempt 2 on Lambdb"], "timeline keeps relaunch notes, skips other notes");
+ok(J.timeline({ events: [{ at: "x", from: null, to: "created", evidence: { relaunch_event: "relaunched_from", relaunch: { attempt: 2, retry_of: "job-a1" } } }] })[0].text === "Created automatically as attempt 2", "the successor's first event");
+// My Jobs: a chain shows its newest attempt; an older attempt that may bill is never hidden
+const g2 = J.jobGroups([att1, att2]);
+eq([g2.active.map(j => j.job_id), g2.completed.map(j => j.job_id)], [["job-b2"], []], "My Jobs groups a chain under its newest attempt");
+const billing = { ...att1, status: "termination_failed", finished: false, resource: { possibly_billing: true } };
+ok(J.jobGroups([billing, att2]).attention.some(j => j.job_id === "job-a1"), "an older attempt that may still bill stays visible (needs attention)");
+ok(J.collapseChains([att1]).length === 1, "the previous attempt stays when its successor is not in the list");
+{
+  const fs = require("fs"), path = require("path");
+  const jsrc = fs.readFileSync(path.join(__dirname, "..", "web", "pages", "job.js"), "utf8");
+  ok(/chainNote\(\)/.test(jsrc) && /J\.chainLine\(job\)/.test(jsrc), "the job page shows the chain note");
+}
+
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);

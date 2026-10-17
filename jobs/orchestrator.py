@@ -15,6 +15,9 @@
     resume_from                 submit/preview pin {job_id, artifact, epoch, sha256, size} via
                                 jobs/artifacts.resolve_resume (same account, stored, sha256 re-verified); the
                                 bootstrap then downloads exactly that checkpoint (runner/resume) before training
+    submit(..., chain=)         jobs/relaunch.py only: the SAME submit path for an automatic relaunch; the new job row
+                                carries retry_of / root_job_id / attempt and UNIQUE(retry_of) refuses a second
+                                successor (relaunch_exists) before anything is quoted or routed
     render_startup(d, spec)     called by routing/deployments.launch under the deployment row lock, right before
                                 the provider call: replaces the placeholder startup_script "opengrid-job:<job_id>"
                                 with runner.bootstrap.render(job_id, <derived token>, ...). The script and token
@@ -285,6 +288,9 @@ def preview(body, who) -> dict:
     sub["ssh"] = ({"mode": "customer", "fingerprint": v.ssh_key_fingerprint} if v.ssh_key_fingerprint else
                   {"mode": "ephemeral", "note": "no ssh_public_key: an ephemeral key is generated at submission and "
                                                 "its private half discarded; nobody (including OpenGrid) can SSH in"})
+    if v.request.get("retry"):
+        from jobs import relaunch
+        sub["retry"] = relaunch.policy_preview(v.request)
     out["submission"] = sub
     return out
 
@@ -323,7 +329,9 @@ def _selection_record(sel: dict, chosen: dict | None) -> dict:
             "template": sel.get("template"), "methodology": sel.get("methodology")}
 
 
-def _create_job(who, v, sel, chosen, *, ssh: dict, sandbox: bool) -> str:
+def _create_job(who, v, sel, chosen, *, ssh: dict, sandbox: bool, chain: dict | None = None) -> str:
+    from sqlalchemy.exc import IntegrityError
+
     from workloads import templates as T
 
     job_id = new_job_id()
@@ -331,25 +339,39 @@ def _create_job(who, v, sel, chosen, *, ssh: dict, sandbox: bool) -> str:
     req = v.request
     cost = (chosen or sel.get("market_best") or {}).get("cost") or {}
     actor, actor_id = _actor(who)
-    with normalize.SessionLocal.begin() as s:
-        job = Job(job_id=job_id, account_id=who.account_id, key_id=who.key_id, principal_kind=who.kind,
-                  name=req["name"], job_type=req["job_type"], template=req["template"],
-                  template_version=v.template.get("version"), config=req["config"],
-                  spec=_public_request(req, ssh.get("fingerprint")), status="created", sandbox=sandbox,
-                  selection=M_json(_selection_record(sel, chosen)),
-                  est_max_total_usd=_dec(cost.get("est_max_total")), est_typical_total_usd=_dec(cost.get("est_typical_total")),
-                  runtime_ceiling_minutes=int((sel.get("runtime") or {}).get("effective_max_runtime_minutes")
-                                              or req["limits"]["max_runtime_minutes"]),
-                  ssh_key_mode=ssh["mode"], ssh_key_fingerprint=ssh.get("fingerprint"), created_at=now, updated_at=now,
-                  state_changed_at=now, evidence=M.blank_evidence())
-        s.add(job)
-        s.flush()
-        s.add(JobEvent(job_id=job_id, at=now, from_status=None, to_status="created", actor=actor, actor_id=actor_id,
-                       reason=("SIMULATED sandbox job" if sandbox else "job submitted"),
-                       evidence={"template": req["template"], "template_version": v.template.get("version"),
-                                 "expected_runtime_minutes": list(T.expected_minutes(v.template, req["config"]))}))
-        S.transition(s, job, "validating", actor="system", reason="request validated against the template",
-                     evidence={"requirements": M_json(v.requirements), "notes": v.notes})
+    ev = {"template": req["template"], "template_version": v.template.get("version"),
+          "expected_runtime_minutes": list(T.expected_minutes(v.template, req["config"]))}
+    reason = "SIMULATED sandbox job" if sandbox else "job submitted"
+    if chain:
+        actor, actor_id = "system", f"relaunch:{chain['retry_of']}"[:64]
+        reason = chain.get("reason") or f"attempt {chain['attempt']}: automatic relaunch of {chain['retry_of']}"
+        ev["relaunch"] = {k: chain.get(k) for k in ("retry_of", "root_job_id", "attempt", "max_attempts")}
+        ev["relaunch_event"] = "relaunched_from"
+    try:
+        with normalize.SessionLocal.begin() as s:
+            job = Job(job_id=job_id, account_id=who.account_id, key_id=who.key_id, principal_kind=who.kind,
+                      name=req["name"], job_type=req["job_type"], template=req["template"],
+                      template_version=v.template.get("version"), config=req["config"],
+                      spec=_public_request(req, ssh.get("fingerprint")), status="created", sandbox=sandbox,
+                      selection=M_json(_selection_record(sel, chosen)),
+                      est_max_total_usd=_dec(cost.get("est_max_total")), est_typical_total_usd=_dec(cost.get("est_typical_total")),
+                      runtime_ceiling_minutes=int((sel.get("runtime") or {}).get("effective_max_runtime_minutes")
+                                                  or req["limits"]["max_runtime_minutes"]),
+                      ssh_key_mode=ssh["mode"], ssh_key_fingerprint=ssh.get("fingerprint"), created_at=now, updated_at=now,
+                      state_changed_at=now, evidence=M.blank_evidence())
+            if chain:
+                job.retry_of, job.root_job_id, job.attempt = chain["retry_of"], chain["root_job_id"], int(chain["attempt"])
+            s.add(job)
+            s.flush()     # UNIQUE(retry_of): a second successor of the same failed attempt stops here
+            s.add(JobEvent(job_id=job_id, at=now, from_status=None, to_status="created", actor=actor, actor_id=actor_id,
+                           reason=reason, evidence=ev))
+            S.transition(s, job, "validating", actor="system", reason="request validated against the template",
+                         evidence={"requirements": M_json(v.requirements), "notes": v.notes})
+    except IntegrityError:
+        if not chain:
+            raise
+        raise JobRefused("relaunch_exists", f"job {chain['retry_of']} already has a successor (one relaunch per "
+                                            "failed attempt)", 409) from None
     return job_id
 
 
@@ -361,7 +383,9 @@ def _dec(v):
     return None if v is None else Decimal(str(round(float(v), 4)))
 
 
-def submit(body, who) -> tuple[int, dict]:
+def submit(body, who, *, chain: dict | None = None) -> tuple[int, dict]:
+    """chain: jobs/relaunch.py only ({retry_of, root_job_id, attempt, max_attempts, reason}); everything else is the
+    one submit path every job takes."""
     from routing import engine
     from workloads.spec import WorkloadError, validate
 
@@ -372,6 +396,8 @@ def submit(body, who) -> tuple[int, dict]:
     _pin_resume(v, who)
     sel = _select(v, who)
     sandbox = bool(v.request["sandbox"])
+    if chain and sandbox:
+        raise JobRefused("relaunch_not_real", "a sandbox job is never relaunched", 422)
     if sandbox:
         ssh = {"mode": "none", "fingerprint": None}
         job_id = _create_job(who, v, sel, sel.get("execution_ready") or sel.get("market_best"), ssh=ssh, sandbox=True)
@@ -391,7 +417,7 @@ def submit(body, who) -> tuple[int, dict]:
     else:
         from jobs import ephemeral_ssh
         ssh = ephemeral_ssh.generate()
-    job_id = _create_job(who, v, sel, ready, ssh=ssh, sandbox=False)
+    job_id = _create_job(who, v, sel, ready, ssh=ssh, sandbox=False, chain=chain)
     try:
         return _route(job_id, who, v, sel, ready, ssh)
     except JobRefused as r:
@@ -652,8 +678,10 @@ def get(job_id: str, who, *, sync_first: bool = False) -> dict:
         evs = [{"at": e.at.isoformat(), "from": e.from_status, "to": e.to_status, "actor": e.actor,
                 "actor_id": e.actor_id, "reason": e.reason, "evidence": e.evidence}
                for e in s.scalars(select(JobEvent).where(JobEvent.job_id == job_id).order_by(JobEvent.at, JobEvent.id))]
+    from jobs import relaunch
     return M.public(job, dep, quote=quote, detail=True, events=evs, artifacts=A.store().list(job_id),
-                    metrics_latest=latest_metrics(job_id), runner_marks=checkpoint_marks(job_id))
+                    metrics_latest=latest_metrics(job_id), runner_marks=checkpoint_marks(job_id),
+                    chain=relaunch.chain_infos([job]).get(job_id))
 
 
 def checkpoint_marks(job_id: str) -> dict:
@@ -688,7 +716,9 @@ def list_for(who, *, status: str | None = None, limit: int = 100, offset: int = 
         ids = [j.deployment_id for j in jobs if j.deployment_id]
         deps = {d.deployment_id: d for d in s.scalars(select(Deployment).where(Deployment.deployment_id.in_(ids)))} \
             if ids else {}
-    return [M.public(j, deps.get(j.deployment_id)) for j in jobs]
+    from jobs import relaunch
+    chains = relaunch.chain_infos(jobs)
+    return [M.public(j, deps.get(j.deployment_id), chain=chains.get(j.job_id)) for j in jobs]
 
 
 def logs(job_id: str, who, *, after: int | None, limit: int) -> dict:
