@@ -2,7 +2,7 @@
    "I need 8 H100s in the US under $2.50/hr": the ticket builds a POST /v1/route/preview body, the
    result shows the selected listing, its QUOTE (distinct from the observed market price), the score
    breakdown per candidate, exclusions with reasons and the factors that have no data.
-   "Request route" calls POST /v1/route (one Idempotency-Key per intent) after a confirmation and shows the
+   "Request a quote" (the one name for the money action: button, dialog and text) calls POST /v1/route (one Idempotency-Key per intent) after a confirmation and shows the
    PENDING APPROVAL ticket: provider, listing, quote vs observed, costs, fees, taxes (not computed), billing unit,
    expiry countdown, limit violations; admins approve (type the provider name; override + reason when limits are
    exceeded) or reject. /route?rr=<route_request_id> reopens a ticket.
@@ -15,13 +15,16 @@
 
   /* ---------- constants mirrored from routing/scoring.py ---------- */
   const REGIONS = ["US", "Canada", "Europe", "UK", "APAC", "Middle East", "LATAM", "Africa"];
-  const MODES = [
+  // The routing modes: the same names, order and hints as /jobs/new (OG.jobs.STRATEGIES, defined in jobs.js, which
+  // loads after this file, so the list is read at mount), plus Custom weights, which only /route offers.
+  const CUSTOM = ["USER_DEFINED", "Custom", "Your own weights over the factors that have data"];
+  const FALLBACK_MODES = [
+    ["BALANCED", "Balanced", "Price 40%, availability 20%, stability 15%, availability history 15%, freshness, integration"],
     ["CHEAPEST", "Cheapest", "Lowest observed price wins; no other factor counts"],
     ["FASTEST_AVAILABLE", "Soonest available", "Availability now, OpenGrid integration and freshness first (not a speed claim)"],
-    ["BALANCED", "Balanced", "Price 40%, availability 20%, stability 15%, availability history 15%, freshness, integration"],
     ["MOST_STABLE", "Most stable", "Availability history and price stability first"],
-    ["USER_DEFINED", "Custom", "Your own weights over the factors that have data"],
   ];
+  const routingModes = () => ((OG.jobs && OG.jobs.STRATEGIES) || FALLBACK_MODES).concat([CUSTOM]);
   const FACTORS = [
     { key: "price", label: "Price", short: "price", color: "#4d94ff", kind: "observed" },
     { key: "availability_now", label: "Availability now", short: "avail", color: "#2fbf71", kind: "observed" },
@@ -89,6 +92,7 @@
   OG.page("/route", {
     title: "Route",
     async mount(el, params, query, ctx) {
+      const MODES = routingModes();
       const root = h("div", { class: "pg-route" });
       el.append(root);
       const st = {
@@ -106,9 +110,9 @@
       const badRegion = query.region && !st.region ? query.region : null;
 
       if (OG.computeStyles) OG.computeStyles();
-      root.append(OG.head("Preview a route", "See which provider OpenGrid would choose for a GPU request, and why. Previewing is free: it never calls a provider and never spends money.",
-        h("a", { class: "btn", href: "/methodology/best-execution" }, "How routing works"),
-        h("a", { class: "btn", href: "/deployments" }, "Deployments →")));
+      const depBtn = h("a", { class: "btn", href: "/deployments", style: "display:none" }, "Deployments →");   // shown once signed in
+      root.append(OG.head("Preview a route", "See which provider OpenGrid would choose for a GPU request, and why. Free: it never calls a provider and never spends money.",
+        h("a", { class: "btn", href: "/methodology/best-execution" }, "How routing works"), depBtn));
       const ticket = h("form", { class: "rt-ticket box", onsubmit: e => { e.preventDefault(); preview(); } });
       const out = h("div", { class: "rt-out" });
       const routed = h("div", { class: "rt-routed" });
@@ -118,6 +122,9 @@
       OG.me().then(me => {
         if (!ctx.alive()) return;
         st.signedIn = !!me;
+        depBtn.style.display = me ? "" : "none";
+        // Signed out nothing on the ticket can succeed: say so once and keep the money button from failing later.
+        if (!me) { routeBtn.disabled = true; routeBtn.title = "Requesting a quote needs an OpenGrid account."; previewBtn.disabled = true; }
         if (!me && !query.rr) drawAccess();
         st.admin = OG.isAdmin(me);
         if (st.admin) OG.api.soft("/v1/admin/execution/mode", { nocache: true }).then(m => { if (m && ctx.alive()) { st.modeStatus = m; drawMode(); if (ticketT) renderTicket(ticketT); } });
@@ -256,7 +263,7 @@
       const strictLbl = h("label", { class: "rt-chk rt-strict", title: "strict_region: exclude listings whose region is not confirmed as the chosen group (otherwise unlocated listings can still rank, scored lower on region match)" }, strictIn, "Strict region");
       const launchIn = (key, ph, attrs) => h("input", Object.assign({ class: "field", placeholder: ph, "aria-label": key, oninput: e => { st.launch[key] = e.target.value.trim(); } }, attrs || {}));
       const launchBox = h("details", { class: "rt-launch" }, h("summary", {}, "Launch parameters (route only)"),
-        h("div", { class: "rt-h" }, "Used only by Request route, on a provider that needs them. On OpenGrid-managed accounts send your SSH PUBLIC key (registered for this deployment only); a provider key name works only with your own (BYO) credentials. Env values are never stored."),
+        h("div", { class: "rt-h" }, "Used only when you request a quote, on a provider that needs them. On OpenGrid-managed accounts send your SSH PUBLIC key (registered for this deployment only); a provider key name works only with your own (BYO) credentials. Env values are never stored."),
         field("Name", launchIn("name", "opengrid-job", { pattern: "[A-Za-z0-9][A-Za-z0-9-]*", maxlength: 60 })),
         field("SSH public key", launchIn("ssh_public_key", "ssh-ed25519 AAAA… you@host")),
         field("SSH key name", launchIn("ssh_key", "BYO credentials only")),
@@ -328,6 +335,7 @@
 
       /* ----- preview ----- */
       async function preview() {
+        if (st.signedIn === false) { drawAccess(); return; }   // no private call without access
         if (!st.gpu) { out.replaceChildren(OG.empty("Pick a GPU to preview a route.")); gpuIn.focus(); return; }
         if (!st.gpuName && !st.family) { const g = await OG.resolveGpu(st.gpu); if (g) { st.gpu = g.slug; st.gpuName = g.name; gpuIn.value = g.short; gpuFull.textContent = g.name; sync(); } }
         const b = body();
@@ -462,11 +470,10 @@
       // and the public alternative instead of a bare sign-in error.
       function drawAccess(status) {
         out.replaceChildren(h("section", { class: "cx-access", role: "status" },
-          h("h2", {}, status === 403 ? "This account can't preview routes" : "Previewing a route needs sign-in"),
-          h("p", {}, "A route preview estimates which provider OpenGrid would select for your request, without spending anything. It's tied to an OpenGrid account, so it needs sign-in."),
-          h("p", {}, "Without an account, Find Compute answers the same question publicly: which GPUs fit your workload, where they're cheapest, and whether OpenGrid can run them."),
-          h("div", { class: "cx-acts" }, status === 403 ? null : h("a", { class: "btn pri", href: OG.loginHref() }, "Sign in"),
-            h("a", { class: "btn", href: "/find" }, "Use Find Compute"), st.gpu ? h("a", { class: "btn", href: "/gpu/" + encodeURIComponent(st.gpu) }, "See this GPU's market") : null)));
+          status === 403 ? h("h2", {}, "This account can't preview routes") : OG.accessNote("account"),
+          h("p", {}, "Without an account, Find Compute answers the same question for free: which GPUs fit your workload and where they're cheapest."),
+          h("div", { class: "cx-acts" }, h("a", { class: "btn pri", href: "/find" }, "Use Find Compute"),
+            st.gpu ? h("a", { class: "btn", href: "/gpu/" + encodeURIComponent(st.gpu) }, "See this GPU's market") : null)));
       }
       // "OpenGrid recommends <provider> because …": the top contributing factors, the observed and hourly price, the
       // cost assumptions and whether OpenGrid can launch it. Same response as the technical panel below it.
@@ -492,7 +499,7 @@
             fact("Total per hour", h("span", {}, fmt.price(c.price_per_instance_hour), h("small", {}, "/h")), `${c.gpu_count} GPU${c.gpu_count === 1 ? "" : "s"} on one instance`),
             fact("Expected cost", q.expected_cost_usd != null ? OG.money(q.expected_cost_usd) : h("span", { class: "dim" }, "per hour only"), hours || "add an expected runtime to estimate a total", OG.kindBadge("estimated")),
             fact("Availability", availText(c), h("span", {}, "price seen ", OG.freshBadge(c.observed_at, { provider: c.provider })))),
-          h("p", { class: "cx-explain" }, "Cost assumptions: the observed list price × GPUs × hours. Storage, egress, fees and taxes are not included. A quote, with the live price, exists only after you request one.",
+          h("p", { class: "cx-explain" }, "Cost: observed list price × GPUs × hours; storage, egress, fees and taxes are not included. The live price comes with a quote.",
             m.median != null ? ` Market median ${fmt.price(m.median)}/GPU·h across ${m.providers} providers.` : ""),
           h("div", { class: "cx-run t-" + ready.tone }, h("b", {}, "Can OpenGrid launch it? ", ready.label), h("span", { class: "dim" }, ready.detail)),
           alts.length ? h("div", { class: "cx-alts" }, h("div", { class: "cx-alts-h" }, h("h3", {}, "Next best"), h("span", { class: "dim" }, "full ranking in Technical details")),
@@ -523,7 +530,7 @@
             d.can_provision_selected ? "" : `OpenGrid cannot launch on ${OG.providerName(d.selected.provider)} (integration level ${d.selected.integration_level || 0}: ${LEVEL[d.selected.integration_level || 0]}). `,
             d.best_provisionable ? h("span", {}, "Best provisionable alternative: ", h("b", {}, OG.providerName(d.best_provisionable.provider)), ` at ${fmt.price(d.best_provisionable.price_per_gpu_hour)}/GPU·h (rank ${d.best_provisionable.rank}).`) :
               d.provisioning_note ? d.provisioning_note + "." : "",
-            " Request route skips non-provisionable candidates."));
+            " Requesting a quote skips non-provisionable candidates."));
         }
         const simpleBox = simpleResult(d);
         kids.push(selectedCard(d));
@@ -595,8 +602,8 @@
         const est = q.expected_cost_usd != null ? `${OG.money(q.expected_cost_usd)} (${fmt.price(q.price_per_gpu_hour)}/GPU·h × ${d.count} GPUs × ${q.hours} h, from the observed listing)`
           : q.price_per_hour != null ? `${OG.money(q.price_per_hour)} per hour, open-ended: set a duration or the auto-terminate cap` : "no quote (no eligible listing)";
         const ok = await OG.dialog({
-          title: eff === "LIVE" ? "Request route: LIVE mode may launch without approval" : "Request route: creates a quote for OpenGrid approval",
-          danger: eff === "LIVE", confirm: "Request route",
+          title: eff === "LIVE" ? "Request a quote: LIVE mode may launch without approval" : "Request a quote: OpenGrid approves it before anything launches",
+          danger: eff === "LIVE", confirm: "Request a quote",
           ack: eff === "LIVE" ? "I understand a validated, live-enabled provider can launch a paid instance immediately" : null,
           body: h("div", { class: "rt-dlg" },
             h("p", {}, "POST /v1/route checks live availability on the top provisionable candidates, issues a ", h("b", {}, "quote"), " and applies the account's cost guards. ",
@@ -615,13 +622,13 @@
       async function requestRoute(b) {
         I.route = OG.intentFor(I.route, "route", b);
         st.routeBody = b;
-        routed.replaceChildren(OG.loading("Routing: live check, quote, cost guards…"));
+        routed.replaceChildren(OG.loading("Requesting a quote: live check, price, cost guards…"));
         try {
           const r = await OG.api.intent(I.route, "/v1/route", { method: "POST", body: b, full: true });
           if (r.data && r.data.execution_mode && !st.modeStatus) { st.modeStatus = { effective_mode: r.data.execution_mode }; drawMode(); }
           renderRouted(r.data);
         } catch (e) {
-          routed.replaceChildren(h("div", { class: "box rt-res rt-res-failed" }, h("div", { class: "rt-res-h" }, h("span", { class: "eyebrow" }, "Route request"), OG.error(e)),
+          routed.replaceChildren(h("div", { class: "box rt-res rt-res-failed" }, h("div", { class: "rt-res-h" }, h("span", { class: "eyebrow" }, "Quote request"), OG.error(e)),
             I.route.state === "unknown" ? h("p", { class: "note" }, "Outcome unknown. ", h("button", { class: "btn sm", type: "button", onclick: () => requestRoute(b) }, "Retry (same Idempotency-Key)"),
               ". The server replays the first answer instead of routing twice.") : null));
         }
@@ -864,12 +871,7 @@
       else {
         out.replaceChildren(h("div", { class: "rt-empty" },
           h("p", {}, "Pick a GPU above and press Preview. OpenGrid ranks every eligible listing by price, availability, freshness and history, and says whether it can launch there."),
-          h("p", { class: "dim" }, "Not sure which GPU you need? ", h("a", { class: "lnk", href: "/find" }, "Find Compute recommends one for your workload →")),
-          h("p", { class: "dim" }, "Try: ", ["h100-80gb-sxm5:8:US:2.5", "h200-141gb-sxm5:1::", "a100-80gb-sxm4:8::"].map(s => {
-            const [g, n, r, m] = s.split(":");
-            return h("a", { class: "lnk mono rt-ex-l", href: "/route" + OG.qs.stringify({ gpu: g, count: n, region: r || null, max: m || null }) }, `${n}× ${g}${r ? " " + r : ""}${m ? " ≤ $" + m : ""}`);
-          })),
-          h("p", { class: "dim" }, "From anywhere: press ", h("kbd", {}, "/"), " and type ", h("code", { class: "mono" }, "r h100 8 us"), ".")));
+          h("p", { class: "dim" }, "Not sure which GPU you need? ", h("a", { class: "lnk", href: "/find" }, "Find Compute recommends one for your workload →"))));
       }
     },
   });

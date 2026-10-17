@@ -232,7 +232,20 @@ eq(J.nextStep({ status: "orphan_suspected", resource: { deployment_id: "dep_1" }
 eq(J.nextStep({ status: "pending_approval", route_request_id: "rr_1" }, null, { admin: true }).href, "/route?rr=rr_1", "admin + pending approval: the approval ticket");
 eq(J.nextStep({ status: "pending_approval" }, null, {}).href, null, "customer + pending approval: nothing to do");
 const pe = (status, detail) => J.plainError({ status, body: detail ? { detail } : null, message: "raw" });
-ok(pe(401).signIn === true && /Sign in/.test(pe(401).title), "401 -> sign in");
+ok(pe(401).signIn === true && /OpenGrid account/.test(pe(401).title) && /invite-only/.test(pe(401).text), "401 -> needs an OpenGrid account (invite-only), not a customer sign-in");
+ok(/account/.test(J.liveStatus(null, null).title) && !/Sign in/.test(J.liveStatus(null, null).title), "real-GPU status signed out: account wording, no sign-in prompt");
+// one set of routing mode names on /jobs/new and /route
+eq(J.STRATEGIES.map(s => s[1]), ["Balanced", "Cheapest", "Soonest available", "Most stable"], "routing modes: one set of names, in one order");
+{
+  const fs = require("fs"), path = require("path");
+  const rsrc = fs.readFileSync(path.join(__dirname, "..", "web", "pages", "route.js"), "utf8");
+  const jsrc = fs.readFileSync(path.join(__dirname, "..", "web", "pages", "jobs.js"), "utf8");
+  ok(/OG\.jobs\.STRATEGIES/.test(rsrc) && !/"Stable"/.test(rsrc + jsrc), "/route reads the same mode list as /jobs/new");
+  ok(!/Request route/.test(rsrc) && /"Request a quote…"/.test(rsrc) && /confirm: "Request a quote"/.test(rsrc), "the quote action has one name: button, dialog and text");
+  ok(!/>\s*"Sign in"\)|, "Sign in"\)/.test(jsrc + rsrc), "no customer-facing 'Sign in' button on Jobs or Route (operator sign-in is a small staff link at most)");
+  ok(/every\(15000, \(\) => \{ if \(!denied\) load\(\); \}\)/.test(jsrc) && /if \(!me\) \{/.test(jsrc), "/jobs never polls without access");
+  ok(!/[–—]/.test(rsrc + jsrc), "no en or em dashes in route.js / jobs.js");
+}
 ok(/isn't allowed/.test(pe(403).title) && !/scope/.test(pe(403).text), "403 -> plain, no scope jargon");
 ok(/aren't switched on/.test(pe(422, { code: "execution_disabled", message: "real execution is disabled in this environment" }).text), "refusal codes -> plain sentences");
 ok(!/Railway|ROUTING_LIVE|admin\//.test(Object.values(J.PLAIN_STATE).join(" ") + ["execution_disabled", "provider_unvalidated", "credentials_unavailable"].map(c => pe(422, { code: c }).text).join(" ")), "plain errors never send a user to a deployment variable or an operator page");

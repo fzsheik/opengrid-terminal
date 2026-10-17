@@ -979,6 +979,9 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .pg-wl .wl-empty { border: 1px dashed var(--line-2); border-radius: 3px; padding: 12px 14px; font-size: var(--fs-base); color: var(--text-2); }
 .pg-wl .wl-empty p { margin: 6px 0 0; }
 .pg-wl .wl-rule { padding: 8px 10px; margin-bottom: 8px; }
+.pg-wl .wl-fold { margin-bottom: 8px; }
+.pg-wl .wl-fold > summary { cursor: pointer; padding: 4px 0; font-size: var(--fs-base); }
+.pg-wl .wl-fold[open] > summary { margin-bottom: 6px; }
 .pg-wl .wl-tpl { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
 .pg-wl .wl-tpl .lbl { margin: 0 6px 0 0; }
 .pg-wl .wl-ffs { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
@@ -992,6 +995,8 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .pg-wl .wl-chs { display: inline-flex; gap: 3px; flex-wrap: wrap; }
 .pg-wl .wl-cnd { font-size: var(--fs-xs); font-weight: 400; white-space: normal; }
 .pg-wl .wl-test { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 10px; margin-bottom: 6px; font-size: var(--fs-sm); border-color: var(--accent-2); }
+.pg-wl .wl-acc { border: 1px solid var(--line-2); border-radius: 4px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); max-width: 720px; }
+.pg-wl .wl-acc p { margin: 0; font-size: var(--fs-base); color: var(--text-2); }
 @media (max-width: 1000px) { .pg-wl .wl-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* /api */
@@ -1793,6 +1798,8 @@ body.og-signed-in .acct-lnk .acct-lock { display: none; }
 .ag-q { display: flex; flex-direction: column; gap: 4px; }
 .ag-warn { color: var(--warn); font-size: var(--fs-sm); }
 .ag-foot, .ag-meta { font-size: var(--fs-xs); }
+.ag-more > summary { cursor: pointer; color: var(--muted); font-size: var(--fs-sm); }
+.ag-more[open] > summary { margin-bottom: 4px; }
 .ag-form { display: flex; gap: 6px; align-items: flex-end; }
 .ag-in { flex: 1; height: auto; min-height: 36px; resize: vertical; font: inherit; padding: 6px 8px; }
 .ag :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

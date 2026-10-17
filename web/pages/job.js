@@ -45,14 +45,18 @@
 
       async function load() {
         let j;
-        try { j = await ctx.api("/v1/jobs/" + enc, { nocache: true }); }
+        try {
+          if (!me && !job) throw { status: 401, message: "no OpenGrid account on this browser" };   // no private call without access
+          j = await ctx.api("/v1/jobs/" + enc, { nocache: true });
+        }
         catch (e) {
           if (!job) {
             const p = J.plainError(e);
             root.replaceChildren(h("a", { class: "lnk jb-back", href: "/jobs" }, "← My Jobs"), OG.head("Job " + id, null),
-              e && (e.status === 401 || e.status === 403 || e.status === 404) ? h("section", { class: "cx-access" }, h("h2", {}, e.status === 404 ? "Job not found" : p.title),
-                h("p", {}, e.status === 404 ? "This job doesn't exist, or it belongs to another account." : e.status === 401 ? "Jobs are private to your OpenGrid account. Sign in to see this one." : p.text),
-                h("div", { class: "cx-acts" }, e.status === 401 ? h("a", { class: "btn pri", href: OG.loginHref() }, "Sign in") : null, h("a", { class: "btn", href: "/jobs" }, "My Jobs"), h("a", { class: "btn", href: J.DEMO_HREF }, "See the example job")))
+              e && (e.status === 401 || e.status === 403 || e.status === 404) ? h("section", { class: "cx-access" },
+                e.status === 401 ? OG.accessNote("account", "Jobs are private to their account.") : h("h2", {}, e.status === 404 ? "Job not found" : p.title),
+                e.status === 401 ? null : h("p", {}, e.status === 404 ? "This job doesn't exist, or it belongs to another account." : p.text),
+                h("div", { class: "cx-acts" }, h("a", { class: "btn", href: J.DEMO_HREF }, "See how a job runs")))
                 : J.notYet("GET /v1/jobs/{id}", e));
             stopped = true; return;
           }
@@ -103,7 +107,9 @@
           h("a", { class: "lnk jb-back", href: "/jobs" }, "← My Jobs"),
           OG.head(h("span", { class: "dep-title" }, job.name || "Job"), h("span", {}, where),
             ca ? h("button", { class: "btn w4-danger", type: "button", onclick: () => cancel(ca) }, ca.button) : null),
-          h("div", { class: "jb-bigline" }, J.lineEl(job), J.modeTag(sandbox())),
+          h("div", { class: "jb-bigline" }, J.lineEl(job), J.modeTag(sandbox()),
+            J.isTerminal(job) ? null : h("span", { class: "dim" }, "updates every few seconds"),
+            h("button", { class: "btn sm", type: "button", onclick: () => load(), title: "Reload the job now" }, "Refresh")),
           sandbox() ? h("div", { class: "jb-simban", role: "note" }, h("b", {}, "SIMULATED"), h("span", {}, "No GPU was used and nothing was charged. Every number on this page is synthetic.")) : null,
           flash,
           billingAlarm(),
@@ -114,20 +120,17 @@
       // At a glance: simulation or real, status, result, GPU, cost, outputs; then the one next step.
       function glanceBlock() {
         const ps = Object.fromEntries(J.plainStatus(job, dep, arts, { admin }).map(p => [p.key, p]));
-        const line = J.jobLine(job);
         const cell = (label, a, sub, tone) => h("div", { class: tone ? "t-" + tone : null }, h("div", { class: "cx-fact-k" }, label), h("div", { class: "cx-g-v" }, a), sub ? h("div", { class: "cx-g-s" }, sub) : null);
         const ns = J.nextStep(job, dep, { admin });
         const arr = Array.isArray(arts) ? arts : [];
+        // the status line and the Simulation / Real GPU tag sit right above, so the glance starts at the result
         return [
           h("div", { class: "cx-glance", "aria-label": "At a glance" },
-            cell("Run", sandbox() ? "Simulation" : "Real GPU", sandbox() ? "no GPU, no provider, no charge" : "on a rented GPU", sandbox() ? "warn" : ""),
-            cell("Status", line.text, J.isTerminal(job) ? "finished" : "updates every few seconds", line.tone === "bad" ? "bad" : line.tone === "warn" ? "warn" : ""),
             cell("Result", ps.success.a, ps.success.detail, ps.success.tone),
             cell("GPU", ps.gpu.a, ps.gpu.detail, ps.gpu.tone),
             cell("Cost", ps.cost.a, ps.cost.detail, ps.cost.tone),
             cell("Outputs", arr.length ? `${arr.length} file${arr.length === 1 ? "" : "s"}` : "None yet", arr.length ? arr.map(a => a && a.name).filter(Boolean).join(", ") : ps.outputs.detail, arr.length ? "good" : "")),
-          h("div", { class: "cx-next", role: "status" }, h("b", {}, "Next: "), h("span", {}, ns.text), ns.href ? h("a", { class: "btn sm pri", href: ns.href }, ns.label) : null,
-            sandbox() && !J.isTerminal(job) ? h("span", { class: "dim" }, "Simulations finish on their own; there's nothing to stop.") : null),
+          h("div", { class: "cx-next", role: "status" }, h("b", {}, "Next: "), h("span", {}, ns.text), ns.href ? h("a", { class: "btn sm pri", href: ns.href }, ns.label) : null),
         ];
       }
       // What happened, oldest first, from the job's recorded events (the raw state and reason are in the tooltip).
@@ -168,8 +171,7 @@
         const ps = sandbox() ? [] : J.plainStatus(job, dep, arts, { admin }).filter(p => ["money", "action"].includes(p.key));
         return h("section", { class: "jb-stage box", "aria-label": "Progress" },
           h("div", { class: "jb-stage-h" }, h("span", { class: "eyebrow" }, "Progress"),
-            sg.mode === "sandbox" ? OG.badge("free simulation", "warn") : OG.badge("real GPU run"),
-            h("span", { class: "dim" }, sg.mode === "sandbox" ? "Simulated: no GPU is selected, approved, started or shut down." : "Each stage follows the job's recorded state.")),
+            h("span", { class: "dim" }, sg.mode === "sandbox" ? "A simulation skips choosing, approving, starting and shutting down a GPU." : "Each stage follows the job's recorded state.")),
           h("ol", { class: "jb-stages", "aria-label": "Stages" }, sg.steps.map((x, i) => h("li", { class: "m-" + x.mark + (x.tone ? " t-" + x.tone : ""), "aria-current": x.mark === "current" ? "step" : null,
             title: x.state ? "job state: " + String(x.state).replace(/_/g, " ") : x.mark === "skipped" ? "not passed through" : null },
             h("span", { class: "jb-sn", "aria-hidden": "true" }, x.mark === "done" ? "✓" : x.mark === "failed" ? "✗" : String(i + 1)),
@@ -242,7 +244,7 @@
         line(lossEl, xs, metrics.map(m => m.loss), { label: "train loss", color: "#4d94ff", yFmt: v => v.toFixed(3) });
         line(accEl, xs, metrics.map(m => m.acc), { label: "test accuracy", color: "#2fbf71", yFmt: v => (v * 100).toFixed(1) + "%" });
         const res = job.result && typeof job.result === "object" ? job.result : null;
-        return OG.section("Training progress" + (sandbox() ? " · SIMULATED (synthetic numbers)" : ""),
+        return OG.section("Training progress" + (sandbox() ? " (synthetic numbers)" : ""),
           OG.stats([
             { label: "Epoch", value: p.epoch != null ? `${p.epoch} / ${p.epochs ?? "?"}` : null, reason: metErr ? "metrics unavailable" : "no epoch reported yet" },
             { label: "Latest loss", value: p.loss != null ? p.loss.toFixed(4) : null, reason: "no loss reported yet" },
@@ -271,7 +273,7 @@
         if (artErr) return OG.section("Artifacts", J.notYet("GET /v1/jobs/{id}/artifacts", artErr));
         const rows = arts || [];
         const href = n => `/v1/jobs/${enc}/artifacts/${encodeURIComponent(n)}`;
-        return OG.section(`Artifacts · ${rows.length}` + (sandbox() ? " · SIMULATED" : ""), rows.length ? OG.table({
+        return OG.section(`Artifacts · ${rows.length}`, rows.length ? OG.table({
           columns: [
             { key: "name", label: "Name", fmt: (v, r) => h("span", { title: r.created_at ? "stored " + exact(r.created_at) : null }, h("a", { class: "lnk mono", href: r.download || href(v), download: v, rel: "external" }, v), r.source === "simulated" ? [" ", OG.badge("simulated", "warn")] : null) },
             { key: "size_bytes", label: "Size", num: true, value: r => r.size_bytes ?? r.size ?? null, fmt: v => J.bytes(v) },
