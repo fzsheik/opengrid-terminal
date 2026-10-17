@@ -44,16 +44,28 @@
       const root = h("div", { class: "pg-wl" });
       el.append(root);
       const st = { lists: [], sel: Number(query.wl) || null, rules: [], indices: [], gpus: [], market: null, tests: new Map() };
-      root.append(OG.head("Watchlists & alerts", "Follow GPUs, providers, regions and indices; alert on price and availability · observed data, unknown never fires",
-        h("a", { class: "btn", href: "/methodology/alerts" }, "Alerts method"), h("a", { class: "btn", href: "/api#ep-watchlists-alerts" }, "API")));
+      root.append(OG.head("Watchlists & alerts", "Follow GPUs, providers, regions and indices, and get an alert when a price or availability changes.",
+        h("a", { class: "btn", href: "/methodology/alerts" }, "How alerts work"), h("a", { class: "btn", href: "/api#ep-watchlists-alerts" }, "API")));
+      // Watchlists and alerts belong to an account: without access, one account note and nothing that needs data
+      // (no lists, rules, firings, forms or polling).
+      const me = await OG.me();
+      if (!ctx.alive()) return;
+      if (!me) {
+        root.append(h("section", { class: "cx-access wl-acc" }, OG.accessNote("account"),
+          h("p", {}, "Without one, every GPU's live prices are free to browse."),
+          h("div", {}, h("a", { class: "btn", href: "/gpus" }, "Browse GPU prices"))));
+        return;
+      }
       const rail = h("div", { class: "wl-rail box" });
       const main = h("div", { class: "wl-main" }, OG.loading());
       const rulesBox = h("div", {}, OG.loading());
       const formBox = h("div");
       const firingsBox = h("div", {}, OG.loading());
       const secretBox = h("div");
+      // the rule form is folded until it is needed (a template, an item's "Alert…" or the summary opens it)
+      const ruleFold = h("details", { class: "wl-fold" }, h("summary", {}, h("b", {}, "New alert rule"), h("span", { class: "dim" }, " (templates, metric, condition, webhook)")), formBox);
       root.append(h("div", { class: "wl-grid" }, rail, main),
-        h("section", { class: "sec", id: "alerts" }, h("h2", { class: "sec-h" }, "Alert rules"), secretBox, formBox, rulesBox),
+        h("section", { class: "sec", id: "alerts" }, h("h2", { class: "sec-h" }, "Alert rules"), secretBox, ruleFold, rulesBox),
         OG.section("Firings · last 7 days", firingsBox));
 
       // GPU datalist shared by the forms
@@ -138,7 +150,7 @@
       async function drawMain() {
         const w = st.lists.find(x => x.id === st.sel);
         if (!w) {
-          main.replaceChildren(h("div", { class: "wl-empty" }, h("b", {}, "No watchlist yet."), h("p", {}, "Create one on the left, then add GPUs, providers, a GPU at one provider, a region group or an OpenGrid index. Values are observed market data, read live."),
+          main.replaceChildren(h("div", { class: "wl-empty" }, h("b", {}, "No watchlist yet."), h("p", {}, "Name one under Watchlists and press Create, then add GPUs, providers, a GPU at one provider, a region group or an OpenGrid index. Values are observed market data, read live."),
             query.add ? h("p", { class: "warn-t" }, `Create a watchlist to add ${query.add}.`) : null));
           return;
         }
@@ -217,7 +229,7 @@
         }],
       ];
       async function applyTemplate(name, fn) { Object.assign(form, await fn(), { name }); drawForm(); }
-      function prefill(i) { Object.assign(form, i.kind === "gpu_provider" ? { metric: "provider_price", gpu: OG.slug(i.gpu), provider: i.provider, op: "<" } : { metric: "market_low", gpu: OG.slug(i.gpu), op: "<" }, { name: "" }); drawForm(); formBox.scrollIntoView({ block: "nearest" }); }
+      function prefill(i) { Object.assign(form, i.kind === "gpu_provider" ? { metric: "provider_price", gpu: OG.slug(i.gpu), provider: i.provider, op: "<" } : { metric: "market_low", gpu: OG.slug(i.gpu), op: "<" }, { name: "" }); drawForm(); ruleFold.open = true; formBox.scrollIntoView({ block: "nearest" }); }
       function drawForm() {
         const m = METRICS[form.metric];
         const need = f => m.fields.some(x => x.replace("?", "") === f);
@@ -289,17 +301,18 @@
             h("button", { class: "btn sm", type: "button", title: "Delete rule", onclick: () => delRule(r) }, "✕")) },
         ],
         rows: [], compact: true, csv: "opengrid-alert-rules.csv", rowKey: r => r.id, sort: { key: "name", dir: "asc" },
-        empty: "No alert rules. Start from a template above.",
+        empty: "No alert rules yet. Start from a template in New alert rule.",
       });
       const testBox = h("div");
       async function loadRules() {
         try {
           st.rules = await ctx.api("/v1/alerts", { nocache: true });
           rulesTbl.update(st.rules);
+          if (!st.rules.length) ruleFold.open = true;   // nothing yet: show the form with its templates
           if (rulesBox.firstChild !== testBox) rulesBox.replaceChildren(testBox, rulesTbl, h("p", { class: "note" }, "State is the last evaluation by the alerts job (about every 3 minutes, on servers where background jobs run). ",
             h("b", {}, "ok"), " = condition false, ", h("b", {}, "firing"), " = true, ", h("b", {}, "unknown"), " = no honest reading (reason shown); unknown never fires."));
           loadFirings();
-        } catch (e) { rulesBox.replaceChildren(OG.error(e, loadRules)); }
+        } catch (e) { rulesBox.replaceChildren(OG.error(e, loadRules)); firingsBox.replaceChildren(OG.empty("Firings load with the alert rules.")); }
       }
       async function test(r) {
         testBox.replaceChildren(OG.loading("Evaluating rule #" + r.id + "…"));
