@@ -125,6 +125,12 @@ const eq = (a, b, m) => ok(JSON.stringify(a) === JSON.stringify(b), m + " -> " +
   ok(X.billingAlarm({ status: "terminated", terminate_deadline_at: "2026-10-07T14:00:00Z" }, now) === null, "terminated past the deadline -> no banner");
   ok(X.billingAlarm({ status: "launch_unknown" }, now).kind === "uncertain" && X.billingAlarm({ status: "termination_failed" }, now).title === "POSSIBLY BILLING", "uncertain -> POSSIBLY BILLING");
 
+  // a failed background refresh keeps the last good view; the notice says why, when, and that the buttons still work
+  const rn = X.refreshNote({ status: 0 }, "2026-10-07T14:05:09Z");
+  ok(/^Could not refresh \(no connection\)\. Showing the view from \d\d:\d\d:\d\d; the buttons still work\./.test(rn), "refresh notice: network blip -> " + rn);
+  ok(/sign-in required/.test(X.refreshNote({ status: 401 }, null)) && /HTTP 503/.test(X.refreshNote({ status: 503 }, null)) && /from earlier/.test(X.refreshNote(null, null)), "refresh notice: 401 / 5xx / unknown");
+  ok(!/[\u2013\u2014]/.test(rn), "refresh notice has no en or em dash");
+
   console.log(failures ? `\n${failures} FAILED` : "\nall passed");
   process.exit(failures ? 1 : 0);
 })();

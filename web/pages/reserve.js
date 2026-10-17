@@ -130,9 +130,13 @@
   const badge = s => h("span", { class: "badge og-st st-" + (tone(s) || "plain") }, String(s || "-").replace(/_/g, " "));
   const indBadge = () => OG.badge("indicative", "warn", "Observed public prices and OpenGrid index levels. Not a quote, not an offer, not a binding price.");
   const kv = rows => h("table", { class: "dep-kv" }, rows.filter(Boolean).map(([k, v, title]) => h("tr", { title: title || null }, h("th", {}, k), h("td", {}, v == null || v === "" ? h("span", { class: "dim" }, "-") : v))));
-  const banner = () => h("div", { class: "rs-ban", role: "note" }, h("b", {}, "NOT A FINANCIAL CONTRACT"), h("span", {}, BANNER), h("a", { class: "lnk", href: "/methodology/reservations" }, "How price-lock requests work →"));
+  const banner = () => h("div", { class: "rs-ban", role: "note" }, h("b", {}, "NOT A FINANCIAL CONTRACT"), h("span", {}, BANNER), h("a", { class: "lnk", href: "/methodology/reservations" }, "How price-lock requests work"));
+  // Signed out: one plain access state before anything loads (never a raw HTTP 401).
+  const signedOut = (title, sub) => h("div", {}, OG.head(title, sub), OG.accessNote("account", "Customers send price-lock requests with an API key (route:preview scope)."),
+    h("p", { class: "x-gate-a" }, h("a", { class: "btn sm", href: "/" }, "Explore free pages"), " ", h("a", { class: "lnk", href: OG.loginHref() }, "OpenGrid staff: operator sign-in")));
   const notYet = (what, e) => e && (e.status === 404 || e.status === 405) && !(e.body && e.body.detail && e.body.detail.code) ? OG.insufficient(what + " is not available on this server yet.", "Not available yet") : apiErr(e, what);
   function apiErr(e, what) {
+    if (e && e.status === 401) return OG.error(e);   // the shared sign-in state, never "HTTP 401"
     const d = e && e.body && e.body.detail;
     const o = d && typeof d === "object" && !Array.isArray(d) ? d : {};
     const fields = Array.isArray(d) ? d.map(x => ({ field: (x.loc || []).join("."), message: x.msg })) : null;
@@ -151,11 +155,13 @@
     const lv = ref.limit_vs_index;
     const stats = OG.stats([
       { label: "Index level", value: ix.level != null ? perGpuH(ix.level) : null, reason: ix.reason || "not published", sub: ix.index_id ? h("a", { class: "lnk mono", href: "/indices/" + encodeURIComponent(ix.index_id) }, ix.index_id) : "no index", title: ix.raw_level != null ? "raw level " + perGpuH(ix.raw_level) + " · " + (ix.constituents || 0) + " constituents" : null },
-      { label: "Raw level", value: ix.raw_level != null ? perGpuH(ix.raw_level) : null, reason: "not computed", sub: ix.constituents != null ? ix.constituents + " constituents" : null },
       { label: "Best on-demand", value: best.listings && best.listings.length ? perGpuH(best.listings[0].price_per_gpu_hour) : null, reason: best.reason || "no listing", sub: best.listings && best.listings.length ? OG.providerName(best.listings[0].provider) : null },
       { label: "Market median", value: best.market && best.market.median != null ? perGpuH(best.market.median) : null, reason: "no market", sub: best.market && best.market.providers != null ? best.market.providers + " providers" : null },
-      { label: "Settlement fixing", value: fixing && fixing.value != null ? perGpuH(fixing.value) : null, reason: fx.reason || (fixing ? fixing.reason || "not published" : "none yet"), sub: fixing ? fixing.fixing_type + " · " + fmt.dateTime(fixing.fixing_time) + " · " + fixing.status : null },
       lv ? { label: "Your limit vs index", value: (lv.pct >= 0 ? "+" : "") + (lv.pct * 100).toFixed(1) + "%", sub: perGpuH(lv.customer_limit) } : null,
+    ]);
+    const more = OG.stats([
+      { label: "Raw index level", value: ix.raw_level != null ? perGpuH(ix.raw_level) : null, reason: "not computed", sub: ix.constituents != null ? ix.constituents + " constituents" : null },
+      { label: "Settlement fixing", value: fixing && fixing.value != null ? perGpuH(fixing.value) : null, reason: fx.reason || (fixing ? fixing.reason || "not published" : "none yet"), sub: fixing ? fixing.fixing_type + " · " + fmt.dateTime(fixing.fixing_time) + " · " + fixing.status : null },
     ]);
     const tbl = best.listings && best.listings.length ? h("table", { class: "grid-t rs-best" },
       h("thead", {}, h("tr", {}, ["Provider", "GPUs / instance", "Region", "$/GPU·h", "Available", "Observed"].map((c, i) => h("th", { class: i >= 3 ? "num" : null }, c)))),
@@ -163,10 +169,11 @@
         h("td", { class: "dim" }, [l.region, l.country].filter(Boolean).join(", ") || "not stated"), h("td", { class: "num mono" }, perGpuH(l.price_per_gpu_hour)),
         h("td", { class: "num" }, l.available === true ? "yes" : l.available === false ? "no" : h("span", { class: "dim" }, "unknown")),
         h("td", { class: "num dim" }, l.observed_at ? fmt.age(l.observed_at) + " ago" : "-"))))) : null;
-    return OG.section(h("span", {}, title, " ", indBadge()), stats, tbl,
-      h("p", { class: "note" }, ref.note || "Indicative only.", ref.as_of ? " As of " + fmt.dateTime(ref.as_of) + "." : "", " ",
-        fixing && fixing.verify ? h("a", { class: "lnk", href: fixing.link }, "Fixing evidence →") : null, " ",
-        h("a", { class: "lnk", href: "/methodology/indices" }, "Index methodology →")));
+    return OG.section(h("span", {}, title, " ", indBadge()), stats,
+      h("p", { class: "note" }, ref.note || "Indicative only.", ref.as_of ? " As of " + fmt.dateTime(ref.as_of) + "." : ""),
+      h("details", { class: "rs-more" }, h("summary", {}, "Details: best listings, raw index and settlement fixing"), more, tbl,
+        h("p", { class: "note" }, fixing && fixing.verify ? h("a", { class: "lnk", href: fixing.link }, "Fixing evidence") : null, " ",
+          h("a", { class: "lnk", href: "/methodology/indices" }, "Index methodology"))));
   }
   R.refBlock = refBlock;
 
@@ -179,14 +186,13 @@
       el.append(root);
       const me = await OG.me();
       if (!ctx.alive()) return;
+      if (!me) { root.append(signedOut("Reserve", "Ask OpenGrid to lock a price for a block of reserved GPU-hours."), banner()); return; }
       const admin = OG.isAdmin(me);
       let scope = admin && query.all === "1" ? "all" : "mine";
       const stats = h("div"), holder = h("div", {}, OG.loading("Loading price-lock requests…"));
       const scopeSeg = admin ? OG.seg([["mine", "Mine"], ["all", "All accounts", "GET /v1/admin/reservations (admin)"]], scope, v => { scope = v; OG.qs.set({ all: v === "all" ? "1" : null }); tbl = makeTable(); load(); }) : null;
       root.append(
-        OG.head("Reserve", "Price-lock requests for reserved compute · reviewed by OpenGrid · indicative references, never quotes",
-          scopeSeg, h("button", { class: "btn", type: "button", onclick: () => load() }, "Reload"),
-          h("a", { class: "btn", href: "/methodology/reservations" }, "Methodology")),
+        OG.head("Reserve", "Ask OpenGrid to lock a price for a block of reserved GPU-hours. Free; OpenGrid reviews every request.", scopeSeg),
         banner());
 
       /* ----- the form ----- */
@@ -207,8 +213,8 @@
       const formErr = h("div", { class: "jb-ferr" });
       const submitBtn = h("button", { class: "btn pri", type: "submit", title: "POST /v1/reservations/requests: reviewed by OpenGrid; nothing is reserved, launched or billed" }, "Submit request…");
       const form = h("form", { class: "box jb-form", onsubmit: e => { e.preventDefault(); submit(); } },
-        h("div", { class: "rt-tt" }, h("b", {}, "New price-lock request"), h("span", { class: "dimmer" }, " · free · reviewed by OpenGrid")),
-        field("GPU", gpuSel, "One GPU variant (families and auto are not accepted for a price lock)", "gpu"),
+        h("div", { class: "rt-tt" }, h("b", {}, "New price-lock request")),
+        field("GPU", gpuSel, "one exact GPU model", "gpu"),
         h("div", { class: "rt-row2" }, field("GPUs", countIn, "used at the same time", "gpu_count"), field("Total GPU-hours", hoursIn, null, "total_gpu_hours")),
         h("div", { class: "rt-row2" }, field("Start after", aIn, "your local time", "start_after"), field("Start before", bIn, "start window end", "start_before")),
         h("div", { class: "rt-row2" }, field("Region", regionSel, null, "region_group"), field("Your max $/GPU·h", priceIn, "your limit, not a price", "max_price_per_gpu_hour")),
@@ -216,7 +222,7 @@
         field("Notes", notesIn, null, "notes"),
         formErr,
         h("div", { class: "rs-acts" }, submitBtn, h("span", { class: "rt-h" }, "Nothing is reserved, launched or billed by submitting.")));
-      const refBox = h("div", {}, h("div", { class: "jb-empty" }, h("p", {}, "Pick a GPU to see the indicative reference: the OpenGrid index level, the best on-demand listings now and the latest settlement fixing.")));
+      const refBox = h("div", {}, h("div", { class: "jb-empty" }, h("p", {}, "Pick a GPU to see today's market reference for it.")));
       const listSec = h("div");
       root.append(h("div", { class: "jb-grid" }, form, h("div", { class: "jb-main" }, refBox)), stats, listSec);
       listSec.append(holder);
@@ -310,22 +316,25 @@
         rows: [], sort: { key: "created_at", dir: "desc" }, rowKey: r => r.request_id, rowHref: r => "/reserve/" + encodeURIComponent(r.request_id),
         csv: "opengrid-price-lock-requests.csv", compact: true, empty: "No price-lock requests yet.",
       });
-      let tbl = makeTable();
+      let tbl = makeTable(), listOk = null;
+      const listStale = h("div");
+      root.insertBefore(listStale, stats);
       async function load() {
         let rows;
         try { const d = await ctx.api(scope === "all" ? "/v1/admin/reservations" : "/v1/reservations", { nocache: true }); rows = Array.isArray(d) ? d : []; }
-        catch (e) { listSec.replaceChildren(OG.section("Your requests", notYet(scope === "all" ? "GET /v1/admin/reservations" : "GET /v1/reservations", e))); return; }
-        stats.replaceChildren(OG.stats([
+        catch (e) {
+          if (listOk) { listStale.replaceChildren(OG.refreshNotice(e, listOk, () => load())); return; }   // keep the last good list
+          listSec.replaceChildren(OG.section("Your requests", notYet(scope === "all" ? "GET /v1/admin/reservations" : "GET /v1/reservations", e))); return;
+        }
+        listOk = new Date().toISOString(); listStale.replaceChildren();
+        stats.replaceChildren(rows.length ? OG.stats([
           { label: "Requests", value: fmt.num(rows.length) },
           { label: "Open", value: fmt.num(rows.filter(r => OPEN.includes(r.status)).length), sub: "awaiting a decision" },
           { label: "Offers to review", value: fmt.num(rows.filter(r => r.status === "offered" && offerOf(r) && offerOf(r).valid).length), sub: "valid offers" },
-          { label: "Accepted", value: fmt.num(rows.filter(r => r.status === "accepted").length), sub: "order form pending" },
-          { label: "Fulfilled", value: fmt.num(rows.filter(r => r.status === "fulfilled").length) },
-          { label: "Closed", value: fmt.num(rows.filter(r => CLOSED.includes(r.status)).length), sub: "declined · expired · withdrawn · cancelled" },
-        ]));
-        if (!rows.length) { listSec.replaceChildren(OG.section(scope === "all" ? "All requests" : "Your requests", h("div", { class: "dep-empty" }, h("b", {}, "No price-lock requests yet."), h("p", {}, "Use the form above: say which GPU, how many GPU-hours, when it should start and your price limit. OpenGrid answers with an offer only when provider capacity backs it.")))); return; }
+        ]) : null);
+        if (!rows.length) { listSec.replaceChildren(OG.section(scope === "all" ? "All requests" : "Your requests", h("div", { class: "dep-empty" }, h("b", {}, "No price-lock requests yet."), h("p", {}, "OpenGrid answers a request with an offer only when provider capacity backs it.")))); return; }
         tbl.update(rows);
-        if (!listSec.contains(tbl)) listSec.replaceChildren(OG.section(scope === "all" ? "All requests" : "Your requests", tbl, h("p", { class: "note" }, "Index at request = the OpenGrid index level captured when the request was made (indicative). An offer binds only in a signed order form.")));
+        if (!listSec.contains(tbl)) listSec.replaceChildren(OG.section(scope === "all" ? "All requests" : "Your requests", tbl, h("p", { class: "note" }, "Index at request is the indicative OpenGrid index level when the request was made. An offer binds only in a signed order form.")));
       }
       load();
       ctx.every(30000, load);
@@ -343,19 +352,34 @@
       root.append(OG.loading("Loading the request…"));
       const me = await OG.me();
       if (!ctx.alive()) return;
+      if (!me) { root.replaceChildren(signedOut("Price-lock request " + id), h("p", {}, h("a", { class: "btn", href: "/reserve" }, "← Reserve"))); return; }
       const admin = OG.isAdmin(me);
-      let r = null, viaAdmin = false;
+      let r = null, viaAdmin = false, lastOk = null;
       const flash = h("div", { class: "dep-flash" });
+      const stale = h("div", { "aria-live": "polite" });
+      const openFolds = new Set();
+      const fold = (key, summary, ...kids) => {
+        const det = h("details", { class: "sec dep-fold", open: openFolds.has(key) ? true : null, ontoggle: () => { if (det.open) openFolds.add(key); else openFolds.delete(key); } }, h("summary", { class: "sec-h" }, summary), kids);
+        return det;
+      };
+      // A failed refresh keeps the last good view (and its Accept / Withdraw buttons) with a one-line notice.
+      const failed = (e, what) => {
+        if (r) { stale.replaceChildren(OG.refreshNotice(e, lastOk, () => load())); return; }
+        root.replaceChildren(OG.head("Price-lock request " + id, null, h("a", { class: "btn", href: "/reserve" }, "← Reserve")), notYet(what, e));
+      };
       const I = { accept: null, withdraw: null };
 
       async function load() {
-        try { r = await ctx.api("/v1/reservations/" + enc, { nocache: true }); viaAdmin = false; }
+        let next;
+        try { next = await ctx.api("/v1/reservations/" + enc, { nocache: true }); viaAdmin = false; }
         catch (e) {
           if (admin && e.status === 404) {
-            try { r = await ctx.api("/v1/admin/reservations/" + enc, { nocache: true }); viaAdmin = true; }
-            catch (e2) { root.replaceChildren(OG.head("Price-lock request " + id, null, h("a", { class: "btn", href: "/reserve" }, "← Reserve")), notYet("GET /v1/admin/reservations/{id}", e2)); return; }
-          } else { root.replaceChildren(OG.head("Price-lock request " + id, null, h("a", { class: "btn", href: "/reserve" }, "← Reserve")), notYet("GET /v1/reservations/{id}", e)); return; }
+            try { next = await ctx.api("/v1/admin/reservations/" + enc, { nocache: true }); viaAdmin = true; }
+            catch (e2) { failed(e2, "GET /v1/admin/reservations/{id}"); return; }
+          } else { failed(e, "GET /v1/reservations/{id}"); return; }
         }
+        if (!next || typeof next !== "object") { failed({ status: 404 }, "GET /v1/reservations/{id}"); return; }
+        r = next; lastOk = new Date().toISOString(); stale.replaceChildren();
         draw();
       }
 
@@ -368,18 +392,15 @@
             h("span", {}, hoursText(r.total_gpu_hours), " · ", r.region_group || "any region", " · start ", fmt.dateTime(r.start_after), " → ", fmt.dateTime(r.start_before)),
             badge(r.status),
             acts.has("withdraw") ? h("button", { class: "btn w4-danger", type: "button", onclick: () => withdraw() }, r.status === "offered" ? "Decline offer / withdraw…" : "Withdraw…") : null,
-            h("button", { class: "btn", type: "button", onclick: () => load() }, "Refresh"),
             h("a", { class: "btn", href: "/reserve" }, "← Reserve"), OG.copy(r.request_id, { title: "Copy the request id" })),
           banner(),
-          flash,
+          stale, flash,
           h("ol", { class: "og-strip", "aria-label": "request lifecycle" }, strip(r.status, evs.map(e => e.to)).map(st => h("li", { class: "m-" + st.mark + (st.tone ? " t-" + st.tone : "") + (st.off ? " off" : ""), "aria-current": st.mark === "current" ? "step" : null }, st.state.replace(/_/g, " ")))),
           OG.stats([
             { label: "Your limit", value: perGpuH(r.max_price_per_gpu_hour), sub: "up to " + usd(r.max_total_usd) },
-            { label: "GPU-hours", value: hoursText(r.total_gpu_hours), sub: r.gpu_count + " GPUs at once" },
             { label: "Offer", value: o ? perGpuH(o.price_per_gpu_hour) : null, reason: OPEN.includes(r.status) ? "no offer yet" : "no offer", sub: o ? `#${o.offer_seq} · ${usd(o.total_usd)} total` : null },
             { label: "Offer valid until", value: o ? fmt.dateTime(o.valid_until) : null, reason: "no offer", sub: o ? (o.valid ? "valid · " + fmt.age((+new Date(o.valid_until) - Date.now()) / 1000) + " left" : "not open") : null },
-            { label: "Created", value: fmt.dateTime(r.created_at), sub: r.account_id == null ? "operator" : "account " + r.account_id },
-            { label: "Status since", value: r.state_changed_at ? fmt.age(r.state_changed_at) : null, sub: r.state_changed_at ? fmt.dateTime(r.state_changed_at) : null, reason: "not reported" },
+            { label: "Status since", value: r.state_changed_at ? fmt.age(r.state_changed_at) + " ago" : null, sub: r.state_changed_at ? fmt.dateTime(r.state_changed_at) : null, reason: "not reported" },
           ]),
           offerBlock(o, acts),
           adminBlock(acts),
@@ -391,9 +412,10 @@
             ["Your max price", perGpuH(r.max_price_per_gpu_hour), "the customer's limit, not a price"],
             ["Notes", r.notes ? h("span", { class: "rs-notes" }, r.notes) : null],
             r.closed_reason ? ["Closed because", r.closed_reason] : null,
+            ["Created", fmt.dateTime(r.created_at) + (r.account_id == null ? " · operator" : " · account " + r.account_id)],
           ])),
-          refBlock(r.indicative, "Indicative reference at request time"),
-          eventsBlock(evs));
+          fold("ref", "Details: market reference when the request was made", refBlock(r.indicative, "Indicative reference at request time")),
+          fold("events", `Details: events (${evs.length})`, eventsBlock(evs)));
       }
 
       function offerBlock(o, acts) {
@@ -424,7 +446,7 @@
         if (acts.has("cancel")) b.push(h("button", { class: "btn w4-danger", type: "button", onclick: () => adminAct("cancel", { title: "Cancel the accepted request", danger: true, fields: [{ key: "reason", label: "Reason", type: "textarea", required: true, minLength: 3 }] }) }, "Cancel…"));
         if (!b.length) return null;
         return OG.section(h("span", {}, "Operator ", OG.badge("admin", "warn")), h("div", { class: "dep-acts" }, b),
-          h("p", { class: "note" }, "An offer needs a supply basis: the provider capacity commitment that backs it. Every action is recorded with your reason."));
+          h("p", { class: "note" }, "An offer needs a supply basis: the provider capacity commitment behind it. Every action is recorded with your reason."));
       }
 
       async function post(path, body, intent) {

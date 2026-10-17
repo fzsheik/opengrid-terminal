@@ -15,10 +15,13 @@
       el.append(root);
       const me = await OG.me();
       if (!ctx.alive()) return;
-      if (!OG.isAdmin(me)) { root.append(OG.head("First real route checklist"), OG.error({ status: 403, message: "admin scope required" })); return; }
+      if (!OG.isAdmin(me)) { root.append(OG.operatorGate("First real route checklist", me)); return; }
       const st = { provider: query.provider || "", rr: query.rr || "", acct: query.acct || "" };
-      const caps = (await OG.api.soft("/v1/capabilities")) || [];
+      let caps, capsErr = null;
+      try { caps = await ctx.api("/v1/capabilities"); } catch (e) { capsErr = e; }
       if (!ctx.alive()) return;
+      if (capsErr) { root.append(OG.head("First real route checklist"), OG.error(capsErr, () => OG.render())); return; }
+      caps = Array.isArray(caps) ? caps : [];
       const provs = caps.filter(c => (c.level_implemented || 0) >= 2).map(c => c.provider);
       if (!st.provider) st.provider = provs.includes("vast") ? "vast" : provs[0] || "";
       const sel = h("select", { class: "field", "aria-label": "Provider", onchange: e => { st.provider = e.target.value; sync(); load(false); } },
@@ -26,14 +29,14 @@
       const rrIn = h("input", { class: "field ck-rr", placeholder: "route_request_id (rr_…) optional", value: st.rr, onchange: e => { st.rr = e.target.value.trim(); sync(); load(false); } });
       const acctIn = h("input", { class: "field num", type: "number", min: 1, placeholder: "acct", value: st.acct, title: "account_id: check that account's limits", onchange: e => { st.acct = e.target.value.trim(); sync(); load(false); } });
       const body = h("div", {}, OG.loading("Computing the checklist…"));
-      root.append(OG.head("First real route checklist", "The gate before SUPERVISED execution · computed live, nothing cached",
+      root.append(OG.head("First real route checklist", "Every item must be green before SUPERVISED launches are turned on. Computed live.",
         sel, rrIn, acctIn,
         h("button", { class: "btn", type: "button", onclick: () => load(false) }, "Recheck"),
         h("button", { class: "btn pri", type: "button", title: "probe=true: one read-only API call with the configured credential", onclick: () => load(true) }, "Probe provider")), body);
       function sync() { OG.qs.set({ provider: st.provider || null, rr: st.rr || null, acct: st.acct || null }); }
 
       async function load(probe) {
-        if (!st.provider) { body.replaceChildren(OG.empty("No provisionable provider on this server.")); return; }
+        if (!st.provider) { body.replaceChildren(OG.empty("No provider on this server can provision yet (integration level 2 or more is needed).")); return; }
         body.replaceChildren(OG.loading(probe ? "Probing " + OG.providerName(st.provider) + " (read-only)…" : "Computing…"));
         let d;
         try {
@@ -47,14 +50,14 @@
             h("span", { class: "mono" }, `${d.green} green · ${d.red} red · ${d.unknown} unknown`),
             h("span", { class: "dim" }, OG.providerName(d.provider) + (d.route_request_id ? " · " + d.route_request_id : "") + " · computed " + fmt.time(d.computed_at) + (probe ? " · probed" : "")),
             h("span", { class: "spacer" }),
-            green ? h("a", { class: "btn pri", href: "/admin/execution" }, "Go to execution mode →") : h("a", { class: "btn", href: "/admin/execution", title: "the gate is not green: fix the red items first" }, "Execution control")),
+            green ? h("a", { class: "btn pri", href: "/admin/execution" }, "Go to execution mode") : h("a", { class: "btn", href: "/admin/execution", title: "the gate is not green: fix the red items first" }, "Execution control")),
           h("ol", { class: "ck-items" }, items.map(it => h("li", { class: "ck-" + it.status },
             h("i", { class: "ck-dot" }),
             h("div", { class: "ck-main" },
               h("div", { class: "ck-l" }, h("b", {}, it.label), it.status === "green" ? null : OG.badge(it.status, TONE[it.status]), it.required ? null : OG.badge("optional")),
               it.evidence ? h("div", { class: "ck-ev mono" }, it.evidence) : null,
               it.status !== "green" && it.fix ? h("div", { class: "ck-fix" }, h("span", { class: "eyebrow" }, "How to fix"), " ", h("code", { class: "mono" }, it.fix)) : null)))),
-          h("p", { class: "note" }, d.rule || "", " · ", h("a", { class: "lnk", href: "/methodology/first-live-route" }, "First live route guide →")));
+          h("p", { class: "note" }, d.rule || "", " · ", h("a", { class: "lnk", href: "/methodology/first-live-route" }, "First live route guide")));
       }
       load(false);
     },
