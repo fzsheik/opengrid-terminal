@@ -12,7 +12,9 @@ What the script does (methodology/runner.md has the full list and the evidence e
   stage 2: log to /var/log/opengrid-job.log; phases bootstrap_started -> gpu_detected (nvidia-smi) ->
           python_ready -> torch_installed (pinned venv: torch 2.4.1+cu121 / torchvision 0.19.1+cu121 /
           numpy 1.26.4, every wheel hash-checked; fallback to the image's preinstalled PyTorch ONLY if that
-          fails, recorded as env_source=preinstalled_fallback) -> cuda_available -> reporter runs the trainer
+          fails, recorded as env_source=preinstalled_fallback) -> cuda_available -> [ONLY for a job created with
+          resume_from: resume_downloaded (the pinned checkpoint via GET runner/resume, job token, sha256-checked;
+          failure = bootstrap_failed)] -> reporter runs the trainer (with --resume when downloaded)
           (dataset_ready, training_started, epoch_completed..., artifacts_uploaded, training_completed |
           training_failed) under `timeout`. ANY failure posts complete(outcome=failed, reason=bootstrap_failed
           ...) so OpenGrid terminates the instance via the provider API. The script never shuts the OS down:
@@ -45,6 +47,7 @@ EMBEDDED = ("__init__.py", "VERSION", "mnist_train.py", "reporter.py", *LOCKS.va
 _JOB_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}\Z")   # \Z, not $: no trailing newline
 _TOKEN = re.compile(r"^[A-Za-z0-9_-]{16,256}\Z")
 _BASE_URL = re.compile(r"^https://[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?(/[A-Za-z0-9._~-]+)*/?\Z")
+_SHA256 = re.compile(r"^[0-9a-f]{64}\Z")
 _HTTP_LOCAL = re.compile(r"^http://(localhost|127\.0\.0\.1)(:[0-9]{1,5})?(/[A-Za-z0-9._~-]+)*/?\Z")
 
 
@@ -90,10 +93,41 @@ def validate_inputs(job_id, token, base_url, template, config, max_runtime_minut
     return cfg
 
 
+def validate_resume(resume, cfg: dict) -> dict | None:
+    """None, or {sha256: 64 hex, epoch: int in [1, epochs-1]} (what jobs/artifacts.resolve_resume pinned)."""
+    if resume is None:
+        return None
+    if not isinstance(resume, dict):
+        raise ValueError("resume must be a dict")
+    sha = resume.get("sha256")
+    if not isinstance(sha, str) or not _SHA256.match(sha):
+        raise ValueError("resume.sha256 must be 64 lowercase hex chars")
+    ep = resume.get("epoch")
+    if isinstance(ep, bool) or not isinstance(ep, int) or not 1 <= ep < cfg["epochs"]:
+        raise ValueError("resume.epoch must be an integer in [1, epochs - 1]")
+    return {"sha256": sha, "epoch": ep}
+
+
+def _resume_parts(resume: dict | None) -> tuple[str, str]:
+    """(stage-2 download step, extra trainer args); both empty unless the job resumes from a checkpoint."""
+    if resume is None:
+        return "", ""
+    sha, ep = resume["sha256"], resume["epoch"]
+    step = (f"\nOG_STEP=resume_download\n"
+            f"og fetch-resume --dest \"$OG_DIR/resume.pt\" --sha256 '{sha}' --epoch {ep} || \\\n"
+            f"  og_fail bootstrap_failed \"could not download the checkpoint to resume from (epoch {ep}, sha256 "
+            f"pinned at submission)\"\n")
+    return step, f" \\\n     --resume \"$OG_DIR/resume.pt\" --resume-sha256 '{sha}'"
+
+
 def render(job_id: str, token: str, *, base_url: str, template: str = "pytorch-mnist", config: dict,
-           max_runtime_minutes: int = 30, allow_http: bool = False) -> str:
-    """The user_data bash script. Raises ValueError on any invalid input (nothing is ever escaped 'around')."""
+           max_runtime_minutes: int = 30, allow_http: bool = False, resume: dict | None = None) -> str:
+    """The user_data bash script. Raises ValueError on any invalid input (nothing is ever escaped 'around').
+    resume={sha256, epoch}: stage 2 downloads the job's pinned checkpoint (GET runner/resume with the job token,
+    sha256-checked) before training and the trainer continues from it; absent, the script has no resume step."""
     cfg = validate_inputs(job_id, token, base_url, template, config, max_runtime_minutes, allow_http)
+    resume = validate_resume(resume, cfg)
+    resume_step, resume_args = _resume_parts(resume)
     base_url = base_url.rstrip("/")
     config_b64 = base64.b64encode(json.dumps(cfg, sort_keys=True, separators=(",", ":")).encode()).decode()
     files = _files()
@@ -108,6 +142,7 @@ def render(job_id: str, token: str, *, base_url: str, template: str = "pytorch-m
         "@@PYTORCH_INDEX@@": PYTORCH_INDEX, "@@PYPI_INDEX@@": PYPI_INDEX,
         "@@PIN_TORCH@@": PINS["torch"], "@@PIN_TORCHVISION@@": PINS["torchvision"],
         "@@FILES@@": "\n".join(blocks), "@@SUMS@@": "\n".join(sums),
+        "@@RESUME_STEP@@": resume_step, "@@RESUME_ARGS@@": resume_args,
     }
     script = _TEMPLATE
     for k, v in subst.items():
@@ -279,7 +314,7 @@ if ! "$OG_PY" -c 'import json, sys, torch; ok = torch.cuda.is_available(); print
   og_fail bootstrap_failed "torch.cuda.is_available() is False"
 fi
 og_phase cuda_available --kv-file cuda="$OG_DIR/state/cuda.json"
-
+@@RESUME_STEP@@
 OG_STEP=training
 OG_REMAIN=$(( OG_DEADLINE - $(date +%s) ))
 [ "$OG_REMAIN" -gt 180 ] || og_fail training_timed_out "less than 3 minutes of the runtime ceiling left before training"
@@ -287,7 +322,7 @@ set +e
 timeout --kill-after=30 "$OG_REMAIN" python3 -m runner.reporter run --base-url "$OG_BASE_URL" --job "$OG_JOB_ID" \
   --token-file "$OG_DIR/token" --state-dir "$OG_DIR/state" --out "$OG_DIR/out" --max-seconds $(( OG_REMAIN - 60 )) \
   -- "$OG_PY" -m runner.mnist_train --out "$OG_DIR/out" --data "$OG_DIR/data" \
-     --config-b64 "$OG_CONFIG_B64" --max-seconds $(( OG_REMAIN - 120 ))
+     --config-b64 "$OG_CONFIG_B64" --max-seconds $(( OG_REMAIN - 120 ))@@RESUME_ARGS@@
 OG_RC=$?
 set -e
 touch "$OG_DIR/completed"

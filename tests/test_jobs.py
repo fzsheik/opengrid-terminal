@@ -922,6 +922,144 @@ def test_live_mode_launches_with_the_bootstrap():
     assert job_row(jid).status == "initializing"
 
 
+def _refused(fn, code, status=None):
+    try:
+        fn()
+    except (O.JobRefused, A.ArtifactError) as e:
+        assert e.code == code, (e.code, e.message)
+        assert status is None or e.status == status, (e.status, status)
+        return e
+    raise AssertionError(f"not refused ({code})")
+
+
+def _ckpt(jid, epoch, data=None, **kw):
+    data = data if data is not None else b"ckpt-%d-" % epoch * 64
+    meta = A.store().put(jid, A.checkpoint_name(epoch), data, hashlib.sha256(data).hexdigest(), **kw)
+    if not meta.get("superseded") and not meta.get("replayed"):
+        sync.on_artifact(jid, meta)
+    return meta
+
+
+def test_checkpoints_retention_and_results_gate():
+    world()
+    settings.job_checkpoint_keep = 2
+    code, out, w = submit_real()
+    jid = out["job_id"]
+    to_running(jid)
+    evs, last = happy_events()
+    runner_events(jid, evs)
+    m1 = _ckpt(jid, 1)
+    assert m1["kind"] == "checkpoint" and m1["epoch"] == 1 and m1["source"] == "runner" and "pruned" not in m1
+    assert _ckpt(jid, 1)["replayed"], "same bytes again: idempotent"
+    _refused(lambda: _ckpt(jid, 1, b"different"), "artifact_exists", 409)
+    _refused(lambda: A.store().put(jid, "ckpt-e0002.pt", b"abc", "0" * 64), "artifact_sha256_mismatch")
+    _refused(lambda: _ckpt(jid, 2, source="simulated"), "checkpoint_source_invalid")
+    old = settings.job_checkpoint_max_mb
+    settings.job_checkpoint_max_mb = 1
+    try:
+        _refused(lambda: _ckpt(jid, 2, b"x" * (1024 * 1024 + 1)), "checkpoint_too_large", 413)
+    finally:
+        settings.job_checkpoint_max_mb = old
+    for bad in ("ckpt-e1.pt", "ckpt-e00001.pt", "ckpt-e0001.pth", "checkpoints/ckpt-e0001.pt"):
+        assert not A.is_checkpoint(bad), bad
+    # latest wins: keep 2, the older one is deleted once a newer one is stored
+    _ckpt(jid, 2)
+    m3 = _ckpt(jid, 3)
+    assert m3["pruned"] == ["ckpt-e0001.pt"], m3
+    assert [c["epoch"] for c in A.checkpoints(jid)] == [3, 2]
+    late = _ckpt(jid, 1)
+    assert late["superseded"] and not late.get("stored", True), "a late, older checkpoint is not stored"
+    assert [c["epoch"] for c in A.checkpoints(jid)] == [3, 2]
+    lc = A.latest_checkpoint(jid, verify=True)
+    assert lc["job_id"] == jid and lc["artifact"] == "ckpt-e0003.pt" and lc["epoch"] == 3, lc
+    assert lc["sha256"] == hashlib.sha256(b"ckpt-3-" * 64).hexdigest()
+    assert A.latest_checkpoint("job-00000000deadbeef") is None
+    # checkpoints are not results: the success gate ignores them
+    ok, missing = A.persisted(jid, ["model.pt", "ckpt-e0003.pt"])
+    assert not ok and missing == ["model.pt", "ckpt-e0003.pt"], missing
+    j = job_row(jid)
+    assert j.evidence["weights_saved"]["status"] == "pending", "a checkpoint is not the trained model.pt"
+    res = sync.complete(jid, {"outcome": "succeeded", "summary": {}})   # result event missing too: refused
+    assert job_row(jid).outcome == "failed" and job_row(jid).status != "training_completed", res
+    # the job shape: stored checkpoints newest first, never in the required artifact list
+    full = O.get(jid, w)
+    cp = full["checkpoints"]
+    assert [c["epoch"] for c in cp["stored"]] == [3, 2] and cp["latest"]["name"] == "ckpt-e0003.pt"
+    assert cp["resumable"] and cp["keep"] == 2 and not cp["simulated"]
+    arts = O.artifacts_list(jid, w)
+    assert {a["name"]: a["kind"] for a in arts} == {"ckpt-e0002.pt": "checkpoint", "ckpt-e0003.pt": "checkpoint"}
+    assert full["resume"] is None
+
+
+def test_resume_from_checkpoint():
+    world()
+    settings.job_checkpoint_keep = 2
+    code, out, w = submit_real()
+    src = out["job_id"]
+    to_running(src)
+    runner_events(src, happy_events()[0])
+    for e in (1, 2, 3):
+        _ckpt(src, e)
+    # refusals: other account (no oracle), missing / pruned / non-checkpoint artifact, nothing left to train
+    other = who()
+    _refused(lambda: O.submit(body(resume_from={"job_id": src}, config={"epochs": 5}), other), "resume_job_not_found", 404)
+    _refused(lambda: O.preview(body(resume_from={"job_id": src}, config={"epochs": 5}), other), "resume_job_not_found")
+    _refused(lambda: O.submit(body(resume_from={"job_id": "job-00000000deadbeef"}), w), "resume_job_not_found")
+    _refused(lambda: O.submit(body(resume_from={"job_id": src, "artifact": "ckpt-e0001.pt"}, config={"epochs": 5}), w),
+             "resume_checkpoint_not_found")
+    _refused(lambda: O.submit(body(resume_from={"job_id": src, "artifact": "model.pt"}), w),
+             "resume_artifact_not_checkpoint")
+    _refused(lambda: O.submit(body(resume_from={"job_id": "../x"}), w), "invalid_resume_from")
+    _refused(lambda: O.submit(body(resume_from={"job_id": src}, config={"epochs": 3}), w), "resume_nothing_to_do")
+    n_jobs = scalar("SELECT count(*) FROM jobs")
+    assert n_jobs == 1, "a refused resume creates nothing"
+    # a sandbox job stores no checkpoint: nothing to resume from
+    code, sb = O.submit(body(sandbox=True, config={"epochs": 3}), w)
+    assert sb["checkpoints"]["reported_epochs"] == [1, 2] and sb["checkpoints"]["stored"] == []
+    assert not sb["checkpoints"]["resumable"] and sb["checkpoints"]["simulated"]
+    assert [a["name"] for a in sb["artifacts"]] == ["simulated-report.json"], "no fake checkpoint bytes"
+    _refused(lambda: O.submit(body(resume_from={"job_id": sb["job_id"]}, config={"epochs": 5}), w),
+             "resume_checkpoint_not_found")
+    # a verified checkpoint of the same account: pinned at submission
+    code, out2, _ = submit_real(w, resume_from={"job_id": src}, config={"epochs": 5})
+    assert code == 202, out2
+    nj = out2["job_id"]
+    rf = job_row(nj).spec["resume_from"]
+    sha3 = hashlib.sha256(b"ckpt-3-" * 64).hexdigest()
+    assert rf == {"job_id": src, "artifact": "ckpt-e0003.pt", "epoch": 3, "sha256": sha3, "size": len(b"ckpt-3-" * 64)}
+    assert out2["resume"]["epoch"] == 3 and out2["resume"]["job_id"] == src and not out2["resume"]["confirmed"]
+    # the pinned checkpoint is never pruned under an unfinished job, even as the source keeps saving
+    _ckpt(src, 4)
+    _ckpt(src, 5)
+    assert [c["epoch"] for c in A.checkpoints(src)] == [5, 4, 3], A.checkpoints(src)
+    meta, data = A.resume_source(nj)
+    assert data == b"ckpt-3-" * 64 and meta["sha256"] == sha3
+    _refused(lambda: A.resume_source(src), "resume_not_requested", 404)
+    # the bootstrap downloads exactly the pinned checkpoint; an ordinary job's has no resume step
+    to_running(nj)
+    ud = SIM.user_data()
+    assert "fetch-resume" not in ud[0] and ud[1].count("og fetch-resume") == 1 and f"'{sha3}' --epoch 3" in ud[1]
+    note = q("SELECT evidence FROM job_events WHERE job_id = :j AND reason LIKE 'bootstrap rendered%'", j=nj)[0][0]
+    assert note["resume_from"]["artifact"] == "ckpt-e0003.pt"
+    # the runner confirms the resume
+    runner_events(nj, [{"seq": 1, "type": "phase", "at": "2026-10-13T10:00:00Z",
+                        "data": {"phase": "resumed", "from_epoch": 3, "next_epoch": 4, "of": 5, "sha256": sha3}}])
+    g = O.get(nj, w)
+    assert g["resume"]["confirmed"] and g["resume"]["confirmed_from_epoch"] == 3, g["resume"]
+    # sandbox resuming a real checkpoint: simulated from the next epoch, nothing downloaded or faked
+    code, sb2 = O.submit(body(sandbox=True, resume_from={"job_id": src}, config={"epochs": 7}), w)
+    assert sb2["resume"]["epoch"] == 5 and sb2["resume"]["confirmed"] and sb2["resume"]["simulated"]
+    m = O.metrics(sb2["job_id"], w)
+    assert [e["epoch"] for e in m["epochs"]] == [6, 7]
+    # a changed / corrupted stored checkpoint is refused at submission and at download
+    with normalize.SessionLocal.begin() as s:
+        s.execute(text("UPDATE job_artifacts SET bytes = 'tampered' WHERE job_id = :j AND name = 'ckpt-e0003.pt'"),
+                  {"j": src})
+    _refused(lambda: O.submit(body(resume_from={"job_id": src, "artifact": "ckpt-e0003.pt"}, config={"epochs": 5}), w),
+             "artifact_corrupt", 500)
+    _refused(lambda: A.resume_source(nj), "artifact_corrupt", 500)
+
+
 TESTS = [test_state_machine, test_preview_shapes, test_sandbox_end_to_end, test_refusals_are_not_faked,
          test_real_path_happy, test_customer_key, test_bootstrap_timeout, test_training_failure_terminates, test_oom,
          test_cuda_init_failed, test_artifact_upload_failure, test_no_success_without_result, test_cancel_before_launch,
@@ -929,7 +1067,8 @@ TESTS = [test_state_machine, test_preview_shapes, test_sandbox_end_to_end, test_
          test_runner_silence_while_initializing, test_gpu_interrupted, test_runner_silence_degraded,
          test_worker_restart_rebuild,
          test_out_of_order_and_late_callbacks, test_s3_backend_fake, test_readiness,
-         test_price_changed_and_gpu_unavailable, test_quote_expired_at_approval, test_live_mode_launches_with_the_bootstrap]
+         test_price_changed_and_gpu_unavailable, test_quote_expired_at_approval, test_live_mode_launches_with_the_bootstrap,
+         test_checkpoints_retention_and_results_gate, test_resume_from_checkpoint]
 
 
 def main(only=None) -> int:

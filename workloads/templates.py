@@ -18,7 +18,7 @@ TEMPLATE_SCHEMA_VERSION = 1
 
 _MNIST = {
     "id": "pytorch-mnist",
-    "version": "1.0.0",
+    "version": "1.1.0",   # 1.1.0: checkpoint_every_epochs + resume_from
     "job_type": "training",
     "title": "Train Your First AI Model: PyTorch MNIST",
     "summary": "Train a small convolutional network to recognise handwritten digits on one cloud GPU.",
@@ -27,7 +27,8 @@ _MNIST = {
         "torchvision's default mirror with torchvision's built-in MD5 checks, trains a small CNN (2 "
         "convolutional + 2 fully-connected layers, Adam) for the chosen number of epochs on one NVIDIA GPU, "
         "reports per-epoch training loss and test accuracy, and saves the trained weights (model.pt), the "
-        "config, the metrics and the software/GPU environment as downloadable artifacts. OpenGrid "
+        "config, the metrics and the software/GPU environment as downloadable artifacts. Between epochs it saves "
+        "a resumable checkpoint (model + optimizer state) that a later job can continue from. OpenGrid "
         "terminates the GPU when the run ends, fails or reaches its runtime ceiling."),
     "framework": {
         "name": "PyTorch", "torch": "2.4.1", "torchvision": "0.19.1", "cuda": "12.1",
@@ -49,6 +50,9 @@ _MNIST = {
                           "description": "Adam learning rate"},
         "seed": {"type": "integer", "min": 0, "max": 2**31 - 1, "default": 42,
                  "description": "random seed (results are seeded, not bit-for-bit reproducible across GPUs)"},
+        "checkpoint_every_epochs": {"type": "integer", "min": 0, "max": 10, "default": 1,
+                                    "description": "save a resumable checkpoint (model + optimizer state) every N "
+                                                   "epochs before the last; 0 = never"},
     },
     "requirements": {
         "vendor": "NVIDIA",
@@ -94,6 +98,9 @@ _MNIST = {
         "default_band_minutes": [6, 15],  # with the default 3 epochs
     },
     "artifacts": ["model.pt", "config.json", "metrics.json", "env.json"],
+    # Resumable state, not results: never required for success; the job keeps only the newest few (jobs/artifacts.py).
+    "checkpoints": {"name_pattern": "ckpt-eNNNN.pt", "contents": "model + Adam optimizer state + epoch + RNG state",
+                    "resume": "POST /v1/jobs with resume_from {job_id, artifact?} (same account)"},
     "preset": {
         "name": "opengrid-first-training-test",
         "job_type": "training",

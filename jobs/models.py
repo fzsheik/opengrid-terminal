@@ -131,8 +131,33 @@ def approval_block(job, dep, quote: dict | None) -> dict | None:
             "limit_violations": dep.limit_violations or []}
 
 
+def resume_block(job, marks: dict | None = None) -> dict | None:
+    """The checkpoint this job continues from (pinned at submission) + whether the runner confirmed loading it."""
+    rf = (job.spec or {}).get("resume_from") or None
+    if not rf:
+        return None
+    r = (marks or {}).get("resumed") or None
+    return {"job_id": rf.get("job_id"), "artifact": rf.get("artifact"), "epoch": rf.get("epoch"),
+            "sha256": rf.get("sha256"), "confirmed": bool(r) if marks is not None else None,   # None: list view
+            "confirmed_from_epoch": (r or {}).get("from_epoch"),
+            "simulated": bool(job.sandbox), "link": f"/v1/jobs/{rf.get('job_id')}"}
+
+
+def checkpoints_block(job, artifacts, marks: dict | None = None) -> dict:
+    """Stored (sha256-verified, runner-uploaded) checkpoints, newest first, and what the run reported saving."""
+    from jobs import artifacts as A
+    stored = sorted((a for a in artifacts or [] if a.get("kind") == "checkpoint"), key=lambda a: a.get("epoch") or 0,
+                    reverse=True)
+    rows = [{k: a.get(k) for k in ("name", "epoch", "size", "sha256", "created_at", "source")} for a in stored]
+    return {"stored": rows, "latest": rows[0] if rows else None, "resumable": bool(rows), "keep": A.checkpoint_keep(),
+            "reported_epochs": list((marks or {}).get("saved") or []), "simulated": bool(job.sandbox),
+            "note": ("SIMULATED: checkpoint events only; a sandbox stores no checkpoint, so nothing is resumable"
+                     if job.sandbox else "resumable training state, not results; only the newest "
+                                         f"{A.checkpoint_keep()} are kept")}
+
+
 def public(job, dep=None, *, quote: dict | None = None, detail: bool = False, events=None, artifacts=None,
-           metrics_latest=None) -> dict:
+           metrics_latest=None, runner_marks=None) -> dict:
     """The job as the API returns it (no key material, no token, no bootstrap script)."""
     from jobs import states
 
@@ -169,6 +194,7 @@ def public(job, dep=None, *, quote: dict | None = None, detail: bool = False, ev
         "checks": checks_list(job),
         "failure": None if not job.failure_code else {"code": job.failure_code, "reason": job.failure_reason},
         "result": job.runner_result,
+        "resume": resume_block(job, runner_marks),
         "created_at": _iso(job.created_at), "updated_at": _iso(job.updated_at), "started_at": _iso(job.started_at),
         "finished_at": _iso(job.finished_at), "state_changed_at": _iso(job.state_changed_at),
         "cancel_requested_at": _iso(job.cancel_requested_at), "last_runner_event_at": _iso(job.last_runner_event_at),
@@ -182,4 +208,5 @@ def public(job, dep=None, *, quote: dict | None = None, detail: bool = False, ev
         out["events"] = events or []
         out["artifacts"] = artifacts or []
         out["metrics_latest"] = metrics_latest or {}
+        out["checkpoints"] = checkpoints_block(job, artifacts, runner_marks)
     return out

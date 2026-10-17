@@ -439,12 +439,76 @@ def test_artifact_bytes_capped_per_job():
         settings.job_artifact_max_mb = 64
 
 
+def test_checkpoints_cannot_blow_the_quota():
+    """Retention keeps a job's checkpoints at job_checkpoint_keep, inside the (unchanged) per-job byte quota."""
+    setup()
+    jid, _ = running_job()
+    h = rh(jid)
+    settings.job_artifact_max_mb, settings.job_checkpoint_max_mb, settings.job_checkpoint_keep = 1, 1, 2
+    try:
+        blob = b"c" * (1024 * 1024 - 10)
+        for e in range(1, 13):
+            b = blob[:-1] + bytes([e])
+            r = client.put(f"/v1/jobs/{jid}/runner/artifacts/{A.checkpoint_name(e)}",
+                           headers={**h, "X-Content-SHA256": hashlib.sha256(b).hexdigest()}, content=b)
+            assert r.status_code == 200, (e, r.text)
+        names = [n for (n,) in q("SELECT name FROM job_artifacts WHERE job_id = :j ORDER BY name", j=jid)]
+        assert names == ["ckpt-e0011.pt", "ckpt-e0012.pt"], names
+        total = scalar("SELECT coalesce(sum(size), 0) FROM job_artifacts WHERE job_id = :j", j=jid)
+        assert total <= 2 * 1024 * 1024
+        # results still fit; and a checkpoint can never be uploaded under a result's name or vice versa
+        for n in ("model.pt", "config.json"):
+            r = client.put(f"/v1/jobs/{jid}/runner/artifacts/{n}", headers={**h, "X-Content-SHA256": hashlib.sha256(
+                n.encode()).hexdigest()}, content=n.encode())
+            assert r.status_code == 200, r.text
+        assert {a["kind"] for a in A.store().list(jid) if a["name"] in ("model.pt", "config.json")} == {"output"}
+    finally:
+        settings.job_artifact_max_mb, settings.job_checkpoint_max_mb, settings.job_checkpoint_keep = 64, 32, 2
+
+
+def test_resume_download_scoping():
+    """GET runner/resume: only the resuming job's own (unrevoked) token, only its pinned checkpoint."""
+    setup()
+    a, h = running_job()
+    c = b"pinned-state" * 50
+    r = client.put(f"/v1/jobs/{a}/runner/artifacts/ckpt-e0001.pt",
+                   headers={**rh(a), "X-Content-SHA256": hashlib.sha256(c).hexdigest()}, content=c)
+    assert r.status_code == 200, r.text
+    r = client.post("/v1/jobs", headers={**h, "Idempotency-Key": str(uuid.uuid4())},
+                    json=T.body(resume_from={"job_id": a}))
+    assert r.status_code == 202, r.text
+    b = r.json()["data"]["job_id"]
+    T.to_running(b)
+    tb = T.token_for(b)
+    assert client.get(f"/v1/jobs/{b}/runner/resume", headers=rh(b, tb)).content == c
+    # the runner token is not a read credential for the source job's public artifact routes
+    for path in (f"/v1/jobs/{a}/artifacts", f"/v1/jobs/{a}/artifacts/ckpt-e0001.pt"):
+        assert client.get(path, headers=rh(b, tb)).status_code == 401, path
+    # a job created without resume_from gets nothing (resume_from is only set, and checked, at submission)
+    assert client.get(f"/v1/jobs/{a}/runner/resume", headers=rh(a)).status_code == 404
+    # a finished job's token is revoked: no more downloads
+    T.sync.complete(b, {"outcome": "failed", "summary": {"reason": "training_failed"}})
+    T.drive_to_end(b)
+    r = client.get(f"/v1/jobs/{b}/runner/resume", headers=rh(b, tb))
+    assert r.status_code in (401, 409) and r.json()["detail"]["code"] in ("runner_token_revoked", "job_finished"), r.text
+    # and once nobody is pinned to it, retention may prune the checkpoint normally
+    settings.job_checkpoint_keep = 1
+    try:
+        for e in (2, 3):
+            d = b"later-%d" % e
+            assert A.store().put(a, A.checkpoint_name(e), d, hashlib.sha256(d).hexdigest()).get("kind") == "checkpoint"
+        assert [x["epoch"] for x in A.checkpoints(a)] == [3]
+    finally:
+        settings.job_checkpoint_keep = 2
+
+
 TESTS = [test_token_derivation_and_storage, test_token_scoping, test_token_expiry_and_revocation,
          test_finished_job_refuses_callbacks, test_callback_bounds, test_artifact_names_sizes_hashes,
          test_customers_cannot_inject_startup_scripts, test_render_refuses_foreign_or_finished_jobs,
          test_unrenderable_placeholder_never_reaches_the_provider, test_ephemeral_key_private_half_discarded,
          test_real_metrics_require_a_gpu, test_operator_basic_auth_cannot_csrf_jobs,
-         test_allowlists_reject_trailing_newline, test_per_job_runner_quotas, test_artifact_bytes_capped_per_job]
+         test_allowlists_reject_trailing_newline, test_per_job_runner_quotas, test_artifact_bytes_capped_per_job,
+         test_checkpoints_cannot_blow_the_quota, test_resume_download_scoping]
 
 
 def main_(only=None) -> int:

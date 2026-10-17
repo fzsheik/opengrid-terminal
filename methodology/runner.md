@@ -19,7 +19,8 @@ code**, and it never receives provider or storage credentials. Code: `runner/`. 
 | 6 | `torch.cuda.is_available()` | `cuda_available` | device count, name, compute capability, cuDNN |
 | 7 | reporter starts trainer under `timeout` | `device_selected` (from the trainer) | device, GPU name, CC, torch, CUDA runtime, cuDNN |
 | 8 | MNIST download | `dataset_ready` | train/test sample counts, size + sha256 of every raw file (torchvision itself MD5-checks each archive) |
-| 9 | training | `training_started`, then per epoch `metric` + `epoch_completed` | parameter count, the device the parameters and batches are on, per-epoch mean train loss over every sample, held-out test loss/accuracy, epoch seconds, samples/s, peak CUDA memory |
+| 6a | ONLY for a job created with `resume_from`: download the pinned checkpoint (§5a) | `resume_downloaded` | epoch, bytes, sha256 (failure → `bootstrap_failed`) |
+| 9 | training (resumed: `resumed` first) | `training_started`, then per epoch `metric` + `epoch_completed` (+ `checkpoint_saved` → `checkpoint_uploaded`) | parameter count, the device the parameters and batches are on, per-epoch mean train loss over every sample, held-out test loss/accuracy, epoch seconds, samples/s, peak CUDA memory; checkpoint name/epoch/sha256/bytes |
 | 10 | save + reload check | `saving_artifacts`, `result` | final metrics, accuracy of `model.pt` re-loaded from disk, L2 distance between initial and final weights, artifact sha256s |
 | 11 | upload | `uploading_artifacts`, `artifacts_uploaded` | names, sha256, bytes; failures |
 | 12 | finish | `training_completed` or `training_failed`, then `POST /complete` | outcome + summary |
@@ -111,7 +112,9 @@ prove (each item names the event/artifact OpenGrid stores):
   ≤ 512 KB per batch, single event data ≤ 64 KB (else replaced by a truncated preview).
   `type` ∈ phase|log|metric|gpu|result|error. `phase` events carry `data.phase`; `error` events `data.code`.
 - `PUT /v1/jobs/{job}/runner/artifacts/{name}` raw bytes, `Content-Type: application/octet-stream`,
-  `X-Content-SHA256: <hex>`; names uploaded: `model.pt config.json metrics.json env.json manifest.json`.
+  `X-Content-SHA256: <hex>`; names uploaded: `model.pt config.json metrics.json env.json manifest.json` at the
+  end, and checkpoints `ckpt-eNNNN.pt` during training (§5a).
+- `GET /v1/jobs/{job}/runner/resume`: the checkpoint a job created with `resume_from` continues from (§5a).
 - `POST /v1/jobs/{job}/runner/complete` `{"outcome": "succeeded|failed|oom|timeout", "summary": {...}}`;
   `summary.reason` ∈ `null | bootstrap_failed | training_failed | out_of_memory | training_timed_out |
   cuda_unavailable | artifact_upload_failed | dataset…`; also `exit_code, runtime_seconds, env_source,
@@ -125,6 +128,39 @@ moved aside (`.rejected`) so it cannot wedge the queue. An undelivered `complete
 `complete.pending.json` and retried by the bootstrap for ~5 minutes. Exit codes of the trainer: 0 succeeded,
 2 failed, 3 oom (`torch.cuda.OutOfMemoryError`), 4 timeout (`--max-seconds`), 5 CUDA unavailable.
 
+### 5a. Checkpoints and resume (wire format)
+
+- **Save** (trainer): after epoch `e` when `checkpoint_every_epochs` > 0, `e % checkpoint_every_epochs == 0` and
+  `e < epochs` (the last epoch's state is `model.pt`, a result): `torch.save` to `OUT/checkpoints/.ckpt-eNNNN.pt.tmp`,
+  atomic rename to `OUT/checkpoints/ckpt-eNNNN.pt`, keep the two newest files on disk, then
+  `{"type": "phase", "data": {"phase": "checkpoint_saved", "epoch", "name", "sha256", "bytes"}}`. Contents:
+  `{format: "opengrid-ckpt-1", template, epoch, config, model, optimizer, torch_rng, loader_rng, history}`:
+  tensors and plain containers only. A failed write emits `checkpoint_failed` and training continues.
+- **Upload** (reporter, background thread): only the newest announced checkpoint (an older one not yet sent is
+  skipped); re-hashes the file and sends nothing if it differs from the trainer's sha256; `PUT
+  /v1/jobs/{job}/runner/artifacts/ckpt-eNNNN.pt` with `X-Content-SHA256` like any artifact (server: ≤
+  `JOB_CHECKPOINT_MAX_MB`, latest-`JOB_CHECKPOINT_KEEP` retention, reply `artifact.superseded` / `pruned`); then
+  `checkpoint_uploaded {name, epoch, sha256, bytes, superseded, pruned}` or `checkpoint_upload_failed {name, epoch,
+  reason}`. Never fatal, never a result: not in `UPLOAD_ARTIFACTS` or `manifest.json`. The supervisor waits for an
+  upload in flight (≤ 120 s, 30 s after a timeout) before uploading the results; `summary.checkpoints_uploaded`.
+- **Resume download** (bootstrap stage 2, after `cuda_available`, only when the job has `resume_from`):
+  `python3 -m runner.reporter fetch-resume --dest $OG_DIR/resume.pt --sha256 <pinned> --epoch N` →
+  `GET /v1/jobs/{job}/runner/resume` with the job's own token (no redirects, retried like other calls), streamed
+  to a temp file, kept only if its sha256 equals the value OpenGrid pinned at submission and rendered into the
+  script (validated `^[0-9a-f]{64}$`; epoch an integer in [1, epochs − 1]), then `resume_downloaded`. Failure
+  → `og_fail bootstrap_failed`. Without `resume_from` the script contains no resume step at all.
+- **Resume** (trainer): `--resume $OG_DIR/resume.pt --resume-sha256 <pinned>`: sha256 re-checked,
+  `torch.load(weights_only=True)` (a torch without `weights_only` refuses rather than unpickling), format /
+  template / epoch < `epochs` checked, model + optimizer + RNG restored, phase `resumed {from_epoch, next_epoch,
+  of, sha256}`, training continues at `from_epoch + 1`. Any problem → `error resume_failed`, exit 2.
+  `metrics.json` adds `resumed_from` and `prior_epochs` (the checkpoint's history; `loss_decreased` spans both);
+  `param_l2_change` measures this run's change from the loaded weights; the `result` adds `resumed_from_epoch`.
+
+Verified locally (CPU, torch 2.4.1 / torchvision 0.19.1 on macOS arm64, `--allow-cpu`, 1,000-image subset,
+`tests/test_runner.py::test_cpu_checkpoint_resume_real_mnist`): a 3-epoch run saved `ckpt-e0001.pt` and
+`ckpt-e0002.pt`; a fresh process resumed from epoch 1, trained epochs 2-3 and succeeded; a wrong pinned
+sha256 was refused before loading.
+
 Time limits (from the job's `max_runtime_minutes`, 5-720): deadline = boot + limit − 120 s; the reporter runs
 under `timeout --kill-after=30 <remaining>`; it kills the trainer at remaining − 60 s; the trainer stops itself
 at remaining − 120 s with a clean `timeout` outcome. OpenGrid's own deadline enforcement still applies.
@@ -132,8 +168,9 @@ at remaining − 120 s with a clean `timeout` outcome. OpenGrid's own deadline e
 ## 6. Security
 
 - **Token scope**: a per-job token derived server-side (HMAC of the pepper, job id and a nonce; only the nonce is
-  stored), valid only for that job's three runner routes, until deadline + 15 min, revocable. It cannot read
-  anything, cannot touch other jobs and grants no API-key scopes.
+  stored), valid only for that job's runner routes, until deadline + 15 min, revocable. It cannot read anything
+  except, for a job created with `resume_from`, the one checkpoint pinned at submission; it cannot touch other
+  jobs and grants no API-key scopes.
 - **No secrets in logs**: the script starts with `set +x`, writes the token with a quoted heredoc into a 0600
   file in a 0700 directory, builds the curl header file from that file at runtime, and never echoes it; the
   reporter reads it from the file (never argv/env), masks it in `repr`, never logs request headers, and scrubs
@@ -144,7 +181,8 @@ at remaining − 120 s with a clean `timeout` outcome. OpenGrid's own deadline e
 - **No arbitrary code / no injection**: templates are allowlisted (`pytorch-mnist`); `job_id`
   `^[A-Za-z0-9_-]{1,64}$`, token `^[A-Za-z0-9_-]{16,256}$`, base URL `https://host[:port][/path]` from
   `[A-Za-z0-9.-]` / `[A-Za-z0-9._~-]` (plain http only for localhost in tests); config validated with the
-  trainer's own bounds (epochs 1-20, batch 16-1024, lr 1e-5-0.1, seed 0-2³¹−1; unknown keys rejected) and
+  trainer's own bounds (epochs 1-20, batch 16-1024, lr 1e-5-0.1, seed 0-2³¹−1, checkpoint_every_epochs 0-20;
+  unknown keys rejected; a resume pin is a 64-hex sha256 + an integer epoch) and
   passed as base64 JSON. Anything else raises `ValueError`; values are never "escaped around".
 - **Supply chain**: every wheel is hash-pinned; the embedded runner files are sha256-verified before stage 2
   is started (a tampered file stops the bootstrap and reports `bootstrap_failed`).

@@ -114,7 +114,8 @@ def test_config_and_runtime_embedding():
     s = _render(config={"epochs": 2, "seed": 7}, max_runtime_minutes=45)
     m = re.search(r"^OG_CONFIG_B64='([A-Za-z0-9+/=]+)'$", s, re.M)
     cfg = json.loads(base64.b64decode(m.group(1)))
-    assert cfg == {"epochs": 2, "seed": 7, "batch_size": 128, "learning_rate": 0.001}, "validated + defaults"
+    assert cfg == {"epochs": 2, "seed": 7, "batch_size": 128, "learning_rate": 0.001,
+                   "checkpoint_every_epochs": 1}, "validated + defaults"
     assert re.search(r"^OG_MAX_SECONDS=2700$", s, re.M)
     assert re.search(r"^OG_JOB_ID='job_abc123'$", s, re.M) and re.search(rf"^OG_BASE_URL='{re.escape(URL)}'$", s, re.M)
 
@@ -146,6 +147,35 @@ def test_bash_syntax():
         p.write_bytes(_render().encode())
         r = subprocess.run([bash, "-n", str(p)], capture_output=True, text=True, timeout=60)
         assert r.returncode == 0, r.stderr
+
+
+def test_resume_step_only_when_requested():
+    plain = _render()
+    assert "fetch-resume" not in plain and "--resume" not in plain and "runner/resume" not in plain
+    sha = hashlib.sha256(b"ckpt").hexdigest()
+    s = _render(resume={"sha256": sha, "epoch": 2})
+    assert s.count("og fetch-resume") == 1 and f"--sha256 '{sha}' --epoch 2" in s
+    assert f"--resume \"$OG_DIR/resume.pt\" --resume-sha256 '{sha}'" in s
+    # the download runs after the CUDA check and before the trainer, and a failure is a reported bootstrap failure
+    assert s.index("og_phase cuda_available") < s.index("og fetch-resume") < s.index("-m runner.mnist_train")
+    assert "og_fail bootstrap_failed \"could not download the checkpoint to resume from" in s
+    assert TOKEN not in s.split("OG_TOKEN_EOF")[2], "the token is still only in the heredoc"
+    assert s.count(TOKEN) == 1
+    for bad in ({"sha256": "x" * 64, "epoch": 2}, {"sha256": sha.upper(), "epoch": 2}, {"sha256": sha + "\n", "epoch": 2},
+                {"sha256": sha, "epoch": 3}, {"sha256": sha, "epoch": 0}, {"sha256": sha, "epoch": "2"},
+                {"sha256": sha, "epoch": True}, {"sha256": "'; rm -rf / #" + "a" * 52, "epoch": 1}, ["x"]):
+        try:
+            _render(resume=bad)
+            raise AssertionError(f"accepted resume={bad}")
+        except ValueError:
+            pass
+    bash = _bash()
+    if bash:
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "ud.sh"
+            p.write_bytes(s.encode())
+            r = subprocess.run([bash, "-n", str(p)], capture_output=True, text=True, timeout=60)
+            assert r.returncode == 0, r.stderr
 
 
 def test_stage1_runs_locally_and_hides_token():
@@ -199,5 +229,5 @@ def test_stage1_tampered_file_fails_closed():
 if __name__ == "__main__":
     for t in (test_shape_size_and_determinism, test_token_written_once_never_echoed, test_injection_rejected,
               test_config_and_runtime_embedding, test_embedded_files_are_the_real_runner_files, test_bash_syntax,
-              test_stage1_runs_locally_and_hides_token, test_stage1_tampered_file_fails_closed):
+              test_resume_step_only_when_requested, test_stage1_runs_locally_and_hides_token, test_stage1_tampered_file_fails_closed):
         t(); print(t.__name__, "ok")

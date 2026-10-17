@@ -262,5 +262,17 @@ ok(/aren't switched on/.test(pe(422, { code: "execution_disabled", message: "rea
 ok(!/Railway|ROUTING_LIVE|admin\//.test(Object.values(J.PLAIN_STATE).join(" ") + ["execution_disabled", "provider_unvalidated", "credentials_unavailable"].map(c => pe(422, { code: c }).text).join(" ")), "plain errors never send a user to a deployment variable or an operator page");
 ok(/Couldn't reach/.test(pe(0).title) && pe(0).retry === true, "network error -> check My Jobs before retrying");
 
+// ---------- checkpoints / resume (jobs/artifacts.py kind "checkpoint"; jobs/models.py resume block) ----------
+const ck = (e, extra) => ({ name: `ckpt-e${String(e).padStart(4, "0")}.pt`, kind: "checkpoint", epoch: e, size: 1, sha256: "a".repeat(64), ...extra });
+eq([J.artifactLabel(ck(3)), J.artifactLabel({ name: "ckpt-e0012.pt" }), J.artifactLabel({ name: "model.pt", kind: "output" })],
+  ["Checkpoint (epoch 3)", "Checkpoint (epoch 12)", "model.pt"], "checkpoints labelled with their epoch; results by name");
+ok(!J.isCheckpoint({ name: "ckpt-e1.pt" }) && !J.isCheckpoint({ name: "model.pt" }) && J.isCheckpoint({ name: "x", kind: "checkpoint" }), "checkpoint detection mirrors the server's name pattern / kind");
+const so = J.splitOutputs([ck(1), { name: "model.pt", kind: "output" }, ck(3), null, { name: "env.json" }]);
+eq([so.results.map(a => a.name), so.checkpoints.map(a => a.epoch)], [["model.pt", "env.json"], [3, 1]], "results first, checkpoints newest first");
+eq(J.resumeLine({ status: "training", resume: { job_id: "job-aa", epoch: 3, confirmed: true, confirmed_from_epoch: 3 } }).text, "Resumed from epoch 3 of job job-aa", "confirmed resume");
+eq(J.resumeLine({ status: "pending_approval", resume: { job_id: "job-aa", epoch: 2, confirmed: false } }).text, "Will resume from epoch 2 of job job-aa", "pinned, not yet confirmed");
+ok(/simulated/.test(J.resumeLine({ status: "training_completed", sandbox: true, finished: true, resume: { job_id: "job-aa", epoch: 2, confirmed: true, confirmed_from_epoch: 2, simulated: true } }).text), "a simulated resume says so");
+ok(J.resumeLine({ status: "training" }) === null && J.resumeLine({ resume: null }) === null, "no resume, no line");
+
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);

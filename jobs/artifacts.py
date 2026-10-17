@@ -19,6 +19,18 @@ Every put: the name matches ^[a-z0-9][a-z0-9._-]{0,63}$ (no paths, no '..'), the
 settings.job_artifact_max_mb, and the declared sha256 equals the sha256 of the received bytes. Same name +
 same bytes again = idempotent; same name + different bytes = refused (ArtifactConflict). Reads are by job id
 only; tenant checks happen in the API (a job's artifacts are visible to its account and the operator only).
+
+Checkpoints (resumable training state, NOT results; methodology/jobs.md "Checkpoints and resume")
+    name ckpt-e<NNNN>.pt (the epoch, 4 digits) -> kind 'checkpoint' in meta(); everything else is kind 'output'.
+    Same sha256 verification; only source 'runner' may write one (a sandbox never fakes checkpoint bytes); one upload
+    <= settings.job_checkpoint_max_mb. Latest wins: once a checkpoint is stored the job keeps only its newest
+    settings.job_checkpoint_keep (by epoch) and deletes the rest; an upload older than every kept one is answered
+    `superseded` (not stored). A checkpoint an unfinished job is pinned to (its spec.resume_from) is never pruned.
+    Checkpoints still count toward MAX_ARTIFACTS_PER_JOB and the per-job byte quota; persisted() (the success gate)
+    ignores them.
+    latest_checkpoint(job_id, verify=False) -> dict | None     the relaunch interface: the newest stored checkpoint
+    resolve_resume(account_id, {job_id, artifact?}, epochs=)   validate a resume_from reference -> the pinned dict
+    resume_source(job_id) -> (meta, bytes)                     the pinned checkpoint, for job_id's runner download
 """
 
 from __future__ import annotations
@@ -41,6 +53,8 @@ MAX_ARTIFACTS_PER_JOB = 32
 # Total bytes per job = this x job_artifact_max_mb (32 x 64 MB = 2 GB per job otherwise). A real pytorch-mnist run
 # stores ~5 MB (model.pt ~4.8 MB + three small JSON files).
 MAX_ARTIFACT_BYTES_FACTOR = 4
+CHECKPOINT_RE = re.compile(r"^ckpt-e([0-9]{4})\.pt\Z")
+JOB_ID_RE = re.compile(r"^job-[0-9a-f]{8,32}\Z")
 
 
 class ArtifactError(ValueError):
@@ -65,6 +79,27 @@ def max_bytes() -> int:
     return int(settings.job_artifact_max_mb) * 1024 * 1024
 
 
+def checkpoint_max_bytes() -> int:
+    return int(settings.job_checkpoint_max_mb) * 1024 * 1024
+
+
+def checkpoint_keep() -> int:
+    return max(1, min(4, int(settings.job_checkpoint_keep or 1)))
+
+
+def checkpoint_epoch(name) -> int | None:
+    m = CHECKPOINT_RE.match(name) if isinstance(name, str) else None
+    return int(m.group(1)) if m else None
+
+
+def is_checkpoint(name) -> bool:
+    return checkpoint_epoch(name) is not None
+
+
+def checkpoint_name(epoch: int) -> str:
+    return f"ckpt-e{int(epoch):04d}.pt"
+
+
 def check_name(name: str) -> str:
     if not isinstance(name, str) or not NAME_RE.match(name) or ".." in name:
         raise ArtifactError("artifact_name_invalid", "artifact names must match ^[a-z0-9][a-z0-9._-]{0,63}$ "
@@ -81,9 +116,22 @@ def check_sha(sha256: str | None) -> str:
 
 
 def meta(r: JobArtifact) -> dict:
-    return {"name": r.name, "size": int(r.size), "sha256": r.sha256, "content_type": r.content_type,
-            "backend": r.backend, "source": r.source, "created_at": r.created_at.isoformat(),
-            "simulated": r.source == "simulated"}
+    ep = checkpoint_epoch(r.name)
+    out = {"name": r.name, "size": int(r.size), "sha256": r.sha256, "content_type": r.content_type,
+           "backend": r.backend, "source": r.source, "created_at": r.created_at.isoformat(),
+           "simulated": r.source == "simulated", "kind": "checkpoint" if ep is not None else "output"}
+    if ep is not None:
+        out["epoch"] = ep
+    return out
+
+
+def _pinned(job_id: str) -> set[str]:
+    """Checkpoint names of job_id that an unfinished job will resume from: never pruned under it."""
+    from store.jobs import Job
+    with normalize.SessionLocal() as s:
+        specs = list(s.scalars(select(Job.spec).where(Job.spec["resume_from"]["job_id"].astext == job_id,
+                                                      Job.finished_at.is_(None))))
+    return {str(((sp or {}).get("resume_from") or {}).get("artifact")) for sp in specs}
 
 
 class ArtifactStore:
@@ -107,6 +155,12 @@ class ArtifactStore:
             source: str = "runner") -> dict:
         check_name(name)
         want = check_sha(sha256)
+        ep = checkpoint_epoch(name)
+        if ep is not None and source != "runner":
+            raise ArtifactError("checkpoint_source_invalid", "checkpoints come only from the runner on the GPU")
+        if ep is not None and len(data) > checkpoint_max_bytes():
+            raise ArtifactError("checkpoint_too_large", f"checkpoint is {len(data)} bytes; the limit is "
+                                                        f"{settings.job_checkpoint_max_mb} MB", 413)
         if len(data) > max_bytes():
             raise ArtifactError("artifact_too_large", f"artifact is {len(data)} bytes; the limit is "
                                                       f"{settings.job_artifact_max_mb} MB", 413)
@@ -120,10 +174,25 @@ class ArtifactStore:
             count = len(list(s.scalars(select(JobArtifact.id).where(JobArtifact.job_id == job_id))))
             total = int(s.scalar(select(func.coalesce(func.sum(JobArtifact.size), 0))
                                  .where(JobArtifact.job_id == job_id)) or 0)
+            ckpts = [] if ep is None else sorted(
+                ((checkpoint_epoch(n), n, int(sz)) for n, sz in s.execute(
+                    select(JobArtifact.name, JobArtifact.size).where(JobArtifact.job_id == job_id)) if is_checkpoint(n)),
+                reverse=True)
         if existing is not None:
             if existing.sha256 == got:
                 return {**meta(existing), "replayed": True}
             raise ArtifactConflict("artifact_exists", f"artifact {name} already exists with different content", 409)
+        prune: list[tuple[str, int]] = []
+        if ep is not None:
+            keep = checkpoint_keep()
+            if len(ckpts) >= keep and ep < ckpts[keep - 1][0]:
+                # latest wins: a checkpoint older than every kept one (a late retry) is not stored
+                return {"name": name, "size": len(data), "sha256": got, "kind": "checkpoint", "epoch": ep,
+                        "source": source, "stored": False, "superseded": True}
+            pinned = _pinned(job_id) if len(ckpts) >= keep else set()
+            prune = [(n, sz) for _, n, sz in ckpts[keep - 1:] if n not in pinned]
+            count -= len(prune)
+            total -= sum(sz for _, sz in prune)
         if count >= MAX_ARTIFACTS_PER_JOB:
             raise ArtifactError("too_many_artifacts", f"at most {MAX_ARTIFACTS_PER_JOB} artifacts per job", 422)
         if total + len(data) > MAX_ARTIFACT_BYTES_FACTOR * max_bytes():
@@ -146,7 +215,10 @@ class ArtifactStore:
             if won is not None and won.sha256 == got:
                 return {**meta(won), "replayed": True}
             raise
-        return meta(row)
+        out = meta(row)
+        if prune:   # only after the new row exists: a job is never left without its newest checkpoint
+            out["pruned"] = [n for n, _ in prune if self.delete(job_id, n)]
+        return out
 
     def _row(self, job_id: str, name: str) -> JobArtifact | None:
         with normalize.SessionLocal() as s:
@@ -305,6 +377,86 @@ def health() -> dict:
 
 def persisted(job_id: str, required) -> tuple[bool, list[str]]:
     """Every required artifact exists with a verified sha256 row. (ok, missing names)."""
-    have = {a["name"] for a in store().list(job_id) if a["source"] == "runner"}
+    have = {a["name"] for a in store().list(job_id) if a["source"] == "runner" and a["kind"] != "checkpoint"}
     missing = [n for n in required if n not in have]
     return not missing, missing
+
+
+# --------------------------------------------------------------------------
+# Checkpoints / resume (the interface the relaunch feature builds on)
+# --------------------------------------------------------------------------
+
+def checkpoints(job_id: str) -> list[dict]:
+    """The job's stored checkpoints, newest epoch first (every row was sha256-verified on upload)."""
+    return sorted((a for a in store().list(job_id) if a["kind"] == "checkpoint" and a["source"] == "runner"),
+                  key=lambda a: a["epoch"], reverse=True)
+
+
+def latest_checkpoint(job_id: str, *, verify: bool = False) -> dict | None:
+    """The newest resumable checkpoint of job_id -> {job_id, artifact, name, epoch, size, sha256, created_at} or None.
+    verify=True re-reads the bytes and re-checks the sha256 (ArtifactError artifact_corrupt if they changed).
+    A new job continues from it with spec.resume_from = {"job_id": job_id, "artifact": <artifact>}."""
+    cs = checkpoints(job_id)
+    if not cs:
+        return None
+    c = cs[0]
+    if verify:
+        store().get(job_id, c["name"])
+    return {"job_id": job_id, "artifact": c["name"], "name": c["name"], "epoch": c["epoch"], "size": c["size"],
+            "sha256": c["sha256"], "created_at": c["created_at"]}
+
+
+def _job(job_id: str):
+    if not JOB_ID_RE.match(job_id or ""):
+        return None
+    from store.jobs import Job
+    with normalize.SessionLocal() as s:
+        return s.get(Job, job_id)
+
+
+def resolve_resume(account_id: int | None, ref: dict, *, epochs: int) -> dict:
+    """Validate a resume_from reference for a new job of account_id -> the pinned {job_id, artifact, epoch, sha256,
+    size}. The source must be the SAME account's job (otherwise resume_job_not_found: no cross-account oracle); the
+    checkpoint must be stored from the runner, re-verify against its sha256, and leave epochs to train."""
+    src = str((ref or {}).get("job_id") or "")
+    job = _job(src)
+    if job is None or job.account_id != account_id:
+        raise ArtifactError("resume_job_not_found", f"resume_from.job_id {src[:40]!r}: no such job in this account", 404)
+    name = (ref or {}).get("artifact")
+    if name is None:
+        latest = latest_checkpoint(src)
+        if latest is None:
+            raise ArtifactError("resume_checkpoint_not_found", f"job {src} has no stored checkpoint to resume from"
+                                                               + (" (sandbox jobs store none)" if job.sandbox else ""))
+        name = latest["artifact"]
+    if not is_checkpoint(name):
+        raise ArtifactError("resume_artifact_not_checkpoint", "resume_from.artifact must be a checkpoint "
+                                                              "(ckpt-eNNNN.pt), not a result artifact")
+    row = next((c for c in checkpoints(src) if c["name"] == name), None)
+    if row is None:
+        raise ArtifactError("resume_checkpoint_not_found", f"checkpoint {name} of job {src} is not stored (never "
+                                                           "uploaded, or superseded by a newer one)")
+    store().get(src, name)   # re-checks the stored bytes against the sha256 (artifact_corrupt otherwise)
+    if row["epoch"] >= int(epochs):
+        raise ArtifactError("resume_nothing_to_do", f"checkpoint {name} is after epoch {row['epoch']}; config.epochs "
+                                                    f"{int(epochs)} leaves nothing to train (raise epochs)")
+    return {"job_id": src, "artifact": name, "epoch": row["epoch"], "sha256": row["sha256"], "size": row["size"]}
+
+
+def resume_source(job_id: str) -> tuple[dict, bytes]:
+    """The checkpoint job_id was created to resume from (spec.resume_from, pinned at submission), re-checked now:
+    same account, still stored, runner-sourced, same sha256. Raises ArtifactError."""
+    job = _job(job_id)
+    ref = ((job.spec or {}).get("resume_from") if job is not None else None) or None
+    if not ref:
+        raise ArtifactError("resume_not_requested", "this job was not created to resume from a checkpoint", 404)
+    src = _job(str(ref.get("job_id") or ""))
+    if src is None or src.account_id != job.account_id or not is_checkpoint(ref.get("artifact")):
+        raise ArtifactError("resume_checkpoint_unavailable", "the checkpoint to resume from is not available", 404)
+    got = store().get(src.job_id, ref["artifact"])
+    if got is None or got[0]["source"] != "runner":
+        raise ArtifactError("resume_checkpoint_unavailable", "the checkpoint to resume from is no longer stored", 404)
+    if got[0]["sha256"] != ref.get("sha256"):
+        raise ArtifactError("resume_checkpoint_changed", "the stored checkpoint differs from the one pinned at "
+                                                         "submission", 422)
+    return got

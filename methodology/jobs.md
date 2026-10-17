@@ -133,13 +133,16 @@ routes never accept an API key or the site login; a runner token is not an API k
 | route | body | rules |
 |---|---|---|
 | `POST /v1/jobs/{id}/runner/events` | `{"events": [{"seq", "type": phase|log|metric|gpu|result|error, "at", "data"}]}` | ≤ 1 MB, ≤ 500 events; one `job_runner_events` row per (job, seq): duplicates ignored, out-of-order accepted; log lines truncated at 4 KB; metric values finite numbers only |
-| `PUT /v1/jobs/{id}/runner/artifacts/{name}` | raw bytes, `X-Content-SHA256` (or `X-Artifact-SHA256`) | name `^[a-z0-9][a-z0-9._-]{0,63}$`; ≤ `JOB_ARTIFACT_MAX_MB` (64); sha256 verified; same bytes again = idempotent, different bytes = 409 |
+| `PUT /v1/jobs/{id}/runner/artifacts/{name}` | raw bytes, `X-Content-SHA256` (or `X-Artifact-SHA256`) | name `^[a-z0-9][a-z0-9._-]{0,63}$`; ≤ `JOB_ARTIFACT_MAX_MB` (64); sha256 verified; same bytes again = idempotent, different bytes = 409. `ckpt-eNNNN.pt` = a checkpoint (section 8a): ≤ `JOB_CHECKPOINT_MAX_MB` (32), latest-N retention |
+| `GET /v1/jobs/{id}/runner/resume` | none | only for a job created with `resume_from`: the pinned checkpoint, re-verified (same account, still stored, same sha256), `X-Content-SHA256`; otherwise 404 `resume_not_requested` |
 | `POST /v1/jobs/{id}/runner/complete` | `{"outcome": succeeded|failed|oom|timeout, "summary": {...}}` | once (a second complete is a no-op); `summary.reason` maps failures (`cuda_unavailable` → bootstrap_failed / `cuda_init_failed`, `artifact_upload_failed`, …) |
 
 Success is never recorded on the runner's word alone: `succeeded` needs the runner's `result` event (or the
 summary's result), every template artifact (`model.pt`, `config.json`, `metrics.json`, `env.json`) stored with
 a verified sha256 that also matches the runner's manifest, and real loss/accuracy metrics trained on a CUDA
 device. Otherwise the job fails with `result_missing`, `artifact_upload_failed` or `metrics_missing`.
+Checkpoints never count toward this: they are not template artifacts, `artifacts.persisted()` ignores them,
+and a stored checkpoint does not set `weights_saved`.
 
 ## 5. SSH access
 
@@ -152,7 +155,11 @@ and fingerprint, and discards the private key in the same function: nobody, Open
 `sandbox: true` never calls a provider. It produces the same kinds of events through the same ingestion code
 with `source = 'simulated'` (placeholder metric values, a `simulated-report.json` artifact), every one of the
 12 checks is `simulated` (never `pass`), the outcome is `simulated`, the disposition `simulated_none`, and every
-response carries `simulated: true` (`meta.kind = simulated`).
+response carries `simulated: true` (`meta.kind = simulated`). Checkpoints are simulated as `checkpoint_saved`
+phase events only (`stored: false`): only the runner may store checkpoint bytes, so a sandbox job has no
+checkpoint and cannot be resumed from (`resume_checkpoint_not_found`). A sandbox job MAY resume from a real,
+verified checkpoint of the same account: it emits a simulated `resumed` phase and simulates the remaining
+epochs, without downloading or loading anything.
 
 ## 7. The 12 verification checks (`jobs/models.py`)
 
@@ -174,6 +181,44 @@ SECRET_ACCESS_KEY`; server-side upload only, the GPU never gets storage credenti
 when configured, otherwise `artifact_storage_unavailable`, never a silent fallback). Downloads
 (`GET /v1/jobs/{id}/artifacts/{name}`, scope deployments:read) are tenant-scoped, `Content-Disposition:
 attachment`, `application/octet-stream`, with `X-Artifact-SHA256`; the stored sha256 is re-checked on read.
+Every artifact carries `kind`: `output` or `checkpoint` (plus `epoch`).
+
+## 8a. Checkpoints and resume
+
+**What.** The `pytorch-mnist` trainer saves model + Adam optimizer state + epoch + torch/data-loader RNG state
+every `config.checkpoint_every_epochs` epochs (template field, 0-10, default 1; 0 = never) before the last one,
+as `ckpt-eNNNN.pt` (methodology/runner.md section 5a). The reporter uploads the newest one through the ordinary
+artifacts PUT while training continues.
+
+**Rules (`jobs/artifacts.py`).** A name matching `^ckpt-e[0-9]{4}\.pt$` is a checkpoint: sha256-verified like
+every artifact, ≤ `JOB_CHECKPOINT_MAX_MB` (default 32; the MNIST state is ~14 MB), and only from the runner
+(`checkpoint_source_invalid` otherwise). **Latest wins**: after a checkpoint is stored, the job keeps only its
+newest `JOB_CHECKPOINT_KEEP` (default 2, clamped 1-4) by epoch and deletes the rest; an upload older than every
+kept one is answered `superseded: true` and not stored. A checkpoint that an unfinished job is pinned to (its
+`resume_from`) is never pruned. Checkpoints still count toward the per-job limits (32 artifacts,
+4 × `JOB_ARTIFACT_MAX_MB` bytes), which are unchanged; retention keeps their share at ≤ keep × the checkpoint
+limit. They are listed with the job's artifacts (`kind: checkpoint`) and in the job's `checkpoints` block
+(`stored`, `latest`, `resumable`, `keep`, `reported_epochs`).
+
+**Resume.** `POST /v1/jobs` (and preview) accept `resume_from: {"job_id": "job-…", "artifact": "ckpt-e0003.pt"}`
+(`artifact` omitted = that job's latest checkpoint). At submission `jobs.artifacts.resolve_resume` requires: a
+job of the SAME account (otherwise `resume_job_not_found`, 404, the same answer as a job that does not exist),
+a stored runner checkpoint (`resume_checkpoint_not_found`, `resume_artifact_not_checkpoint`), bytes that still
+match the stored sha256 (`artifact_corrupt`), and `config.epochs` > the checkpoint's epoch
+(`resume_nothing_to_do`). It pins `{job_id, artifact, epoch, sha256, size}` into the new job's spec. At launch
+the bootstrap gets the pinned sha256 + epoch; stage 2 downloads the checkpoint with the new job's own runner
+token (`GET /v1/jobs/{new}/runner/resume`, re-checked again server-side), refuses bytes whose sha256 differs,
+and starts the trainer with `--resume`. The trainer re-verifies the sha256, loads the file weights-only (no
+pickled code), checks template/format/epoch, restores the state and continues at epoch + 1 with a `resumed`
+phase `{from_epoch, next_epoch}`. Nothing is public: the source job's artifacts stay readable only by its
+account (and the operator); the new job's token reaches exactly the pinned checkpoint and nothing else, and
+stops working when that job ends. The job's `resume` block shows `{job_id, artifact, epoch, sha256,
+confirmed, confirmed_from_epoch}` ("Resumed from epoch N of job X" on the job page once `confirmed`).
+
+**Relaunch interface.** `jobs.artifacts.latest_checkpoint(job_id, verify=False) -> {job_id, artifact, epoch,
+size, sha256, created_at} | None` answers "is there a resumable checkpoint"; a new submission (same account)
+with `resume_from = {"job_id": job_id, "artifact": <artifact>}` continues from it on any provider.
+`jobs.artifacts.resolve_resume(account_id, ref, epochs=)` is the same validation without creating a job.
 
 ## 9. Errors
 
@@ -198,7 +243,7 @@ termination shows as `resource.termination_unconfirmed` with `disposition = poss
 | POST | /v1/jobs (Idempotency-Key) | route:execute |
 | GET | /v1/jobs, /v1/jobs/{id}, /logs?after=&limit=, /metrics, /artifacts, /artifacts/{name} | deployments:read |
 | POST | /v1/jobs/{id}/cancel (Idempotency-Key) | route:execute |
-| POST/PUT | /v1/jobs/{id}/runner/events, /runner/artifacts/{name}, /runner/complete | job token only |
+| POST/PUT/GET | /v1/jobs/{id}/runner/events, /runner/artifacts/{name}, /runner/complete, /runner/resume | job token only |
 
 Keys see their own account's jobs; the operator sees all. Discord: job transitions are posted to the
 deployments channel (`alerts/channels.py`, feed `jobs`), next to the deployment's own lifecycle posts.

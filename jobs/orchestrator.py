@@ -12,6 +12,9 @@
                                 deployment_id / quote_id. Approval is the existing POST /v1/route/{rr}/approve.
     cancel(job_id, who)         before launch: the existing engine.reject; after: cancel_requested -> the existing
                                 deployments.terminate (actor system) -> job_sync follows to confirmed termination
+    resume_from                 submit/preview pin {job_id, artifact, epoch, sha256, size} via
+                                jobs/artifacts.resolve_resume (same account, stored, sha256 re-verified); the
+                                bootstrap then downloads exactly that checkpoint (runner/resume) before training
     render_startup(d, spec)     called by routing/deployments.launch under the deployment row lock, right before
                                 the provider call: replaces the placeholder startup_script "opengrid-job:<job_id>"
                                 with runner.bootstrap.render(job_id, <derived token>, ...). The script and token
@@ -70,6 +73,18 @@ def _actor(who) -> tuple[str, str]:
 def _workload_error(exc) -> JobRefused:
     return JobRefused(exc.code, exc.message, getattr(exc, "status", 422), **({"field": exc.field} if exc.field else {}),
                       **(getattr(exc, "extra", None) or {}))
+
+
+def _pin_resume(v, who) -> None:
+    """resume_from -> the pinned, verified checkpoint {job_id, artifact, epoch, sha256, size} (same account only)."""
+    ref = v.request.get("resume_from")
+    if not ref:
+        return
+    from jobs import artifacts as A
+    try:
+        v.request["resume_from"] = A.resolve_resume(who.account_id, ref, epochs=int(v.request["config"]["epochs"]))
+    except A.ArtifactError as exc:
+        raise JobRefused(exc.code, exc.message, exc.status, field="resume_from") from None
 
 
 # --------------------------------------------------------------------------
@@ -249,8 +264,11 @@ def preview(body, who) -> dict:
     sel = _select(body, who)
     from workloads.spec import validate
     v = validate(body)
+    _pin_resume(v, who)
     out = dict(sel)
     out["request"] = _public_request(sel["request"], v.ssh_key_fingerprint)
+    if v.request.get("resume_from"):
+        out["request"]["resume_from"] = v.request["resume_from"]
     sandbox = bool(sel["request"].get("sandbox"))
     if sandbox:
         sub = {"can_submit": True, "would": "simulated",
@@ -351,6 +369,7 @@ def submit(body, who) -> tuple[int, dict]:
         v = validate(body)
     except WorkloadError as exc:
         raise _workload_error(exc) from None
+    _pin_resume(v, who)
     sel = _select(v, who)
     sandbox = bool(v.request["sandbox"])
     if sandbox:
@@ -544,6 +563,8 @@ def run_simulated(job_id: str) -> None:
     with normalize.SessionLocal() as s:
         job = s.get(Job, job_id)
         epochs = int((job.config or {}).get("epochs") or 1)
+        every = int((job.config or {}).get("checkpoint_every_epochs") or 0)
+        resume = (job.spec or {}).get("resume_from") or None
         info = {"name": job.name, "template": job.template, "template_version": job.template_version,
                 "config": dict(job.config or {}), "limits": dict((job.spec or {}).get("limits") or {}),
                 "submitted_at": job.created_at.isoformat() if job.created_at else None}
@@ -559,12 +580,21 @@ def run_simulated(job_id: str) -> None:
     events = [ev("phase", phase="bootstrap_started", note=note),
               ev("log", stream="simulated", line="[SIMULATED] " + note),
               ev("phase", phase="torch_installed", torch="simulated", env_source="simulated"),
-              ev("phase", phase="cuda_available", device="simulated", gpu_name=None),
-              ev("phase", phase="training_started", device="simulated")]
-    for e in range(1, epochs + 1):
+              ev("phase", phase="cuda_available", device="simulated", gpu_name=None)]
+    start = 1
+    if resume:   # the pinned checkpoint is real, but a simulation never downloads or loads it
+        start = int(resume["epoch"]) + 1
+        events.append(ev("phase", phase="resumed", from_epoch=start - 1, next_epoch=start, of=epochs,
+                         from_job_id=resume["job_id"], artifact=resume["artifact"],
+                         note="SIMULATED: the checkpoint was verified at submission but not loaded"))
+    events.append(ev("phase", phase="training_started", device="simulated", start_epoch=start))
+    for e in range(start, epochs + 1):
         events.append(ev("metric", epoch=e, train_loss=round(1.0 / e, 4), test_accuracy=round(min(0.5 + 0.1 * e, 0.9), 4),
                          batch_device="simulated"))
         events.append(ev("phase", phase="epoch_completed", epoch=e, of=epochs))
+        if every and e < epochs and e % every == 0:
+            # the event only: a sandbox stores no checkpoint bytes (only the runner may), so nothing is resumable
+            events.append(ev("phase", phase="checkpoint_saved", epoch=e, name=f"ckpt-e{e:04d}.pt", stored=False))
     events += [ev("phase", phase="saving_artifacts"),
                ev("result", outcome="succeeded", params_changed=False, note=note)]
     sync.ingest(job_id, events, source="simulated")
@@ -623,7 +653,25 @@ def get(job_id: str, who, *, sync_first: bool = False) -> dict:
                 "actor_id": e.actor_id, "reason": e.reason, "evidence": e.evidence}
                for e in s.scalars(select(JobEvent).where(JobEvent.job_id == job_id).order_by(JobEvent.at, JobEvent.id))]
     return M.public(job, dep, quote=quote, detail=True, events=evs, artifacts=A.store().list(job_id),
-                    metrics_latest=latest_metrics(job_id))
+                    metrics_latest=latest_metrics(job_id), runner_marks=checkpoint_marks(job_id))
+
+
+def checkpoint_marks(job_id: str) -> dict:
+    """What the runner (or the simulation) SAID about checkpoints / resume: {saved: [epochs], resumed: {...}|None}.
+    The stored, verified checkpoints themselves are the artifacts (kind 'checkpoint')."""
+    from store.jobs import JobRunnerEvent
+    with normalize.SessionLocal() as s:
+        rows = list(s.scalars(select(JobRunnerEvent).where(
+            JobRunnerEvent.job_id == job_id, JobRunnerEvent.type == "phase",
+            JobRunnerEvent.data["phase"].astext.in_(("checkpoint_saved", "resumed"))).order_by(JobRunnerEvent.seq)))
+    saved, resumed = [], None
+    for r in rows:
+        d = r.data or {}
+        if d.get("phase") == "resumed":
+            resumed = {"from_epoch": d.get("from_epoch"), "source": r.source, "at": r.at.isoformat() if r.at else None}
+        elif isinstance(d.get("epoch"), int):
+            saved.append(d["epoch"])
+    return {"saved": sorted(set(saved)), "resumed": resumed}
 
 
 def list_for(who, *, status: str | None = None, limit: int = 100, offset: int = 0) -> list[dict]:
@@ -808,9 +856,11 @@ def render_startup(d, launch_spec, *, now: datetime | None = None):
             base, problem = _callback_base()
             if problem:
                 raise ValueError("callback base url")
+            rf = (job.spec or {}).get("resume_from") or None
             script = bootstrap.render(job_id, tokens.derive(job_id, nonce), base_url=base, template=job.template,
                                       config=dict(job.config or {}), max_runtime_minutes=max(5, min(eff, 720)),
-                                      allow_http=base.startswith("http://"))
+                                      allow_http=base.startswith("http://"),
+                                      resume={"sha256": rf["sha256"], "epoch": int(rf["epoch"])} if rf else None)
             sha = hashlib.sha256(script.encode("utf-8")).hexdigest()
             job.deployment_id = job.deployment_id or d.deployment_id
             job.route_request_id = job.route_request_id or d.route_request_id
@@ -819,7 +869,8 @@ def render_startup(d, launch_spec, *, now: datetime | None = None):
             S.note(s, job, "bootstrap rendered for the launch (the script and its token are never stored or logged)",
                    {"sha256": sha, "template_version": job.bootstrap_template_version,
                     "bundle_sha256": getattr(bootstrap, "BUNDLE_SHA256", None), "bytes": len(script.encode()),
-                    "token_id": trow.id, "token_expires_at": expires.isoformat(), "deployment_id": d.deployment_id})
+                    "token_id": trow.id, "token_expires_at": expires.isoformat(), "deployment_id": d.deployment_id,
+                    "resume_from": {k: rf.get(k) for k in ("job_id", "artifact", "epoch", "sha256")} if rf else None})
         out = dataclasses.replace(launch_spec, startup_script=script)
         for k in ("defaults_applied", "defaults_withheld"):
             if hasattr(launch_spec, k):

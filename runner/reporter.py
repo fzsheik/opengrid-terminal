@@ -6,7 +6,14 @@ Wire format (JOBS_BRIEF "Runner callback API"; documented in methodology/runner.
   POST {base}/v1/jobs/{job}/runner/events     {"events": [{"seq": int, "type": phase|log|metric|gpu|result|error,
                                                           "at": iso8601, "data": {...}}, ...]}
   PUT  {base}/v1/jobs/{job}/runner/artifacts/{name}   raw bytes; X-Content-SHA256: <hex>
+                                              (results at the end; checkpoints ckpt-eNNNN.pt during training)
+  GET  {base}/v1/jobs/{job}/runner/resume     the checkpoint this job resumes from (only if it was created with
+                                              resume_from); saved only if its sha256 equals the pinned one
   POST {base}/v1/jobs/{job}/runner/complete   {"outcome": succeeded|failed|oom|timeout, "summary": {...}}
+
+Checkpoints: the trainer's `checkpoint_saved` phase names OUT/checkpoints/ckpt-eNNNN.pt; a background thread uploads
+the newest pending one (an older one not yet sent is skipped), re-hashing the bytes against the trainer's sha256,
+then emits `checkpoint_uploaded` (or `checkpoint_upload_failed`: never fatal, checkpoints are not results).
 
 Delivery: every event gets a monotonically increasing seq (persisted counter, shared by every process on the
 instance via a lock dir) and is written to an on-disk spool BEFORE any network attempt; a batch is deleted from
@@ -20,6 +27,7 @@ CLI (used by the bootstrap script):
   python3 -m runner.reporter emit     <common> --type phase --name gpu_detected [--kv k=v]... [--kv-file k=path]...
   python3 -m runner.reporter run      <common> --out DIR [--max-seconds N] -- <trainer command...>
   python3 -m runner.reporter complete <common> --outcome failed [--code X] [--message M]
+  python3 -m runner.reporter fetch-resume <common> --dest PATH --sha256 HEX [--epoch N]
   python3 -m runner.reporter flush    <common>
   python3 -m runner.reporter retry    <common>      (flush + re-send an undelivered complete)
   <common> = --base-url URL --job JOB_ID --token-file PATH --state-dir DIR
@@ -47,7 +55,9 @@ EVENT_TYPES = ("phase", "log", "metric", "gpu", "result", "error")
 OUTCOMES = ("succeeded", "failed", "oom", "timeout")
 _PROGRESS = re.compile(r"\s*\d{1,3}(\.\d+)?%\s*")
 ARTIFACT_NAME = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+CHECKPOINT_NAME = re.compile(r"^ckpt-e[0-9]{4}\.pt\Z")
 UPLOAD_ARTIFACTS = ("model.pt", "config.json", "metrics.json", "env.json", "manifest.json")
+MAX_RESUME_BYTES = 256 * 1024 * 1024   # the server's checkpoint limit is far lower; this only bounds the disk
 MAX_LINE = 4000            # server truncates at 4 KB; we stay under it
 MAX_BATCH_EVENTS = 100
 MAX_BATCH_BYTES = 512 * 1024   # server bounds bodies at 1 MB
@@ -140,7 +150,7 @@ class Client:
         """Exponential backoff with full jitter: U(0.5, 1.5) x base x 2^attempt, capped."""
         return min(self.backoff_cap, self.backoff_base * (2 ** attempt)) * (0.5 + self.rng.random())
 
-    def _once(self, method: str, path: str, body: bytes, headers: dict):
+    def _once(self, method: str, path: str, body: bytes, headers: dict, sink=None):
         req = urllib.request.Request(self.base + path, data=body, method=method)
         req.add_header("Authorization", self._auth)
         req.add_header("User-Agent", "opengrid-runner")
@@ -148,7 +158,12 @@ class Client:
             req.add_header(k, v)
         try:
             with self._opener.open(req, timeout=self.timeout) as resp:
-                return resp.status, resp.read(65536)
+                if sink is None or not 200 <= resp.status < 300:
+                    return resp.status, resp.read(65536)
+                sink(None)   # reset: a retried download starts over
+                for chunk in iter(lambda: resp.read(1 << 20), b""):
+                    sink(chunk)
+                return resp.status, b""
         except urllib.error.HTTPError as e:
             code = e.code
             detail = e.read(2000).decode("utf-8", "replace") if e.fp else ""
@@ -163,14 +178,15 @@ class Client:
         except (urllib.error.URLError, OSError, TimeoutError) as e:
             raise TransientError(f"{method} {path} -> {type(e).__name__}: {self.scrub(str(e))[:200]}") from None
 
-    def request(self, method: str, path: str, body: bytes, headers: dict, *, attempts: int | None = None):
+    def request(self, method: str, path: str, body: bytes | None, headers: dict, *, attempts: int | None = None,
+                sink=None):
         if self.disabled_reason:
             raise self._disabled_cls(f"delivery disabled: {self.disabled_reason}")
         attempts = attempts or self.max_attempts
         last = None
         for i in range(attempts):
             try:
-                status, data = self._once(method, path, body, headers)
+                status, data = self._once(method, path, body, headers, sink)
                 if 300 <= status < 400:
                     raise PermanentError(f"{method} {path} -> HTTP {status} (redirects refused)")
                 return status, data
@@ -197,6 +213,45 @@ class Client:
         return self.request("PUT", f"/v1/jobs/{self.job_id}/runner/artifacts/{name}", data,
                             {"Content-Type": "application/octet-stream", "X-Content-SHA256": sha256_bytes(data)},
                             attempts=attempts)
+
+    def fetch_resume(self, dest, *, sha256: str, max_bytes: int = MAX_RESUME_BYTES, attempts=None) -> dict:
+        """GET the checkpoint this job resumes from into `dest` (temp file + rename), only if its sha256 is the one
+        OpenGrid pinned in the bootstrap. -> {bytes, sha256}. Raises PermanentError on a mismatch or oversize."""
+        want = (sha256 or "").strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", want):
+            raise ValueError("sha256 must be 64 hex chars")
+        dest = Path(dest)
+        tmp = dest.with_name("." + dest.name + ".part")
+        st = {"h": hashlib.sha256(), "n": 0, "f": None}
+
+        def sink(chunk):
+            if chunk is None:
+                if st["f"]:
+                    st["f"].close()
+                st.update(h=hashlib.sha256(), n=0, f=open(tmp, "wb"))
+                return
+            st["n"] += len(chunk)
+            if st["n"] > max_bytes:
+                raise PermanentError(f"resume checkpoint larger than {max_bytes} bytes")
+            st["h"].update(chunk)
+            st["f"].write(chunk)
+
+        try:
+            self.request("GET", f"/v1/jobs/{self.job_id}/runner/resume", None, {}, attempts=attempts, sink=sink)
+        except BaseException:
+            if st["f"]:
+                st["f"].close()
+            tmp.unlink(missing_ok=True)
+            raise
+        if st["f"] is None:
+            raise PermanentError("resume download returned no body")
+        st["f"].close()
+        got = st["h"].hexdigest()
+        if got != want:
+            tmp.unlink(missing_ok=True)
+            raise PermanentError("resume checkpoint sha256 does not match the pinned value")
+        os.replace(tmp, dest)
+        return {"bytes": st["n"], "sha256": got}
 
     def complete(self, outcome: str, summary: dict, *, attempts=None):
         if outcome not in OUTCOMES:
@@ -350,6 +405,37 @@ class Reporter:
                 failed[name] = str(e)[:300]
         return {"uploaded": uploaded, "failed": failed}
 
+    def _ckpt_phase(self, phase: str, name: str, **data):
+        return self.emit("phase", {"phase": phase, "name": name, **data})
+
+    def upload_checkpoint(self, out_dir, info: dict) -> bool:
+        """Upload the checkpoint a `checkpoint_saved` phase announced, if the file is still there and its bytes are
+        the ones the trainer hashed. Never fatal: a checkpoint is resumable state, not a result."""
+        name = str((info or {}).get("name") or "")
+        if not CHECKPOINT_NAME.match(name):
+            return False
+        p = Path(out_dir) / "checkpoints" / name
+        try:
+            data = p.read_bytes()
+        except OSError:
+            return False   # pruned locally: a newer checkpoint exists
+        digest = sha256_bytes(data)
+        if info.get("sha256") and digest != info["sha256"]:
+            self._ckpt_phase("checkpoint_upload_failed", name, epoch=info.get("epoch"), reason="sha256_changed")
+            return False
+        try:
+            status, body = self.client.put_artifact(name, data, attempts=4)
+        except (PermanentError, TransientError) as e:
+            self._ckpt_phase("checkpoint_upload_failed", name, epoch=info.get("epoch"), reason=str(e)[:300])
+            return False
+        try:
+            art = json.loads(body or b"{}").get("artifact") or {}
+        except ValueError:
+            art = {}
+        self._ckpt_phase("checkpoint_uploaded", name, epoch=info.get("epoch"), sha256=digest, bytes=len(data),
+                   superseded=bool(art.get("superseded")), pruned=art.get("pruned") or [])
+        return True
+
     def complete(self, outcome: str, summary: dict) -> bool:
         self.flush(attempts=4)
         try:
@@ -416,9 +502,10 @@ def run_supervised(rep: Reporter, cmd: list, *, out_dir, max_seconds=None, flush
     popen_kw = {"start_new_session": True} if os.name == "posix" else {}
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL,
                             text=True, encoding="utf-8", errors="replace", bufsize=1, env=child_env, **popen_kw)
-    state = {"lines": 0, "dropped": 0, "result": None, "error": None, "phases": []}
+    state = {"lines": 0, "dropped": 0, "result": None, "error": None, "phases": [], "ckpt": None, "ckpts": 0}
     stop = threading.Event()
     lock = threading.Lock()
+    ckpt_ready = threading.Event()
 
     def reader(stream, name):
         for line in stream:
@@ -433,6 +520,10 @@ def run_supervised(rep: Reporter, cmd: list, *, out_dir, max_seconds=None, flush
                 elif type_ == "phase":
                     state["phases"].append(data.get("phase"))
                 rep.emit(type_, data, at, flush=False)
+                if type_ == "phase" and data.get("phase") == "checkpoint_saved":
+                    with lock:
+                        state["ckpt"] = data   # latest wins: an older one not yet uploaded is skipped
+                    ckpt_ready.set()
                 continue
             if not line.strip() or (_PROGRESS.fullmatch(line) and not line.strip().startswith("100")):
                 continue   # download progress ticks ("0.3%", "0.7%", ...) are noise, not logs
@@ -454,9 +545,26 @@ def run_supervised(rep: Reporter, cmd: list, *, out_dir, max_seconds=None, flush
                 if s:
                     rep.emit("gpu", s, flush=False)
 
+    done = threading.Event()
+
+    def uploader():   # checkpoints go up while training continues; only the newest pending one is sent
+        while True:
+            ckpt_ready.wait(1.0)
+            with lock:
+                info, state["ckpt"] = state["ckpt"], None
+                ckpt_ready.clear()
+            if info is not None:
+                try:
+                    if rep.upload_checkpoint(out_dir, info):
+                        state["ckpts"] += 1
+                except Exception as e:  # noqa: BLE001 - a checkpoint problem never stops the job
+                    diag(f"checkpoint upload error: {type(e).__name__}")
+            elif done.is_set():
+                return
+
     threads = [threading.Thread(target=reader, args=(proc.stdout, "stdout"), daemon=True),
                threading.Thread(target=reader, args=(proc.stderr, "stderr"), daemon=True),
-               threading.Thread(target=flusher, daemon=True)]
+               threading.Thread(target=flusher, daemon=True), threading.Thread(target=uploader, daemon=True)]
     for t in threads:
         t.start()
 
@@ -469,6 +577,8 @@ def run_supervised(rep: Reporter, cmd: list, *, out_dir, max_seconds=None, flush
         _kill(proc)
     for t in threads[:2]:
         t.join(timeout=30)
+    done.set()
+    threads[3].join(timeout=30 if timed_out else 120)   # a checkpoint upload in flight finishes before the results
     stop.set()
     threads[2].join(timeout=30)
     if state["dropped"]:
@@ -483,7 +593,7 @@ def run_supervised(rep: Reporter, cmd: list, *, out_dir, max_seconds=None, flush
         reason = EXIT_CODE_REASON.get(code, "training_failed" if code else None)
     summary = {"exit_code": code, "runtime_seconds": round(time.monotonic() - t0, 3), "reason": reason,
                "env_source": os.environ.get("OG_ENV_SOURCE", "unknown"),
-               "result": state["result"], "error": state["error"]}
+               "result": state["result"], "error": state["error"], "checkpoints_uploaded": state["ckpts"]}
 
     # Artifacts: upload whatever exists (partial outputs help diagnose failures too).
     rep.phase("uploading_artifacts")
@@ -594,6 +704,11 @@ def main(argv=None) -> int:
     c.add_argument("--outcome", required=True, choices=OUTCOMES)
     c.add_argument("--code")
     c.add_argument("--message")
+    fr = sub.add_parser("fetch-resume", help="download the checkpoint this job resumes from (sha256-pinned)")
+    _common(fr)
+    fr.add_argument("--dest", required=True)
+    fr.add_argument("--sha256", required=True)
+    fr.add_argument("--epoch")
     f = sub.add_parser("flush")
     _common(f)
     rt = sub.add_parser("retry", help="flush the spool and re-send a complete that was not delivered")
@@ -609,6 +724,14 @@ def main(argv=None) -> int:
         return 0
     if a.action == "flush":
         return 0 if rep.flush() else 1
+    if a.action == "fetch-resume":
+        try:
+            got = rep.client.fetch_resume(a.dest, sha256=a.sha256)
+        except (PermanentError, TransientError, ValueError, OSError) as e:
+            diag(f"resume checkpoint not downloaded: {e}")
+            return 1
+        rep.phase("resume_downloaded", epoch=a.epoch, **got)
+        return 0
     if a.action == "retry":
         return 0 if rep.retry_pending() else 1
     if a.action == "complete":
