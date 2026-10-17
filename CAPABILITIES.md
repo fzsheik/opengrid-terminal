@@ -49,7 +49,7 @@ important) what it deliberately does not claim.
 | OpenGrid indices defined | **251** (per-GPU, family composites, overall compute index, regional, spot, provider-class) |
 | News & signal sources | **44** verified feeds (hyperscalers, neoclouds, NVIDIA/AMD, US Federal Register, trade press) |
 | API operations | **203** (188 under `/v1`, 61 of them admin-only), plus 3 runner-callback routes outside the public schema |
-| Web pages | **37** routes: five-item navigation (GPUs, Find Compute, My Jobs, Markets, Developers), light/dark themes, keyboard command bar |
+| Web pages | **37** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar |
 | Database tables | **71** (Postgres, migrated by Alembic, 20 migrations) |
 | Background jobs | **17** (polling, rollups, indices, settlement fixings, events, news, reconciliation, tracking, training-job sync, reservation expiry, alerts, feeds…) |
 | Provisioning adapters | **9 providers** (Lambda, RunPod, Hyperstack, DigitalOcean, Crusoe/Denvr/Latitude via Shadeform, Vast, Verda) |
@@ -57,7 +57,7 @@ important) what it deliberately does not claim.
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
 | Workload intelligence | GPU memory estimator, project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (13 tools, 3 prompts; hosted at `/mcp` with an API key, or local via uvx), grounded assistant |
-| Automated tests | **59** Python test files + **9** JavaScript test files + **4** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team |
+| Automated tests | **60** Python test files + **11** JavaScript test files + **4** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team |
 
 ---
 
@@ -640,29 +640,62 @@ data. Delivery: in-app feed and signed webhooks (email not implemented).
 
 ## 12. Web terminal (UI)
 
-A dense, dark, data-first market terminal: no hero sections, no decorative dashboards.
+A data-first market terminal that a first-time visitor can read: a dark (or light) terminal look, dense
+monospaced market tables, and plain-language copy, access states and errors around them. A page-by-page
+description is in docs/UI_GUIDE.md.
 
+**Navigation and access**
+- **Home**, then **Explore** (free, no account): **GPUs** (Compare, Explorer, Heatmaps, Providers), **Find
+  Compute** (Ask the assistant), **Markets** (Indices, Opportunities, Events, News, Watchlists), **Developers**
+  (API docs, API keys, Onboarding). Then **Your workspace** (needs an account): **My Jobs** (Deployments,
+  Reserve, Route). Methodology at the bottom. **Operator** tools (Execution, Checklist, Partners, Value, Ops)
+  appear only for the operator / an admin key.
+- Pages whose data needs an account carry a lock until you are signed in. The top bar shows **"Public access"**
+  (a popover says what a visitor can use, that accounts are invite-only, and offers the operator sign-in for
+  staff only) or **"Operator"**. The browser login is the operator's site login at `/login`; customers use
+  API keys, and no customer sign-up is offered (none exists).
+- Errors are a title, one plain sentence and the next step; the HTTP status and endpoint sit in a folded
+  "Technical details". A missing sign-in is an access state ("accounts are invite-only"), not a failure.
+  Unknown pages show "Page not found" with links.
+
+**Shell**
+- Status bar in words: "Prices updated 3 min ago" (exact local time on hover), "Prices may be out of date"
+  after 10 minutes, "Can't reach OpenGrid". A ticker of live GPU prices shows only whole items, then "+N more".
+- **Search / command bar** (`/`): empty, it lists the main places and example queries; every suggestion is
+  clickable (commands with an argument fill the box). Type a GPU, provider or page; a question ("which gpu
+  for llama 70b") goes to the assistant. Power-user commands stay: `g h100` market, `p lambda` provider,
+  `c h100 h200` compare, `r h100 8 us` route preview, `w h100` watch, `j` / `j new` jobs, `e` `n` `o` `x` `i` `h`
+  `m` `d` pages, `home` `gpus` `find` `markets` `developers`, `ask <question>`, `theme`; `?` lists them all.
+- Design system (web/app.css): one type scale (`--fs-*`, body 14px, data tables 12.5px, no raw pixel sizes,
+  enforced by a test), 32px controls (44px on touch screens), a 2px focus ring, and text colours that meet
+  WCAG AA contrast in both themes (tested). Tested at 375px, 768px and 1440px; on phones the menu is a full
+  list with 44px rows.
+
+**Pages**
 | Area | Pages |
 |---|---|
+| Home | "Compare GPU prices. Find the right compute. Run supported workloads.", a "What works today" list (including what does not work yet), three actions tagged free / simulation / needs an account, the live price board, indices, how it works |
 | Market | Overview · Indices · Index detail · GPUs · GPU detail · GPU family · Providers · Provider detail · Compare · Explorer · Heatmaps |
 | Signals | Opportunities · Events · News (feed + timeline) |
-| Execute | Jobs · New training job · Job detail · Reserve (price-lock requests) · Request detail · Route (order ticket, approval ticket) · Deployments · Deployment detail · Onboarding · Watchlists · API keys |
-| Reference | Developers (three steps: create a key, connect your app over MCP, ask) · API docs (with try-it) · Methodology · Ops (data quality) |
-| Admin | Execution control (modes, kill switches, flags, orphans, resources, validation) · First-route checklist · Partners · Value (economics, quality, reliability, funnel) |
+| Find Compute | four guided steps (what you are doing, model or project, what matters incl. **training data** and epochs, recommendation); one recommended option with price, memory per GPU, availability, estimated runtime and whole-job cost, and whether OpenGrid can run it; up to three alternatives; the three or four answers kept apart (lowest advertised price, best fit, execution-ready, lowest cost for the whole job); per-option performance across its GPUs; everything else under Advanced details |
+| Workspace | My Jobs (Needs attention / Active / Completed, simulation vs real tags, a plain-English box) · New job (example job as a free simulation, a real-GPU card with readiness, run your own model) · Job page (at a glance, next step, timeline) · Route (a simple ticket; technical panel folded) · Deployments · Deployment detail · Reserve (price-lock requests) · Request detail · Watchlists |
+| Developers | three paths (AI assistant over MCP, CLI, REST) with what each needs; two first successes without a key; per-client MCP setup (Claude Code, Cursor, VS Code, Codex, Claude Desktop / claude.ai), each marked tested or not; access requests via GitHub issues · API docs (curated public reference with Try it; the full schema for the operator) · API keys (one access state when signed out; presets) · Onboarding (design partners) |
+| Reference | Methodology · Assistant |
+| Operator | Execution control (modes, kill switches, flags, orphans, resources, validation) · First-route checklist · Partners · Value (economics, quality, reliability, funnel) · Ops (data quality) |
 
 - **GPU pages** feel like stock pages: index level, low/median/high, spread, providers,
   availability, changes, volatility, percentiles, robust price charts with event/news markers,
   availability history, provider ranking, regional pricing, best available now, dispersion,
   price distribution, price per capability, hardware specs, alternatives, events, news, listings.
-- **Keyboard command bar**: `/` to search, `g h100` open a market, `p lambda` provider,
-  `c h100 h200` compare, `r h100 8 us` route preview, `w h100` watch, `j` jobs, `j new` new training
-  job, `e` events, `n` news, `o` opportunities, `x` explorer, `?` help.
 - **Index detail pages** for the settlement indices carry a **Settlement fixings** panel (latest daily TWAP
   and hourly fixings in UTC, status, surveillance flags, evidence, a Verify button).
 - Shareable URLs for every view, CSV export on every table, honest "insufficient data" states,
   data-kind badges (observed / inferred / estimated / transaction) and freshness badges.
 - **SEO** renderers for GPU, family, provider and compare pages with real numbers, structured data
   and a sitemap (active when `PUBLIC_PAGES` is on).
+- **Known UI gaps:** an unknown URL answers a visitor with a plain-text 401 from the server (the app's own
+  "Page not found" is reached only by in-app navigation); the New job page offers visitors a "Sign in" that is
+  the operator login; the same provider can appear twice for one GPU when it lists two regions.
 
 ---
 
