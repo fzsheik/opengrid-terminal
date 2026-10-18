@@ -312,6 +312,13 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
                                       f"{'s' if k > 1 else ''} (minimum {need['min_gb']:g} GB + "
                                       f"{mem['margin_pct']}% margin)"))
             continue
+        if n > 1 and spec.get("form_factor") == "MIG slice":
+            # MIG slices are partitions of one physical GPU with no GPU-to-GPU link: they cannot be sharded across
+            if g in listed:
+                excluded.append(_excl(g, "mig_single_slice",
+                                      f"needs {n} GPUs, but a MIG slice ({vram:g} GB) is part of one GPU and cannot "
+                                      f"be combined with other slices for sharding or tensor parallelism"))
+            continue
         if g not in listed:
             unlisted_fit += 1
             continue
@@ -332,7 +339,7 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
                          "GPUs (communication outweighs the extra compute).")
         else:
             for g, n, spec, _ in fitting:
-                if 2 * n in by_count:
+                if 2 * n in by_count and spec.get("form_factor") != "MIG slice":
                     scale_ups.append((g, 2 * n, spec, None))
 
     budget, runtime_h = c.budget_usd, c.runtime_hours

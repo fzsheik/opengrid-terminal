@@ -87,6 +87,7 @@ These figures are estimates in the open: every input, assumption and source is i
 2. **Market (read-only).** `routing.scoring.rank_listings(gpu, count=n)` runs for each fitting GPU. The same rules as `/v1/best` apply: canonical, on-demand, priced, not sold out, seen within the provider's freshness window (`market.stale_after`), and exactly `n` GPUs per instance. Listings with unknown availability are kept and labelled "stock not published by the provider". Spot capacity is never ranked, even with `allow_spot`. Region, maximum price and provider include/exclude lists come from the request.
 3. **Exclusions.** Everything left out is listed with a code:
    - `insufficient_vram`: too little memory even at the largest count.
+   - `mig_single_slice`: a MIG slice that would be needed more than once. A slice is part of one GPU, so slices are never combined for sharding or tensor parallelism, and get no scale-up option.
    - `wrong_vendor`, `compute_capability_too_low`, `precision_unsupported`: hardware checks.
    - `no_fresh_listing`: the GPU fits but no fresh listing of the needed shape exists. The reason explains why that GPU count is needed.
    - `stale`, `sold_out`, `not_on_demand`, `over_max_price`, `wrong_region`, `excluded_by_preference`, `multi_instance`: market rules.

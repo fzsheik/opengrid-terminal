@@ -704,6 +704,28 @@ def test_k_recommendation_is_the_cheapest_safe_option_and_every_option_says_why(
         assert vals[0][1] >= vals[-1][1] - 0.3, vals
 
 
+def test_mig_slices_are_never_combined():
+    reset()
+    mig = "NVIDIA B300 MIG 1g.34gb"
+    with normalize.SessionLocal.begin() as s:
+        s.add_all([L("syn_a", mig, 0.50, count=8), L("syn_b", mig, 0.55)])
+    scoring.history.cache_clear()
+    try:
+        # 70B inference needs several GPUs: eight slices of one B300 are not eight GPUs
+        out = rec({"workload_type": "inference", "model": {"name": "meta-llama/Llama-3.1-70B"}, "precision": "bf16"})
+        assert not [o for o in out["options"] if o["gpu"] == mig], [(o["gpu"], o["gpu_count"]) for o in out["options"]]
+        assert "mig_single_slice" in codes(out, mig), codes(out, mig)
+        # a workload that fits one slice still gets the slice, with no scale-up to more slices
+        out = rec(RESNET, limit=20)
+        mo = [o for o in out["options"] if o["gpu"] == mig]
+        assert mo and all(o["gpu_count"] == 1 and o["count_choice"] == "minimum" for o in mo), (
+            codes(out, mig), [(o["gpu"], o["gpu_count"]) for o in out["options"]])
+    finally:
+        with normalize.SessionLocal.begin() as s:
+            s.execute(text("DELETE FROM compute_listings WHERE canonical_gpu_name = :g"), {"g": mig})
+        scoring.history.cache_clear()
+
+
 def test_migration_roundtrip():
     """0020 applies on top of 0019 and downgrades cleanly (additive only)."""
     from alembic import command
