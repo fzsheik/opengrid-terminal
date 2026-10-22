@@ -8,10 +8,10 @@ database.
 
 Re-checked on 2026-10-21 and still declined (CAPABILITIES.md 3.1), asserted absent
 below: Akash (the USD figure is a summary of per-provider bids up to 31 days old,
-with a fallback across RAM/interface variants), Clore.ai (its docs make the `auth`
-token mandatory on /v1/marketplace; prices per day), TensorDock (keyless endpoints
+with a fallback across RAM/interface variants), TensorDock (keyless endpoints
 answer 404 or an empty list), io.net (pricing endpoints answer 401) and SF Compute
-(orderbook needs a Bearer token).
+(orderbook needs a Bearer token). Clore.ai, declined then for its key, was added on
+2026-10-21 with an account key (tests/test_provider_clore.py).
 
 Run:  .venv/bin/python tests/test_provider_decentralized.py
 """
@@ -171,7 +171,7 @@ def test_registry():
     m = provider_meta.meta("nosana")
     assert m.provider_class == "decentralized" and m.source_type == "public_api" and m.source == "api.nosana.com"
     # Re-checked and still declined.
-    assert not ({"akash", "clore", "tensordock", "ionet", "io.net", "sfcompute"} & set(PROVIDERS))
+    assert not ({"akash", "tensordock", "ionet", "io.net", "sfcompute"} & set(PROVIDERS))
 
 
 def test_aliases():

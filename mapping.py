@@ -1178,6 +1178,48 @@ SIMPLEPOD = ProviderMapping(
 )
 
 
+CLORE = ProviderMapping(
+    provider="clore",
+    display_name="Clore.ai (marketplace)",
+    endpoints={
+        "GET /v1/marketplace": "every public server, rented or not; account key in the `auth` header; ~4 MB",
+        "GET /v1/renter_fees": "the renter's fee per order type and currency; only the on-demand fee is kept",
+    },
+    fields=_fields(
+        "clore",
+        sku=(DERIVED, 'gpu_array model + " {specs.gpuram}GB"', 'e.g. "RTX 4090 24GB"'),
+        listing_id=(DERIVED, "{sku}:{median|cheapest}", "a summary of a book, not one server"),
+        raw_gpu_name=(DERIVED, 'gpu_array model + " {specs.gpuram}GB"', "specs.gpuram is per-GPU VRAM"),
+        gpu_count=(CONSTANT, "1", "priced per single GPU"),
+        region=(ABSENT, "-", "only a country code is published"),
+        country=(RAW, "specs.net.cc of the cheapest server", "None on the median row"),
+        price_per_gpu_hour=(DERIVED, 'median or minimum of price.on_demand["USD-Blockchain"] x (1 + renter fee %) / 24 / len(gpu_array)',
+                            "the listed price is per whole server per day, without fees"),
+        price_per_instance_hour=(DERIVED, "= price_per_gpu_hour", "single GPU"),
+        currency=(CONSTANT, '"USD"', "USD-Blockchain: the USDT/USDC balance"),
+        provider_tier=(CONSTANT, '"median" | "cheapest"'),
+        available=(CONSTANT, "True", "a row exists only if a server that is not rented does"),
+        capacity=(DERIVED, "sum(len(gpu_array)) over servers not rented"),
+        capacity_unit=(CONSTANT, '"gpu"'),
+        vcpu=(DERIVED, "cheapest server's specs.cpus threads (\"cores/threads\")", "None on the median row"),
+        ram_gb=(RAW, "cheapest server's specs.ram", "None on the median row"),
+        storage_gb=(DERIVED, "cheapest server's specs.disk trailing GB figure", "None on the median row"),
+    ),
+    quirks=[
+        "Prices are per server per day in each accepted coin; only USD-Blockchain (USDT/USDC) is a USD "
+        "price a renter pays. Servers that do not accept it give no price.",
+        "The listed price excludes the renter's base fee (5% on demand today, read from /v1/renter_fees); "
+        "it is added. Proof-of-Holding discounts are account-specific and not applied.",
+        "Rented servers are skipped. A server whose 'Nx' disagrees with gpu_array, or that mixes models, is "
+        "skipped, never guessed.",
+        "Spot is a bid auction; price.spot is the host's minimum bid and price.usd.spot is 0, so spot is not read.",
+        "A multi-GPU server may only rent whole unless partial_gpu_rental is on; the per-GPU figure is a share.",
+        "Datacenter names without a form factor (\"H100 80GB\", \"Tesla T4 15GB\", \"L40S 45GB\") and "
+        "odd VRAM figures (\"RTX 4090 23GB\") stay unmapped.",
+    ],
+)
+
+
 MODAL = ProviderMapping(
     provider="modal",
     display_name="Modal (serverless GPU)",
@@ -1501,6 +1543,45 @@ DEEPINFRA = ProviderMapping(
 )
 
 
+THUNDERCOMPUTE = ProviderMapping(
+    provider="thundercompute",
+    display_name="Thunder Compute",
+    endpoints={
+        "GET /v2/pricing": "flat map of USD hourly rates; only {gpu}_x{count} keys are read",
+        "GET /v2/specs": "the instance config behind each {gpu}_x{count} key",
+        "GET /v2/status": "live stock per {gpu}_x{count} key: available / unavailable",
+    },
+    fields=_fields(
+        "thundercompute",
+        sku=(RAW, "pricing key", 'e.g. "a100xl_x2"'),
+        listing_id=(RAW, "pricing key"),
+        raw_gpu_name=(DERIVED, 'specs.displayName (any "(80GB)" dropped) + vramGB', 'e.g. "NVIDIA H100 80GB"'),
+        gpu_count=(RAW, "specs.gpuCount", "must agree with the key's _x{count}"),
+        region=(ABSENT, "-", 'docs say "North America" only'),
+        country=(ABSENT, "-"),
+        price_per_gpu_hour=(DERIVED, "= pricing[key] / gpuCount"),
+        price_per_instance_hour=(RAW, "pricing[key]", "the whole instance; h100_x2 = 2 x h100_x1"),
+        currency=(CONSTANT, '"USD"', "not stated by the API; the pricing page prints $"),
+        provider_tier=(CONSTANT, '"vm"'),
+        available=(RAW, "status.specs[key]", '"available" -> True, "unavailable" -> False, else None'),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(DERIVED, "min(specs.vcpuOptions)", "the vCPUs included in the price; more cost additional_vcpus/hr"),
+        ram_gb=(DERIVED, "vcpu x ramPerVCPUGiB, or the ramCapGiB rule", "GiB"),
+        storage_gb=(DERIVED, "100 x gpuCount", "docs: first 100 GB per GPU included"),
+    ),
+    quirks=[
+        'Legacy mode keys ("h100", "a100xl_native") and per-second "sandbox_*" rates (a sales-gated '
+        "product) are not read; nor are disk, snapshot or extra-vCPU rates.",
+        "Multi-GPU sizes are not always linear: a100xl_x4 is $5.96 (1.49/GPU) against 1.09/GPU for x1 and x2.",
+        'The specs say "NVIDIA H100" and "NVIDIA A100 (80GB)" with no SXM/PCIe, so both stay unmapped '
+        '(the marketing page says "H100 SXM"; that page is not the source read).',
+        "Billed per minute; instances are never preempted (pricing FAQ).",
+        "Read with the account's API token (THUNDER_API_KEY): the terms allow automated access only that way.",
+    ],
+)
+
+
 PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
     m.provider: m
     for m in (
@@ -1513,11 +1594,13 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         AZURE,
         LINODE, OVHCLOUD, SCALEWAY, KOYEB,
         ORACLE, IBM,
+        THUNDERCOMPUTE,
         MODAL, REPLICATE, BASETEN, BEAM,
         ARKANE, VESSL, MITHRIL,
         NOSANA,
         CIVO, ATLANTICNET, DEEPINFRA,
         E2E, SIMPLEPOD,
+        CLORE,
     )
 }  # fmt: skip
 

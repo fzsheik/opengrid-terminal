@@ -10,6 +10,7 @@ from db import SessionLocal, init_db
 from models import RawResponse
 from providers import (
     CivoProvider,
+    CloreProvider,
     AtlanticNetProvider,
     DeepInfraProvider,
     E2EProvider,
@@ -41,6 +42,7 @@ from providers import (
     CrusoeProvider,
     DenvrProvider,
     DigitalOceanProvider,
+    ThunderComputeProvider,
     LatitudeProvider,
     VerdaProvider,
     HyperbolicProvider,
@@ -83,6 +85,12 @@ def build_fetchers() -> list[Provider]:
 
     if settings.digitalocean_api_key:
         fetchers.append(DigitalOceanProvider(settings.digitalocean_api_key))
+
+    if settings.thunder_api_key:
+        fetchers.append(ThunderComputeProvider(settings.thunder_api_key))
+
+    if settings.clore_api_key:
+        fetchers.append(CloreProvider(settings.clore_api_key))
 
     # Public endpoints and pages: no credentials to be missing.
     fetchers.extend(

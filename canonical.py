@@ -414,6 +414,59 @@ _add("NVIDIA A100 80GB SXM4", "NVIDIA A100 SXM 80GB")
 # PCIe not stated).
 _add("NVIDIA H100 94GB NVL", "H100NVL")
 
+# Clore.ai (keyed marketplace API). Names are the gpu_array model plus specs.gpuram,
+# the per-GPU VRAM. Mapped only where the name and VRAM fix one product: GeForce
+# cards at their standard memory, and boards whose name states the form factor or
+# edition. Left unmapped on purpose: "H100 80GB" (SXM or PCIe not stated), "Tesla T4
+# 15GB", "L4 23GB", "L40S 45GB", "A30 24GB", "A2 14GB" (no form factor in the name),
+# "RTX 5060 Ti 8GB", "RTX 3080 12GB", "RTX 4070 SUPER 12GB" (no canonical variant
+# yet), odd figures ("RTX 4090 23GB", "RTX 4060 Ti 7GB", "RTX 3090 20GB",
+# "RTX 4090 D 48GB"), laptop parts other than the 5090, and CMP mining cards.
+_add("NVIDIA RTX 5090 32GB", "RTX 5090 32GB")
+_add("NVIDIA RTX 5090 Laptop 24GB", "RTX 5090 Laptop GPU 24GB")
+_add("NVIDIA RTX 5080 16GB", "RTX 5080 16GB")
+_add("NVIDIA RTX 5070 Ti 16GB", "RTX 5070 Ti 16GB")
+_add("NVIDIA RTX 5070 12GB", "RTX 5070 12GB")
+_add("NVIDIA RTX 5060 Ti 16GB", "RTX 5060 Ti 16GB")
+_add("NVIDIA RTX 5060 8GB", "RTX 5060 8GB")
+_add("NVIDIA RTX 4090 24GB", "RTX 4090 24GB")
+_add("NVIDIA RTX 4080 SUPER 16GB", "RTX 4080 SUPER 16GB")
+_add("NVIDIA RTX 4080 16GB", "RTX 4080 16GB")
+_add("NVIDIA RTX 4070 Ti SUPER 16GB", "RTX 4070 Ti SUPER 16GB")
+_add("NVIDIA RTX 4070 Ti 12GB", "RTX 4070 Ti 12GB")
+_add("NVIDIA RTX 4070 12GB", "RTX 4070 12GB")
+_add("NVIDIA RTX 3090 Ti 24GB", "RTX 3090 Ti 24GB")
+_add("NVIDIA RTX 3090 24GB", "RTX 3090 24GB")
+_add("NVIDIA RTX 3080 Ti 12GB", "RTX 3080 Ti 12GB")
+_add("NVIDIA RTX 3080 10GB", "RTX 3080 10GB")
+_add("NVIDIA RTX 3070 Ti 8GB", "RTX 3070 Ti 8GB")
+_add("NVIDIA RTX 3070 8GB", "RTX 3070 8GB")
+_add("NVIDIA RTX 3060 Ti 8GB", "RTX 3060 Ti 8GB")
+_add("NVIDIA RTX 3060 12GB", "RTX 3060 12GB")
+_add("NVIDIA RTX 3060 8GB", "RTX 3060 8GB")
+_add("NVIDIA RTX 3050 8GB", "RTX 3050 8GB")
+_add("NVIDIA RTX 2080 Ti 11GB", "RTX 2080 Ti 11GB")
+_add("NVIDIA RTX 2080 8GB", "RTX 2080 8GB")
+_add("NVIDIA RTX 2070 8GB", "RTX 2070 8GB")
+_add("NVIDIA RTX 2060 6GB", "RTX 2060 6GB")
+_add("NVIDIA GTX 1660 SUPER 6GB", "GTX 1660 SUPER 6GB")
+_add("NVIDIA GTX 1650 4GB", "GTX 1650 4GB")
+_add("NVIDIA GTX 1060 6GB", "GTX 1060 6GB 6GB")
+_add("NVIDIA GTX 1050 Ti 4GB", "GTX 1050 Ti 4GB")
+_add("NVIDIA RTX PRO 6000 Blackwell 96GB Workstation", "RTX PRO 6000 Blackwell Workstation Edition 96GB")
+_add("NVIDIA RTX PRO 6000 Blackwell 96GB Max-Q", "RTX PRO 6000 Blackwell MaxQ Workstation Edition 96GB")
+_add("NVIDIA RTX PRO 6000 96GB SE", "RTX PRO 6000 Blackwell Server Edition 96GB")
+_add("NVIDIA RTX PRO 5000 Blackwell 48GB", "RTX PRO 5000 Blackwell 48GB")
+_add("NVIDIA RTX PRO 4500 Blackwell 32GB", "RTX PRO 4500 Blackwell 32GB")
+_add("NVIDIA RTX PRO 4000 Blackwell 24GB", "RTX PRO 4000 Blackwell 24GB")
+_add("NVIDIA RTX A4000 16GB", "RTX A4000 16GB")
+_add("NVIDIA RTX A2000 6GB", "RTX A2000 6GB")
+_add("NVIDIA Quadro RTX 6000 24GB", "Quadro RTX 6000 24GB")
+_add("NVIDIA A100 40GB SXM4", "A100SXM440GB 40GB")
+_add("NVIDIA A100 80GB PCIe", "A100 80GB PCIe 80GB")
+_add("NVIDIA Tesla V100 16GB SXM2", "Tesla V100SXM216GB 16GB")
+_add("NVIDIA H100 94GB NVL", "H100 NVL 94GB")
+
 # --------------------------------------------------------------------------
 # Seen, deliberately not mapped
 # --------------------------------------------------------------------------

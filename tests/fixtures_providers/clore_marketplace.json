@@ -1,0 +1,2317 @@
+{
+ "servers": [
+  {
+   "id": 120803,
+   "owner": 14893,
+   "autoprice": "usd",
+   "mrl": 24,
+   "price": {
+    "on_demand": {
+     "CLORE-Blockchain": 5710.76,
+     "USD-Blockchain": 11.5
+    },
+    "spot": {
+     "CLORE-Blockchain": 4861.59,
+     "USD-Blockchain": 9.88
+    },
+    "original_usd": {
+     "CLORE-Blockchain": {
+      "on_demand": 11.5,
+      "spot": 9.79
+     }
+    },
+    "usd": {
+     "on_demand_btc": null,
+     "on_demand_clore": 11.52696899436336,
+     "on_demand_usd": 11.5,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "B550 AORUS ELITE V2",
+    "cpu": "AMD Ryzen 7 5800X 8-Core Processor",
+    "cpus": "8/16",
+    "ram": 32,
+    "disk": "Patriot M.2 P300 128GB 62.9846GB",
+    "disk_speed": 659.51,
+    "gpu": "1x NVIDIA GeForce RTX 4090",
+    "gpuram": 24,
+    "net": {
+     "cc": "BY",
+     "down": 163.65,
+     "up": 49.95,
+     "test_history": [
+      "S|1791130044|198.98|57.89",
+      "S|1792515369|163.65|49.95"
+     ]
+    },
+    "backend_version": 24,
+    "pcie_rev": 4,
+    "pcie_width": 16,
+    "update_channel": "stable",
+    "xfs": 3,
+    "stock_oc_override": true,
+    "pl": [
+     411
+    ],
+    "stock_pl": [
+     411
+    ],
+    "stock_oc": [
+     {
+      "model": "RTX 4090",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     }
+    ]
+   },
+   "partial_gpu_rental": {
+    "total_gpus": 1,
+    "available_gpus": 1,
+    "free_indices": [
+     0
+    ]
+   },
+   "reliability": 0.9685,
+   "allowed_coins": [
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 4.5,
+    "cnt": 8
+   },
+   "gpu_array": [
+    "RTX 4090"
+   ],
+   "cuda_version": "13.0"
+  },
+  {
+   "id": 106507,
+   "owner": 14893,
+   "autoprice": "usd",
+   "mrl": 24,
+   "price": {
+    "on_demand": {
+     "CLORE-Blockchain": 5859.73,
+     "USD-Blockchain": 11.8
+    },
+    "spot": {
+     "CLORE-Blockchain": 4861.59,
+     "USD-Blockchain": 9.88
+    },
+    "original_usd": {
+     "CLORE-Blockchain": {
+      "on_demand": 11.8,
+      "spot": 9.79
+     }
+    },
+    "usd": {
+     "on_demand_btc": null,
+     "on_demand_clore": 11.82765972048218,
+     "on_demand_usd": 11.8,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "B650 GAMING X",
+    "cpu": "AMD Ryzen 9 7900X 12-Core Processor",
+    "cpus": "12/24",
+    "ram": 64,
+    "disk": "Patriot M.2 P300 128GB 62.6015GB",
+    "disk_speed": 871.26,
+    "gpu": "1x NVIDIA GeForce RTX 4090",
+    "gpuram": 24,
+    "net": {
+     "cc": "BY",
+     "down": 54.4,
+     "up": 69.92,
+     "test_history": [
+      "S|1780094409|80.62|85.85",
+      "S|1781477222|54.4|69.92"
+     ]
+    },
+    "backend_version": 21,
+    "pcie_rev": 4,
+    "pcie_width": 16,
+    "xfs": 3,
+    "stock_oc_override": true,
+    "pl": [
+     450
+    ],
+    "stock_pl": [
+     450
+    ],
+    "stock_oc": [
+     {
+      "model": "RTX 4090",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     }
+    ]
+   },
+   "partial_gpu_rental": false,
+   "reliability": 0.9996,
+   "allowed_coins": [
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 4.39,
+    "cnt": 51
+   },
+   "gpu_array": [
+    "RTX 4090"
+   ],
+   "cuda_version": "12.4"
+  },
+  {
+   "id": 119708,
+   "owner": 3114,
+   "autoprice": "usd",
+   "mrl": 48,
+   "price": {
+    "on_demand": {
+     "bitcoin": 0.00028476,
+     "CLORE-Blockchain": 11918.1,
+     "USD-Blockchain": 24
+    },
+    "spot": {
+     "bitcoin": 0.00028476,
+     "CLORE-Blockchain": 11918.1,
+     "USD-Blockchain": 24
+    },
+    "original_usd": {
+     "bitcoin": {
+      "on_demand": 24,
+      "spot": 24
+     },
+     "CLORE-Blockchain": {
+      "on_demand": 24,
+      "spot": 24
+     }
+    },
+    "usd": {
+     "on_demand_btc": 24.001909822707375,
+     "on_demand_clore": 24.05626732198901,
+     "on_demand_usd": 24,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "X670E Taichi",
+    "cpu": "AMD Ryzen 9 7950X3D 16-Core Processor",
+    "cpus": "16/32",
+    "ram": 64,
+    "disk": "T-FORCE TM8FF1001T 809.2519GB",
+    "disk_speed": 6537.31,
+    "gpu": "2x NVIDIA GeForce RTX 4090",
+    "gpuram": 24,
+    "net": {
+     "cc": "BY",
+     "down": 431.64,
+     "up": 215.11,
+     "test_history": [
+      "S|1790312786|188.33|97.28",
+      "S|1790425703|68.87|29.77",
+      "S|1790571608|411.94|99.97",
+      "S|1791572819|374.28|116.95",
+      "S|1792305236|431.64|215.11"
+     ]
+    },
+    "backend_version": 24,
+    "pcie_rev": 4,
+    "pcie_width": 8,
+    "update_channel": "stable",
+    "xfs": 3,
+    "stock_oc_override": true,
+    "pl": [
+     320,
+     320
+    ],
+    "stock_pl": [
+     320,
+     320
+    ],
+    "stock_oc": [
+     {
+      "model": "RTX 4090",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 4090",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     }
+    ]
+   },
+   "partial_gpu_rental": false,
+   "reliability": 0.9888,
+   "allowed_coins": [
+    "bitcoin",
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 4,
+    "cnt": 4
+   },
+   "gpu_array": [
+    "RTX 4090",
+    "RTX 4090"
+   ],
+   "cuda_version": "13.2"
+  },
+  {
+   "id": 94741,
+   "owner": 41318,
+   "autoprice": "usd",
+   "mrl": 72,
+   "price": {
+    "on_demand": {
+     "bitcoin": 0.00059326,
+     "CLORE-Blockchain": 24829.37,
+     "USD-Blockchain": 50
+    },
+    "spot": {
+     "bitcoin": 0.00077124,
+     "CLORE-Blockchain": 32278.19,
+     "USD-Blockchain": 65
+    },
+    "original_usd": {
+     "bitcoin": {
+      "on_demand": 50,
+      "spot": 65
+     },
+     "CLORE-Blockchain": {
+      "on_demand": 50,
+      "spot": 65
+     }
+    },
+    "usd": {
+     "on_demand_btc": 50.00482167937694,
+     "on_demand_clore": 50.11721349515227,
+     "on_demand_usd": 50,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "H310-F PRO (MS-7B25)",
+    "cpu": "Intel(R) Celeron(R) G4900 CPU @ 3.10GHz",
+    "cpus": "2/2",
+    "ram": 32,
+    "gpu": "4x NVIDIA GeForce RTX 4090",
+    "gpuram": 24,
+    "disk": "SSDx20120GBx20x20x20 53.129GB",
+    "disk_speed": 310.66,
+    "net": {
+     "up": 10.27,
+     "down": 56.34,
+     "cc": "RU",
+     "test_history": [
+      "S|1766008058|95.66|10.26",
+      "S|1767392658|56.34|10.27"
+     ]
+    },
+    "backend_version": 24,
+    "pcie_rev": 2,
+    "pcie_width": 1,
+    "xfs": 3,
+    "update_channel": "stable",
+    "stock_oc_override": true,
+    "pl": [
+     320,
+     300,
+     350,
+     350
+    ],
+    "stock_pl": [
+     320,
+     320,
+     320,
+     320
+    ],
+    "stock_oc": [
+     {
+      "model": "RTX 4090",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 4090",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 4090",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 4090",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     }
+    ]
+   },
+   "partial_gpu_rental": false,
+   "reliability": 0.9513,
+   "allowed_coins": [
+    "bitcoin",
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 4.41,
+    "cnt": 63
+   },
+   "gpu_array": [
+    "RTX 4090",
+    "RTX 4090",
+    "RTX 4090",
+    "RTX 4090"
+   ],
+   "cuda_version": "13.2"
+  },
+  {
+   "id": 112213,
+   "owner": 56494,
+   "autoprice": "usd",
+   "mrl": 144,
+   "price": {
+    "on_demand": {
+     "CLORE-Blockchain": 7945.4,
+     "USD-Blockchain": 12.5
+    },
+    "spot": {
+     "CLORE-Blockchain": 7945.4,
+     "USD-Blockchain": 8.4
+    },
+    "original_usd": {
+     "CLORE-Blockchain": {
+      "on_demand": 16,
+      "spot": 16
+     }
+    },
+    "usd": {
+     "on_demand_btc": null,
+     "on_demand_clore": 16.037511547992672,
+     "on_demand_usd": 12.5,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "B650E PG Riptide WiFi",
+    "cpu": "AMD Ryzen 9 7900X 12-Core Processor",
+    "cpus": "12/24",
+    "ram": 64,
+    "disk": "Netac NVMe SSD 2TB 1145.2026GB",
+    "disk_speed": 16400.14,
+    "gpu": "1x NVIDIA GeForce RTX 4090",
+    "gpuram": 24,
+    "net": {
+     "cc": "BY",
+     "down": 85.55,
+     "up": 92.42,
+     "test_history": [
+      "S|1784057342|24.27|93.76",
+      "S|1784478399|85.55|92.42"
+     ]
+    },
+    "backend_version": 24,
+    "pcie_rev": 4,
+    "pcie_width": 16,
+    "xfs": 3,
+    "update_channel": "stable",
+    "pl": [
+     360
+    ],
+    "stock_pl": [
+     450
+    ],
+    "stock_oc": "default"
+   },
+   "partial_gpu_rental": {
+    "total_gpus": 1,
+    "available_gpus": 1,
+    "free_indices": [
+     0
+    ]
+   },
+   "reliability": 1,
+   "allowed_coins": [
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 4.2,
+    "cnt": 20
+   },
+   "gpu_array": [
+    "RTX 4090"
+   ],
+   "cuda_version": "13.0"
+  },
+  {
+   "id": 15098,
+   "owner": 9319,
+   "autoprice": "usd",
+   "mrl": 55,
+   "price": {
+    "on_demand": {
+     "CLORE-Blockchain": 20856.67,
+     "USD-Blockchain": 42
+    },
+    "spot": {
+     "CLORE-Blockchain": 20856.67,
+     "USD-Blockchain": 42
+    },
+    "original_usd": {
+     "CLORE-Blockchain": {
+      "on_demand": 42,
+      "spot": 42
+     }
+    },
+    "usd": {
+     "on_demand_btc": null,
+     "on_demand_clore": 42.09845772115593,
+     "on_demand_usd": 42,
+     "spot": 0
+    }
+   },
+   "rented": true,
+   "specs": {
+    "mb": "BTC B250",
+    "cpu": "Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz",
+    "cpus": "4/8",
+    "ram": 32,
+    "disk": "MSIx20S270x20240GBx20 152.3892GB",
+    "disk_speed": 2808.988764044944,
+    "gpu": "4x NVIDIA GeForce RTX 4090",
+    "gpuram": 24,
+    "net": {
+     "up": 88.73,
+     "down": 91.72,
+     "cc": "RU",
+     "test_history": [
+      "S|1729230295|83.03|8.8",
+      "S|1730615579|91.72|88.73"
+     ]
+    },
+    "backend_version": 24,
+    "pcie_rev": 2,
+    "pcie_width": 1,
+    "xfs": 3,
+    "update_channel": "stable",
+    "stock_oc_override": true,
+    "pl": [
+     400,
+     400,
+     400,
+     400
+    ],
+    "stock_pl": [
+     400,
+     400,
+     400,
+     400,
+     400
+    ],
+    "stock_oc": [
+     {
+      "model": "RTX 4090",
+      "core_offset": 90,
+      "mem_offset": 1000,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 4090",
+      "core_offset": 90,
+      "mem_offset": 1000,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 4090",
+      "core_offset": 90,
+      "mem_offset": 1000,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 4090",
+      "core_offset": 90,
+      "mem_offset": 1000,
+      "core_lock": null,
+      "mem_lock": null
+     }
+    ]
+   },
+   "partial_gpu_rental": false,
+   "reliability": 0.9848,
+   "allowed_coins": [
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 4.11,
+    "cnt": 148
+   },
+   "gpu_array": [
+    "RTX 4090",
+    "RTX 4090",
+    "RTX 4090",
+    "RTX 4090"
+   ],
+   "oc": true,
+   "cuda_version": "13.2"
+  },
+  {
+   "id": 18022,
+   "owner": 4550,
+   "autoprice": "usd",
+   "mrl": 72,
+   "price": {
+    "on_demand": {
+     "CLORE-Blockchain": 5375,
+     "USD-Blockchain": 10.4
+    },
+    "spot": {
+     "CLORE-Blockchain": 5300,
+     "USD-Blockchain": 10.2
+    },
+    "original_usd": {},
+    "usd": {
+     "on_demand_btc": null,
+     "on_demand_clore": 10.849249197077633,
+     "on_demand_usd": 10.4,
+     "spot": 0
+    }
+   },
+   "rented": true,
+   "specs": {
+    "mb": "X99-D8 MAX",
+    "cpu": "Intel(R) Xeon(R) CPU E5-2680 v4 @ 2.40GHz",
+    "cpus": "28/56",
+    "ram": 64,
+    "disk": "SPCC M.2 PCIe SSD 128.7089GB",
+    "disk_speed": 2392.3444976076557,
+    "gpu": "1x NVIDIA GeForce RTX 4090",
+    "gpuram": 24,
+    "net": {
+     "up": 754.34,
+     "down": 740.76,
+     "cc": "UA",
+     "test_history": [
+      "S|1728713957|278.54|255.17",
+      "S|1737107650|276|233.14",
+      "S|1739211933|317.55|513.5",
+      "S|1739212108|736.73|583.91",
+      "S|1754901151|740.76|754.34"
+     ]
+    },
+    "backend_version": 24,
+    "pcie_rev": 3,
+    "pcie_width": 16,
+    "xfs": 3,
+    "update_channel": "stable",
+    "pl": [
+     450
+    ],
+    "stock_pl": [
+     450
+    ],
+    "stock_oc": "default"
+   },
+   "partial_gpu_rental": {
+    "total_gpus": 1,
+    "available_gpus": 0,
+    "free_indices": []
+   },
+   "reliability": 0.9991,
+   "allowed_coins": [
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 4.23,
+    "cnt": 150
+   },
+   "gpu_array": [
+    "RTX 4090"
+   ],
+   "cuda_version": "13.4"
+  },
+  {
+   "id": 122151,
+   "owner": 45274,
+   "autoprice": "usd",
+   "mrl": 120,
+   "price": {
+    "on_demand": {
+     "bitcoin": 0.00021357,
+     "CLORE-Blockchain": 8938.57,
+     "USD-Blockchain": 18
+    },
+    "spot": {
+     "bitcoin": 0.00021357,
+     "CLORE-Blockchain": 8938.57,
+     "USD-Blockchain": 18
+    },
+    "original_usd": {
+     "bitcoin": {
+      "on_demand": 18,
+      "spot": 18
+     },
+     "CLORE-Blockchain": {
+      "on_demand": 18,
+      "spot": 18
+     }
+    },
+    "usd": {
+     "on_demand_btc": 18.00143236703053,
+     "on_demand_clore": 18.042190399166923,
+     "on_demand_usd": 18,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "Unknown",
+    "cpu": "Intel(R) Celeron(R) CPU 847 @ 1.10GHz",
+    "cpus": "2/2",
+    "ram": 4,
+    "gpu": "8x NVIDIA GeForce RTX 3070",
+    "gpuram": 8,
+    "disk": "6723 207.0669GB",
+    "disk_speed": 30.61,
+    "net": {
+     "up": 2.1,
+     "down": 9.02,
+     "cc": "FI",
+     "test_history": [
+      "S|1792512108|9.02|2.1"
+     ]
+    },
+    "backend_version": 24,
+    "pcie_rev": 2,
+    "pcie_width": 1,
+    "xfs": 1,
+    "update_channel": "stable",
+    "stock_oc_override": true,
+    "pl": [
+     120,
+     120,
+     120,
+     120,
+     120,
+     120,
+     120,
+     120
+    ],
+    "stock_pl": [
+     120,
+     120,
+     120,
+     120,
+     120,
+     120,
+     120,
+     120
+    ],
+    "stock_oc": [
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": 1200,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": 1200,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": 1200,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": 1200,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": 1200,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": 1200,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": 1200,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": 1200,
+      "mem_lock": null
+     }
+    ]
+   },
+   "partial_gpu_rental": false,
+   "reliability": 0.1036,
+   "allowed_coins": [
+    "bitcoin",
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 1,
+    "cnt": 1
+   },
+   "gpu_array": [
+    "RTX 3070",
+    "RTX 3070",
+    "RTX 3070",
+    "RTX 3070",
+    "RTX 3070",
+    "RTX 3070",
+    "RTX 3070",
+    "RTX 3070"
+   ],
+   "cuda_version": "13.2"
+  },
+  {
+   "id": 120874,
+   "owner": 42547,
+   "autoprice": "usd",
+   "mrl": 120,
+   "price": {
+    "on_demand": {
+     "bitcoin": 0.00032036,
+     "CLORE-Blockchain": 13407.86,
+     "USD-Blockchain": 27
+    },
+    "spot": {
+     "bitcoin": 0.00032036,
+     "CLORE-Blockchain": 13407.86,
+     "USD-Blockchain": 27
+    },
+    "original_usd": {
+     "bitcoin": {
+      "on_demand": 27,
+      "spot": 27
+     },
+     "CLORE-Blockchain": {
+      "on_demand": 27,
+      "spot": 27
+     }
+    },
+    "usd": {
+     "on_demand_btc": 27.002569991580753,
+     "on_demand_clore": 27.063295691075222,
+     "on_demand_usd": 27,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "H110 Pro BTC",
+    "cpu": "Intel(R) Core(TM) i7-7700K CPU @ 4.20GHz",
+    "cpus": "4/8",
+    "ram": 32,
+    "disk": "SanDiskx20SD7SB7S512G10 414.3732GB",
+    "disk_speed": 486.8,
+    "gpu": "10x NVIDIA GeForce RTX 3070",
+    "gpuram": 8,
+    "net": {
+     "cc": "NO",
+     "down": 439.72,
+     "up": 162.69,
+     "test_history": [
+      "S|1791900194|339.57|0",
+      "S|1791900774|1.6|5.86",
+      "S|1791900949|128.94|62.77",
+      "S|1791903079|0|22.53",
+      "S|1791909125|439.72|162.69"
+     ]
+    },
+    "backend_version": 24,
+    "pcie_rev": 2,
+    "pcie_width": 1,
+    "update_channel": "stable",
+    "xfs": 3,
+    "stock_oc_override": true,
+    "pl": [
+     110,
+     110,
+     110,
+     110,
+     110,
+     110,
+     110,
+     110,
+     110,
+     110
+    ],
+    "stock_pl": [
+     110,
+     110,
+     110,
+     110,
+     110,
+     110,
+     110,
+     110,
+     110,
+     110
+    ],
+    "stock_oc": [
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     }
+    ]
+   },
+   "partial_gpu_rental": false,
+   "reliability": 0.9917,
+   "allowed_coins": [
+    "bitcoin",
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 4.33,
+    "cnt": 6
+   },
+   "gpu_array": [
+    "RTX 3070",
+    "RTX 3070",
+    "RTX 3070",
+    "RTX 3070",
+    "RTX 3070",
+    "RTX 3070",
+    "RTX 3070",
+    "RTX 3070",
+    "RTX 3070",
+    "RTX 3070"
+   ],
+   "cuda_version": "13.0"
+  },
+  {
+   "id": 121074,
+   "owner": 49131,
+   "autoprice": "usd",
+   "mrl": 72,
+   "price": {
+    "on_demand": {
+     "bitcoin": 3.204e-05,
+     "CLORE-Blockchain": 1300,
+     "USD-Blockchain": 2.7
+    },
+    "spot": {
+     "bitcoin": 3.204e-05,
+     "CLORE-Blockchain": 1300,
+     "USD-Blockchain": 2.7
+    },
+    "original_usd": {
+     "bitcoin": {
+      "on_demand": 2.7,
+      "spot": 2.7
+     }
+    },
+    "usd": {
+     "on_demand_btc": 2.7005941519860386,
+     "on_demand_clore": 2.6240044569676133,
+     "on_demand_usd": 2.7,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "H110M-DVS R3.0",
+    "cpu": "Intel(R) Pentium(R) CPU G4560 @ 3.50GHz",
+    "cpus": "2/4",
+    "ram": 8,
+    "disk": "KINGSTONx20SA400S37240G 176.9433GB",
+    "disk_speed": 498.88,
+    "gpu": "1x NVIDIA GeForce RTX 3070",
+    "gpuram": 8,
+    "net": {
+     "cc": "BG",
+     "down": 492.11,
+     "up": 156.09,
+     "test_history": [
+      "S|1791481204|492.11|156.09"
+     ]
+    },
+    "backend_version": 24,
+    "pcie_rev": 3,
+    "pcie_width": 16,
+    "update_channel": "stable",
+    "xfs": 3,
+    "stock_oc_override": true,
+    "pl": [
+     150
+    ],
+    "stock_pl": [
+     150
+    ],
+    "stock_oc": [
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     }
+    ]
+   },
+   "partial_gpu_rental": {
+    "total_gpus": 1,
+    "available_gpus": 1,
+    "free_indices": [
+     0
+    ]
+   },
+   "reliability": 0.9642,
+   "allowed_coins": [
+    "bitcoin",
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 4,
+    "cnt": 4
+   },
+   "gpu_array": [
+    "RTX 3070"
+   ],
+   "cuda_version": "12.4"
+  },
+  {
+   "id": 122216,
+   "owner": 66418,
+   "autoprice": "usd",
+   "mrl": 24,
+   "price": {
+    "on_demand": {
+     "USD-Blockchain": 2.76
+    },
+    "spot": {
+     "USD-Blockchain": 2.76
+    },
+    "original_usd": {},
+    "usd": {
+     "on_demand_btc": null,
+     "on_demand_clore": null,
+     "on_demand_usd": 2.76,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "B450M-A PRO MAX II (MS-7C52)",
+    "cpu": "AMD Ryzen 5 5600 6-Core Processor",
+    "cpus": "6/12",
+    "ram": 32,
+    "disk": "TEAMx20TM8PS7512Gx20x 17.114GB",
+    "disk_speed": 518.47,
+    "gpu": "1x NVIDIA GeForce RTX 3070",
+    "gpuram": 8,
+    "net": {
+     "cc": "PH",
+     "down": 71.63,
+     "up": 33.83,
+     "test_history": [
+      "S|1792598179|71.63|33.83"
+     ]
+    },
+    "backend_version": 24,
+    "pcie_rev": 3,
+    "pcie_width": 16,
+    "update_channel": "stable",
+    "xfs": 2,
+    "stock_oc_override": true,
+    "pl": [
+     110
+    ],
+    "stock_pl": [
+     110
+    ],
+    "stock_oc": [
+     {
+      "model": "RTX 3070",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     }
+    ]
+   },
+   "partial_gpu_rental": {
+    "total_gpus": 1,
+    "available_gpus": 1,
+    "free_indices": [
+     0
+    ]
+   },
+   "reliability": 0.0355,
+   "allowed_coins": [
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 1,
+    "cnt": 1
+   },
+   "gpu_array": [
+    "RTX 3070"
+   ],
+   "cuda_version": "13.2"
+  },
+  {
+   "id": 6954,
+   "owner": 6652,
+   "autoprice": "usd",
+   "mrl": 120,
+   "price": {
+    "on_demand": {
+     "bitcoin": 0.00016611,
+     "CLORE-Blockchain": 6952.22,
+     "USD-Blockchain": 14
+    },
+    "spot": {
+     "bitcoin": 0.00016611,
+     "CLORE-Blockchain": 6952.22,
+     "USD-Blockchain": 14
+    },
+    "original_usd": {
+     "bitcoin": {
+      "on_demand": 14,
+      "spot": 14
+     },
+     "CLORE-Blockchain": {
+      "on_demand": 14,
+      "spot": 14
+     }
+    },
+    "usd": {
+     "on_demand_btc": 14.00111406324597,
+     "on_demand_clore": 14.032812512168755,
+     "on_demand_usd": 14,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "H97M-E",
+    "cpu": "Intel(R) Pentium(R) CPU G3220 @ 3.00GHz",
+    "cpus": "2/2",
+    "ram": 8,
+    "disk": "KPSS120G2x20x20x20x2 67.568GB",
+    "disk_speed": 2032.5203252032522,
+    "gpu": "3x NVIDIA GeForce RTX 3070 Ti",
+    "gpuram": 8,
+    "net": {
+     "up": 93.89,
+     "down": 92.26,
+     "cc": "RU",
+     "test_history": [
+      "S|1727386790|93.27|93.35",
+      "S|1729216439|92.26|93.89"
+     ]
+    },
+    "backend_version": 21,
+    "pcie_rev": 2,
+    "pcie_width": 1,
+    "xfs": 3,
+    "stock_oc_override": true,
+    "pl": [
+     220,
+     220,
+     220
+    ],
+    "stock_pl": [
+     240,
+     240,
+     240
+    ],
+    "stock_oc": [
+     {
+      "model": "RTX 3070 Ti",
+      "core_offset": 150,
+      "mem_offset": null,
+      "core_lock": 1470,
+      "mem_lock": 5001
+     },
+     {
+      "model": "RTX 3070 Ti",
+      "core_offset": 150,
+      "mem_offset": null,
+      "core_lock": 1470,
+      "mem_lock": 5001
+     },
+     {
+      "model": "RTX 3070 Ti",
+      "core_offset": 150,
+      "mem_offset": null,
+      "core_lock": 1470,
+      "mem_lock": 5001
+     }
+    ]
+   },
+   "partial_gpu_rental": false,
+   "reliability": 0.9902,
+   "allowed_coins": [
+    "bitcoin",
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 4.31,
+    "cnt": 106
+   },
+   "gpu_array": [
+    "RTX 3070 Ti",
+    "RTX 3070 Ti",
+    "RTX 3070 Ti"
+   ],
+   "cuda_version": "12.4"
+  },
+  {
+   "id": 16330,
+   "owner": 10448,
+   "autoprice": "usd",
+   "mrl": 48,
+   "price": {
+    "on_demand": {
+     "bitcoin": 0.00021357,
+     "CLORE-Blockchain": 8938.57,
+     "USD-Blockchain": 18
+    },
+    "spot": {
+     "bitcoin": 0.00021357,
+     "CLORE-Blockchain": 8938.57,
+     "USD-Blockchain": 18
+    },
+    "original_usd": {
+     "bitcoin": {
+      "on_demand": 18,
+      "spot": 18
+     },
+     "CLORE-Blockchain": {
+      "on_demand": 18,
+      "spot": 18
+     }
+    },
+    "usd": {
+     "on_demand_btc": 18.00143236703053,
+     "on_demand_clore": 18.042190399166923,
+     "on_demand_usd": 18,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "ROG STRIX Z390-H GAMING",
+    "cpu": "Intel(R) Celeron(R) G4930 CPU @ 3.20GHz",
+    "cpus": "2/2",
+    "ram": 32,
+    "disk": "Apacerx20AS350x20120GB 32.5786GB",
+    "disk_speed": 2994.0119760479038,
+    "gpu": "1x NVIDIA GeForce RTX 5090",
+    "gpuram": 32,
+    "net": {
+     "up": 93.93,
+     "down": 92.86,
+     "cc": "UA",
+     "test_history": [
+      "S|1753970135|90.41|91.48",
+      "S|1759489125|36.38|11.07",
+      "S|1759489300|91.14|92.69",
+      "S|1759833799|84.14|81.99",
+      "S|1769027571|92.86|93.93"
+     ]
+    },
+    "backend_version": 24,
+    "pcie_rev": 3,
+    "pcie_width": 16,
+    "xfs": 3,
+    "update_channel": "stable",
+    "stock_oc_override": true,
+    "pl": [
+     450
+    ],
+    "stock_pl": [
+     450
+    ],
+    "stock_oc": [
+     {
+      "model": "RTX 5090",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     }
+    ]
+   },
+   "partial_gpu_rental": {
+    "total_gpus": 1,
+    "available_gpus": 1,
+    "free_indices": [
+     0
+    ]
+   },
+   "reliability": 1,
+   "allowed_coins": [
+    "bitcoin",
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 3.99,
+    "cnt": 153
+   },
+   "gpu_array": [
+    "RTX 5090"
+   ],
+   "cuda_version": "13.0"
+  },
+  {
+   "id": 17888,
+   "owner": 9741,
+   "autoprice": "usd",
+   "mrl": 3000,
+   "price": {
+    "on_demand": {
+     "bitcoin": 0.00118652,
+     "CLORE-Blockchain": 49658.75,
+     "USD-Blockchain": 100
+    },
+    "spot": {
+     "bitcoin": 0.00118652,
+     "CLORE-Blockchain": 49658.75,
+     "USD-Blockchain": 100
+    },
+    "original_usd": {
+     "bitcoin": {
+      "on_demand": 100,
+      "spot": 100
+     },
+     "CLORE-Blockchain": {
+      "on_demand": 100,
+      "spot": 100
+     }
+    },
+    "usd": {
+     "on_demand_btc": 100.00964335875388,
+     "on_demand_clore": 100.23444717495421,
+     "on_demand_usd": 100,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "X99-F8D PLUS",
+    "cpu": "Intel(R) Xeon(R) CPU E5-2698 v4 @ 2.20GHz",
+    "cpus": "40/80",
+    "ram": 128,
+    "disk": "NE-512 393.3709GB",
+    "disk_speed": 1377.4104683195594,
+    "gpu": "2x NVIDIA GeForce RTX 5090",
+    "gpuram": 32,
+    "net": {
+     "up": 97,
+     "down": 92.26,
+     "cc": "RU",
+     "test_history": [
+      "S|1729238721|87.76|90.36",
+      "S|1730621303|92.26|97"
+     ]
+    },
+    "backend_version": 21,
+    "pcie_rev": 3,
+    "pcie_width": 16,
+    "xfs": 3,
+    "stock_oc_override": true,
+    "pl": [
+     460,
+     460
+    ],
+    "stock_pl": [
+     400,
+     400
+    ],
+    "stock_oc": [
+     {
+      "model": "RTX 5090",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 5090",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     }
+    ]
+   },
+   "partial_gpu_rental": false,
+   "reliability": 0.9457,
+   "allowed_coins": [
+    "bitcoin",
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 4.24,
+    "cnt": 75
+   },
+   "gpu_array": [
+    "RTX 5090",
+    "RTX 5090"
+   ],
+   "oc": true,
+   "cuda_version": "13.2"
+  },
+  {
+   "id": 63544,
+   "owner": 3068,
+   "autoprice": "usd",
+   "mrl": 72,
+   "price": {
+    "on_demand": {
+     "bitcoin": 0.00033222,
+     "CLORE-Blockchain": 13904.45,
+     "USD-Blockchain": 28
+    },
+    "spot": {
+     "bitcoin": 0.00032036,
+     "CLORE-Blockchain": 13407.86,
+     "USD-Blockchain": 27
+    },
+    "original_usd": {
+     "bitcoin": {
+      "on_demand": 28,
+      "spot": 27
+     },
+     "CLORE-Blockchain": {
+      "on_demand": 28,
+      "spot": 27
+     }
+    },
+    "usd": {
+     "on_demand_btc": 28.00222812649194,
+     "on_demand_clore": 28.06564520898718,
+     "on_demand_usd": 28,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "TUF GAMING B650E-E WIFI",
+    "cpu": "AMD Ryzen 9 9900X 12-Core Processor",
+    "cpus": "12/24",
+    "ram": 64,
+    "disk": "Samsung SSD 990 PRO with 1696.9032GB",
+    "disk_speed": 383.41,
+    "gpu": "1x NVIDIA GeForce RTX 5090",
+    "gpuram": 32,
+    "net": {
+     "cc": "UA",
+     "down": 678.28,
+     "up": 247.25,
+     "test_history": [
+      "S|1738095477|740.75|752.53",
+      "S|1739480652|678.28|247.25"
+     ]
+    },
+    "backend_version": 21,
+    "pcie_rev": 5,
+    "pcie_width": 16,
+    "xfs": 3,
+    "update_channel": "stable",
+    "stock_oc_override": true,
+    "pl": [
+     500
+    ],
+    "stock_pl": [
+     450
+    ],
+    "stock_oc": [
+     {
+      "model": "RTX 5090",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     }
+    ]
+   },
+   "partial_gpu_rental": false,
+   "reliability": 0.9613,
+   "allowed_coins": [
+    "bitcoin",
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 4.74,
+    "cnt": 58
+   },
+   "gpu_array": [
+    "RTX 5090"
+   ],
+   "cuda_version": "13.4"
+  },
+  {
+   "id": 37364,
+   "owner": 21980,
+   "autoprice": "usd",
+   "mrl": 24,
+   "price": {
+    "on_demand": {
+     "bitcoin": 0.00041528,
+     "USD-Blockchain": 35
+    },
+    "spot": {
+     "bitcoin": 0.00041528,
+     "USD-Blockchain": 35
+    },
+    "original_usd": {
+     "bitcoin": {
+      "on_demand": 35,
+      "spot": 35
+     }
+    },
+    "usd": {
+     "on_demand_btc": 35.00320659914988,
+     "on_demand_clore": null,
+     "on_demand_usd": 35,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "STRIX B250H GAMING",
+    "cpu": "Intel(R) Pentium(R) CPU G4400 @ 3.30GHz",
+    "cpus": "2/2",
+    "ram": 8,
+    "disk": "DGSR2256GS93Tx20x20x2 190.8324GB",
+    "disk_speed": 467.97,
+    "gpu": "5x Mixed GPUs",
+    "gpuram": 10,
+    "net": {
+     "cc": "RU",
+     "down": 92.32,
+     "up": 92.04,
+     "test_history": [
+      "S|1729430637|93.18|92.19",
+      "S|1730815372|92.32|92.04"
+     ]
+    },
+    "backend_version": 24,
+    "pcie_rev": 2,
+    "pcie_width": 1,
+    "xfs": 3,
+    "update_channel": "stable",
+    "stock_oc_override": true,
+    "pl": [
+     250,
+     300,
+     250,
+     300,
+     250
+    ],
+    "gpus": [
+     {
+      "type": "NVIDIA GeForce RTX 3080",
+      "mem": 10,
+      "pcie_gen": 2,
+      "pcie_width": 1
+     },
+     {
+      "type": "NVIDIA GeForce RTX 4080 SUPER",
+      "mem": 15,
+      "pcie_gen": 2,
+      "pcie_width": 1
+     },
+     {
+      "type": "NVIDIA GeForce RTX 3080",
+      "mem": 10,
+      "pcie_gen": 2,
+      "pcie_width": 1
+     },
+     {
+      "type": "NVIDIA GeForce RTX 4080 SUPER",
+      "mem": 15,
+      "pcie_gen": 2,
+      "pcie_width": 1
+     },
+     {
+      "type": "NVIDIA GeForce RTX 3080",
+      "mem": 10,
+      "pcie_gen": 2,
+      "pcie_width": 1
+     }
+    ],
+    "stock_pl": [
+     250,
+     250,
+     250,
+     250,
+     250,
+     250
+    ],
+    "stock_oc": [
+     {
+      "model": "RTX 3080",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 4080 SUPER",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3080",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 4080 SUPER",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3080",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     }
+    ]
+   },
+   "partial_gpu_rental": false,
+   "reliability": 0.9997,
+   "allowed_coins": [
+    "bitcoin",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 4.51,
+    "cnt": 37
+   },
+   "gpu_array": [
+    "RTX 3080",
+    "RTX 4080 SUPER",
+    "RTX 3080",
+    "RTX 4080 SUPER",
+    "RTX 3080"
+   ],
+   "cuda_version": "13.0"
+  },
+  {
+   "id": 13927,
+   "owner": 4727,
+   "autoprice": "usd",
+   "mrl": 24,
+   "price": {
+    "on_demand": {
+     "CLORE-Blockchain": 5959.05
+    },
+    "spot": {
+     "CLORE-Blockchain": 5959.05
+    },
+    "original_usd": {
+     "CLORE-Blockchain": {
+      "on_demand": 12,
+      "spot": 12
+     }
+    },
+    "usd": {
+     "on_demand_btc": null,
+     "on_demand_clore": 12.028133660994506,
+     "on_demand_usd": null,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "WS C422 DC",
+    "cpu": "Intel(R) Xeon(R) W-2195 CPU @ 2.30GHz  CPU @ 2.3GHz",
+    "cpus": "18/36",
+    "ram": 64,
+    "disk": "TS120GMTS820Sx20x20x2 71.327GB",
+    "disk_speed": 1479.2899408284025,
+    "gpu": "3x NVIDIA GeForce RTX 3080",
+    "gpuram": 10,
+    "net": {
+     "up": 66.02,
+     "down": 82.47,
+     "cc": "RU",
+     "test_history": [
+      "S|1729217744|15.91|0.28",
+      "S|1730618458|82.47|66.02"
+     ]
+    },
+    "backend_version": 24,
+    "pcie_rev": 3,
+    "pcie_width": 4,
+    "xfs": 3,
+    "update_channel": "stable",
+    "stock_oc_override": true,
+    "pl": [
+     290,
+     290,
+     290
+    ],
+    "stock_pl": [
+     290,
+     290,
+     290
+    ],
+    "stock_oc": [
+     {
+      "model": "RTX 3080",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3080",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     },
+     {
+      "model": "RTX 3080",
+      "core_offset": null,
+      "mem_offset": null,
+      "core_lock": null,
+      "mem_lock": null
+     }
+    ]
+   },
+   "partial_gpu_rental": {
+    "total_gpus": 3,
+    "available_gpus": 3,
+    "free_indices": [
+     0,
+     1,
+     2
+    ]
+   },
+   "reliability": 0.9781,
+   "allowed_coins": [
+    "CLORE-Blockchain"
+   ],
+   "rating": {
+    "avg": 4.04,
+    "cnt": 126
+   },
+   "gpu_array": [
+    "RTX 3080",
+    "RTX 3080",
+    "RTX 3080"
+   ],
+   "oc": true,
+   "cuda_version": "13.2"
+  },
+  {
+   "id": 119275,
+   "owner": 62487,
+   "autoprice": "usd",
+   "mrl": 1440,
+   "price": {
+    "on_demand": {
+     "CLORE-Blockchain": 16883.97,
+     "USD-Blockchain": 34
+    },
+    "spot": {
+     "CLORE-Blockchain": 13904.45,
+     "USD-Blockchain": 28
+    },
+    "original_usd": {
+     "CLORE-Blockchain": {
+      "on_demand": 34,
+      "spot": 28
+     }
+    },
+    "usd": {
+     "on_demand_btc": null,
+     "on_demand_clore": 34.0797019471596,
+     "on_demand_usd": 34,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "Google Compute Engine",
+    "cpu": "CPU @ 2.0GHz",
+    "cpus": "12/24",
+    "ram": 167,
+    "disk": "PersistentDiskx20x20 917.7392GB",
+    "disk_speed": 705.89,
+    "gpu": "2x NVIDIA A100SXM440GB",
+    "gpuram": 40,
+    "net": {
+     "cc": "US",
+     "down": 423.07,
+     "up": 619.29,
+     "test_history": [
+      "S|1789529677|1324.28|638.7",
+      "S|1790916495|423.07|619.29"
+     ]
+    },
+    "backend_version": 24,
+    "update_channel": "stable",
+    "xfs": 3,
+    "pcie_rev": 4,
+    "pcie_width": 16,
+    "pl": [
+     400,
+     400
+    ],
+    "stock_pl": [
+     400,
+     400
+    ],
+    "stock_oc": "default"
+   },
+   "partial_gpu_rental": {
+    "total_gpus": 2,
+    "available_gpus": 2,
+    "free_indices": [
+     0,
+     1
+    ]
+   },
+   "reliability": 0.9988,
+   "allowed_coins": [
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 1,
+    "cnt": 1
+   },
+   "gpu_array": [
+    "A100SXM440GB",
+    "A100SXM440GB"
+   ],
+   "cuda_version": "13.2"
+  },
+  {
+   "id": 115753,
+   "owner": 21050,
+   "mrl": 720,
+   "price": {
+    "on_demand": {
+     "CLORE-Blockchain": 500000,
+     "USD-Blockchain": 29
+    },
+    "spot": {
+     "CLORE-Blockchain": 500000,
+     "USD-Blockchain": 28
+    },
+    "usd": {
+     "on_demand_btc": null,
+     "on_demand_clore": 1009.2324834490821,
+     "on_demand_usd": 29,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "X99-P4",
+    "cpu": "Intel(R) Xeon(R) CPU E5-2680 v4 @ 2.40GHz",
+    "cpus": "14/28",
+    "ram": 64,
+    "disk": "ST1000DM003-1SB10Cx20x 817.0434GB",
+    "disk_speed": 128.35,
+    "gpu": "1x NVIDIA GeForce RTX 4090",
+    "gpuram": 23,
+    "net": {
+     "cc": "RU",
+     "down": 244.36,
+     "up": 249.64,
+     "test_history": [
+      "S|1788075539|249.02|249.75",
+      "S|1789458344|244.36|249.64"
+     ]
+    },
+    "backend_version": 21,
+    "pcie_rev": 3,
+    "pcie_width": 16,
+    "xfs": 3,
+    "pl": [
+     320
+    ],
+    "stock_pl": [
+     450
+    ],
+    "stock_oc": "default"
+   },
+   "partial_gpu_rental": false,
+   "reliability": 0.9464,
+   "allowed_coins": [
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 5,
+    "cnt": 2
+   },
+   "gpu_array": [
+    "RTX 4090"
+   ],
+   "cuda_version": "13.0"
+  },
+  {
+   "id": 55214,
+   "owner": 3371,
+   "autoprice": "usd",
+   "mrl": 240,
+   "price": {
+    "on_demand": {
+     "CLORE-Blockchain": 29795.25,
+     "USD-Blockchain": 60
+    },
+    "spot": {
+     "CLORE-Blockchain": 29795.25,
+     "USD-Blockchain": 60
+    },
+    "original_usd": {
+     "CLORE-Blockchain": {
+      "on_demand": 60,
+      "spot": 60
+     }
+    },
+    "usd": {
+     "on_demand_btc": null,
+     "on_demand_clore": 60.14066830497253,
+     "on_demand_usd": 60,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "PRIME Z270-P",
+    "cpu": "Intel(R) Pentium(R) CPU G4560 @ 3.50GHz",
+    "cpus": "2/4",
+    "ram": 16,
+    "disk": "SPCCx20Solidx20Statex 97.0492GB",
+    "disk_speed": 358.42,
+    "gpu": "6x NVIDIA CMP 90HX",
+    "gpuram": 10,
+    "net": {
+     "cc": "RU",
+     "down": 82.52,
+     "up": 68.77,
+     "test_history": [
+      "S|1736920053|85.38|87.57",
+      "S|1738303289|82.52|68.77"
+     ]
+    },
+    "backend_version": 24,
+    "pcie_rev": 2,
+    "pcie_width": 1,
+    "xfs": 1,
+    "update_channel": "stable",
+    "stock_oc_override": true,
+    "pl": [
+     230,
+     230,
+     230,
+     230,
+     230,
+     230
+    ],
+    "stock_pl": [
+     230,
+     230,
+     230,
+     230,
+     230,
+     230
+    ],
+    "stock_oc": [
+     {
+      "model": "CMP 90HX",
+      "core_offset": 125,
+      "mem_offset": -1000,
+      "core_lock": 1650,
+      "mem_lock": null
+     },
+     {
+      "model": "CMP 90HX",
+      "core_offset": 125,
+      "mem_offset": -1000,
+      "core_lock": 1650,
+      "mem_lock": null
+     },
+     {
+      "model": "CMP 90HX",
+      "core_offset": 125,
+      "mem_offset": -1000,
+      "core_lock": 1650,
+      "mem_lock": null
+     },
+     {
+      "model": "CMP 90HX",
+      "core_offset": 125,
+      "mem_offset": -1000,
+      "core_lock": 1650,
+      "mem_lock": null
+     },
+     {
+      "model": "CMP 90HX",
+      "core_offset": 125,
+      "mem_offset": -1000,
+      "core_lock": 1650,
+      "mem_lock": null
+     },
+     {
+      "model": "CMP 90HX",
+      "core_offset": 125,
+      "mem_offset": -1000,
+      "core_lock": 1650,
+      "mem_lock": null
+     }
+    ]
+   },
+   "partial_gpu_rental": false,
+   "reliability": 0.9994,
+   "allowed_coins": [
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 4.76,
+    "cnt": 50
+   },
+   "gpu_array": [
+    "CMP 90HX",
+    "CMP 90HX",
+    "CMP 90HX",
+    "CMP 90HX",
+    "CMP 90HX",
+    "CMP 90HX"
+   ],
+   "cuda_version": "13.3"
+  },
+  {
+   "id": 121464,
+   "owner": 65544,
+   "autoprice": "usd",
+   "mrl": 48,
+   "price": {
+    "on_demand": {
+     "USD-Blockchain": 15
+    },
+    "spot": {
+     "USD-Blockchain": 15
+    },
+    "original_usd": {},
+    "usd": {
+     "on_demand_btc": null,
+     "on_demand_clore": null,
+     "on_demand_usd": 15,
+     "spot": 0
+    }
+   },
+   "rented": true,
+   "specs": {
+    "mb": "X11SPM-F",
+    "cpu": "Intel(R) Xeon(R) Silver 4210 CPU @ 2.20GHz",
+    "cpus": "10/20",
+    "ram": 384,
+    "disk": " 48.5255GB",
+    "disk_speed": 575.32,
+    "gpu": "1x NVIDIA H100",
+    "gpuram": 80,
+    "net": {
+     "cc": "RU",
+     "down": 91.37,
+     "up": 93.18,
+     "test_history": [
+      "S|1791968557|91.37|93.18"
+     ]
+    },
+    "backend_version": 24,
+    "pcie_rev": 3,
+    "pcie_width": 16,
+    "update_channel": "stable",
+    "xfs": 3,
+    "pl": [
+     700
+    ],
+    "stock_pl": [
+     700
+    ],
+    "stock_oc": "default"
+   },
+   "partial_gpu_rental": {
+    "total_gpus": 1,
+    "available_gpus": 0,
+    "free_indices": []
+   },
+   "reliability": 0.493,
+   "allowed_coins": [
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 5,
+    "cnt": 2
+   },
+   "gpu_array": [
+    "H100"
+   ],
+   "cuda_version": "13.0"
+  },
+  {
+   "id": 103371,
+   "owner": 39395,
+   "autoprice": "usd",
+   "mrl": 96,
+   "price": {
+    "on_demand": {
+     "bitcoin": 0.00035596,
+     "CLORE-Blockchain": 14897.62,
+     "USD-Blockchain": 30
+    },
+    "spot": {
+     "bitcoin": 0.00035596,
+     "CLORE-Blockchain": 14897.62,
+     "USD-Blockchain": 30
+    },
+    "original_usd": {
+     "bitcoin": {
+      "on_demand": 30,
+      "spot": 30
+     },
+     "CLORE-Blockchain": {
+      "on_demand": 30,
+      "spot": 30
+     }
+    },
+    "usd": {
+     "on_demand_btc": 30.003230160454127,
+     "on_demand_clore": 30.07032406016143,
+     "on_demand_usd": 30,
+     "spot": 0
+    }
+   },
+   "rented": false,
+   "specs": {
+    "mb": "PRIME H310M-A R2.0",
+    "cpu": "Intel(R) Pentium(R) Gold G5400 CPU @ 3.70GHz",
+    "cpus": "2/4",
+    "ram": 8,
+    "gpu": "3x NVIDIA GeForce RTX 3090",
+    "gpuram": 24,
+    "disk": "KINGSTONx20SA400S37120G 69.8803GB",
+    "disk_speed": 292.83,
+    "net": {
+     "up": 32.01,
+     "down": 88.88,
+     "cc": "HR",
+     "test_history": [
+      "S|1778181132|89.75|32.73",
+      "S|1779564825|88.88|32.01"
+     ]
+    },
+    "backend_version": 24,
+    "pcie_rev": 2,
+    "pcie_width": 1,
+    "xfs": 3,
+    "update_channel": "stable",
+    "stock_oc_override": true,
+    "pl": [
+     300,
+     300,
+     280
+    ],
+    "stock_pl": [
+     290,
+     300,
+     290
+    ],
+    "stock_oc": [
+     {
+      "model": "RTX 3090",
+      "core_offset": 250,
+      "mem_offset": null,
+      "core_lock": 1700,
+      "mem_lock": 5001
+     },
+     {
+      "model": "RTX 3090",
+      "core_offset": 250,
+      "mem_offset": null,
+      "core_lock": 1700,
+      "mem_lock": 5001
+     },
+     {
+      "model": "RTX 3090",
+      "core_offset": 250,
+      "mem_offset": null,
+      "core_lock": 1700,
+      "mem_lock": 5001
+     }
+    ]
+   },
+   "partial_gpu_rental": {
+    "total_gpus": 3,
+    "available_gpus": 3,
+    "free_indices": [
+     0,
+     1,
+     2
+    ]
+   },
+   "reliability": 0.9999,
+   "allowed_coins": [
+    "bitcoin",
+    "CLORE-Blockchain",
+    "USD-Blockchain"
+   ],
+   "rating": {
+    "avg": 3.72,
+    "cnt": 18
+   },
+   "gpu_array": [
+    "RTX 3090",
+    "RTX 3090",
+    "RTX 3090"
+   ],
+   "cuda_version": "13.2"
+  }
+ ],
+ "my_servers": [],
+ "code": 0
+}

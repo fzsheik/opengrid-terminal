@@ -89,6 +89,8 @@ _ALL = [
                  "global list prices per GPU-hour; shapes from Oracle's pricing page"),
     ProviderMeta("ibm", "IBM Cloud", "general_cloud", "public_api", "globalcatalog.cloud.ibm.com",
                  "https://www.ibm.com/cloud/gpu", "VPC GPU virtual servers; on-demand and spot per region"),
+    ProviderMeta("thundercompute", "Thunder Compute", "neocloud", "authenticated_api", "api.thundercompute.com",
+                 "https://www.thundercompute.com", "instance list prices incl. base vCPUs and 100 GB disk per GPU; live stock"),
     ProviderMeta("arkane", "Arkane Cloud", "neocloud", "public_page", "arkanecloud.com", "https://arkanecloud.com",
                  "on-demand Cloud GPU prices per GPU-hour, read as 1-GPU listings"),
     ProviderMeta("vessl", "VESSL AI", "neocloud", "public_page", "vessl.ai", "https://vessl.ai",
@@ -108,6 +110,9 @@ _ALL = [
                  "Indian cloud; USD on-demand list from its pricing.json feed, per GPU-hour; INR-only spot and committed rates not read"),
     ProviderMeta("simplepod", "SimplePod", "marketplace", "public_api", "api.simplepod.ai", "https://simplepod.ai",
                  "own racks plus community hosts; one listing per open on-demand offer (Docker and VM); disk billed extra"),
+    ProviderMeta("clore", "Clore.ai", "marketplace", "authenticated_api", "api.clore.ai", "https://clore.ai",
+                 "host-set USD prices per server per day, plus the renter fee; the median row stands for Clore, "
+                 "the cheapest row is excluded from market math"),
     ProviderMeta("modal", "Modal", "general_cloud", "public_page", "modal.com", "https://modal.com",
                  "serverless GPUs, billed per second; GPU-only rate (CPU and memory extra), preemptible by default"),
     ProviderMeta("replicate", "Replicate", "general_cloud", "public_page", "replicate.com", "https://replicate.com",

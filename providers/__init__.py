@@ -18,6 +18,7 @@ from providers.azure import AzureProvider
 from providers.baseten import BasetenProvider
 from providers.beam import BeamProvider
 from providers.civo import CivoProvider
+from providers.clore import CloreProvider
 from providers.coreweave import CoreWeaveProvider
 from providers.deepinfra import DeepInfraProvider
 from providers.digitalocean import DigitalOceanProvider
@@ -52,6 +53,7 @@ from providers.shadeform import (
     PhyntecProvider,
     ScalewayProvider,
 )
+from providers.thundercompute import ThunderComputeProvider
 from providers.together import TogetherProvider
 from providers.vast import VastProvider
 from providers.verda import VerdaProvider
@@ -94,6 +96,7 @@ PROVIDERS: dict[str, type[Provider]] = {
         KoyebProvider,
         OracleProvider,
         IbmProvider,
+        ThunderComputeProvider,
         ArkaneProvider,
         VesslProvider,
         MithrilProvider,
@@ -107,6 +110,7 @@ PROVIDERS: dict[str, type[Provider]] = {
         ReplicateProvider,
         BasetenProvider,
         BeamProvider,
+        CloreProvider,
     )
 }
 
@@ -146,6 +150,7 @@ __all__ = [
     "KoyebProvider",
     "OracleProvider",
     "IbmProvider",
+    "ThunderComputeProvider",
     "ArkaneProvider",
     "VesslProvider",
     "MithrilProvider",
@@ -159,6 +164,7 @@ __all__ = [
     "ReplicateProvider",
     "BasetenProvider",
     "BeamProvider",
+    "CloreProvider",
     "find_endpoint",
     "gather_limited",
     "to_decimal",
