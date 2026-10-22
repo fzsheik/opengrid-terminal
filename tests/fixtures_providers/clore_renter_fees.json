@@ -1,0 +1,45 @@
+{
+ "renter_fees": {
+  "on_demand": {
+   "base": {
+    "bitcoin": 5,
+    "CLORE-Blockchain": 5,
+    "USD-Blockchain": 5
+   },
+   "extra": {
+    "bitcoin": 0,
+    "CLORE-Blockchain": 0,
+    "USD-Blockchain": 0
+   }
+  },
+  "spot": {
+   "base": {
+    "bitcoin": 1.25,
+    "CLORE-Blockchain": 1.25,
+    "USD-Blockchain": 1.25
+   },
+   "extra": {
+    "bitcoin": 0,
+    "CLORE-Blockchain": 0,
+    "USD-Blockchain": 0
+   }
+  }
+ },
+ "poh_config": {
+  "max_reduction_percent": 50,
+  "max_poh_amount": 2000000
+ },
+ "creation_fees": {
+  "on_demand": {
+   "bitcoin": 3e-07,
+   "CLORE-Blockchain": 0.5,
+   "USD-Blockchain": 0.1
+  },
+  "spot": {
+   "bitcoin": 1e-07,
+   "CLORE-Blockchain": 0.05,
+   "USD-Blockchain": 0.005
+  }
+ },
+ "code": 0
+}
