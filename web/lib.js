@@ -158,6 +158,8 @@
     const d = new Date(iso);
     const p = n => String(n).padStart(2, "0");
     if (spanHours <= 36) return p(d.getHours()) + ":" + p(d.getMinutes());
+    // spans of months (ticks on month starts): "Apr", and the year on January
+    if (spanHours > 24 * 120) return d.toLocaleString("en-US", { month: "short" }) + (d.getMonth() === 0 ? " " + d.getFullYear() : "");
     return (d.getMonth() + 1) + "/" + d.getDate() + (spanHours <= 24 * 4 ? " " + p(d.getHours()) + "h" : "");
   }
   const spanHours = (t0, t1) => (new Date(t1) - new Date(t0)) / 36e5;

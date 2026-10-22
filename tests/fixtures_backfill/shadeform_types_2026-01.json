@@ -1,0 +1,485 @@
+{
+ "_source": "https://web.archive.org/web/20260103194526/https://api.shadeform.ai/v1/instances/types (trimmed: 3 GPU types each for crusoe/latitude/denvr, 2 of a cloud read elsewhere)",
+ "instance_types": [
+  {
+   "cloud": "crusoe",
+   "shade_instance_type": "A100_80G_sxm4x8",
+   "cloud_instance_type": "a100-80gb-sxm-ib.8x",
+   "configuration": {
+    "memory_in_gb": 960,
+    "storage_in_gb": 7808,
+    "vcpus": 96,
+    "num_gpus": 8,
+    "gpu_type": "A100_80G",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu22.04_cuda12.2_shade_os",
+     "ubuntu20.04_cuda12.2_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 80,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 960,
+   "storage_in_gb": 7808,
+   "vcpus": 96,
+   "num_gpus": 8,
+   "gpu_type": "A100_80G",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 1560,
+   "availability": [
+    {
+     "region": "culpeper-usa-1",
+     "available": false,
+     "display_name": "US, Culpeper, VA"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 600
+   },
+   "deployment_type": "vm"
+  },
+  {
+   "cloud": "crusoe",
+   "shade_instance_type": "A100_80G",
+   "cloud_instance_type": "a100-80gb.1x",
+   "configuration": {
+    "memory_in_gb": 120,
+    "storage_in_gb": 1088,
+    "vcpus": 12,
+    "num_gpus": 1,
+    "gpu_type": "A100_80G",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu22.04_cuda12.2_shade_os",
+     "ubuntu20.04_cuda12.2_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 80,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 120,
+   "storage_in_gb": 1088,
+   "vcpus": 12,
+   "num_gpus": 1,
+   "gpu_type": "A100_80G",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 165,
+   "availability": [
+    {
+     "region": "fairview-usa-1",
+     "available": false,
+     "display_name": "US, Fairview, OH"
+    },
+    {
+     "region": "culpeper-usa-1",
+     "available": false,
+     "display_name": "US, Culpeper, VA"
+    },
+    {
+     "region": "us-west1-a",
+     "available": false,
+     "display_name": "us-west1-a"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 600
+   },
+   "deployment_type": "vm"
+  },
+  {
+   "cloud": "crusoe",
+   "shade_instance_type": "A100_80Gx2",
+   "cloud_instance_type": "a100-80gb.2x",
+   "configuration": {
+    "memory_in_gb": 240,
+    "storage_in_gb": 3968,
+    "vcpus": 24,
+    "num_gpus": 2,
+    "gpu_type": "A100_80G",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu22.04_cuda12.2_shade_os",
+     "ubuntu20.04_cuda12.2_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 80,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 240,
+   "storage_in_gb": 3968,
+   "vcpus": 24,
+   "num_gpus": 2,
+   "gpu_type": "A100_80G",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 330,
+   "availability": [
+    {
+     "region": "fairview-usa-1",
+     "available": false,
+     "display_name": "US, Fairview, OH"
+    },
+    {
+     "region": "us-west1-a",
+     "available": false,
+     "display_name": "us-west1-a"
+    },
+    {
+     "region": "culpeper-usa-1",
+     "available": false,
+     "display_name": "US, Culpeper, VA"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 600
+   },
+   "deployment_type": "vm"
+  },
+  {
+   "cloud": "latitude",
+   "shade_instance_type": "H100",
+   "cloud_instance_type": "g3-h100-small",
+   "configuration": {
+    "memory_in_gb": 192,
+    "storage_in_gb": 7600,
+    "vcpus": 16,
+    "num_gpus": 1,
+    "gpu_type": "H100",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu22.04_cuda12.4_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 80,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 192,
+   "storage_in_gb": 7600,
+   "vcpus": 16,
+   "num_gpus": 1,
+   "gpu_type": "H100",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 199,
+   "availability": [
+    {
+     "region": "dallas-usa-1",
+     "available": true,
+     "display_name": "US, Dallas, TX"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 600
+   },
+   "deployment_type": "baremetal"
+  },
+  {
+   "cloud": "latitude",
+   "shade_instance_type": "H100x8_NVLINK",
+   "cloud_instance_type": "g3-h100-large",
+   "configuration": {
+    "memory_in_gb": 1536,
+    "storage_in_gb": 15200,
+    "vcpus": 128,
+    "num_gpus": 8,
+    "gpu_type": "H100",
+    "interconnect": "pcie",
+    "nvlink": true,
+    "os_options": [
+     "ubuntu22.04_cuda12.4_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 80,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 1536,
+   "storage_in_gb": 15200,
+   "vcpus": 128,
+   "num_gpus": 8,
+   "gpu_type": "H100",
+   "interconnect": "pcie",
+   "nvlink": true,
+   "hourly_price": 1434,
+   "availability": [
+    {
+     "region": "dallas-usa-1",
+     "available": false,
+     "display_name": "US, Dallas, TX"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 600
+   },
+   "deployment_type": "baremetal"
+  },
+  {
+   "cloud": "latitude",
+   "shade_instance_type": "H100x4",
+   "cloud_instance_type": "g3-h100-medium",
+   "configuration": {
+    "memory_in_gb": 768,
+    "storage_in_gb": 7600,
+    "vcpus": 128,
+    "num_gpus": 4,
+    "gpu_type": "H100",
+    "interconnect": "pcie",
+    "nvlink": true,
+    "os_options": [
+     "ubuntu22.04_cuda12.4_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 80,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 768,
+   "storage_in_gb": 7600,
+   "vcpus": 128,
+   "num_gpus": 4,
+   "gpu_type": "H100",
+   "interconnect": "pcie",
+   "nvlink": true,
+   "hourly_price": 897,
+   "availability": [
+    {
+     "region": "dallas-usa-1",
+     "available": true,
+     "display_name": "US, Dallas, TX"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 600
+   },
+   "deployment_type": "baremetal"
+  },
+  {
+   "cloud": "denvr",
+   "shade_instance_type": "H100_sxm5x8",
+   "cloud_instance_type": "H100_80GB_SXM_8x",
+   "configuration": {
+    "memory_in_gb": 940,
+    "storage_in_gb": 20000,
+    "vcpus": 208,
+    "num_gpus": 8,
+    "gpu_type": "H100",
+    "interconnect": "sxm5",
+    "nvlink": true,
+    "os_options": [
+     "ubuntu22.04_cuda12.4_shade_os",
+     "ubuntu20.04_cuda12.4_shade_os",
+     "ubuntu20.04",
+     "ubuntu22.04"
+    ],
+    "vram_per_gpu_in_gb": 80,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 940,
+   "storage_in_gb": 20000,
+   "vcpus": 208,
+   "num_gpus": 8,
+   "gpu_type": "H100",
+   "interconnect": "sxm5",
+   "nvlink": true,
+   "hourly_price": 1760,
+   "availability": [
+    {
+     "region": "houston-usa-1",
+     "available": false,
+     "display_name": "US, Houston, TX"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 600,
+    "max_boot_in_sec": 1200
+   },
+   "deployment_type": "vm"
+  },
+  {
+   "cloud": "denvr",
+   "shade_instance_type": "A100_sxm4x8",
+   "cloud_instance_type": "A100_40GB_SXM_8x",
+   "configuration": {
+    "memory_in_gb": 940,
+    "storage_in_gb": 13600,
+    "vcpus": 120,
+    "num_gpus": 8,
+    "gpu_type": "A100",
+    "interconnect": "sxm4",
+    "nvlink": true,
+    "os_options": [
+     "ubuntu22.04_cuda12.2_shade_os",
+     "ubuntu20.04_cuda12.2_shade_os",
+     "ubuntu20.04",
+     "ubuntu22.04"
+    ],
+    "vram_per_gpu_in_gb": 40,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 940,
+   "storage_in_gb": 13600,
+   "vcpus": 120,
+   "num_gpus": 8,
+   "gpu_type": "A100",
+   "interconnect": "sxm4",
+   "nvlink": true,
+   "hourly_price": 1000,
+   "availability": [
+    {
+     "region": "calgary-canada-1",
+     "available": true,
+     "display_name": "CA, Calgary"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 600,
+    "max_boot_in_sec": 900
+   },
+   "deployment_type": "vm"
+  },
+  {
+   "cloud": "denvr",
+   "shade_instance_type": "Gaudi2x8",
+   "cloud_instance_type": "GAUDI2_8X",
+   "configuration": {
+    "memory_in_gb": 940,
+    "storage_in_gb": 27000,
+    "vcpus": 152,
+    "num_gpus": 8,
+    "gpu_type": "GAUDI2",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu22.04_habana1.16.2_shade_os",
+     "ubuntu22.04",
+     "ubuntu20.04"
+    ],
+    "vram_per_gpu_in_gb": 96,
+    "gpu_manufacturer": "intel"
+   },
+   "memory_in_gb": 940,
+   "storage_in_gb": 27000,
+   "vcpus": 152,
+   "num_gpus": 8,
+   "gpu_type": "GAUDI2",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 880,
+   "availability": [
+    {
+     "region": "houston-usa-1",
+     "available": false,
+     "display_name": "US, Houston, TX"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 600,
+    "max_boot_in_sec": 900
+   },
+   "deployment_type": "vm"
+  },
+  {
+   "cloud": "imwt",
+   "shade_instance_type": "A6000x8",
+   "cloud_instance_type": "gpu_8x_a6000",
+   "configuration": {
+    "memory_in_gb": 384,
+    "storage_in_gb": 2560,
+    "vcpus": 62,
+    "num_gpus": 8,
+    "gpu_type": "A6000",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu22.04_cuda12.6_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 48,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 384,
+   "storage_in_gb": 2560,
+   "vcpus": 62,
+   "num_gpus": 8,
+   "gpu_type": "A6000",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 392,
+   "availability": [
+    {
+     "region": "desmoines-usa-2",
+     "available": false,
+     "display_name": "US, Des Moines, IA"
+    },
+    {
+     "region": "kansascity-usa-2",
+     "available": false,
+     "display_name": "US, Kansas City, MO"
+    },
+    {
+     "region": "kansascity-usa-6",
+     "available": false,
+     "display_name": "US, Kansas City, MO"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 600
+   },
+   "deployment_type": "vm"
+  },
+  {
+   "cloud": "imwt",
+   "shade_instance_type": "A6000",
+   "cloud_instance_type": "gpu_1x_a6000",
+   "configuration": {
+    "memory_in_gb": 48,
+    "storage_in_gb": 256,
+    "vcpus": 6,
+    "num_gpus": 1,
+    "gpu_type": "A6000",
+    "interconnect": "pcie",
+    "nvlink": false,
+    "os_options": [
+     "ubuntu22.04_cuda12.6_shade_os"
+    ],
+    "vram_per_gpu_in_gb": 48,
+    "gpu_manufacturer": "nvidia"
+   },
+   "memory_in_gb": 48,
+   "storage_in_gb": 256,
+   "vcpus": 6,
+   "num_gpus": 1,
+   "gpu_type": "A6000",
+   "interconnect": "pcie",
+   "nvlink": false,
+   "hourly_price": 49,
+   "availability": [
+    {
+     "region": "kansascity-usa-6",
+     "available": false,
+     "display_name": "US, Kansas City, MO"
+    },
+    {
+     "region": "desmoines-usa-2",
+     "available": false,
+     "display_name": "US, Des Moines, IA"
+    },
+    {
+     "region": "kansascity-usa-2",
+     "available": true,
+     "display_name": "US, Kansas City, MO"
+    }
+   ],
+   "boot_time": {
+    "min_boot_in_sec": 300,
+    "max_boot_in_sec": 600
+   },
+   "deployment_type": "vm"
+  }
+ ]
+}

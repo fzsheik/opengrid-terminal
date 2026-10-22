@@ -360,6 +360,24 @@ _add("NVIDIA Tesla V100 16GB", "NVIDIA Tesla V100 16GB")
 _add("NVIDIA H100 80GB SXM5", "NVIDIA H100 SXM5 80GB")
 _add("NVIDIA H200 141GB SXM5", "NVIDIA H200 SXM5 141GB")
 
+# Archived price pages (backfill/parsers, methodology/archived-history.md): names older designs of provider pages
+# printed. Only names whose card is unambiguous: "HGX" boards are SXM; A5000 / A6000 / RTX 6000 Ada exist only as
+# those RTX workstation cards; "SXM" / "PCIe" stated. Still unmapped on purpose: bare "A100 80GB" / "H100 80GB"
+# (form factor not stated), "NVIDIA HGX H100 Inference" (Together, one capture: what it is is not stated).
+_add("NVIDIA H100 80GB SXM5", "NVIDIA HGX H100 SXM")                          # Together, Oct 2025 - Mar 2026
+_add("NVIDIA L40S 48GB", "NVIDIA L40S GPU with AMD", "NVIDIA L40S GPU with Intel")  # Nebius, Nov 2025 - Mar 2026
+_add("NVIDIA RTX A5000 24GB", "NVIDIA A5000 24GB")                            # Jarvislabs, Dec 2025 - Apr 2026
+_add("NVIDIA RTX A6000 48GB", "NVIDIA A6000 48GB")                            # Jarvislabs, Hyperstack
+_add("NVIDIA RTX 6000 Ada 48GB", "NVIDIA RTX6000 Ada 48GB", "NVIDIA RTX 6000 Ada Generation 48GB")
+_add("NVIDIA RTX 4000 Ada 20GB", "NVIDIA RTX 4000 Ada Generation 20GB")       # DigitalOcean
+_add("NVIDIA A100 80GB SXM4", "NVIDIA A100 SXM 80GB", "NVIDIA A100 80GB SXM", "NVIDIA HGX A100 80GB")
+_add("NVIDIA A100 40GB SXM4", "NVIDIA A100 SXM 40GB")                         # Denvr
+_add("NVIDIA A100 80GB PCIe", "NVIDIA PCIe A100 80GB")                        # Vultr
+_add("NVIDIA A100 40GB PCIe", "NVIDIA A100 40GB PCIe")                        # Crusoe
+_add("NVIDIA A40 48GB", "NVIDIA A40 48GB")                                    # Crusoe
+_add("NVIDIA RTX PRO 6000 96GB SE", "NVIDIA RTX Pro 6000 SE 96GB")            # Hyperstack
+_add("AMD Instinct MI300X 192GB", "AMD Instinct MI300X 192GB")                # DigitalOcean
+
 # --------------------------------------------------------------------------
 # Seen, deliberately not mapped
 # --------------------------------------------------------------------------

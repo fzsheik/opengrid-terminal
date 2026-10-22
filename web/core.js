@@ -35,7 +35,7 @@ DOM          OG.h(tag, props, ...kids)  (props: class, style, on<event>, any att
 Formatting   OG.fmt.price/pct/num/compact/age/time/date/dateTime/dir/cls, OG.chg(fraction) (▲/▼ span)
 States       OG.loading(text) · OG.empty(text) · OG.error(err, retry) · OG.insufficient(reason, title)
              OG.na(reason) (inline "n/a" with the reason) · OG.value(v, fmtFn, reason) · OG.reasonOf(obj)
-Badges       OG.kindBadge("observed"|"estimated"|"transaction"; "inferred" renders nothing) · OG.freshBadge(isoOrSeconds|label)
+Badges       OG.kindBadge("observed"|"estimated"|"transaction"|"archived"; "inferred" renders nothing) · OG.freshBadge(isoOrSeconds|label)
              OG.badge(text, tone)
 Components   OG.head(title, sub, ...right) · OG.section(title, ...kids) · OG.stats(items) · OG.seg(options, value, onChange)
              OG.tabs(options, value, onChange) · OG.table(spec) · OG.csv(rows, columns, filename) · OG.logo(p, size)
@@ -754,6 +754,7 @@ Full docs: web/README.md.
     observed: "Read directly from a provider and normalized",
     estimated: "A model or assumption fills a gap",
     transaction: "What an OpenGrid execution actually quoted or paid",
+    archived: "Read by OpenGrid from a public archive (an archived price page or price-list version), not observed live",
   };
   OG.badge = (text, tone, title) => h("span", { class: "badge " + (tone || ""), title: title || null }, text);
   // "inferred" is a data kind in the API but is not shown as a badge in the UI

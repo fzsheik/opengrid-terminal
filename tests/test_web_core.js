@@ -146,6 +146,11 @@ ok(OG.reasonOf({ value: null, reason: "coverage below 3 providers" }) === "cover
   ok(tt.length >= 4 && tt.length <= 9 && tt.every(t => t >= t0 && t <= t1), "time ticks inside the span: " + tt.length);
   ok(tt.every((t, i) => i === 0 || t - tt[i - 1] === tt[1] - tt[0]), "time ticks evenly stepped");
   ok(new Date(tt[0]).getMinutes() === 0, "time ticks land on round local times");
+  const yt = C.timeTicks(Date.UTC(2025, 9, 18), Date.UTC(2026, 9, 18), 7);
+  ok(yt.length >= 3 && yt.length <= 5 && yt.every(t => new Date(t).getDate() === 1 && new Date(t).getHours() === 0 && new Date(t).getMonth() % 3 === 0),
+    "a year of ticks lands on quarter-month starts: " + yt.map(t => new Date(t).toDateString()).join(", "));
+  const Lib = require("../web/lib.js");
+  ok(Lib.timeLabel(new Date(2026, 3, 1).toISOString(), 24 * 365) === "Apr" && Lib.timeLabel(new Date(2026, 0, 1).toISOString(), 24 * 365) === "Jan 2026", "month labels on long spans");
   const bn = C.bins([1, 1.1, 1.2, 2, 3.9, 4], 4);
   ok(bn.reduce((s, x) => s + x.count, 0) === 6 && bn[0].x0 <= 1 && bn[bn.length - 1].x1 >= 4, "bins cover every value: " + JSON.stringify(bn));
   ok(bn.every((x, i) => i === 0 || Math.abs(x.x0 - bn[i - 1].x1) < 1e-9), "bins are contiguous");

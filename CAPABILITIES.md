@@ -263,6 +263,14 @@ Current price percentile vs its own 30-day and 90-day distribution, distance fro
 median and from historical low/high, and labels (very cheap → very expensive) only when the window
 has enough samples. Generated sentences like *"H100 is in the 18th percentile of its 90-day range"*.
 
+**Archived price history** (data kind `archived`, methodology/archived-history.md): about 12 months of prices
+from before OpenGrid started recording, read by OpenGrid's own parsers from Internet Archive captures of
+provider price pages and from AWS's monthly EC2 price-list versions (`python -m backfill import`). Shown per
+provider at `GET /v1/history/{gpu}/archived`, each sample linked to the exact
+archived document. The 1Y / ALL price chart runs one continuous line through it (archived stretch drawn lighter
+and labelled), via `GET /v1/history/{gpu}/extended`. Sampled only on capture days, so it misses short moves;
+never used in percentiles, indices, events or routing.
+
 ### 4.4 Market structure
 - **Dispersion** per GPU: low / median / high, absolute and % spread, IQR, standard deviation,
   coefficient of variation, providers, available listings.

@@ -6,7 +6,9 @@ and returns a handle {el, update(opts), destroy()} (timeseries also has highligh
   OG.charts.timeseries(el, {times, series:[{key,label,values,color,step=true,width,dash,opacity,halo}],
                             band:{lo:[], hi:[], label, color}, events:[{t, label, kind, severity, detail, href, onClick(event), hint, color}],
                             yFmt, height=260, hatchBefore: iso, yZero=false, endLabels=true, legend=true, onHover(i|null),
-                            gapReason(i) -> string|null (tooltip text where a series has no value)})
+                            gapReason(i) -> string|null (tooltip text where a series has no value),
+                            fadeBefore: iso (lines drawn lighter before it, on a faint tint; e.g. archived history),
+                            tipNote(i) -> string|null (one extra muted line in the tooltip)})
                             A value with null on both sides is drawn as a dot (a line cannot show it).
   OG.charts.sparkline(values, {dir, width=96, height=22, color}) -> <svg> (not a container renderer)
   OG.charts.bars(el, {items:[{label, value, color, href, title}], fmt, horizontal=true, height})
@@ -56,6 +58,15 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
     if (!(t1 > t0)) return [t0];
     const raw = (t1 - t0) / Math.max(1, count || 5);
     const step = STEPS.find(s => s >= raw) || STEPS[STEPS.length - 1];
+    if (step >= 30 * DAY) {
+      // months: ticks on local month starts, every 1 / 3 / 12 months (fixed-length steps drift off the 1st)
+      const every = step >= 365 * DAY ? 12 : step >= 91 * DAY ? 3 : 1, out = [];
+      const d = new Date(t0);
+      let m = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+      while (m.getMonth() % every) m = new Date(m.getFullYear(), m.getMonth() + 1, 1);
+      for (; +m <= t1; m = new Date(m.getFullYear(), m.getMonth() + every, 1)) out.push(+m);
+      return out;
+    }
     const off = new Date(t0).getTimezoneOffset() * MIN;            // align to local clock / midnight
     const out = [];
     for (let t = Math.ceil((t0 - off) / step) * step + off; t <= t1; t += step) out.push(t);
@@ -265,11 +276,30 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
           else svg.append(svgText({ x: Lm + pw - 4, y: Tm + ph - 6, "text-anchor": "end", class: "c-clipl" }, txt));
         }
       }
+      // fadeBefore: the part of every line before this time is drawn again, lighter, over a faint tint (the
+      // full-strength copy is clipped to after it), so one continuous line reads as two kinds of data
+      let fadeX = null;
+      if (o.fadeBefore) {
+        const fx = xs(+new Date(o.fadeBefore));
+        if (fx > Lm && fx < Lm + pw) {
+          fadeX = fx;
+          svg.querySelector("defs").append(
+            s("clipPath", { id: id + "fa" }, s("rect", { x: Lm, y: Tm - 3, width: fx - Lm, height: ph + 6 })),
+            s("clipPath", { id: id + "fb" }, s("rect", { x: fx, y: Tm - 3, width: Lm + pw - fx + 1, height: ph + 6 })));
+          plot.append(s("rect", { x: Lm, y: Tm, width: fx - Lm, height: ph, class: "c-fade" }));
+        }
+      }
       refs = new Map();
       for (const x of series) {
         const d = x.step === false ? L.linePath(x.values, xAt, ys) : L.stepPath(x.values, xAt, ys);
         const p = s("path", { d, fill: "none", stroke: x.color || "#94a3b8", "stroke-width": x.halo ? 6 : x.width || 1.5, "stroke-opacity": x.halo ? 0.18 : x.opacity || 0.95,
           "stroke-dasharray": x.dash || null, "stroke-linejoin": "round", "stroke-linecap": "round" });
+        if (fadeX != null) {
+          p.setAttribute("clip-path", `url(#${id}fb)`);
+          plot.append(s("path", { d, fill: "none", stroke: x.color || "#94a3b8", "stroke-width": x.halo ? 6 : x.width || 1.5,
+            "stroke-opacity": x.halo ? 0.1 : (x.opacity || 0.95) * 0.5, "stroke-dasharray": x.dash || null, "stroke-linejoin": "round",
+            "stroke-linecap": "round", "clip-path": `url(#${id}fa)`, class: "c-faded" }));
+        }
         plot.append(p);
         // a published value with nothing on either side is invisible as a line: draw it as a dot
         const dots = x.halo ? [] : isolated(x.values).map(i => s("circle", { cx: xAt(i), cy: ys(x.values[i]), r: (x.width || 1.5) + 1, fill: x.color || "#94a3b8", class: "c-iso" }));
@@ -340,6 +370,7 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
         if (vals.length > 12) nodes.push(hd("div", "ct-t", `+${vals.length - 12} more`));
         if (!vals.length) nodes.push(hd("div", "ct-t", (o.gapReason && o.gapReason(i)) || "no data at this time"));
         else if (o.gapReason && vals.length < series.filter(x2 => !x2.halo).length) { const why = o.gapReason(i); if (why) nodes.push(hd("div", "ct-d", why)); }
+        if (o.tipNote) { const note = o.tipNote(i); if (note) nodes.push(hd("div", "ct-d", note)); }
         f.tip(x * (r.width / W), 4, nodes);
         o.onHover && o.onHover(i);
       });

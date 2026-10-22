@@ -26,6 +26,8 @@
       ["GET", "/v1/markets/{gpu}/dispersion", "Dispersion of one GPU over time", "gpu*, days, resolution"],
       ["GET", "/v1/markets/{gpu}/regions", "One GPU by region group: cheapest, median, providers, premium", "gpu*"],
       ["GET", "/v1/history/{gpu}", "One GPU over time: lowest / median / highest / provider count + index", "gpu*, window, resolution, segment"],
+      ["GET", "/v1/history/{gpu}/extended", "One GPU daily as far back as archives reach: archived prices (held between captures) before recording, observed after; kind per day", "gpu*, days, segment"],
+      ["GET", "/v1/history/{gpu}/archived", "ARCHIVED prices before recording: Internet Archive captures of provider price pages + AWS price-list versions, per provider and month", "gpu*, segment"],
       ["GET", "/v1/spreads", "Every GPU ranked by fragmentation and spread", "min_providers"],
       ["GET", "/v1/heatmaps/{kind}", "Heatmap matrix: rows, cols, cells (null = no data)", "kind*, days"],
       ["GET", "/v1/regions", "Region groups and what is listed in each now", ""],

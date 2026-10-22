@@ -19,6 +19,9 @@ dependencies = [
 llm = [
     "anthropic>=1.13.0",
 ]
+backfill = [
+    "brotli>=1.2.0",
+]
 
 # The CLI / MCP package (cli/) is also a server dependency: the hosted MCP endpoint at /mcp (api/mcp_remote.py)
 # serves the same tool implementations. A path source: Railpack copies the whole tree before `uv sync` when

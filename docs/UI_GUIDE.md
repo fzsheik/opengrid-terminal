@@ -154,7 +154,7 @@ Dark by default, or the OS preference on first visit; the choice is saved in the
    - Eyebrow "OpenGrid · live GPU cloud prices".
    - Headline "Compare GPU prices. Find the right compute. Run supported workloads."
    - Sub text "OpenGrid reads the public price lists of N GPU cloud providers every few minutes. See what an hour of GPU time costs everywhere, find the right GPU for your AI project, and run supported jobs safely." (N filled from /polling.)
-   - Box "What works today" with five rows and a status icon each: "Live GPU prices and comparisons" (free, no account), "GPU recommendations for your project" (free, no account), "Training demo (a simulation, no charge)" (needs an account), "Real GPU runs, each approved by OpenGrid" (early access), "Running your own code" (not yet).
+   - Box "What works today" with five rows and a status icon each: "Live GPU prices and comparisons" (free, no account), "GPU recommendations for your project" (free, no account), "Training demo (a simulation, no charge)" (needs an account), "Real GPU runs, each approved by OpenGrid" (early access), "Running your own code" (coming soon).
 2. **Hero, right column: three action cards** (each with title, arrow, one line and tags)
    - "Explore GPU Prices", "Every GPU, cheapest provider first, with price history.", tag "Free · no account". Link to /gpus. Highlighted as primary.
    - "Find Compute for My Project", "Describe your model and job; get the GPUs that fit, ranked by price.", tag "Free · no account". Link to /find.
@@ -492,10 +492,12 @@ In the menu, "Explore" (marked "Free to use, no account needed") holds "GPUs" wi
 5. Two columns. The main column comes first:
    - **"Price history"**. Controls on the right:
      - a view toggle "Market" / "Providers"
-     - a window toggle "24H", "7D" (default), "30D", "90D", "ALL"
+     - a window toggle "24H", "7D" (default), "30D", "90D", "1Y", "ALL"
      - the word "overlay" followed by chips "Events", "News" and "Moves" (all on by default)
 
      "Market" view draws median, lowest, a low-high band and a dashed OG index line. "Providers" view draws one step line per provider. Event, news and move markers sit on the time axis. Clicking a move marker opens a "Related news and events around this move (not necessarily causal)" panel under the chart, with a "×" close button. A note under the chart explains the hatched area (before every current provider was being recorded) and links "Method".
+
+     "1Y" and "ALL" draw daily values reaching back through archived prices: before the day OpenGrid started recording this GPU, each provider's price from archived copies of its price page (or AWS's monthly price list), held until its next capture. The archived stretch is drawn lighter on a faint tint; the tooltip there reads "archived · price as captured: <provider> <date>, …". The note under the chart carries an "observed" and an "archived" badge, "Before <date> (lighter): prices read from archived copies of provider price pages and AWS price lists, each held until the provider's next capture.", a "Sources" disclosure (table: Provider, Captures, From, To, Low $/GPU·h, High $/GPU·h, Latest source link) and "Method".
    - **"Availability history"**: a small chart with three lines, "Available listings", "Priced providers" and "Sold-out listings", plus a note.
    - **"Provider ranking"**: table titled "N providers · one vote each (its lowest eligible price)". Columns:
      - "#" and "Provider"
