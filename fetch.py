@@ -9,6 +9,11 @@ from config import settings
 from db import SessionLocal, init_db
 from models import RawResponse
 from providers import (
+    CivoProvider,
+    AtlanticNetProvider,
+    DeepInfraProvider,
+    E2EProvider,
+    SimplePodProvider,
     AwsProvider,
     AzureProvider,
     BoostRunProvider,
@@ -26,6 +31,13 @@ from providers import (
     KoyebProvider,
     OracleProvider,
     IbmProvider,
+    ArkaneProvider,
+    VesslProvider,
+    MithrilProvider,
+    ModalProvider,
+    ReplicateProvider,
+    BasetenProvider,
+    BeamProvider,
     CrusoeProvider,
     DenvrProvider,
     DigitalOceanProvider,
@@ -37,6 +49,7 @@ from providers import (
     LiumProvider,
     MassedComputeProvider,
     NebiusProvider,
+    NosanaProvider,
     Provider,
     RunPodProvider,
     SaladProvider,
@@ -75,6 +88,11 @@ def build_fetchers() -> list[Provider]:
     fetchers.extend(
         cls()
         for cls in (
+            CivoProvider,
+            AtlanticNetProvider,
+            DeepInfraProvider,
+            E2EProvider,
+            SimplePodProvider,
             HyperbolicProvider,
             VoltageParkProvider,
             LiumProvider,
@@ -102,6 +120,14 @@ def build_fetchers() -> list[Provider]:
             KoyebProvider,
             OracleProvider,
             IbmProvider,
+            ArkaneProvider,
+            VesslProvider,
+            MithrilProvider,
+            ModalProvider,
+            ReplicateProvider,
+            BasetenProvider,
+            BeamProvider,
+            NosanaProvider,
         )
     )
     return fetchers

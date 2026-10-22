@@ -11,10 +11,17 @@ from providers.base import (
     gather_limited,
     to_decimal,
 )
+from providers.arkane import ArkaneProvider
+from providers.atlanticnet import AtlanticNetProvider
 from providers.aws import AwsProvider
 from providers.azure import AzureProvider
+from providers.baseten import BasetenProvider
+from providers.beam import BeamProvider
+from providers.civo import CivoProvider
 from providers.coreweave import CoreWeaveProvider
+from providers.deepinfra import DeepInfraProvider
 from providers.digitalocean import DigitalOceanProvider
+from providers.e2e import E2EProvider
 from providers.gcp import GcpProvider
 from providers.hotaisle import HotAisleProvider
 from providers.hyperbolic import HyperbolicProvider
@@ -26,11 +33,16 @@ from providers.lambda_labs import LambdaProvider
 from providers.linode import LinodeProvider
 from providers.lium import LiumProvider
 from providers.massedcompute import MassedComputeProvider
+from providers.mithril import MithrilProvider
+from providers.modal import ModalProvider
 from providers.nebius import NebiusProvider
+from providers.nosana import NosanaProvider
 from providers.oracle import OracleProvider
 from providers.ovhcloud import OvhCloudProvider
+from providers.replicate import ReplicateProvider
 from providers.runpod import RunPodProvider
 from providers.salad import SaladProvider
+from providers.simplepod import SimplePodProvider
 from providers.shadeform import (
     BoostRunProvider,
     CrusoeProvider,
@@ -43,6 +55,7 @@ from providers.shadeform import (
 from providers.together import TogetherProvider
 from providers.vast import VastProvider
 from providers.verda import VerdaProvider
+from providers.vessl import VesslProvider
 from providers.voltagepark import VoltageParkProvider
 from providers.vultr import VultrProvider
 
@@ -81,6 +94,19 @@ PROVIDERS: dict[str, type[Provider]] = {
         KoyebProvider,
         OracleProvider,
         IbmProvider,
+        ArkaneProvider,
+        VesslProvider,
+        MithrilProvider,
+        NosanaProvider,
+        CivoProvider,
+        AtlanticNetProvider,
+        DeepInfraProvider,
+        E2EProvider,
+        SimplePodProvider,
+        ModalProvider,
+        ReplicateProvider,
+        BasetenProvider,
+        BeamProvider,
     )
 }
 
@@ -120,6 +146,19 @@ __all__ = [
     "KoyebProvider",
     "OracleProvider",
     "IbmProvider",
+    "ArkaneProvider",
+    "VesslProvider",
+    "MithrilProvider",
+    "NosanaProvider",
+    "CivoProvider",
+    "AtlanticNetProvider",
+    "DeepInfraProvider",
+    "E2EProvider",
+    "SimplePodProvider",
+    "ModalProvider",
+    "ReplicateProvider",
+    "BasetenProvider",
+    "BeamProvider",
     "find_endpoint",
     "gather_limited",
     "to_decimal",

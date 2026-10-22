@@ -6,8 +6,9 @@ The last test pushes both through raw storage, normalize + quality screening,
 the hourly rollup and the index vote in a scratch database.
 
 Candidates checked and not added (TensorDock, Cudo, SF Compute, Akash, io.net,
-Prime Intellect, Oblivus, Clore.ai, Nosana; Excess Supply and IMWT via
-Shadeform) are asserted absent from the registry below.
+Prime Intellect, Oblivus, Clore.ai; Excess Supply and IMWT via Shadeform) are
+asserted absent from the registry below. Nosana was added later, once its market
+API stated USD prices (tests/test_provider_decentralized.py).
 
 Run:  .venv/bin/python tests/test_provider_markets.py
 """
@@ -202,7 +203,10 @@ def test_registry():
     assert not (via & direct), via & direct
     # Declined candidates stay out: resellers, unidentified clouds, and sources that failed policy.
     declined = {"excesssupply", "imwt", "paperspace", "tensordock", "cudo", "sfcompute", "akash",
-                "ionet", "io.net", "primeintellect", "oblivus", "clore", "nosana"}
+                "ionet", "io.net", "primeintellect", "oblivus", "clore",
+                # declined 2026-10-21: terms forbid automated access, or resellers of clouds read directly
+                "thunder", "cloudrift", "novita", "cerebrium", "fal", "northflank", "lightning", "saturn",
+                "runcrate", "spheron"}
     assert not (declined & (set(PROVIDERS) | via)), declined & (set(PROVIDERS) | via)
 
 

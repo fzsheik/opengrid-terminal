@@ -1,7 +1,7 @@
 # OpenGrid Terminal: Capabilities & Features
 
 **OpenGrid Terminal is a market-intelligence and execution terminal for GPU compute.**
-It watches 32 GPU clouds, turns their prices into one trustworthy market, explains what is moving
+It watches 45 GPU clouds, turns their prices into one trustworthy market, explains what is moving
 and why, and routes a workload to the best provider through one OpenGrid API key, with every
 decision audited and every dollar reconciled.
 
@@ -44,7 +44,7 @@ important) what it deliberately does not claim.
 
 | | |
 |---|---|
-| GPU clouds monitored | **32** (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb) |
+| GPU clouds monitored | **45** (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb, Civo, Atlantic.Net, E2E Networks, Modal, Replicate, Baseten, Beam, Arkane Cloud, VESSL AI, Mithril, DeepInfra, SimplePod, Nosana) |
 | Canonical GPU models | **91**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL) |
 | OpenGrid indices defined | **251** (per-GPU, family composites, overall compute index, regional, spot, provider-class) |
 | News & signal sources | **44** verified feeds (hyperscalers, neoclouds, NVIDIA/AMD, US Federal Register, trade press) |
@@ -64,7 +64,7 @@ important) what it deliberately does not claim.
 ## 2. Architecture
 
 ```
-                    ┌──────────────────────── 32 GPU clouds ───────────────────────┐
+                    ┌──────────────────────── 45 GPU clouds ───────────────────────┐
                     │ APIs · public price pages · pricing files · aggregator feeds │
                     └──────────────────────────────┬────────────────────────────────┘
                                                    │ independent poll loop per provider
@@ -134,6 +134,8 @@ provider never holds up the others.
 | Vast.ai | marketplace | public API |
 | Hyperbolic | marketplace | public API |
 | Lium | decentralized | public API |
+| Nosana | decentralized | public API |
+| SimplePod | marketplace | public API (open on-demand offers, Docker and VM) |
 | Verda (ex-DataCrunch) | neocloud | public API |
 | Voltage Park | neocloud | public API |
 | Nebius | neocloud | public page |
@@ -146,6 +148,13 @@ provider never holds up the others.
 | Akamai/Linode | general cloud | public API |
 | OVHcloud | general cloud | public API (the two USD catalogues, US and World) |
 | Koyeb | general cloud | public API (serverless GPU instances) |
+| Civo | general cloud | public page (on-demand hourly) |
+| Atlantic.Net | general cloud | public page (on-demand hourly) |
+| E2E Networks | general cloud | public pricing file (its USD on-demand list) |
+| Replicate · Baseten | general cloud | public page (serverless, whole-instance price per second) |
+| Modal · Beam | general cloud | public page (serverless GPU-only rate; CPU/RAM extra, kept out of indices) |
+| Arkane Cloud · VESSL AI · DeepInfra (GPU instances) | neocloud | public page (on-demand, per GPU-hour) |
+| Mithril (ex-ML Foundry) | neocloud | public page (spot, published 7-day average) |
 | Scaleway | general cloud | aggregator (via Shadeform; its own catalogue is EUR-only) |
 | Crusoe · Denvr · Latitude.sh · Boost Run · Horizon Compute · Phyntec | neocloud | aggregator (via Shadeform) |
 
@@ -154,10 +163,16 @@ Thunder Compute (terms forbid automated access), TensorWave ("starting at" floor
 Nscale and Sesterce (no public prices), Genesis Cloud (unreachable). Also declined: Alibaba Cloud (price API needs an
 AccessKey; robots.txt disallows the page's data files), TensorDock (key-only API, "from" floors), Cudo Compute (public
 on-demand closed 2026-03-31), SF Compute (login; robots disallows /api), Akash (estimates from stale bids, variants mixed),
-io.net and Oblivus (terms forbid scraping), Prime Intellect (auth; an aggregator), Clore.ai (key; per day), Nosana
-(token-priced), Exoscale (no GPU model in the keyless feed), Civo and Gcore (key required), Seeweb (EUR only), and
+io.net and Oblivus (terms forbid scraping), Prime Intellect (auth; an aggregator), Clore.ai (key; per day),
+Exoscale (no GPU model in the keyless feed), Gcore (EUR only without a key), Seeweb (EUR only), and
 Shadeform's Excess Supply and IMWT (unidentifiable or reselling other clouds). A provider is added only when it
-publishes on-demand prices that can be read without an account and its terms allow it.
+publishes on-demand prices that can be read without an account and its terms allow it. Nosana, declined then as
+token-priced, was added on 2026-10-21: its documented, keyless market API now states USD rates; Civo, declined
+for its keyed API, was added from its keyless USD pricing page. Also declined on 2026-10-21: Paperspace (still
+contradicts Shadeform), Thunder Compute (terms), Lightning AI and Saturn Cloud (resell AWS/GCP/Lambda/Nebius),
+CloudRift, Novita, Cerebrium, fal.ai and Northflank (terms forbid automated access), Inferless (shut down),
+Cirrascale (monthly only), GMI Cloud, HPC-AI and Taiga ("from" floors), Runcrate, Spheron, Qubrid, Dataoorts and
+Andromeda (resellers, brokers or no stable source), Fluidstack and Nscale (still no public prices).
 
 ### 3.2 Normalization
 - Every listing becomes a standard `ComputeListing`: provider, SKU, GPU, count, region, country,

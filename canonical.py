@@ -360,6 +360,60 @@ _add("NVIDIA Tesla V100 16GB", "NVIDIA Tesla V100 16GB")
 _add("NVIDIA H100 80GB SXM5", "NVIDIA H100 SXM5 80GB")
 _add("NVIDIA H200 141GB SXM5", "NVIDIA H200 SXM5 141GB")
 
+# Nosana (providers/nosana.py) market names. Only names with a single product
+# behind them are mapped. Unmapped: "NVIDIA H100", "NVIDIA A100 80GB/40GB" (no
+# SXM or PCIe), "NVIDIA 3060" (8 or 12GB; the market's own vram says 8GB),
+# "NVIDIA 4060" / "4070" / "4080" / "3090" (a Ti or SUPER host could sit in the
+# same market), "4000/A4000" and "5000/A5000" (two cards), "Pro 6000 (SOC2)" and
+# "Pro 6000 Server Edition (CC)" (a compliance / confidential-compute product).
+_add("NVIDIA RTX 4090 24GB", "NVIDIA 4090")
+_add("NVIDIA RTX 5090 32GB", "NVIDIA 5090")
+_add("NVIDIA RTX A6000 48GB", "NVIDIA A6000")
+_add("NVIDIA RTX 6000 Ada 48GB", "NVIDIA 6000 Ada")
+
+# E2E Networks (providers/e2e.py): "<model> <vramGB>GB". The A40 and T4 come in
+# one board each. "NVIDIA B200 180GB", "NVIDIA H200 141GB", "NVIDIA L40S 48GB"
+# and "NVIDIA L4 24GB" are mapped above; the H100, A100, RTX PRO 6000, V100 32GB
+# and A30 rows stay unmapped (variant not stated / no canonical name yet).
+_add("NVIDIA A40 48GB", "NVIDIA A40 48GB")
+_add("NVIDIA T4 16GB", "NVIDIA T4 16GB")
+# SimplePod (providers/simplepod.py): "<gpuModel> (<VRAM> GB)". Its V100 name
+# states the PCIe board; "Tesla V100-SXM2-32GB (32 GB)" has no canonical name yet.
+_add("NVIDIA Tesla V100 16GB PCIe", "Tesla V100-PCIE-16GB (16 GB)")
+
+# --------------------------------------------------------------------------
+# Serverless: Modal (page names), Baseten ("NVIDIA <name> <VRAM>GB" from its
+# specs), Beam ("<name> <interface> <VRAM>GB"), Replicate (page names; all its
+# mappable names resolve above). Modal's GPU guide (modal.com/docs/guide/gpu)
+# states every H100 and H200 on Modal is SXM and the H200 has 141 GB; the B300
+# exists only as the SXM part. A10G is a single 24GB board.
+# Left unmapped on purpose: Modal "Nvidia A100, 80 GB" / "Nvidia A100, 40 GB",
+# Baseten "NVIDIA A100 80GB" / "NVIDIA H100 80GB", Replicate "Nvidia H100" /
+# "Nvidia A100 (80GB)" (SXM or PCIe not stated); Modal "Nvidia RTX PRO 6000"
+# (edition not stated); Modal "Nvidia A10" (A10 or AWS's A10G not stated).
+# --------------------------------------------------------------------------
+_add("NVIDIA B300 288GB SXM", "Nvidia B300")
+_add("NVIDIA H200 141GB SXM5", "Nvidia H200 SXM")
+_add("NVIDIA H100 80GB SXM5", "Nvidia H100 SXM5")
+_add("NVIDIA A10G 24GB", "NVIDIA A10G 24GB")
+_add("NVIDIA RTX 4090 24GB", "RTX 4090 PCIE 24GB")
+
+# Arkane Cloud, VESSL AI and Mithril (public price pages). Arkane and VESSL names
+# carry the printed per-GPU VRAM. B300 exists only as an SXM board (see Oracle
+# above); the A100 SXM board is SXM4. Mithril's "H100 SXM5" / "H200 SXM5" are
+# mapped above. Left unmapped on purpose: Arkane's "NVIDIA H100 80GB" and "NVIDIA
+# A100 80GB" (SXM or PCIe not stated) and "RTX PRO 6000 96GB" (edition not stated).
+_add("NVIDIA B300 288GB SXM", "NVIDIA B300 288GB")
+_add("NVIDIA A100 80GB SXM4", "NVIDIA A100 SXM 80GB")
+
+# Civo, Atlantic.Net, DeepInfra (public price pages). Civo's and DeepInfra's names
+# ("NVIDIA H100 SXM 80GB", "NVIDIA L40S 48GB", "NVIDIA B200 180GB", "NVIDIA B300")
+# are already mapped above. Atlantic.Net prints "H100NVL" for the card its page
+# calls "NVIDIA H100 NVL", which exists only as the 94GB NVL board.
+# Left unmapped on purpose: Civo "NVIDIA A100 40GB" / "NVIDIA A100 80GB" (SXM or
+# PCIe not stated).
+_add("NVIDIA H100 94GB NVL", "H100NVL")
+
 # --------------------------------------------------------------------------
 # Seen, deliberately not mapped
 # --------------------------------------------------------------------------

@@ -1,0 +1,341 @@
+{
+ "provider": "E2E Networks Limited",
+ "source": "https://www.e2enetworks.com/pricing",
+ "documentation": "https://www.e2enetworks.com/llms.txt",
+ "generatedAt": "2026-10-22T00:41:15.245Z",
+ "notes": "GPU and CPU instance prices are per hour and include both INR and USD. GPU monthly and annual plans are NOT published as rates in any currency: each GPU carries termPricing.monthly and termPricing.annual set to \"Contact Sales\", and a quote comes from https://www.e2enetworks.com/contact-sales. Any monthly or annual GPU figure attributed to E2E Networks that did not come from that conversation is not a current rate. Storage and backup rows carry the same pricing.inr / pricing.usd shape; each storage block lists the currencies its rows populate, and persistent volumes are INR-only. INR is the authoritative billing currency. Prices exclude GST. commitmentPricePerHourINR is the committed-use (3+ month) rate; spotPricePerHourINR is the interruptible rate and is null for SKUs where spot is not offered; spot is currently offered on A100 80GB, H100 and H200 only. Authoritative source for on-demand rates: the /pricing page. Committed and spot rates are published in this feed and in /pricing.md rather than in the on-page table.",
+ "gpuInstances": [
+  {
+   "id": "b200",
+   "model": "NVIDIA B200",
+   "vramGB": 180,
+   "vcpus": 32,
+   "ramGB": 400,
+   "unit": "per hour",
+   "pricing": {
+    "usd": {
+     "hourly": 7.99
+    },
+    "inr": {
+     "hourly": 759.05
+    }
+   },
+   "termPricing": {
+    "monthly": "Contact Sales",
+    "annual": "Contact Sales",
+    "url": "https://www.e2enetworks.com/contact-sales"
+   },
+   "commitmentPricePerHourINR": "683.05",
+   "spotPricePerHourINR": null,
+   "url": "https://www.e2enetworks.com/gpus/nvidia-b200"
+  },
+  {
+   "id": "h200",
+   "model": "NVIDIA H200",
+   "vramGB": 141,
+   "vcpus": 30,
+   "ramGB": 375,
+   "unit": "per hour",
+   "pricing": {
+    "usd": {
+     "hourly": 5.29
+    },
+    "inr": {
+     "hourly": 502.55
+    }
+   },
+   "termPricing": {
+    "monthly": "Contact Sales",
+    "annual": "Contact Sales",
+    "url": "https://www.e2enetworks.com/contact-sales"
+   },
+   "commitmentPricePerHourINR": "462.65",
+   "spotPricePerHourINR": "88",
+   "url": "https://www.e2enetworks.com/gpus/nvidia-h200"
+  },
+  {
+   "id": "h100",
+   "model": "NVIDIA H100",
+   "vramGB": 80,
+   "vcpus": 26,
+   "ramGB": 250,
+   "unit": "per hour",
+   "pricing": {
+    "usd": {
+     "hourly": 3.99
+    },
+    "inr": {
+     "hourly": 379.05
+    }
+   },
+   "termPricing": {
+    "monthly": "Contact Sales",
+    "annual": "Contact Sales",
+    "url": "https://www.e2enetworks.com/contact-sales"
+   },
+   "commitmentPricePerHourINR": "347.70",
+   "spotPricePerHourINR": "70",
+   "url": "https://www.e2enetworks.com/gpus/nvidia-h100"
+  },
+  {
+   "id": "rtx-pro-6000",
+   "model": "NVIDIA RTX PRO 6000",
+   "vramGB": 96,
+   "vcpus": 32,
+   "ramGB": 170,
+   "unit": "per hour",
+   "pricing": {
+    "usd": {
+     "hourly": 2.49
+    },
+    "inr": {
+     "hourly": 236.55
+    }
+   },
+   "termPricing": {
+    "monthly": "Contact Sales",
+    "annual": "Contact Sales",
+    "url": "https://www.e2enetworks.com/contact-sales"
+   },
+   "commitmentPricePerHourINR": "217.55",
+   "spotPricePerHourINR": null,
+   "url": "https://www.e2enetworks.com/gpus/nvidia-rtx-pro-6000"
+  },
+  {
+   "id": "a100-80gb",
+   "model": "NVIDIA A100",
+   "vramGB": 80,
+   "vcpus": 16,
+   "ramGB": 115,
+   "unit": "per hour",
+   "pricing": {
+    "usd": {
+     "hourly": 2.1
+    },
+    "inr": {
+     "hourly": 189
+    }
+   },
+   "termPricing": {
+    "monthly": "Contact Sales",
+    "annual": "Contact Sales",
+    "url": "https://www.e2enetworks.com/contact-sales"
+   },
+   "commitmentPricePerHourINR": null,
+   "spotPricePerHourINR": "66",
+   "url": "https://www.e2enetworks.com/gpus/nvidia-a100-80gb"
+  },
+  {
+   "id": "a100-40gb",
+   "model": "NVIDIA A100",
+   "vramGB": 40,
+   "vcpus": 16,
+   "ramGB": 115,
+   "unit": "per hour",
+   "pricing": {
+    "usd": {
+     "hourly": 1.98
+    },
+    "inr": {
+     "hourly": 179
+    }
+   },
+   "termPricing": {
+    "monthly": "Contact Sales",
+    "annual": "Contact Sales",
+    "url": "https://www.e2enetworks.com/contact-sales"
+   },
+   "commitmentPricePerHourINR": null,
+   "spotPricePerHourINR": null,
+   "url": "https://www.e2enetworks.com/gpus/nvidia-a100-40gb"
+  },
+  {
+   "id": "a40",
+   "model": "NVIDIA A40",
+   "vramGB": 48,
+   "vcpus": 16,
+   "ramGB": 100,
+   "unit": "per hour",
+   "pricing": {
+    "usd": {
+     "hourly": 1.44
+    },
+    "inr": {
+     "hourly": 96
+    }
+   },
+   "termPricing": {
+    "monthly": "Contact Sales",
+    "annual": "Contact Sales",
+    "url": "https://www.e2enetworks.com/contact-sales"
+   },
+   "commitmentPricePerHourINR": null,
+   "spotPricePerHourINR": null,
+   "url": "https://www.e2enetworks.com/gpus/nvidia-a40"
+  },
+  {
+   "id": "l40s",
+   "model": "NVIDIA L40S",
+   "vramGB": 48,
+   "vcpus": 60,
+   "ramGB": 220,
+   "unit": "per hour",
+   "pricing": {
+    "usd": {
+     "hourly": 1.2
+    },
+    "inr": {
+     "hourly": 102
+    }
+   },
+   "termPricing": {
+    "monthly": "Contact Sales",
+    "annual": "Contact Sales",
+    "url": "https://www.e2enetworks.com/contact-sales"
+   },
+   "commitmentPricePerHourINR": null,
+   "spotPricePerHourINR": null,
+   "url": "https://www.e2enetworks.com/gpus/nvidia-l40s"
+  },
+  {
+   "id": "v100",
+   "model": "NVIDIA V100",
+   "vramGB": 32,
+   "vcpus": 8,
+   "ramGB": 120,
+   "unit": "per hour",
+   "pricing": {
+    "usd": {
+     "hourly": 1.5
+    },
+    "inr": {
+     "hourly": 100
+    }
+   },
+   "termPricing": {
+    "monthly": "Contact Sales",
+    "annual": "Contact Sales",
+    "url": "https://www.e2enetworks.com/contact-sales"
+   },
+   "commitmentPricePerHourINR": null,
+   "spotPricePerHourINR": null,
+   "url": null
+  },
+  {
+   "id": "a30",
+   "model": "NVIDIA A30",
+   "vramGB": 24,
+   "vcpus": 16,
+   "ramGB": 90,
+   "unit": "per hour",
+   "pricing": {
+    "usd": {
+     "hourly": 1.35
+    },
+    "inr": {
+     "hourly": 90
+    }
+   },
+   "termPricing": {
+    "monthly": "Contact Sales",
+    "annual": "Contact Sales",
+    "url": "https://www.e2enetworks.com/contact-sales"
+   },
+   "commitmentPricePerHourINR": null,
+   "spotPricePerHourINR": null,
+   "url": "https://www.e2enetworks.com/gpus/nvidia-a30"
+  },
+  {
+   "id": "l4",
+   "model": "NVIDIA L4",
+   "vramGB": 24,
+   "vcpus": 25,
+   "ramGB": 110,
+   "unit": "per hour",
+   "pricing": {
+    "usd": {
+     "hourly": 0.57
+    },
+    "inr": {
+     "hourly": 49
+    }
+   },
+   "termPricing": {
+    "monthly": "Contact Sales",
+    "annual": "Contact Sales",
+    "url": "https://www.e2enetworks.com/contact-sales"
+   },
+   "commitmentPricePerHourINR": null,
+   "spotPricePerHourINR": null,
+   "url": "https://www.e2enetworks.com/gpus/nvidia-l4"
+  },
+  {
+   "id": "t4",
+   "model": "NVIDIA T4",
+   "vramGB": 16,
+   "vcpus": 12,
+   "ramGB": 50,
+   "unit": "per hour",
+   "pricing": {
+    "usd": {
+     "hourly": 0.45
+    },
+    "inr": {
+     "hourly": 30
+    }
+   },
+   "termPricing": {
+    "monthly": "Contact Sales",
+    "annual": "Contact Sales",
+    "url": "https://www.e2enetworks.com/contact-sales"
+   },
+   "commitmentPricePerHourINR": null,
+   "spotPricePerHourINR": null,
+   "url": null
+  }
+ ],
+ "cpuInstances": [
+  {
+   "id": "c3-8gb",
+   "plan": "C3.8GB",
+   "vcpus": 4,
+   "ramGB": 8,
+   "unit": "per hour",
+   "pricing": {
+    "usd": {
+     "hourly": 0.049,
+     "monthly": 35.64,
+     "sixMonth": 181.78,
+     "yearly": 342.17
+    },
+    "inr": {
+     "hourly": 4.7,
+     "monthly": 3422,
+     "sixMonth": 17450,
+     "yearly": 32848
+    }
+   }
+  },
+  {
+   "id": "c3-16gb",
+   "plan": "C3.16GB",
+   "vcpus": 8,
+   "ramGB": 16,
+   "unit": "per hour",
+   "pricing": {
+    "usd": {
+     "hourly": 0.096,
+     "monthly": 70.13,
+     "sixMonth": 357.69,
+     "yearly": 673.29
+    },
+    "inr": {
+     "hourly": 9.2,
+     "monthly": 6733,
+     "sixMonth": 34338,
+     "yearly": 64636
+    }
+   }
+  }
+ ]
+}

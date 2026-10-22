@@ -12,6 +12,12 @@ A cloud that has its own feed in this app must never also be read through here:
 that would count one cloud's capacity twice.
 
 Each subclass fetches the whole catalogue and keeps only its own cloud's rows.
+
+Not read, on purpose: "excesssupply" (Excess Supply is Shadeform's own white-label
+pool of other neoclouds' spare capacity; its types carry Lambda, Nebius and Phyntec
+names and regions, so reading it would count those clouds twice) and "imwt" (no
+public identity; its type names, vCPU/RAM shapes and regions are Massed Compute's,
+which is read directly).
 """
 
 import logging
