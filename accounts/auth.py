@@ -28,6 +28,7 @@ ALL = "*"
 SCOPES = {
     "data:read": "read market data, indices, events, news",
     "route:preview": "dry-run routing decisions",
+    "probes:write": "post provider probe results from a remote probe agent (probes/agent.py)",
     "route:execute": "provision compute through OpenGrid (spends money)",
     "deployments:read": "see your deployments",
     "deployments:write": "stop / terminate your deployments",

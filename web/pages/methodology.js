@@ -11,7 +11,7 @@
   const GROUPS = [
     ["Prices & data", ["data-kinds", "data-trust", "data-quality", "historical-context", "dispersion", "families", "hardware"]],
     ["Indices & settlement", ["indices", "settlement"]],
-    ["Market signals", ["events", "opportunities", "news", "provider-value", "reliability"]],
+    ["Market signals", ["events", "opportunities", "news", "provider-value", "reliability", "uptime", "probes"]],
     ["Recommendations", ["recommendations", "workloads", "best-execution"]],
     ["Running jobs", ["jobs", "execution-safety", "runner", "routing", "routing-quality", "provider-capabilities", "reservations", "first-live-route"]],
     ["Accounts, billing & security", ["security", "billing", "reconciliation", "economics", "alerts"]],
