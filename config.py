@@ -21,6 +21,16 @@ class Settings(BaseSettings):
     public_base_url: str = "https://opengrid-terminal-production.up.railway.app"
     # Poll public news / regulatory feeds (news/sources.py) in the background.
     news_enabled: bool = True
+    # Poll UptimeProject (uptime/; methodology/uptime.md): external control-plane uptime + latency, CC BY 4.0.
+    uptime_enabled: bool = True
+    uptime_poll_seconds: int = Field(default=3600, ge=300)   # upstream caches 5 minutes; hourly buckets
+    uptime_base_url: str = "https://api.uptimeproject.org"
+    uptime_probe_retention_days: int = Field(default=90, ge=1)
+    # OpenGrid's own provider probes (probes/; methodology/probes.md). The web process is one vantage point; run
+    # probes/agent.py elsewhere to add more. Raw results are kept this long; the hourly rollups are kept for good.
+    probes_local_enabled: bool = True
+    probes_location: str | None = None            # this process's vantage-point name; default RAILWAY_REGION, else "local"
+    probes_raw_retention_days: int = Field(default=30, ge=1)
     # OpenGrid API keys are stored only as HMAC-SHA256(pepper, key). Required when deployed;
     # changing it invalidates every issued key. Unset in dev: a derived dev pepper, with a warning.
     api_key_pepper: str | None = None

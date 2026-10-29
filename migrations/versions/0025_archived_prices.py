@@ -1,16 +1,16 @@
 """archived prices: price history recovered from public archives (store/archive.py; methodology/archived-history.md).
 Additive only: one new table, read by /v1/history/{gpu}/archived and nothing that computes statistics.
 
-Revision ID: 0022_archived_prices
-Revises: 0021_job_relaunch
+Revision ID: 0025_archived_prices
+Revises: 0024_probes
 """
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "0022_archived_prices"
-down_revision: Union[str, Sequence[str], None] = "0021_job_relaunch"
+revision: str = "0025_archived_prices"
+down_revision: Union[str, Sequence[str], None] = "0024_probes"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

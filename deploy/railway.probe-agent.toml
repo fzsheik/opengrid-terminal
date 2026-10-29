@@ -1,0 +1,11 @@
+# Config-as-code for a PROBE AGENT service (one vantage point). In Railway: add a service from this repo, then
+# Settings > Config-as-code > path "/deploy/railway.probe-agent.toml", and choose the region under Settings > Deploy.
+# Variables the service needs:
+#   OPENGRID_SERVER=https://<your opengrid host>          the main OpenGrid server it reports to
+#   OPENGRID_PROBE_KEY=opg_live_...                       an API key with the data:read and probes:write scopes
+#   OPENGRID_PROBE_LOCATION=eu-west                       this vantage point's name (2-32 lowercase letters/digits/dashes)
+#   OPENGRID_PROBE_AGENT_ID=eu-west-1                     optional; defaults to the location
+# It serves no HTTP, so there is no healthcheck; Railway restarts it if the process exits.
+[deploy]
+startCommand = "python -m probes.agent"
+restartPolicyType = "ALWAYS"

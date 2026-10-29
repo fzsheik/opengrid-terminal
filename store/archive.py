@@ -1,5 +1,5 @@
 """Archived prices: what a provider's price page or price list said on a past date, recovered from a public
-archive (migration 0022_archived_prices; methodology/archived-history.md).
+archive (migration 0025_archived_prices; methodology/archived-history.md).
 
     archived_prices   one priced listing as it appeared in one archived source document: the Internet Archive's
                       capture of a provider's price page / public API, or one monthly version of AWS's EC2 price
