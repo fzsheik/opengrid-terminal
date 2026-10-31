@@ -2,6 +2,10 @@
 
 One anonymous endpoint returns a bare list of rentable shapes. Each entry is a
 whole-option price, so the per-GPU rate is derived.
+
+Capacity: each option carries `totalAvailable` (GPUs) and `enabled`. A count; in stock only when the option is
+enabled and has GPUs. Options can share GPU, size and region but differ by machine type and network, so the
+capacity sku includes both.
 """
 
 import logging
@@ -11,7 +15,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
-from models import ComputeListing, RawResponse
+from models import CapacityObservation, ComputeListing, RawResponse
 from providers.base import PollingPolicy, Provider, find_endpoint
 
 if TYPE_CHECKING:
@@ -99,3 +103,26 @@ class HyperbolicProvider(Provider):
                 )
             )
         return listings
+
+    @staticmethod
+    def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
+        rows = find_endpoint(by_endpoint, ENDPOINT)
+        if not rows or not isinstance(rows[0].payload, list):
+            return []
+        out = []
+        for opt in rows[0].payload:
+            gpu_count, gpu_type, form = opt.get("gpuCount") or 0, opt.get("gpuType"), opt.get("gpuFormFactor")
+            if not gpu_count or not gpu_type:
+                continue
+            raw_name = f"{gpu_type} {form}" if form else gpu_type
+            total, enabled = opt.get("totalAvailable"), opt.get("enabled")
+            out.append(CapacityObservation(
+                provider="hyperbolic", sku=f"{raw_name}:{gpu_count}x:{opt.get('machineType')}:{opt.get('connectionType')}",
+                region=opt.get("region"), raw_gpu_name=raw_name, canonical_gpu_name=canonical.canonical_gpu_name(raw_name),
+                gpu_count=gpu_count,
+                # A missing totalAvailable means unknown, never zero (same rule as the listing).
+                in_stock=None if not isinstance(total, int) else bool(enabled) and total > 0,
+                available_count=total if isinstance(total, int) else None, count_unit="gpu" if isinstance(total, int) else None,
+                raw_value=f"enabled={str(enabled).lower()}; totalAvailable={total}",
+                source=ENDPOINT, observed_at=rows[0].fetched_at))
+        return out

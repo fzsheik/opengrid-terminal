@@ -103,7 +103,9 @@ def fill(path):
 def test_csrf_every_route():
     setup()
     B = basic()
-    unsafe = [(m, p) for m, p in all_routes() if m not in SAFE]
+    # POST /login is the sign-in form itself: no session yet, so no CSRF header; it checks Sec-Fetch-Site instead
+    # (tests/test_pages.py) and failed attempts feed the login throttle, which would lock this test's own client out
+    unsafe = [(m, p) for m, p in all_routes() if m not in SAFE and (m, p) != ("POST", "/login")]
     assert len(unsafe) >= 40, f"route enumeration found only {len(unsafe)} state-changing routes"
     attacks = {
         "form, no header": {**B, "Content-Type": "application/x-www-form-urlencoded"},
@@ -262,7 +264,7 @@ def test_safe_url_web_client():
     # an allowlisted same-site path: every off-site or browser-normalised trick lands on "/"
     for f in list(ROOT.glob("*.py")) + list((ROOT / "api").glob("*.py")) + list((ROOT / "accounts").glob("*.py")):
         n = f.read_text(encoding="utf-8").count("RedirectResponse(")
-        assert n == (1 if f.name == "main.py" else 0), (f, n)
+        assert n == (4 if f.name == "main.py" else 0), (f, n)  # login-redirect, /login x2, /logout
     setup()
     for evil in ("//evil.example", "https://evil.example", "/\\evil.example", "\\\\evil.example", "/\t/evil.example",
                  "/\n/evil.example", " //evil.example", "evil.example", "javascript:alert(1)", "/\r\n/evil", "///evil.example"):
@@ -270,7 +272,7 @@ def test_safe_url_web_client():
         assert r.status_code == 303 and r.headers["location"] == "/", (evil, r.status_code, r.headers.get("location"))
     r = client.get("/login", params={"next": "/jobs/new?preset=mnist&real=1"}, headers=basic(), follow_redirects=False)
     assert r.headers["location"] == "/jobs/new?preset=mnist&real=1", r.headers.get("location")
-    assert client.get("/login", follow_redirects=False).status_code == 401, "/login always challenges"
+    assert client.get("/login", follow_redirects=False).status_code == 200, "/login is the public sign-in form"
 
 
 # ---------------------------------------------------------------- CSP

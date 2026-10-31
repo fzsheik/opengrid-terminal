@@ -71,6 +71,16 @@ def build_fetchers() -> list[Provider]:
     if settings.digitalocean_api_key:
         fetchers.append(DigitalOceanProvider(settings.digitalocean_api_key))
 
+    if settings.jarvis_api_key:
+        fetchers.append(JarvislabsProvider(settings.jarvis_api_key))
+
+    if settings.gcp_api_key:
+        fetchers.append(GcpProvider(settings.gcp_api_key))
+
+    # Public prices; a key adds capacity (Vast's free/total census, Latitude's own stock).
+    fetchers.append(VastProvider(api_key=settings.vast_api_key))
+    fetchers.append(LatitudeProvider(api_key=settings.latitude_api_key))
+
     # Public endpoints and pages: no credentials to be missing.
     fetchers.extend(
         cls()
@@ -78,21 +88,17 @@ def build_fetchers() -> list[Provider]:
             HyperbolicProvider,
             VoltageParkProvider,
             LiumProvider,
-            VastProvider,
             NebiusProvider,
             MassedComputeProvider,
             AwsProvider,
             VerdaProvider,
             CrusoeProvider,
-            LatitudeProvider,
             DenvrProvider,
             BoostRunProvider,
             CoreWeaveProvider,
             TogetherProvider,
-            JarvislabsProvider,
             HotAisleProvider,
             VultrProvider,
-            GcpProvider,
             AzureProvider,
             HorizonProvider,
             PhyntecProvider,

@@ -48,10 +48,10 @@ def create(name: str) -> str:
 # --------------------------------------------------------------------------
 
 _SECRET_FIELDS = ("salad_api_key", "salad_org", "hyperstack_api_key", "lambda_api_key", "runpod_api_key",
-                  "digitalocean_api_key", "shadeform_api_key", "vast_api_key", "verda_client_id",
+                  "digitalocean_api_key", "shadeform_api_key", "vast_api_key", "latitude_api_key", "verda_client_id",
                   "verda_client_secret", "anthropic_api_key", "job_artifact_s3_access_key_id",
                   "job_artifact_s3_secret_access_key", "ops_alert_webhook_url", "deployments_webhook_url",
-                  "market_webhook_url", "news_webhook_url")
+                  "market_webhook_url", "news_webhook_url", "jarvis_api_key", "gcp_api_key")
 _LOOPBACK = ("127.0.0.1", "localhost", "::1", "[::1]")
 BLOCKED: list[str] = []
 

@@ -38,6 +38,16 @@ def _setup_db():
 PERIODS: list[tuple[str, str]] = []  # every (service, period) the poller asked for
 
 
+def _recent(body: dict) -> dict:
+    """The saved buckets shifted so the newest one is the current hour: windows like 'last 24h' stay filled
+    whatever day the test runs (the fixture itself is dated 2026-10-16..23)."""
+    from datetime import datetime, timezone
+    pts = body["points"]
+    stamp = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00"))  # noqa: E731
+    shift = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) - stamp(pts[-1]["bucket"])
+    return {**body, "points": [{**p, "bucket": (stamp(p["bucket"]) + shift).isoformat()} for p in pts]}
+
+
 def _transport(fail_ids=(), list_status=200):
     """Serves the saved responses for every service id; `fail_ids` get a 503 on their detail call."""
     def handler(req: httpx.Request) -> httpx.Response:
@@ -53,7 +63,7 @@ def _transport(fail_ids=(), list_status=200):
             period = req.url.params["period"]
             PERIODS.append((sid, period))
             fix = "digitalocean_uptime_7d.json" if period == "7d" else "digitalocean_uptime_90d_daily.json"
-            return httpx.Response(200, json={**_load(fix), "service_id": sid, "period": period})
+            return httpx.Response(200, json={**_recent(_load(fix)), "service_id": sid, "period": period})
         return httpx.Response(200, json=_load("digitalocean_detail.json"))
     return httpx.MockTransport(handler)
 

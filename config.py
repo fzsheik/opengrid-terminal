@@ -90,11 +90,14 @@ class Settings(BaseSettings):
     salad_org: str | None = None
     hyperstack_api_key: str | None = None
     lambda_api_key: str | None = None
+    jarvis_api_key: str | None = None          # Jarvislabs misc/server_meta (prices, spot, reserved, capacity)
+    gcp_api_key: str | None = None             # Google Cloud Billing Catalog API (restricted to that API)
     runpod_api_key: str | None = None
     digitalocean_api_key: str | None = None
     # Routing (execution) credentials, OpenGrid-managed. Each enables one adapter's live calls.
     shadeform_api_key: str | None = None      # one key launches Crusoe / Denvr / Latitude via Shadeform
     vast_api_key: str | None = None
+    latitude_api_key: str | None = None        # Latitude.sh plans API (capacity per location; prices stay via Shadeform)
     verda_client_id: str | None = None
     verda_client_secret: str | None = None
     # Per-provider launch defaults (JSON), e.g. {"lambda": {"ssh_key": "opengrid"},

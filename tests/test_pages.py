@@ -258,10 +258,27 @@ def test_public_pages_through_the_middleware():
         assert client.get("/raw").status_code == 401, "raw provider data stays private"
         assert client.post("/fetch").status_code == 401
         assert client.get("/v1/keys").status_code in (401, 404), "keys never public"
-        # /login is never public: it always challenges, so a browser can sign in while the pages are open
+        # /login is the styled sign-in form: always reachable, never leaks pages
         r = client.get("/login?next=/jobs", follow_redirects=False)
-        assert r.status_code == 401 and r.headers.get("www-authenticate", "").startswith("Basic"), r.status_code
-        assert client.get("/login", auth=("opengrid", "wrong"), follow_redirects=False).status_code == 401
+        assert r.status_code == 200 and "Sign in" in r.text and 'value="/jobs"' in r.text, r.status_code
+        assert 'name="password"' in r.text and "<script" not in r.text
+        # form login: wrong password 401, right one sets the signed cookie that opens the site
+        bad = client.post("/login", content=b"username=opengrid&password=nope&next=/jobs",
+                          headers={"Content-Type": "application/x-www-form-urlencoded"}, follow_redirects=False)
+        assert bad.status_code == 401 and "Incorrect" in bad.text and "set-cookie" not in bad.headers
+        good = client.post("/login", content=b"username=opengrid&password=s3cret&next=/jobs",
+                           headers={"Content-Type": "application/x-www-form-urlencoded"}, follow_redirects=False)
+        assert good.status_code == 303 and good.headers["location"] == "/jobs", good.status_code
+        cookie = good.headers["set-cookie"]
+        assert "og_session=" in cookie and "HttpOnly" in cookie and "SameSite=lax" in cookie, cookie
+        x = client.post("/login", content=b"username=opengrid&password=s3cret", follow_redirects=False,
+                        headers={"Content-Type": "application/x-www-form-urlencoded", "Sec-Fetch-Site": "cross-site"})
+        assert x.status_code == 403, "cross-site login refused"
+        tok = cookie.split("og_session=")[1].split(";")[0]
+        assert client.get("/v1/me", cookies={"og_session": tok}).status_code != 401, "session cookie authenticates"
+        assert client.get("/v1/me", cookies={"og_session": tok[:-1] + ("1" if tok[-1] == "0" else "0")}).status_code == 401, "forged cookie"
+        assert client.get("/login", cookies={"og_session": tok}, follow_redirects=False).status_code == 303
+        assert client.get("/logout", follow_redirects=False).headers["location"] == "/login"
         ok = dict(auth=("opengrid", "s3cret"), follow_redirects=False)
         r = client.get("/login?next=/jobs", **ok)
         assert r.status_code == 303 and r.headers["location"] == "/jobs", (r.status_code, r.headers.get("location"))
@@ -305,11 +322,12 @@ def test_unknown_url_shows_the_apps_not_found_page():
             r = client.get(p, headers=html)
             assert r.status_code == 401, (p, r.status_code)
             assert 'id="page"' not in r.text, p
-        r = client.get("/login", headers=html, follow_redirects=False)
-        assert r.status_code == 401 and r.headers["www-authenticate"].startswith("Basic"), "/login still challenges"
+        assert client.get("/login", headers=html).status_code == 200, "/login is the public sign-in form"
         assert client.get("/gpus", headers=html).status_code == 200, "real pages unchanged"
         settings.public_pages = False
-        assert client.get("/nope", headers=html).status_code == 401, "closed site: everything needs the password"
+        r = client.get("/nope?a=1", headers=html, follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"] == "/login?next=/nope%3Fa%3D1", "closed site: browsers go to the sign-in form"
+        assert client.get("/nope").status_code == 401, "closed site: API-style callers still get 401"
     finally:
         settings.app_password, settings.public_pages = None, False
 

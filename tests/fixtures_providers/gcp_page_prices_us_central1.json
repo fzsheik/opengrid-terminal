@@ -1,0 +1,180 @@
+{
+ "source": "cloud.google.com/products/compute/pricing/accelerator-optimized, Iowa (us-central1), fetched 2026-10-13",
+ "machines": {
+  "a3-ultragpu-8g": "84.806908493",
+  "a3-megagpu-8g": "93.400712807",
+  "a3-highgpu-8g": "88.490000119",
+  "a2-ultragpu-1g": "5.06879789",
+  "a2-ultragpu-2g": "10.137595781",
+  "a2-ultragpu-4g": "20.275191562",
+  "a2-ultragpu-8g": "40.550383123",
+  "a2-highgpu-1g": "3.673385",
+  "a2-highgpu-2g": "7.34677",
+  "a2-highgpu-4g": "14.69354",
+  "a2-highgpu-8g": "29.38708",
+  "a2-megagpu-16g": "55.739504",
+  "g4-standard-6": "0.64688",
+  "g4-standard-12": "1.29376",
+  "g4-standard-24": "2.58752",
+  "g4-standard-48": "4.49993",
+  "g4-standard-96": "8.99986",
+  "g4-standard-192": "17.99972",
+  "g4-standard-384": "35.99944",
+  "g2-standard-4": "0.706832276",
+  "g2-standard-8": "0.853624312",
+  "g2-standard-12": "1.000416348",
+  "g2-standard-16": "1.147208384",
+  "g2-standard-24": "2.000832696",
+  "g2-standard-32": "1.734376528",
+  "g2-standard-48": "4.001665392",
+  "g2-standard-96": "8.003330784"
+ },
+ "attachable": {
+  "NVIDIA T4": "0.35",
+  "NVIDIA P4": "0.60",
+  "NVIDIA V100": "2.48",
+  "NVIDIA P100": "1.46"
+ },
+ "page_specs": {
+  "a4-highgpu-8g": {
+   "gpus": "8",
+   "vcpus": "224",
+   "memory": "3,968GB"
+  },
+  "a3-ultragpu-8g": {
+   "gpus": "8",
+   "vcpus": "224",
+   "memory": "2,952GB"
+  },
+  "a3-megagpu-8g": {
+   "gpus": "8",
+   "vcpus": "208",
+   "memory": "1,872GB"
+  },
+  "a3-highgpu-8g": {
+   "gpus": "8",
+   "vcpus": "208",
+   "memory": "1,871GB"
+  },
+  "a2-ultragpu-1g": {
+   "gpus": "1",
+   "vcpus": "12",
+   "memory": "170GB"
+  },
+  "a2-ultragpu-2g": {
+   "gpus": "2",
+   "vcpus": "24",
+   "memory": "340GB"
+  },
+  "a2-ultragpu-4g": {
+   "gpus": "4",
+   "vcpus": "48",
+   "memory": "680GB"
+  },
+  "a2-ultragpu-8g": {
+   "gpus": "8",
+   "vcpus": "96",
+   "memory": "1,360GB"
+  },
+  "a2-highgpu-1g": {
+   "gpus": "1",
+   "vcpus": "12",
+   "memory": "85GiB"
+  },
+  "a2-highgpu-2g": {
+   "gpus": "2",
+   "vcpus": "24",
+   "memory": "170GiB"
+  },
+  "a2-highgpu-4g": {
+   "gpus": "4",
+   "vcpus": "48",
+   "memory": "340GiB"
+  },
+  "a2-highgpu-8g": {
+   "gpus": "8",
+   "vcpus": "96",
+   "memory": "680GiB"
+  },
+  "a2-megagpu-16g": {
+   "gpus": "16",
+   "vcpus": "96",
+   "memory": "1,360GiB"
+  },
+  "g4-standard-6": {
+   "gpus": "1/8",
+   "vcpus": "6",
+   "memory": "22GiB"
+  },
+  "g4-standard-12": {
+   "gpus": "1/4",
+   "vcpus": "12",
+   "memory": "45GiB"
+  },
+  "g4-standard-24": {
+   "gpus": "1/2",
+   "vcpus": "24",
+   "memory": "90GiB"
+  },
+  "g4-standard-48": {
+   "gpus": "1",
+   "vcpus": "48",
+   "memory": "180GiB"
+  },
+  "g4-standard-96": {
+   "gpus": "2",
+   "vcpus": "96",
+   "memory": "360GiB"
+  },
+  "g4-standard-192": {
+   "gpus": "4",
+   "vcpus": "192",
+   "memory": "720GiB"
+  },
+  "g4-standard-384": {
+   "gpus": "8",
+   "vcpus": "384",
+   "memory": "1440GiB"
+  },
+  "g2-standard-4": {
+   "gpus": "1",
+   "vcpus": "4",
+   "memory": "16GiB"
+  },
+  "g2-standard-8": {
+   "gpus": "1",
+   "vcpus": "8",
+   "memory": "32GiB"
+  },
+  "g2-standard-12": {
+   "gpus": "1",
+   "vcpus": "12",
+   "memory": "48GiB"
+  },
+  "g2-standard-16": {
+   "gpus": "1",
+   "vcpus": "16",
+   "memory": "64GiB"
+  },
+  "g2-standard-24": {
+   "gpus": "2",
+   "vcpus": "24",
+   "memory": "96GiB"
+  },
+  "g2-standard-32": {
+   "gpus": "1",
+   "vcpus": "32",
+   "memory": "128GiB"
+  },
+  "g2-standard-48": {
+   "gpus": "4",
+   "vcpus": "48",
+   "memory": "192GiB"
+  },
+  "g2-standard-96": {
+   "gpus": "8",
+   "vcpus": "96",
+   "memory": "384GiB"
+  }
+ }
+}

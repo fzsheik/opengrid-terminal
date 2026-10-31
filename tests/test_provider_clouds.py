@@ -77,8 +77,19 @@ def _fetch(prov):
     return asyncio.run(prov.fetch())
 
 
+CAP = Path(__file__).resolve().parent / "fixtures_capacity"
+
+
+def _cap(provider: str, fragment: str):
+    """A capacity endpoint's saved body (tests/fixtures_capacity), as one unpaged JSON response."""
+    saved = json.loads((CAP / f"{provider}.json").read_text())
+    return next(v[0] for k, v in saved.items() if fragment in k)
+
+
 def linode_prov():
-    return LinodeProvider(_client("https://api.linode.com", _serve({"/v4/linode/types": text("linode_types.json")})))
+    availability = {**_cap("linode", "/v4/regions/availability"), "page": 1, "pages": 1}
+    return LinodeProvider(_client("https://api.linode.com", _serve({
+        "/v4/linode/types": text("linode_types.json"), "/v4/regions/availability": json.dumps(availability)})))
 
 
 def ovh_prov():
@@ -89,12 +100,19 @@ def ovh_prov():
 
 
 def koyeb_prov():
-    return KoyebProvider(_client("https://app.koyeb.com", _serve({"/v1/catalog/instances": text("koyeb_instances.json")})))
+    return KoyebProvider(_client("https://app.koyeb.com", _serve({
+        "/v1/catalog/instances": text("koyeb_instances.json"), "/v1/catalog/usage": json.dumps(_cap("koyeb", "/v1/catalog/usage"))})))
 
 
 def scaleway_prov():
+    # Prices from Shadeform; capacity from Scaleway's own per-zone API (saved in tests/fixtures_capacity).
+    # Availability paths come first: the catalogue path is a prefix of them.
+    saved = json.loads((CAP / "scaleway.json").read_text())
+    zones = {k: v[0] for k, v in saved.items() if "api.scaleway.com" in k}
+    routes = {k.replace("https://api.scaleway.com", ""): json.dumps({"servers": v["servers"]})
+              for k, v in sorted(zones.items(), key=lambda kv: not kv[0].endswith("/availability"))}
     return ScalewayProvider(_client("https://api.shadeform.ai",
-                                    _serve({"/v1/instances/types": text("shadeform_scaleway.json")})))
+                                    _serve({"/v1/instances/types": text("shadeform_scaleway.json"), **routes})))
 
 
 # --------------------------------------------------------------------------
@@ -104,7 +122,9 @@ def scaleway_prov():
 
 def test_linode():
     raws = _fetch(linode_prov())
-    assert len(raws) == 1 and raws[0].ok and raws[0].endpoint == LINODE_EP
+    assert len(raws) == 2 and raws[0].ok and raws[0].endpoint == LINODE_EP
+    assert raws[1].ok and raws[1].endpoint.startswith("/v4/regions/availability"), "capacity fetched next to prices"
+    assert raws[1].payload["data"] and all("gpu" in r["plan"] for r in raws[1].payload["data"]), "GPU plans only"
     data = raws[0].payload["data"]
     assert len(data) == 13 and all(t["gpus"] for t in data), "CPU plans dropped before storage"
     assert raws[0].payload["pages"] == 1
@@ -192,8 +212,10 @@ def test_ovhcloud():
 
 
 def test_koyeb():
-    raw = _fetch(koyeb_prov())[0]
+    raws = _fetch(koyeb_prov())
+    raw = raws[0]
     assert raw.ok and raw.endpoint == KOYEB_EP
+    assert len(raws) == 2 and raws[1].ok and raws[1].endpoint == "/v1/catalog/usage", "capacity fetched next to prices"
     assert raw.payload["count"] == raw.payload["listed"] == 44
     assert raw.payload["instances"] and all(i["gpu"] for i in raw.payload["instances"]), "CPU types dropped"
     out = by_id(KoyebProvider.normalize({KOYEB_EP: [snap(raw.payload)]}))
@@ -316,8 +338,16 @@ def test_pipeline():
             bodies = s.execute(sql("SELECT count(*) FROM raw_payloads")).scalar()
             listed = dict(s.execute(sql("SELECT provider, count(*) FROM compute_listings GROUP BY 1")).all())
             held = s.execute(sql("SELECT provider, listing_id, rule FROM quality_quarantine WHERE status = 'pending'")).all()
-        assert stored == {"linode": 2, "ovhcloud": 4, "scaleway": 2, "koyeb": 2}, stored
-        assert bodies == 5, "identical bodies from the second poll are stored once"
+            cap = dict(s.execute(sql("SELECT provider, count(*) FROM capacity_current GROUP BY 1")).all())
+            cap_changes = s.execute(sql("SELECT count(*) FROM capacity_changes")).scalar()
+        assert cap == {"linode": 429, "koyeb": 25, "scaleway": 29}, f"the poll fills capacity through the same refresh: {cap}"
+        assert cap_changes == 429 + 25 + 29, "the second identical poll adds no capacity history"
+        # Linode and Koyeb store a capacity response next to the price response each poll (capacity.py).
+        # Scaleway adds a catalogue + availability response for each of its 9 zones (19 per poll).
+        assert stored == {"linode": 4, "ovhcloud": 4, "scaleway": 38, "koyeb": 4}, stored
+        # 7 as before + Scaleway capacity: 3 GPU zones x 2 bodies, plus 6 GPU-less zones whose filtered catalogue and
+        # availability are the same empty body (stored once each) = 19. The second, identical poll adds none.
+        assert bodies == 19, f"identical bodies are stored once: {bodies}"
         assert listed == {"linode": 13, "ovhcloud": 31, "scaleway": 11, "koyeb": 15}, listed
         assert not held, f"nothing held on clean data: {held}"
 

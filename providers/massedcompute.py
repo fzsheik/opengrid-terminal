@@ -3,6 +3,11 @@
 Each GPU model is a heading followed by a table of shapes (quantity, vCPU, RAM,
 storage, instance price). Prices are per instance, so the per-GPU rate is
 derived.
+
+Capacity: the price page says nothing about stock, so capacity comes from Shadeform's public catalogue, which
+lists Massed Compute's types with per-region availability (yes/no). Prices still come only from the page, so
+nothing is counted twice. Capacity skus are Shadeform's type names (e.g. "gpu_8x_a6000"); they join to
+listings by GPU and count, not by sku.
 """
 
 import logging
@@ -13,8 +18,9 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
-from models import ComputeListing, RawResponse
-from providers.base import PollingPolicy, Provider, find_endpoint, get_page
+from models import CapacityObservation, ComputeListing, RawResponse
+from providers import shadeform
+from providers.base import PollingPolicy, Provider, find_endpoint, get_page, reshaped
 
 if TYPE_CHECKING:
     from tables import RawSnapshot
@@ -84,7 +90,15 @@ class MassedComputeProvider(Provider):
         )
 
     async def fetch(self) -> list[RawResponse]:
-        return [await get_page(self, ENDPOINT, extract)]
+        catalogue = await self.get(shadeform.BASE_URL + shadeform.ENDPOINT)
+        types = (catalogue.payload or {}).get("instance_types") if isinstance(catalogue.payload, dict) else None
+        if isinstance(types, list):  # keep Massed Compute's rows only, verbatim
+            catalogue = reshaped(catalogue, {"instance_types": [t for t in types if t.get("cloud") == "massedcompute"]})
+        return [await get_page(self, ENDPOINT, extract), catalogue]
+
+    @staticmethod
+    def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
+        return shadeform.shadeform_capacity("massedcompute", "massedcompute", by_endpoint)
 
     @staticmethod
     def normalize(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:

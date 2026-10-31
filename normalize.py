@@ -313,7 +313,14 @@ def refresh(only: list[str] | None = None) -> dict:
     references = 0
     if only is None or "hyperstack" in only:
         references = save_reference_prices({(l.provider, l.raw_gpu_name) for l in listings})
-    return {"listings": saved, "observations": observations, "reference_prices": references}
+    try:  # capacity reads the same raw snapshots; it fails open so it can never block prices
+        import capacity
+
+        cap = capacity.refresh(only)
+    except Exception:
+        log.exception("capacity refresh failed")
+        cap = {"error": "capacity refresh failed"}
+    return {"listings": saved, "observations": observations, "reference_prices": references, "capacity": cap}
 
 
 def history(q: str | None = None, limit: int = 200) -> list[dict]:
@@ -378,8 +385,13 @@ def unmapped_gpus() -> list[dict]:
         .distinct()
         .order_by(ComputeListingRow.provider, ComputeListingRow.raw_gpu_name)
     )
+    from store.capacity import CapacityCurrent  # capacity names share the same to-do list
+
+    capacity_stmt = (select(CapacityCurrent.provider, CapacityCurrent.raw_gpu_name)
+                     .where(CapacityCurrent.canonical_gpu_name.is_(None)).distinct())
     with SessionLocal() as s:
-        rows = [dict(r._mapping) for r in s.execute(stmt)]
+        names = {tuple(r) for r in s.execute(stmt)} | {tuple(r) for r in s.execute(capacity_stmt)}
+    rows = [{"provider": p, "raw_gpu_name": n} for p, n in sorted(names)]
     for row in rows:
         row["reason"] = canonical.NOT_A_SINGLE_GPU.get(
             row["raw_gpu_name"], "not mapped yet"

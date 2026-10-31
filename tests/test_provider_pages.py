@@ -26,7 +26,7 @@ import httpx  # noqa: E402
 import mapping  # noqa: E402
 import provider_meta  # noqa: E402
 from providers import PROVIDERS  # noqa: E402
-from providers import coreweave, hotaisle, jarvislabs, nebius, together  # noqa: E402
+from providers import coreweave, hotaisle, nebius, together  # noqa: E402
 from providers.coreweave import CoreWeaveProvider  # noqa: E402
 from providers.hotaisle import HotAisleProvider  # noqa: E402
 from providers.jarvislabs import JarvislabsProvider  # noqa: E402
@@ -144,25 +144,35 @@ def test_together():
 
 
 def test_jarvislabs():
-    payload = jarvislabs.extract(text("jarvislabs_pricing.html"))
-    assert len(payload["rows"]) == 7
-    out = by_id(JarvislabsProvider.normalize({"/pricing": [snap(payload)]}))
-    h200, h100 = out["nvidia-h200-sxm:1x"], out["nvidia-h100-sxm:1x"]
-    assert h200.raw_gpu_name == "NVIDIA H200 SXM 141GB" and h200.canonical_gpu_name == "NVIDIA H200 141GB SXM5"
-    assert h200.price_per_gpu_hour == D("4.59") and h200.gpu_count == 1 and h200.vcpu == 28
-    assert h100.canonical_gpu_name == "NVIDIA H100 80GB SXM5" and h100.price_per_gpu_hour == D("3.49")
-    assert h100.market_type == "on_demand" and not h100.interruptible and h100.region is None
-    assert out["nvidia-l4:1x"].canonical_gpu_name == "NVIDIA L4 24GB"
-    for ambiguous in ("nvidia-a100-80gb:1x", "nvidia-rtx-pro-6000-blackwell:1x", "nvidia-a100-40gb:1x"):
-        assert out[ambiguous].canonical_gpu_name is None, ambiguous
-    assert out["nvidia-a100-80gb:1x"].raw_gpu_name == "NVIDIA A100 80GB", "a name with its VRAM is kept"
-    # A page rendering another configuration, or a non-on-demand price, fails the poll.
-    html = text("jarvislabs_pricing.html")
-    pressed_1 = 'aria-pressed="true" class="px-2.5 py-1.5 rounded-md text-[12px] font-medium transition-all duration-200" style="font-family:var(--font-mono, ui-monospace, monospace);background:rgba(68,119,224,0.20);border:1px solid rgba(107,147,232,0.55);color:var(--mk-solid);cursor:pointer;line-height:1;min-width:32px;box-shadow:0 0 12px -2px rgba(68,119,224,0.30)">1<'
-    assert pressed_1 in html
-    assert raises(jarvislabs.extract, html.replace(pressed_1, pressed_1[:-2] + "2<", 1))
-    assert raises(jarvislabs.extract, html.replace("On-demand", "Spot", 1).replace("On-demand", "Spot"))
-    assert raises(jarvislabs.extract, html.replace("per GPU pricing", "pricing"))
+    """Read from the authenticated misc/server_meta API (it replaced the price-page scraper)."""
+    body = json.loads(text("jarvislabs_server_meta.json"))
+    out = by_id(JarvislabsProvider.normalize({"/misc/server_meta": [snap(body)]}))
+    h100 = out["NVIDIA H100 SXM 80GB:1x:india-noida-01:vm:on_demand"]
+    assert h100.canonical_gpu_name == "NVIDIA H100 80GB SXM5", "NAMES keeps the variant the page used to give"
+    assert h100.price_per_gpu_hour == D("3.49") and h100.gpu_count == 1 and h100.provider_tier == "vm" and h100.country == "IN"
+    spot = out["NVIDIA H100 SXM 80GB:1x:india-noida-01:vm:spot"]
+    assert spot.market_type == "spot" and spot.interruptible and spot.price_per_gpu_hour == D("1.54")
+    assert out["NVIDIA H200 SXM 141GB:1x:europe-01:any:on_demand"].canonical_gpu_name == "NVIDIA H200 141GB SXM5"
+    assert not any(k.startswith("NVIDIA H200 SXM 141GB:1x:europe-01") and k.endswith(":spot") for k in out), "no spot price: no spot listing"
+    assert {l.canonical_gpu_name for l in out.values() if l.raw_gpu_name == "NVIDIA L4 24GB"} == {"NVIDIA L4 24GB"}
+    for ambiguous in ("NVIDIA A100 80GB", "NVIDIA RTX Pro 6000 Blackwell 96GB", "NVIDIA A100 40GB"):
+        assert all(l.canonical_gpu_name is None for l in out.values() if l.raw_gpu_name == ambiguous), ambiguous
+    assert all(l.available is None for l in out.values()), "stock lives in capacity, not on the price row"
+    # An unknown code keeps its own text and stays unmapped, never guessed.
+    odd = json.loads(json.dumps(body))
+    odd["server_meta"][0]["gpu_type"] = "MYSTERY-9000"
+    names = {l.raw_gpu_name for l in JarvislabsProvider.normalize({"/misc/server_meta": [snap(odd)]})}
+    assert "MYSTERY-9000 80GB" in names
+    assert raises(JarvislabsProvider.normalize, {"/misc/server_meta": [snap({"oops": []})]})
+    cap = JarvislabsProvider.normalize_capacity({"/misc/server_meta": [snap(body)]})
+    assert len(cap) == 13 and all(c.count_unit == "gpu" and c.sku.count(":") == 2 for c in cap)
+    free = {(c.sku, c.region): c.available_count for c in cap}
+    assert free[("NVIDIA H100 SXM 80GB:1x:vm", "india-noida-01")] == 4, "effective free GPUs, as the SDK routes on"
+    # the provider's own client carries the key as a Bearer token; fetch stores the response
+    assert JarvislabsProvider("k-test")._client.headers["authorization"] == "Bearer k-test"
+    raw = asyncio.run(JarvislabsProvider("k-test", httpx.AsyncClient(base_url="https://backendn.jarvislabs.net",
+                      transport=httpx.MockTransport(lambda req: httpx.Response(200, json=body)))).fetch())[0]
+    assert raw.ok and raw.endpoint == "/misc/server_meta" and raw.payload == body
 
 
 # --------------------------------------------------------------------------
@@ -321,7 +331,6 @@ def test_nebius():
 def test_fetch_pages():
     cases = [(CoreWeaveProvider, coreweave, "https://www.coreweave.com", "coreweave_pricing.html"),
              (TogetherProvider, together, "https://www.together.ai", "together_pricing.html"),
-             (JarvislabsProvider, jarvislabs, "https://jarvislabs.ai", "jarvislabs_pricing.html"),
              (HotAisleProvider, hotaisle, "https://hotaisle.xyz", "hotaisle_pricing.html")]
     for cls, mod, base, fix in cases:
         raw = asyncio.run(cls(_client(base, _serve({"/pricing": text(fix)}, "text/html"))).fetch())[0]
@@ -372,14 +381,14 @@ def test_pipeline():
         normalize.SessionLocal = Session
 
         pages = {"coreweave": "coreweave_pricing.html", "together": "together_pricing.html",
-                 "jarvislabs": "jarvislabs_pricing.html", "hotaisle": "hotaisle_pricing.html"}
+                 "hotaisle": "hotaisle_pricing.html"}
         vultr_routes = {"/v2/plans?type=vcg": text("vultr_plans_vcg.json"),
                         "/v2/plans-metal": text("vultr_plans_metal.json")}
 
         def provs():
             return [CoreWeaveProvider(_client("https://x", _serve({"/pricing": text(pages["coreweave"])}, "text/html"))),
                     TogetherProvider(_client("https://x", _serve({"/pricing": text(pages["together"])}, "text/html"))),
-                    JarvislabsProvider(_client("https://x", _serve({"/pricing": text(pages["jarvislabs"])}, "text/html"))),
+                    JarvislabsProvider("k-test", _client("https://x", _serve({"/misc/server_meta": text("jarvislabs_server_meta.json")}))),
                     HotAisleProvider(_client("https://x", _serve({"/pricing": text(pages["hotaisle"])}, "text/html"))),
                     VultrProvider(_client("https://x", _serve(vultr_routes))),
                     BoostRunProvider(_client("https://x", _serve({"/v1/instances/types": text("shadeform_boostrun.json")})))]
@@ -400,7 +409,8 @@ def test_pipeline():
             held = s.execute(sql("SELECT provider, listing_id, rule FROM quality_quarantine WHERE status = 'pending'")).all()
         assert stored == {"coreweave": 2, "together": 2, "jarvislabs": 2, "hotaisle": 2, "vultr": 4, "boostrun": 2}
         assert bodies == 7, "identical bodies from the second poll are stored once"
-        assert listed == {"coreweave": 34, "together": 8, "jarvislabs": 7, "hotaisle": 3, "vultr": 4, "boostrun": 6}, listed
+        # Jarvislabs (API): 13 on-demand rows by region and workload + 11 with a spot price.
+        assert listed == {"coreweave": 34, "together": 8, "jarvislabs": 24, "hotaisle": 3, "vultr": 4, "boostrun": 6}, listed
         assert not held, f"nothing held on clean data: {held}"
 
         rollups.rebuild()

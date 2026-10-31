@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 
 import httpx
 
-from models import ComputeListing, RawResponse
+from models import CapacityObservation, ComputeListing, RawResponse
 
 log = logging.getLogger(__name__)
 
@@ -100,6 +100,25 @@ class Provider(ABC):
     async def post(self, path: str, **kw) -> RawResponse:
         return await self.call("POST", path, **kw)
 
+    @staticmethod
+    @abstractmethod
+    def normalize(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:
+        """Turn this provider's stored raw snapshots into listings.
+
+        `by_endpoint` maps endpoint path -> the snapshots from the newest fetch
+        round, so an endpoint called many times per fetch (Salad's per-class
+        availability) arrives as a list.
+        """
+
+    @staticmethod
+    def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
+        """Turn the same raw snapshots into capacity observations (capacity.py).
+
+        Optional: a provider that publishes no capacity signal keeps this default. Like
+        normalize(), it never touches the network, so it can be re-run over stored history.
+        """
+        return []
+
 
 async def gather_limited(factories, limit: int = 4) -> list:
     """Run calls with a concurrency cap, so we stay under rate limits.
@@ -114,17 +133,6 @@ async def gather_limited(factories, limit: int = 4) -> list:
             return await make()
 
     return await asyncio.gather(*(run(f) for f in factories))
-
-
-    @staticmethod
-    @abstractmethod
-    def normalize(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:
-        """Turn this provider's stored raw snapshots into listings.
-
-        `by_endpoint` maps endpoint path -> the snapshots from the newest fetch
-        round, so an endpoint called many times per fetch (Salad's per-class
-        availability) arrives as a list.
-        """
 
 
 def reshaped(raw: RawResponse, payload, request=None) -> RawResponse:

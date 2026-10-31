@@ -1,0 +1,394 @@
+{
+ "server_meta": [
+  {
+   "vram": "80",
+   "cpus_per_gpu": 16,
+   "ram_per_gpu": 200,
+   "arc": "Hopper",
+   "gpu_type": "H100",
+   "price_per_hour": 2.99,
+   "num_free_devices": 0,
+   "spot_num_free_devices": 0,
+   "effective_num_free_devices": 0,
+   "spot_only_server": false,
+   "region": "europe-01",
+   "workload_type": null
+  },
+  {
+   "vram": "141",
+   "cpus_per_gpu": 16,
+   "ram_per_gpu": 200,
+   "arc": "Hopper",
+   "gpu_type": "H200",
+   "price_per_hour": 3.99,
+   "num_free_devices": 1,
+   "spot_num_free_devices": 1,
+   "effective_num_free_devices": 1,
+   "spot_only_server": false,
+   "region": "europe-01",
+   "workload_type": null
+  },
+  {
+   "gpu_type": "A30",
+   "ram_per_gpu": 64,
+   "num_gpus": "4",
+   "cpus_per_gpu": 16,
+   "price_per_hour": 0.41,
+   "spot_price": 0.29,
+   "price_per_week": null,
+   "price_per_month": null,
+   "reserved_pricing": {
+    "reserved_1m": 0.4,
+    "reserved_1y": 0.38,
+    "reserved_2y": 0.37,
+    "reserved_3m": 0.4,
+    "reserved_6m": 0.39
+   },
+   "vram": "24",
+   "region": "india-noida-01",
+   "workload_type": "container",
+   "num_free_devices": 0,
+   "effective_num_free_devices": 0,
+   "spot_num_free_devices": 0,
+   "spot_only_server": false,
+   "arc": "Ampere"
+  },
+  {
+   "gpu_type": "L4",
+   "ram_per_gpu": 124,
+   "num_gpus": "8",
+   "cpus_per_gpu": 28,
+   "price_per_hour": 0.44,
+   "spot_price": 0.29,
+   "price_per_week": 840,
+   "price_per_month": 3600,
+   "reserved_pricing": {
+    "reserved_1m": 0.43,
+    "reserved_1y": 0.4,
+    "reserved_2y": 0.4,
+    "reserved_3m": 0.43,
+    "reserved_6m": 0.42
+   },
+   "vram": "24",
+   "region": "india-noida-01",
+   "workload_type": "vm",
+   "num_free_devices": 0,
+   "effective_num_free_devices": 0,
+   "spot_num_free_devices": 0,
+   "spot_only_server": false,
+   "arc": "Ada"
+  },
+  {
+   "gpu_type": "L4",
+   "ram_per_gpu": 124,
+   "num_gpus": "8",
+   "cpus_per_gpu": 28,
+   "price_per_hour": 0.44,
+   "spot_price": 0.29,
+   "price_per_week": 840,
+   "price_per_month": 3600,
+   "reserved_pricing": {
+    "reserved_1m": 0.43,
+    "reserved_1y": 0.4,
+    "reserved_2y": 0.4,
+    "reserved_3m": 0.43,
+    "reserved_6m": 0.42
+   },
+   "vram": "24",
+   "region": "india-noida-01",
+   "workload_type": "container",
+   "num_free_devices": 0,
+   "effective_num_free_devices": 0,
+   "spot_num_free_devices": 0,
+   "spot_only_server": false,
+   "arc": "Ada"
+  },
+  {
+   "gpu_type": "A100",
+   "ram_per_gpu": 112,
+   "num_gpus": "3",
+   "cpus_per_gpu": 16,
+   "price_per_hour": 0.89,
+   "spot_price": 0.79,
+   "price_per_week": 252,
+   "price_per_month": 1080,
+   "reserved_pricing": {
+    "reserved_1m": 0.87,
+    "reserved_1y": 0.82,
+    "reserved_2y": 0.8,
+    "reserved_3m": 0.86,
+    "reserved_6m": 0.85
+   },
+   "vram": "40",
+   "region": "india-noida-01",
+   "workload_type": "container",
+   "num_free_devices": 0,
+   "effective_num_free_devices": 0,
+   "spot_num_free_devices": 0,
+   "spot_only_server": false,
+   "arc": "Ampere"
+  },
+  {
+   "gpu_type": "A100-80GB",
+   "ram_per_gpu": 112,
+   "num_gpus": "4",
+   "cpus_per_gpu": 28,
+   "price_per_hour": 1.49,
+   "spot_price": 0.89,
+   "price_per_week": 238,
+   "price_per_month": 967,
+   "reserved_pricing": {
+    "reserved_1m": 1.46,
+    "reserved_1y": 1.37,
+    "reserved_2y": 1.34,
+    "reserved_3m": 1.45,
+    "reserved_6m": 1.43
+   },
+   "vram": "80",
+   "region": "india-noida-01",
+   "workload_type": "container",
+   "num_free_devices": 0,
+   "effective_num_free_devices": 2,
+   "spot_num_free_devices": 0,
+   "spot_only_server": false,
+   "arc": "Ampere"
+  },
+  {
+   "gpu_type": "RTX-PRO6000",
+   "ram_per_gpu": 160,
+   "num_gpus": "8",
+   "cpus_per_gpu": 28,
+   "price_per_hour": 2.19,
+   "spot_price": 1.15,
+   "price_per_week": 840,
+   "price_per_month": 3600,
+   "reserved_pricing": {
+    "reserved_1m": 2.15,
+    "reserved_1y": 2.01,
+    "reserved_2y": 1.97,
+    "reserved_3m": 2.12,
+    "reserved_6m": 2.1
+   },
+   "vram": "96",
+   "region": "india-chennai-01",
+   "workload_type": "vm",
+   "num_free_devices": 1,
+   "effective_num_free_devices": 1,
+   "spot_num_free_devices": 1,
+   "spot_only_server": false,
+   "arc": "Blackwell"
+  },
+  {
+   "gpu_type": "RTX-PRO6000",
+   "ram_per_gpu": 160,
+   "num_gpus": "8",
+   "cpus_per_gpu": 28,
+   "price_per_hour": 2.19,
+   "spot_price": 1.15,
+   "price_per_week": 840,
+   "price_per_month": 3600,
+   "reserved_pricing": {
+    "reserved_1m": 2.15,
+    "reserved_1y": 2.01,
+    "reserved_2y": 1.97,
+    "reserved_3m": 2.12,
+    "reserved_6m": 2.1
+   },
+   "vram": "96",
+   "region": "india-chennai-01",
+   "workload_type": "container",
+   "num_free_devices": 0,
+   "effective_num_free_devices": 0,
+   "spot_num_free_devices": 0,
+   "spot_only_server": false,
+   "arc": "Blackwell"
+  },
+  {
+   "gpu_type": "H100",
+   "ram_per_gpu": 200,
+   "num_gpus": "8",
+   "cpus_per_gpu": 24,
+   "price_per_hour": 3.49,
+   "spot_price": 1.54,
+   "price_per_week": 238,
+   "price_per_month": 238,
+   "reserved_pricing": {
+    "reserved_1m": 3.42,
+    "reserved_1y": 3.21,
+    "reserved_2y": 3.14,
+    "reserved_3m": 3.39,
+    "reserved_6m": 3.35
+   },
+   "vram": "80",
+   "region": "india-noida-01",
+   "workload_type": "vm",
+   "num_free_devices": 2,
+   "effective_num_free_devices": 4,
+   "spot_num_free_devices": 2,
+   "spot_only_server": false,
+   "arc": "Hopper"
+  },
+  {
+   "gpu_type": "H100",
+   "ram_per_gpu": 200,
+   "num_gpus": "8",
+   "cpus_per_gpu": 24,
+   "price_per_hour": 3.49,
+   "spot_price": 1.54,
+   "price_per_week": 238,
+   "price_per_month": 238,
+   "reserved_pricing": {
+    "reserved_1m": 3.42,
+    "reserved_1y": 3.21,
+    "reserved_2y": 3.14,
+    "reserved_3m": 3.39,
+    "reserved_6m": 3.35
+   },
+   "vram": "80",
+   "region": "india-noida-01",
+   "workload_type": "container",
+   "num_free_devices": 0,
+   "effective_num_free_devices": 0,
+   "spot_num_free_devices": 0,
+   "spot_only_server": false,
+   "arc": "Hopper"
+  },
+  {
+   "gpu_type": "H200",
+   "ram_per_gpu": 300,
+   "num_gpus": "8",
+   "cpus_per_gpu": 28,
+   "price_per_hour": 4.59,
+   "spot_price": 2.29,
+   "price_per_week": null,
+   "price_per_month": null,
+   "reserved_pricing": {
+    "reserved_1m": 4.5,
+    "reserved_1y": 4.22,
+    "reserved_2y": 4.13,
+    "reserved_3m": 4.45,
+    "reserved_6m": 4.41
+   },
+   "vram": "141",
+   "region": "india-noida-01",
+   "workload_type": "container",
+   "num_free_devices": 4,
+   "effective_num_free_devices": 5,
+   "spot_num_free_devices": 4,
+   "spot_only_server": false,
+   "arc": "Hopper"
+  },
+  {
+   "gpu_type": "H200",
+   "ram_per_gpu": 300,
+   "num_gpus": "8",
+   "cpus_per_gpu": 28,
+   "price_per_hour": 4.59,
+   "spot_price": 2.29,
+   "price_per_week": null,
+   "price_per_month": null,
+   "reserved_pricing": {
+    "reserved_1m": 4.5,
+    "reserved_1y": 4.22,
+    "reserved_2y": 4.13,
+    "reserved_3m": 4.45,
+    "reserved_6m": 4.41
+   },
+   "vram": "141",
+   "region": "india-noida-01",
+   "workload_type": "vm",
+   "num_free_devices": 1,
+   "effective_num_free_devices": 1,
+   "spot_num_free_devices": 1,
+   "spot_only_server": false,
+   "arc": "Hopper"
+  }
+ ],
+ "cpu_meta": {
+  "device_type": "CPU",
+  "cpu_price": 0.02,
+  "ram": "2GB",
+  "cores": 1,
+  "available": false,
+  "region": "india-01",
+  "workload_type": "container",
+  "combinations": [
+   {
+    "vcpus": 2,
+    "ram_gb": 8,
+    "price": 0.0496,
+    "available": true,
+    "regions": {
+     "india-chennai-01": true,
+     "india-noida-01": true
+    },
+    "reserved_pricing": {
+     "reserved_1m": 0.0471,
+     "reserved_3m": 0.0446,
+     "reserved_6m": 0.0422
+    }
+   },
+   {
+    "vcpus": 4,
+    "ram_gb": 16,
+    "price": 0.0992,
+    "available": true,
+    "regions": {
+     "india-chennai-01": true,
+     "india-noida-01": true
+    },
+    "reserved_pricing": {
+     "reserved_1m": 0.0942,
+     "reserved_3m": 0.0893,
+     "reserved_6m": 0.0843
+    }
+   },
+   {
+    "vcpus": 8,
+    "ram_gb": 32,
+    "price": 0.1984,
+    "available": true,
+    "regions": {
+     "india-chennai-01": true,
+     "india-noida-01": true
+    },
+    "reserved_pricing": {
+     "reserved_1m": 0.1885,
+     "reserved_3m": 0.1786,
+     "reserved_6m": 0.1686
+    }
+   },
+   {
+    "vcpus": 16,
+    "ram_gb": 64,
+    "price": 0.3968,
+    "available": false,
+    "regions": {
+     "india-chennai-01": false,
+     "india-noida-01": false
+    },
+    "reserved_pricing": {
+     "reserved_1m": 0.377,
+     "reserved_3m": 0.3571,
+     "reserved_6m": 0.3373
+    }
+   },
+   {
+    "vcpus": 32,
+    "ram_gb": 128,
+    "price": 0.7936,
+    "available": false,
+    "regions": {
+     "india-chennai-01": false,
+     "india-noida-01": false
+    },
+    "reserved_pricing": {
+     "reserved_1m": 0.7539,
+     "reserved_3m": 0.7142,
+     "reserved_6m": 0.6746
+    }
+   }
+  ]
+ },
+ "currency": "USD"
+}

@@ -11,3 +11,4 @@ from store import settlement  # noqa: F401  (0018_settlement: official index fix
 from store import reservations  # noqa: F401  (0019_reservations: reserved-compute price-lock requests)
 from store import intelligence  # noqa: F401  (0020_intelligence: performance observations for future learning)
 from store import uptime  # noqa: F401  (0022_uptime: external UptimeProject control-plane probe data)
+from store import capacity  # noqa: F401  (0025_capacity: provider-reported capacity)

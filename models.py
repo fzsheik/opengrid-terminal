@@ -2,10 +2,12 @@
 
 `RawResponse` is what a provider's API said, untouched.
 `ComputeListing` is the normalized shape everything else is built on.
+`CapacityObservation` is one provider's own word on how much of one SKU it can supply in one region.
 """
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -63,4 +65,41 @@ class ComputeListing(BaseModel):
     storage_gb: float | None
 
     # TIME
+    observed_at: datetime
+
+
+class CapacityObservation(BaseModel):
+    """How much of one SKU a provider says it can supply in one region, right now.
+
+    Providers report capacity in three incompatible shapes, so the shape is kept, not flattened:
+        a count     "363 of 395 GPUs free"            -> available_count / total_count
+        a tier      "LOW", "scarce"                    -> tier (low | medium | high)
+        a boolean   "available": false                 -> in_stock only
+    `in_stock` is the one field every shape can fill, so it is the comparable one across providers.
+    `raw_value` is the provider's own word, kept for audit. Key: (provider, sku, region).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    # IDENTITY: same sku as the provider's listings, so capacity joins to price
+    provider: str
+    sku: str
+    region: str | None  # None = the provider reports it provider-wide
+    country: str | None = None
+
+    # HARDWARE
+    raw_gpu_name: str
+    canonical_gpu_name: str | None
+    gpu_count: int  # GPUs per instance
+
+    # CAPACITY
+    in_stock: bool | None
+    tier: Literal["low", "medium", "high"] | None = None
+    available_count: int | None = None
+    total_count: int | None = None
+    count_unit: Literal["gpu", "instance"] | None = None
+    raw_value: str
+
+    # PROVENANCE
+    source: str  # the endpoint it came from
     observed_at: datetime

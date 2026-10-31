@@ -1,15 +1,20 @@
-"""Google Cloud Compute Engine: the public accelerator-optimized price page.
+"""Google Cloud Compute Engine: the Cloud Billing Catalog API (it replaced the price-page scraper 2026-10-30).
 
-The parser runs on a trimmed copy of the REAL page (tests/fixtures_providers/
-gcp_accelerator_optimized.html, fetched 2026-10-13 with an unauthenticated GET):
-the two sections read, with scripts, unselected region options and behaviour
-attributes removed. The last test pushes it through raw storage, normalize +
-quality screening, the hourly rollup and the index vote in a scratch database.
+Fixtures:
+    gcp_catalog_skus.json            the API's Compute Engine SKUs as the provider stores them (filtered to GPU,
+                                     the GPU families' core/RAM and Local SSD), fetched 2026-10-30
+    gcp_page_prices_us_central1.json the Iowa prices printed on Google's accelerator-optimized pricing page
+                                     (extracted from the saved page, fetched 2026-10-13). Every machine shape in
+                                     providers/gcp.py is PROVEN by reproducing these from the API's components.
+
+The last test pushes the catalogue through raw storage, normalize + quality screening, the hourly rollup and the
+index vote in a scratch database.
 
 Run:  .venv/bin/python tests/test_provider_gcp.py
 """
 
 import asyncio
+import json
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -29,12 +34,16 @@ import provider_meta  # noqa: E402
 from providers import PROVIDERS, gcp  # noqa: E402
 from providers.gcp import ENDPOINT, GcpProvider  # noqa: E402
 
-FIX = Path(__file__).resolve().parent / "fixtures_providers" / "gcp_accelerator_optimized.html"
-NOW = datetime(2026, 10, 13, 12, tzinfo=timezone.utc)
+FIX = Path(__file__).resolve().parent / "fixtures_providers"
+NOW = datetime(2026, 10, 30, 12, tzinfo=timezone.utc)
 
 
-def page():
-    return FIX.read_text(encoding="utf-8")
+def catalogue():
+    return json.loads((FIX / "gcp_catalog_skus.json").read_text())
+
+
+def page_prices():
+    return json.loads((FIX / "gcp_page_prices_us_central1.json").read_text())
 
 
 def snap(payload, at=NOW):
@@ -53,102 +62,96 @@ def raises(fn, *a):
     return False
 
 
-def _serve(body: str):
+def _serve(pages: list[dict], status=200):
+    """Serve the catalogue in `pages`, chained by nextPageToken; remember the request headers."""
+    seen = []
+
     def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/products/compute/pricing/accelerator-optimized":
-            return httpx.Response(200, text=body, headers={"content-type": "text/html"})
-        return httpx.Response(404, text="not found")
-    return httpx.AsyncClient(base_url="https://cloud.google.com", transport=httpx.MockTransport(handler))
+        seen.append(request)
+        if request.url.path != ENDPOINT:
+            return httpx.Response(404, text="not found")
+        if status != 200:
+            return httpx.Response(status, json={"error": {"message": "nope"}})
+        i = int(request.url.params.get("pageToken") or 0)
+        body = {"skus": pages[i]["skus"], **({"nextPageToken": str(i + 1)} if i + 1 < len(pages) else {})}
+        return httpx.Response(200, json=body)
+    return GcpProvider("k-test", httpx.AsyncClient(base_url=gcp.BASE_URL, transport=httpx.MockTransport(handler))), seen
 
 
-def test_extract():
-    payload = gcp.extract(page())
-    assert payload["region"] == "Iowa (us-central1)"
-    assert len(payload["machines"]) == 28 and len(payload["attachable"]) == 4
-    a3 = next(r for r in payload["machines"] if r["machine_type"] == "a3-highgpu-8g")
-    assert a3 == {"machine_type": "a3-highgpu-8g", "gpu": "Nvidia H100", "gpus": "8", "vcpus": "208",
-                  "memory": "1,871GB", "price": "$88.490000119 / 1 hour"}, "the on-demand column, as printed"
-    assert [r["model"] for r in payload["attachable"]] == ["NVIDIA T4", "NVIDIA P4", "NVIDIA V100", "NVIDIA P100"]
+def test_shapes_reproduce_googles_page_prices():
+    out = listings(catalogue())
+    ref = page_prices()
+    checked = 0
+    for mtype in gcp.MACHINES:
+        assert mtype in ref["machines"], f"{mtype}: no page price to prove its shape against"
+        got = out[f"{mtype}:us-central1"].price_per_instance_hour
+        assert abs(got - D(ref["machines"][mtype])) < D("0.000001"), (mtype, got, ref["machines"][mtype])
+        checked += 1
+    assert checked == len(gcp.MACHINES) == 24
+    names = {"nvidia-tesla-t4": "NVIDIA T4", "nvidia-tesla-p4": "NVIDIA P4", "nvidia-tesla-v100": "NVIDIA V100",
+             "nvidia-tesla-p100": "NVIDIA P100"}
+    for accel, model in names.items():
+        assert out[f"{accel}:us-central1"].price_per_gpu_hour == D(ref["attachable"][model]), accel
+    # Shapes left out because they cannot be proven: no on-demand page price, or a fraction of a card.
+    assert "a4-highgpu-8g" not in gcp.MACHINES and not any(k.startswith(("g4-standard-6", "g4-standard-12", "g4-standard-24"))
+                                                            for k in gcp.MACHINES)
 
 
 def test_normalize():
-    out = listings(gcp.extract(page()))
-
-    h100 = out["a3-highgpu-8g:us-central1"]
-    assert h100.raw_gpu_name == "nvidia-h100-80gb" and h100.canonical_gpu_name == "NVIDIA H100 80GB SXM5"
-    assert h100.gpu_count == 8 and h100.price_per_instance_hour == D("88.490000119")
-    assert h100.price_per_gpu_hour == D("88.490000119") / 8 == D("11.061250014875"), "VM price / 8 GPUs, exact"
-    assert h100.market_type == "on_demand" and not h100.interruptible and h100.available is None
-    assert h100.region == "us-central1" and h100.country == "US" and h100.provider_tier == "hyperscaler"
-    assert h100.vcpu == 208 and h100.ram_gb == 1871
-    mega = out["a3-megagpu-8g:us-central1"]
-    assert mega.canonical_gpu_name == "NVIDIA H100 80GB SXM5" and mega.price_per_gpu_hour == D("11.675089100875")
-    h200 = out["a3-ultragpu-8g:us-central1"]
-    assert h200.canonical_gpu_name == "NVIDIA H200 141GB SXM5" and h200.price_per_gpu_hour == D("10.600863561625")
-    a100_80 = out["a2-ultragpu-8g:us-central1"]
-    assert a100_80.canonical_gpu_name == "NVIDIA A100 80GB SXM4" and a100_80.price_per_gpu_hour == D("5.068797890375")
-    a100_40 = out["a2-highgpu-1g:us-central1"]
-    assert a100_40.canonical_gpu_name == "NVIDIA A100 40GB SXM4" and a100_40.price_per_gpu_hour == D("3.673385")
-    assert out["a2-megagpu-16g:us-central1"].gpu_count == 16
-    assert out["a2-megagpu-16g:us-central1"].price_per_gpu_hour == D("3.483719")
-    rtx = out["g4-standard-384:us-central1"]
-    assert rtx.canonical_gpu_name == "NVIDIA RTX PRO 6000 96GB SE" and rtx.price_per_gpu_hour == D("4.49993")
-    l4 = out["g2-standard-4:us-central1"]
-    assert l4.canonical_gpu_name == "NVIDIA L4 24GB" and l4.price_per_gpu_hour == D("0.706832276") and l4.ram_gb == 16
-    assert out["g2-standard-96:us-central1"].price_per_gpu_hour == D("1.000416348")
-
-    # Attachable GPUs: the GPU alone, per GPU.
+    out = listings(catalogue())
+    assert len(out) == 28 and {l.region for l in out.values()} == {"us-central1"}, "Iowa only (see REGIONS)"
+    a3 = out["a3-highgpu-8g:us-central1"]
+    assert a3.canonical_gpu_name == "NVIDIA H100 80GB SXM5" and a3.gpu_count == 8 and a3.vcpu == 208 and a3.ram_gb == 1872
+    assert abs(a3.price_per_gpu_hour - D("11.06125")) < D("0.000001") and a3.provider_tier == "hyperscaler"
+    assert a3.market_type == "on_demand" and not a3.interruptible and a3.country == "US" and a3.available is None
+    mega, high = out["a3-megagpu-8g:us-central1"], a3
+    assert mega.price_per_instance_hour > high.price_per_instance_hour, "Mega (Plus SKUs) costs more than High"
     t4 = out["nvidia-tesla-t4:us-central1"]
-    assert t4.canonical_gpu_name == "NVIDIA T4 16GB" and t4.gpu_count == 1 and t4.price_per_gpu_hour == D("0.35")
-    assert t4.provider_tier == "gpu-attachment" and t4.vcpu is None
-    assert out["nvidia-tesla-v100:us-central1"].canonical_gpu_name == "NVIDIA Tesla V100 16GB", "variant-less V100"
-    assert out["nvidia-tesla-v100:us-central1"].price_per_gpu_hour == D("2.48")
-    assert out["nvidia-tesla-p4:us-central1"].canonical_gpu_name is None, "no canonical P4"
-    assert out["nvidia-tesla-p100:us-central1"].canonical_gpu_name is None, "no canonical P100"
-
-    # B200 is N/A on demand; fractional G4 shapes are not whole GPUs; spot / DWS / CUDs never read.
-    assert "a4-highgpu-8g:us-central1" not in out
-    assert not {"g4-standard-6:us-central1", "g4-standard-12:us-central1", "g4-standard-24:us-central1"} & set(out)
-    prices = {l.price_per_instance_hour for l in out.values()}
-    assert not prices & {D("52.794210411"), D("38.3200"), D("41.6000"), D("61.383674231"), D("0.22")}
-    assert all(l.market_type == "on_demand" for l in out.values())
-    assert len(out) == 28
+    assert t4.gpu_count == 1 and t4.provider_tier == "gpu-attachment" and t4.price_per_gpu_hour == D("0.35")
+    unmapped = {l.raw_gpu_name for l in out.values() if l.canonical_gpu_name is None}
+    assert unmapped == {"nvidia-tesla-p4", "nvidia-tesla-p100"}, unmapped
 
 
-def test_hand_table_wins():
-    payload = gcp.extract(page())
-    # The page printing a different count or GPU than the table: skipped, not guessed.
-    for r in payload["machines"]:
-        if r["machine_type"] == "a3-highgpu-8g":
-            r["gpus"] = "4"
-        if r["machine_type"] == "g2-standard-4":
-            r["gpu"] = "NVIDIA L40S"
-    # A machine type nobody put in the table: skipped.
-    payload["machines"].append({"machine_type": "a5-highgpu-8g", "gpu": "Nvidia B300", "gpus": "8",
-                                "vcpus": "224", "memory": "4,000GB", "price": "$120.00 / 1 hour"})
-    out = listings(payload)
-    assert "a3-highgpu-8g:us-central1" not in out and "g2-standard-4:us-central1" not in out
-    assert "a5-highgpu-8g:us-central1" not in out and len(out) == 26
-    assert GcpProvider.normalize({}) == []
+def _sku(desc, region, units, nanos=0, usage="OnDemand", group="GPU", unit="h"):
+    return {"description": desc, "serviceRegions": [region], "category": {"usageType": usage, "resourceGroup": group},
+            "pricingInfo": [{"pricingExpression": {"usageUnit": unit, "tieredRates": [{"unitPrice": {"units": str(units), "nanos": nanos}}]}}]}
+
+
+def test_conflicts_and_missing_components():
+    base = catalogue()
+    # A second, different on-demand H100 price for Iowa: the region is skipped for H100 machines, never guessed.
+    clash = {"skus": base["skus"] + [_sku("Nvidia H100 80GB GPU running in Americas", "us-central1", 99)]}
+    out = listings(clash)
+    assert "a3-highgpu-8g:us-central1" not in out and "a2-highgpu-1g:us-central1" in out
+    # Spot / commitment SKUs never leak into on-demand prices.
+    spot = {"skus": base["skus"] + [_sku("Spot Preemptible Nvidia H100 80GB GPU running in Americas", "us-central1", 1)]}
+    assert listings(spot)["a3-highgpu-8g:us-central1"].price_per_instance_hour == listings(base)["a3-highgpu-8g:us-central1"].price_per_instance_hour
+    # Without the A3 RAM SKU in Iowa there is no A3 High listing there.
+    no_ram = {"skus": [s for s in base["skus"] if not s["description"].startswith("A3 Instance Ram")]}
+    assert "a3-highgpu-8g:us-central1" not in listings(no_ram)
+    assert gcp.unit_price({"pricingInfo": []}) is None
 
 
 def test_fail_closed():
-    html = page()
-    assert raises(gcp.extract, "<html>new design</html>")
-    # Another region rendered: not us-central1, so the poll fails.
-    assert raises(gcp.extract, html.replace("Iowa (us-central1)", "Belgium (europe-west1)", 1))
-    assert raises(gcp.extract, html.replace(">Machine type<", ">Instance<", 1))
-    assert raises(gcp.extract, html.replace(">GPU price (USD)<", ">Price<", 1))
-    assert raises(gcp.extract, html.replace("$88.490000119 / 1 hour", "$88.49 per hour", 1))
-    assert raises(gcp.extract, html.replace(">GPU Attachment pricing<", ">Attach a GPU<", 1))
-    assert not raises(gcp.extract, html)
+    assert GcpProvider.normalize({}) == []
+    assert raises(GcpProvider.normalize, {ENDPOINT: [snap({"oops": []})]})
+    no_h100 = {"skus": [s for s in catalogue()["skus"] if "H100 80GB GPU" not in s["description"]]}
+    assert raises(GcpProvider.normalize, {ENDPOINT: [snap(no_h100)]}), "a catalogue without H100 is a reshaped one"
 
 
 def test_fetch():
-    raw = asyncio.run(GcpProvider(_serve(page())).fetch())[0]
-    assert raw.ok and raw.endpoint == ENDPOINT and raw.payload == gcp.extract(page())
-    broken = asyncio.run(GcpProvider(_serve("<html>new design</html>")).fetch())[0]
-    assert not broken.ok and broken.payload is None and "ValueError" in broken.error
+    skus = catalogue()["skus"]
+    noise = [_sku("N2 Instance Core running in Americas", "us-central1", 0, 31000000, group="CPU")]
+    prov, seen = _serve([{"skus": skus[:1000] + noise}, {"skus": skus[1000:]}])
+    raw = asyncio.run(prov.fetch())
+    assert len(raw) == 1 and raw[0].ok and raw[0].endpoint == ENDPOINT
+    assert len(raw[0].payload["skus"]) == len(skus), "both pages, and unrelated SKUs (N2) filtered out"
+    assert [r.url.params.get("pageToken") for r in seen] == [None, "1"]
+    assert GcpProvider("k-test")._client.headers["x-goog-api-key"] == "k-test", "the key travels in a header"
+    assert all("k-test" not in str(r.url) for r in seen), "never in a URL"
+    failing, _ = _serve([{"skus": skus}], status=403)
+    bad = asyncio.run(failing.fetch())
+    assert len(bad) == 1 and not bad[0].ok and "k-test" not in (bad[0].error or ""), "a failure is stored as a failure"
 
 
 def test_registry():
@@ -156,13 +159,19 @@ def test_registry():
     assert mapping.check_mapping_coverage() == {}
     assert "gcp" in mapping.PROVIDER_MAPPINGS
     m = provider_meta.meta("gcp")
-    assert (m.provider_class, m.source_type, m.source) == ("hyperscaler", "public_page", "cloud.google.com")
+    assert (m.provider_class, m.source_type, m.source) == ("hyperscaler", "authenticated_api", "cloudbilling.googleapis.com")
+    import config
     import fetch
-    assert any(isinstance(p, GcpProvider) for p in fetch.build_fetchers())
-    # Every table entry resolves to a canonical name or is a known, deliberate gap.
-    unmapped = {a for _, a, _ in gcp.GPU_MACHINES.values()} | {a for a, _ in gcp.ATTACHABLE.values()}
-    unmapped = {a for a in unmapped if canonical.canonical_gpu_name(a) is None}
-    assert unmapped == {"nvidia-tesla-p4", "nvidia-tesla-p100"}, unmapped
+    real = config.settings.gcp_api_key
+    try:
+        config.settings.gcp_api_key = None
+        assert not any(isinstance(p, GcpProvider) for p in fetch.build_fetchers()), "no key, no GCP"
+        config.settings.gcp_api_key = "k-test"
+        assert any(isinstance(p, GcpProvider) for p in fetch.build_fetchers())
+    finally:
+        config.settings.gcp_api_key = real
+    unmapped = {a for _, _, a, *_ in gcp.MACHINES.values()} | set(gcp.ATTACHABLE.values())
+    assert {a for a in unmapped if canonical.canonical_gpu_name(a) is None} == {"nvidia-tesla-p4", "nvidia-tesla-p100"}
 
 
 def test_pipeline():
@@ -182,7 +191,8 @@ def test_pipeline():
 
         now = datetime.now(timezone.utc).replace(microsecond=0)
         for when in (now - timedelta(hours=3), now - timedelta(minutes=5)):  # two polls, three hours apart
-            responses = [r.model_copy(update={"fetched_at": when}) for r in asyncio.run(GcpProvider(_serve(page())).fetch())]
+            prov, _ = _serve([catalogue()])
+            responses = [r.model_copy(update={"fetched_at": when}) for r in asyncio.run(prov.fetch())]
             assert all(r.ok for r in responses), [r.error for r in responses]
             fetch.save(responses)
             normalize.refresh(["gcp"])
@@ -212,8 +222,8 @@ def test_pipeline():
 
 
 if __name__ == "__main__":
-    for t in (test_extract, test_normalize, test_hand_table_wins, test_fail_closed, test_fetch, test_registry,
-              test_pipeline):
+    for t in (test_shapes_reproduce_googles_page_prices, test_normalize, test_conflicts_and_missing_components,
+              test_fail_closed, test_fetch, test_registry, test_pipeline):
         t()
         print(t.__name__, "ok")
     print("all passed")

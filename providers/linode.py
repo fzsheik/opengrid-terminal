@@ -9,6 +9,10 @@ plan label ("Dedicated 32GB + RTX6000 GPU x1", "RTX4000 Ada x2 Medium"), so the
 normalizer pulls the "RTX..." token out of it; a GPU label with no such token
 keeps the whole label as its name and stays unmapped.
 
+Capacity: GET /v4/regions/availability (also anonymous, paged at most 500 rows) says, per region
+and plan, whether the plan can be launched there now (`available` true/false). Only GPU plans are
+kept. A boolean, so it fills in_stock and nothing else.
+
 Akamai/Linode is a general-purpose cloud, so it never counts toward neocloud indices.
 """
 
@@ -19,7 +23,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
-from models import ComputeListing, RawResponse
+from models import CapacityObservation, ComputeListing, RawResponse
 from providers.base import PollingPolicy, Provider, find_endpoint, reshaped, to_decimal
 
 if TYPE_CHECKING:
@@ -29,6 +33,7 @@ log = logging.getLogger(__name__)
 
 BASE_URL = "https://api.linode.com"
 ENDPOINT = "/v4/linode/types?page_size=500"
+AVAILABILITY = "/v4/regions/availability?page_size=500"
 _GPU_TOKEN = re.compile(r"\b(RTX\s?\w+(?: Ada)?)\b")
 
 
@@ -57,10 +62,27 @@ class LinodeProvider(Provider):
         raw = await self.get(ENDPOINT)
         body = raw.payload
         if not isinstance(body, dict) or not isinstance(body.get("data"), list):
-            return [raw]  # stored as-is; normalize() refuses it
+            return [raw, await self._availability(None)]  # stored as-is; normalize() refuses it
         # Keep the GPU types only, verbatim (plus the paging fields): the rest are CPU plans.
-        return [reshaped(raw, {**{k: v for k, v in body.items() if k != "data"},
-                               "data": [t for t in body["data"] if t.get("gpus")]})]
+        gpu_types = [t for t in body["data"] if t.get("gpus")]
+        types = reshaped(raw, {**{k: v for k, v in body.items() if k != "data"}, "data": gpu_types})
+        return [types, await self._availability({t.get("id") for t in gpu_types})]
+
+    async def _availability(self, gpu_plans: set | None) -> RawResponse:
+        """Every page of /regions/availability as one response, GPU plans only. A page that fails
+        returns that failure, so a partial set is never stored as a complete one."""
+        rows, page, pages, first = [], 1, 1, None
+        while page <= pages:
+            resp = await self.get(f"{AVAILABILITY}&page={page}")
+            body = resp.payload
+            if not resp.ok or not isinstance(body, dict) or not isinstance(body.get("data"), list):
+                return resp
+            first = first or resp
+            pages = body.get("pages") or 1
+            # Without the type list, fall back to the plan id naming GPU plans ("g1-gpu-rtx6000-1").
+            rows += [r for r in body["data"] if (r.get("plan") in gpu_plans if gpu_plans else "gpu" in str(r.get("plan")))]
+            page += 1
+        return reshaped(first, {"pages": pages, "data": rows})
 
     @staticmethod
     def normalize(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:
@@ -118,3 +140,27 @@ class LinodeProvider(Provider):
                     )
                 )
         return listings
+
+    @staticmethod
+    def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
+        """One (GPU plan, region) availability boolean becomes one observation."""
+        types, avail = find_endpoint(by_endpoint, "/v4/linode/types"), find_endpoint(by_endpoint, "/v4/regions/availability")
+        if not types or not avail:
+            return []
+        body = avail[0].payload
+        if not isinstance(body, dict) or not isinstance(body.get("data"), list):
+            raise ValueError("linode: /regions/availability has no `data` list - response reshaped")
+        plans = {t.get("id"): t for t in (types[0].payload or {}).get("data") or [] if t.get("gpus")}
+        out = []
+        for r in body["data"]:
+            t = plans.get(r.get("plan"))
+            if t is None or not r.get("region"):
+                continue  # a CPU plan, or a row missing its region
+            raw_name = gpu_name(t.get("label") or "")
+            available = r.get("available")
+            out.append(CapacityObservation(
+                provider="linode", sku=t["id"], region=r["region"], raw_gpu_name=raw_name,
+                canonical_gpu_name=canonical.canonical_gpu_name(raw_name), gpu_count=t["gpus"],
+                in_stock=available if isinstance(available, bool) else None,
+                raw_value=str(available).lower(), source=AVAILABILITY, observed_at=avail[0].fetched_at))
+        return out

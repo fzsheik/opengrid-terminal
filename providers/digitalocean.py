@@ -3,6 +3,10 @@
 /v2/sizes lists every Droplet size with its hourly price for the whole Droplet.
 GPU sizes carry a `gpu_info` block, so they are told apart from CPU sizes by
 that, not by name.
+
+Capacity: per GPU size, `available` (new Droplets can be created with it) and `regions` (where it can be
+created). One row per listed region; a size with no region gets one provider-wide row. DigitalOcean does not
+say whether this tracks live stock or only where a size is sold.
 """
 
 import logging
@@ -11,7 +15,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
-from models import ComputeListing, RawResponse
+from models import CapacityObservation, ComputeListing, RawResponse
 from providers.base import PollingPolicy, Provider, find_endpoint, to_decimal
 
 if TYPE_CHECKING:
@@ -100,6 +104,28 @@ class DigitalOceanProvider(Provider):
                     )
                 )
         return listings
+
+
+    @staticmethod
+    def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
+        out = []
+        for snapshot in find_endpoint(by_endpoint, ENDPOINT):
+            for size in (snapshot.payload or {}).get("sizes") or []:
+                gpu = size.get("gpu_info") or {}
+                count = gpu.get("count") or 0
+                if not count or not size.get("slug"):
+                    continue
+                flag, regions = size.get("available"), size.get("regions") or []
+                for region in regions or [None]:
+                    out.append(CapacityObservation(
+                        provider="digitalocean", sku=size["slug"], region=region,
+                        country=COUNTRY_BY_REGION_PREFIX.get((region or "")[:3]), raw_gpu_name=gpu.get("model") or "",
+                        canonical_gpu_name=canonical.canonical_gpu_name(gpu.get("model")), gpu_count=count,
+                        # Listed regions are where the size can be created; with none listed only a False is known.
+                        in_stock=(flag if isinstance(flag, bool) else None) if region else (False if flag is False else None),
+                        raw_value=f"available={str(flag).lower()}; regions={len(regions)}",
+                        source=ENDPOINT, observed_at=snapshot.fetched_at))
+        return out
 
 
 def _has_next(raw: RawResponse) -> bool:

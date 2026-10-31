@@ -5,9 +5,10 @@ import re
 import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import parse_qs, quote
 
-from fastapi import Depends, FastAPI, Query
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi import Depends, FastAPI, Query, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -16,7 +17,7 @@ import mapping
 import market
 import normalize
 import raw_store
-from accounts import security
+from accounts import security, sitelogin
 from config import settings
 from db import get_db, init_db
 from fetch import fetch_all
@@ -69,6 +70,10 @@ def password_ok(header: str) -> bool:
         user, _, password = base64.b64decode(header[6:]).decode().partition(":")
     except Exception:
         return False
+    return creds_ok(user, password)
+
+
+def creds_ok(user: str, password: str) -> bool:
     # Both are compared every time (& not `and`), in constant time, so timing reveals nothing.
     return secrets.compare_digest(user.encode(), settings.app_user.encode()) & secrets.compare_digest(
         password.encode(), (settings.app_password or "").encode()
@@ -80,10 +85,11 @@ def _deny(status: int, detail: str, headers: dict | None = None) -> Response:
 
 
 LOGIN_PATH = "/login"
+LOGOUT_PATH = "/logout"
 
 # Paths that are never a web page: API, assets, the hosted MCP endpoint, the login, health and the first UI's
 # JSON reads (some of them private). An unknown path under these keeps its normal answer (401 / 404 JSON).
-_NOT_PAGES = ("/v1", "/static", "/mcp", LOGIN_PATH, "/health", "/docs", "/redoc", "/openapi", "/classic", "/market",
+_NOT_PAGES = ("/v1", "/static", "/mcp", LOGIN_PATH, LOGOUT_PATH, "/health", "/docs", "/redoc", "/openapi", "/classic", "/market",
               "/listings", "/changes", "/history", "/reference-prices", "/polling", "/mapping", "/unmapped", "/raw",
               "/fetch", "/normalize", "/robots.txt", "/sitemap.xml")
 
@@ -123,6 +129,8 @@ async def require_password(request, call_next):
     path = request.url.path
     if path == "/health" or path == mcp_remote.PATH:
         return await call_next(request)
+    if path in (LOGIN_PATH, LOGOUT_PATH):  # the form does its own throttling and origin check
+        return await call_next(request)
     auth = request.headers.get("authorization", "")
     if path.startswith("/v1/") and auth.lower().startswith("bearer "):
         return await call_next(request)
@@ -133,6 +141,8 @@ async def require_password(request, call_next):
             return _deny(503, "APP_PASSWORD is not configured on a deployed server")
         if not security.open_dev_host_ok(request):  # DNS rebinding against an open dev server
             return _deny(403, "this development server (no APP_PASSWORD) only answers to localhost or an IP address")
+    elif sitelogin.valid(request):
+        pass  # signed session cookie from /login: an operator, same CSRF rules as basic auth below
     elif security.is_basic(auth):
         wait = security.login_locked(ip)
         if wait:
@@ -152,8 +162,13 @@ async def require_password(request, call_next):
         # asks /v1/me). Only /login challenges for the site login; the rest says "use a key" (Bearer: no popup).
         return Response("Authentication required: sign in at /login or use an API key", status_code=401,
                         headers={"WWW-Authenticate": "Bearer"})
+    elif request.method in ("GET", "HEAD") and "text/html" in request.headers.get("accept", ""):
+        q = request.url.query
+        return RedirectResponse(f"{LOGIN_PATH}?next={quote(path + ('?' + q if q else ''))}", status_code=303)
     else:
-        return Response("Authentication required", status_code=401, headers={"WWW-Authenticate": 'Basic realm="OpenGrid"'})
+        # a background fetch (an expired session) must not raise the browser's password popup
+        scheme = "Bearer" if request.headers.get("sec-fetch-dest") == "empty" else 'Basic realm="OpenGrid"'
+        return Response("Authentication required", status_code=401, headers={"WWW-Authenticate": scheme})
     if public:
         if not path.startswith("/static/"):
             d = security.public_allowed(ip)
@@ -196,15 +211,48 @@ def classic():
 _SAFE_NEXT = re.compile(r"/[A-Za-z0-9/_.~?=&%+-]*")
 
 
-@app.get(LOGIN_PATH, include_in_schema=False)
-def login(next: str = "/"):
-    """Operator sign-in. Never public, so require_password always challenges here: with PUBLIC_PAGES on the pages
-    load without a password and the browser would otherwise never be asked for the site login. Reached only with a
-    valid login; `next` is a same-site path (no open redirect)."""
-    from fastapi.responses import RedirectResponse
+def _safe_next(next: str) -> str:
     # an allowlist, not a blocklist: browsers drop tabs/newlines and treat "\\" as "/", so "/\t/evil" would be off-site
-    safe = next if _SAFE_NEXT.fullmatch(next) and not next.startswith("//") else "/"
-    return RedirectResponse(safe, status_code=303)
+    return next if _SAFE_NEXT.fullmatch(next) and not next.startswith("//") else "/"
+
+
+@app.get(LOGIN_PATH, include_in_schema=False)
+def login(request: Request, next: str = "/"):
+    """Styled sign-in form. Already signed in (cookie or basic auth), or open dev: straight on to `next`."""
+    safe = _safe_next(next)
+    if not settings.app_password or sitelogin.valid(request) or password_ok(request.headers.get("authorization", "")):
+        return RedirectResponse(safe, status_code=303)
+    return HTMLResponse(sitelogin.page(safe), headers={"Cache-Control": "no-store"})
+
+
+@app.post(LOGIN_PATH, include_in_schema=False)
+async def login_submit(request: Request):
+    ip = security.client_ip(request)
+    if request.headers.get("sec-fetch-site", "same-origin") not in ("same-origin", "none"):
+        return _deny(403, "cross-site login refused")
+    if int(request.headers.get("content-length") or 0) > 4096:
+        return _deny(413, "request too large")
+    form = {k: v[0] for k, v in parse_qs((await request.body()).decode("utf-8", "replace")).items()}
+    safe = _safe_next(form.get("next", "/"))
+    wait = security.login_locked(ip)
+    if wait:
+        return HTMLResponse(sitelogin.page(safe, "Too many failed attempts. Try again later."), status_code=429,
+                            headers={"Retry-After": str(wait), "Cache-Control": "no-store"})
+    if not (settings.app_password and creds_ok(form.get("username", ""), form.get("password", ""))):
+        security.login_failed(ip)
+        return HTMLResponse(sitelogin.page(safe, "Incorrect username or password."), status_code=401,
+                            headers={"Cache-Control": "no-store"})
+    resp = RedirectResponse(safe, status_code=303)
+    resp.set_cookie(sitelogin.COOKIE, sitelogin.make_token(), max_age=sitelogin.MAX_AGE, httponly=True,
+                    secure=security.deployed(), samesite="lax", path="/")
+    return resp
+
+
+@app.get(LOGOUT_PATH, include_in_schema=False)
+def logout():
+    resp = RedirectResponse(LOGIN_PATH, status_code=303)
+    resp.delete_cookie(sitelogin.COOKIE, path="/")
+    return resp
 
 
 @app.get("/market", summary="Every canonical GPU: current price, change, sparkline")
@@ -319,8 +367,9 @@ from api import product as product_api  # noqa: E402
 from api import reconcile as reconcile_api  # noqa: E402
 from api import uptime as uptime_api  # noqa: E402  (registers the uptime background job)
 from api import probes as probes_api  # noqa: E402  (registers the probe_local + probe_rollup jobs)
+from api import capacity as capacity_api  # noqa: E402
 
-for _module in (execution_api, partners_api, product_api, reconcile_api, uptime_api, probes_api):
+for _module in (execution_api, partners_api, product_api, reconcile_api, uptime_api, probes_api, capacity_api):
     app.include_router(_module.router)
 
 from api import jobs as jobs_api  # noqa: E402  (OpenGrid Jobs; registers the job_sync background job)

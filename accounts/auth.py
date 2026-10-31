@@ -57,14 +57,15 @@ OPERATOR = Principal(kind="operator", scopes=frozenset({ALL}))
 PUBLIC = Principal(kind="public", scopes=frozenset({"data:read"}))
 
 
-def _site_auth_ok(header: str) -> bool:
-    import main  # the site password check lives with the middleware
+def _site_auth_ok(request: Request, header: str) -> bool:
+    import main
+    from accounts import sitelogin  # the site password check lives with the middleware
 
     if not settings.app_password:
         from accounts.security import deployed
 
         return not deployed()  # open only on a developer's machine; deployed without a password: closed
-    return main.password_ok(header)
+    return main.password_ok(header) or sitelogin.valid(request)  # basic auth, or the /login session cookie
 
 
 def _public_path(request: Request) -> bool:
@@ -91,7 +92,7 @@ def principal(request: Request) -> Principal:
         from accounts import keys
 
         who = keys.verify(header[7:].strip(), request)  # raises 401/429 itself
-    elif _site_auth_ok(header):
+    elif _site_auth_ok(request, header):
         who = OPERATOR
     elif settings.public_pages and _public_read(request) and _public_path(request):
         who = PUBLIC

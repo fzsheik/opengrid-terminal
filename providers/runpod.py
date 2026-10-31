@@ -3,6 +3,9 @@
 `lowestPrice` takes a `secureCloud` flag, so each cloud reports its own price,
 stock and pod minimums. Asking for every (cloud, gpuCount) pair as aliases
 keeps the whole poll to a single HTTP request.
+
+Capacity: `stockStatus` (High / Medium / Low / None) per GPU type, cloud and pod size. Pod size matters (8x can
+be Low while 1x is High), so a capacity row's sku is the listing_id "<gpu>:<cloud>:<count>".
 """
 
 import logging
@@ -12,7 +15,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
-from models import ComputeListing, RawResponse
+from models import CapacityObservation, ComputeListing, RawResponse
 from providers.base import PollingPolicy, Provider, find_endpoint
 
 if TYPE_CHECKING:
@@ -26,6 +29,9 @@ ENDPOINT = "https://api.runpod.io/graphql"
 GPU_COUNTS = (1, 2, 4, 8)
 # (our tier name, the secureCloud flag it corresponds to)
 CLOUDS = (("secure", "true"), ("community", "false"))
+
+# RunPod's stock words -> our tiers. "None" (the word) means no stock; a missing value means not reported.
+STOCK_TIER = {"High": "high", "Medium": "medium", "Low": "low"}
 
 # Fields of LowestPrice we actually use. rentedCount, totalCount,
 # rentalPercentage and availableGpuCounts also exist but are null in every
@@ -134,3 +140,27 @@ class RunPodProvider(Provider):
                         )
                     )
         return listings
+
+    @staticmethod
+    def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
+        rows = find_endpoint(by_endpoint, "graphql")
+        if not rows:
+            return []
+        out = []
+        for gpu in ((rows[0].payload or {}).get("data") or {}).get("gpuTypes") or []:
+            gpu_id = gpu.get("id")
+            if not gpu_id:
+                continue
+            for cloud, _flag in CLOUDS:
+                for count in GPU_COUNTS:
+                    block = gpu.get(_alias(cloud, count)) or {}
+                    if block.get("uninterruptablePrice") is None:
+                        continue  # not offered at this size in this cloud
+                    word = block.get("stockStatus")
+                    tier = STOCK_TIER.get(word)
+                    out.append(CapacityObservation(
+                        provider="runpod", sku=f"{gpu_id}:{cloud}:{count}", region=None, raw_gpu_name=gpu_id,
+                        canonical_gpu_name=canonical.canonical_gpu_name(gpu_id), gpu_count=count,
+                        in_stock=True if tier else (False if word == "None" else None), tier=tier,
+                        raw_value=str(word), source=ENDPOINT, observed_at=rows[0].fetched_at))
+        return out

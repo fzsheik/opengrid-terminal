@@ -1,14 +1,22 @@
-"""Jarvislabs: the public price page, no API key.
+"""Jarvislabs: the authenticated `misc/server_meta` catalogue (the same call the official SDK makes).
 
-jarvislabs.ai/pricing is server-rendered with its On-Demand tab selected. The
-desktop table has one row per GPU: name, VRAM, RAM, vCPU, a 1x/2x/4x/8x
-configuration picker, and the price for the selected configuration, labelled
-"On-demand · /hr". The section is headed "per GPU pricing", and the page renders
-the 1x configuration selected, so the printed price is one GPU's hourly rate.
+GET https://backendn.jarvislabs.net/misc/server_meta with `Authorization: Bearer <JARVIS_API_KEY>` returns one row per
+(region, GPU type, workload type: vm or container) with:
 
-A row whose selected configuration is not 1x, or whose price is not labelled
-on-demand, raises: the page has changed what it prints. Spot and reserved tabs
-are filled in client-side and are not read.
+    price_per_hour            on-demand, per GPU-hour
+    spot_price                spot, per GPU-hour (null when not offered)
+    reserved_pricing          1-month / 1-year / 2-year per GPU-hour (kept in raw; not a listing yet)
+    effective_num_free_devices  free GPUs for on-demand (what the SDK's own launch routing reads)
+    spot_num_free_devices     free GPUs for spot
+    num_gpus                  GPUs per server
+
+Every regional host returns the same catalogue, so one call covers all regions.
+
+GPU names: the API's `gpu_type` codes drop the form factor ("H100"), while Jarvislabs' own pricing page names the
+part ("NVIDIA H100 SXM"). NAMES maps codes to the names Jarvislabs publishes, so mapping matches what the page gave;
+a code not in NAMES keeps the API's own text and goes to the unmapped queue, never guessed.
+
+Replaced the pricing-page scraper (2026-10-30): the API adds regions, spot prices, reserved prices and live capacity.
 """
 
 import logging
@@ -19,120 +27,137 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
-from models import ComputeListing, RawResponse
-from providers.base import PollingPolicy, Provider, find_endpoint, get_page
+from models import CapacityObservation, ComputeListing, RawResponse
+from providers.base import PollingPolicy, Provider, find_endpoint
 
 if TYPE_CHECKING:
     from tables import RawSnapshot
 
 log = logging.getLogger(__name__)
 
-BASE_URL = "https://jarvislabs.ai"
-ENDPOINT = "/pricing"
+BASE_URL = "https://backendn.jarvislabs.net"
+ENDPOINT = "/misc/server_meta"
 
-_PANEL = re.compile(r'<div role="tabpanel" id="plan-panel" aria-labelledby="plan-tab-on-demand">(?P<p>.*?)<div class="md:hidden">', re.S)
-_ROW_START = re.compile(r'<div class="grid items-center px-7 py-5')
-_NAME = re.compile(r"<h3[^>]*>(?P<v>[^<]+)</h3>")
-_NUM_CELL = re.compile(r'<div class="text-right text-\[14px\][^"]*"[^>]*>(?P<v>\d+)(?:<span[^>]*>GB</span>)?</div>')
-_PRESSED = re.compile(r'<button[^>]*aria-pressed="true"[^>]*>(?P<v>\d+)<!-- -->')
-_PRICE_CELL = re.compile(r">\$(?P<v>\d+(?:,\d{3})*(?:\.\d+)?)</div></div><div[^>]*>(?P<label>[^<]*)</div>")
-_TAGS = re.compile(r"<[^>]+>")
-
-
-def extract(html: str) -> dict:
-    """Every row of the On-Demand desktop table, as printed.
-
-    Raises when the panel is missing, a row lost a field, the selected
-    configuration is not 1x, or a price is not labelled on-demand.
-    """
-    if "per GPU pricing" not in html:
-        raise ValueError("jarvislabs: the page no longer says its GPU prices are per GPU")
-    panel = _PANEL.search(html)
-    if panel is None:
-        raise ValueError("jarvislabs: On-Demand price panel not found - page reshaped")
-    body = panel["p"]
-    starts = [m.start() for m in _ROW_START.finditer(body)] + [len(body)]
-    rows = []
-    for a, b in zip(starts, starts[1:]):
-        row = body[a:b]
-        name, pressed, price = _NAME.search(row), _PRESSED.search(row), _PRICE_CELL.search(row)
-        nums = [m["v"] for m in _NUM_CELL.finditer(row)]
-        if name is None or pressed is None or price is None or len(nums) < 3:
-            raise ValueError("jarvislabs: a price row lost a field - page reshaped")
-        if pressed["v"] != "1":
-            raise ValueError(f"jarvislabs: {name['v']} renders the {pressed['v']}x price, not 1x")
-        if not price["label"].startswith("On-demand"):
-            raise ValueError(f"jarvislabs: {name['v']} price is labelled {price['label']!r}, not on-demand")
-        rows.append({"gpu": name["v"].strip(), "vram_gb": nums[0], "ram_gb": nums[1], "vcpu": nums[2],
-                     "config": "1x", "price": "$" + price["v"]})
-    if not rows:
-        raise ValueError("jarvislabs: no price rows found - page reshaped")
-    return {"rows": rows}
+# API gpu_type -> the GPU name on jarvislabs.ai/pricing (checked 2026-10-30).
+NAMES = {
+    "H100": "NVIDIA H100 SXM",
+    "H200": "NVIDIA H200 SXM",
+    "A100-80GB": "NVIDIA A100 80GB",
+    "A100": "NVIDIA A100",
+    "A30": "NVIDIA A30",
+    "L4": "NVIDIA L4",
+    "RTX-PRO6000": "NVIDIA RTX Pro 6000 Blackwell",
+}
 
 
-def raw_name(gpu: str, vram: str) -> str:
-    """The row name with its printed VRAM, unless the name already carries one:
+def raw_name(gpu: str, vram) -> str:
+    """The GPU name with its VRAM, unless the name already carries one:
     "NVIDIA H200 SXM" + 141 -> "NVIDIA H200 SXM 141GB"; "NVIDIA A100 80GB" stays."""
-    return gpu if re.search(r"\d+\s?GB\b", gpu, re.I) else f"{gpu} {vram}GB"
+    return gpu if re.search(r"\d+\s?GB\b", gpu, re.I) or not vram else f"{gpu} {vram}GB"
+
+
+def _rows(by_endpoint: "dict[str, list[RawSnapshot]]"):
+    """(snapshot, server_meta rows), or (None, []) before the first fetch. A reshaped body raises."""
+    snaps = find_endpoint(by_endpoint, ENDPOINT)
+    if not snaps:
+        return None, []
+    meta = snaps[0].payload.get("server_meta") if isinstance(snaps[0].payload, dict) else None
+    if not isinstance(meta, list):
+        raise ValueError("jarvislabs: server_meta has no server_meta list - response reshaped")
+    return snaps[0], meta
+
+
+def _name(row: dict) -> str:
+    code = str(row.get("gpu_type") or "")
+    return raw_name(NAMES.get(code, code), row.get("vram"))
+
+
+def _int(v) -> int | None:
+    try:
+        return None if v is None or v == "" else int(v)
+    except (TypeError, ValueError):
+        return None
 
 
 class JarvislabsProvider(Provider):
     name = "jarvislabs"
-    # One page load per poll.
-    polling = PollingPolicy(interval_seconds=900, timeout_seconds=45)
+    # One authenticated request per poll; every regional host returns the same catalogue.
+    polling = PollingPolicy(interval_seconds=900, timeout_seconds=30)
 
-    def __init__(self, client: httpx.AsyncClient | None = None):
+    def __init__(self, api_key: str, client: httpx.AsyncClient | None = None):
         super().__init__(
             client
             or httpx.AsyncClient(
                 base_url=BASE_URL,
-                headers={"user-agent": "opengrid-terminal/0.1"},
-                timeout=45,
-                follow_redirects=True,
+                headers={"Authorization": f"Bearer {api_key}", "accept": "application/json"},
+                timeout=30,
             )
         )
 
     async def fetch(self) -> list[RawResponse]:
-        return [await get_page(self, ENDPOINT, extract)]
+        return [await self.get(ENDPOINT)]
 
     @staticmethod
     def normalize(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:
-        """One row becomes one single-GPU on-demand listing."""
-        rows = find_endpoint(by_endpoint, ENDPOINT)
-        if not rows:
-            return []
-        snapshot = rows[0]
-
+        """One listing per (GPU, region, workload type) and market: on-demand always, spot when priced."""
+        snapshot, rows = _rows(by_endpoint)
         listings = []
-        for r in snapshot.payload["rows"]:
-            price = Decimal(r["price"].lstrip("$").replace(",", ""))
-            if price <= 0:
+        for r in rows:
+            name, region, workload = _name(r), r.get("region"), r.get("workload_type") or "any"
+            if not r.get("gpu_type") or not region:
                 continue
-            name = raw_name(r["gpu"], r["vram_gb"])
-            slug = re.sub(r"[^a-z0-9]+", "-", r["gpu"].lower()).strip("-")
-            listings.append(
-                ComputeListing(
+            per_gpu = _int(r.get("num_gpus"))
+            for market, price in (("on_demand", r.get("price_per_hour")), ("spot", r.get("spot_price"))):
+                if not isinstance(price, (int, float)) or price <= 0 or (market == "on_demand" and r.get("spot_only_server")):
+                    continue
+                listings.append(ComputeListing(
                     provider="jarvislabs",
-                    sku=f"{r['gpu']}:1x",
-                    listing_id=f"{slug}:1x",
+                    sku=f"{name}:1x",
+                    listing_id=f"{name}:1x:{region}:{workload}:{market}",
                     raw_gpu_name=name,
                     canonical_gpu_name=canonical.canonical_gpu_name(name),
-                    gpu_count=1,
-                    region=None,
-                    country=None,
-                    price_per_gpu_hour=price,
-                    price_per_instance_hour=price,
+                    gpu_count=1,  # prices are per GPU-hour; a 1-GPU instance is the unit Jarvislabs sells
+                    region=region,
+                    country="IN" if region.startswith("india") else None,
+                    price_per_gpu_hour=Decimal(str(price)),
+                    price_per_instance_hour=Decimal(str(price)),
                     currency="USD",
-                    market_type="on_demand",
-                    provider_tier=None,
-                    interruptible=False,
-                    available=None,  # the page says nothing about stock
+                    market_type=market,
+                    provider_tier=workload,
+                    interruptible=market == "spot",
+                    available=None,  # stock lives in capacity (normalize_capacity), not on the price row
                     capacity=None,
                     capacity_unit=None,
-                    vcpu=int(r["vcpu"]),
-                    ram_gb=float(r["ram_gb"]),
+                    vcpu=r.get("cpus_per_gpu"),
+                    ram_gb=r.get("ram_per_gpu"),
                     storage_gb=None,
                     observed_at=snapshot.fetched_at,
-                )
-            )
+                ))
+        if rows:
+            unknown = sorted({str(r.get("gpu_type")) for r in rows if r.get("gpu_type") not in NAMES})
+            if unknown:
+                log.warning("jarvislabs: gpu types not in NAMES (left unmapped): %s", unknown)
         return listings
+
+    @staticmethod
+    def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
+        """Free on-demand GPUs per (GPU, region, workload type). Sku carries the workload, like the listing id."""
+        snapshot, rows = _rows(by_endpoint)
+        out = []
+        for r in rows:
+            name, region, workload = _name(r), r.get("region"), r.get("workload_type") or "any"
+            if not r.get("gpu_type") or not region:
+                continue
+            free = _int(r.get("effective_num_free_devices"))
+            if free is None:
+                free = _int(r.get("num_free_devices"))
+            out.append(CapacityObservation(
+                provider="jarvislabs", sku=f"{name}:1x:{workload}", region=region,
+                country="IN" if region.startswith("india") else None, raw_gpu_name=name,
+                canonical_gpu_name=canonical.canonical_gpu_name(name), gpu_count=1,
+                in_stock=None if free is None else free > 0, available_count=free,
+                count_unit=None if free is None else "gpu",
+                raw_value=(f"effective_free={r.get('effective_num_free_devices')}; free={r.get('num_free_devices')}; "
+                           f"spot_free={r.get('spot_num_free_devices')}; gpus_per_server={r.get('num_gpus')}"),
+                source=ENDPOINT, observed_at=snapshot.fetched_at))
+        return out

@@ -2,6 +2,9 @@
 
 Module is lambda_labs.py because `lambda` is a Python keyword; the provider
 slug is still "lambda".
+
+Capacity: `regions_with_capacity_available` per instance type says WHERE there is stock, never how much:
+one in-stock row per listed region, or one provider-wide out-of-stock row when no region is listed.
 """
 
 import asyncio
@@ -12,7 +15,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
-from models import ComputeListing, RawResponse
+from models import CapacityObservation, ComputeListing, RawResponse
 from providers.base import PollingPolicy, Provider
 
 if TYPE_CHECKING:
@@ -130,3 +133,26 @@ class LambdaProvider(Provider):
                     )
                 )
         return listings
+
+    @staticmethod
+    def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
+        rows = [r for ep, rs in by_endpoint.items() if "/instance-types" in ep for r in rs]
+        data = (rows[0].payload or {}).get("data") if rows else None
+        if not isinstance(data, dict):
+            return []
+        out = []
+        for type_name, entry in data.items():
+            spec_block = entry.get("instance_type") or {}
+            gpu_count = (spec_block.get("specs") or {}).get("gpus") or 0
+            if not gpu_count:
+                continue
+            raw_name = spec_block.get("gpu_description") or spec_block.get("description") or type_name
+            regions = [r.get("name") for r in entry.get("regions_with_capacity_available") or [] if r.get("name")]
+            for region in regions or [None]:
+                out.append(CapacityObservation(
+                    provider="lambda", sku=type_name, region=region, country=country_for(region),
+                    raw_gpu_name=raw_name, canonical_gpu_name=canonical.canonical_gpu_name(raw_name),
+                    gpu_count=gpu_count, in_stock=region is not None,
+                    raw_value="listed with capacity" if region else "no region with capacity",
+                    source="/instance-types", observed_at=rows[0].fetched_at))
+        return out

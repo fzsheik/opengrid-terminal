@@ -3,6 +3,9 @@
 Each executor is one host machine with its own price. The raw body carries live
 GPU utilization, driver and port details that change every request, so the
 stored payload keeps only the fields we read.
+
+Capacity: each executor reports `gpu_count` and `available_gpu_count`. Summed per
+(machine type, city) they are true counts, the only provider here that gives them.
 """
 
 import logging
@@ -11,7 +14,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
-from models import ComputeListing, RawResponse
+from models import CapacityObservation, ComputeListing, RawResponse
 from providers.base import PollingPolicy, Provider, find_endpoint, reshaped, to_decimal
 
 if TYPE_CHECKING:
@@ -113,3 +116,25 @@ class LiumProvider(Provider):
                 )
             )
         return listings
+
+    @staticmethod
+    def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
+        """Executors summed per (machine type, city): free GPUs out of all GPUs."""
+        rows = find_endpoint(by_endpoint, ENDPOINT)
+        if not rows or not isinstance(rows[0].payload, list):
+            return []
+        sums: dict[tuple, list[int]] = {}
+        for e in rows[0].payload:
+            name, total, free = e.get("machine_name"), e.get("gpu_count"), e.get("available_gpu_count")
+            if not name or not isinstance(total, int) or total < 1 or not isinstance(free, int):
+                continue
+            s = sums.setdefault((name, e.get("city"), e.get("country_code")), [0, 0, total])
+            s[0] += free
+            s[1] += total
+            s[2] = min(s[2], total)  # GPUs per instance: the smallest host of this type
+        return [CapacityObservation(
+            provider="lium", sku=name, region=city, country=country, raw_gpu_name=name,
+            canonical_gpu_name=canonical.canonical_gpu_name(name), gpu_count=per_host,
+            in_stock=free > 0, available_count=free, total_count=total, count_unit="gpu",
+            raw_value=f"{free}/{total}", source=ENDPOINT, observed_at=rows[0].fetched_at)
+            for (name, city, country), (free, total, per_host) in sums.items()]

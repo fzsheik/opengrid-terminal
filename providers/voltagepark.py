@@ -4,6 +4,9 @@
                            InfiniBand fabric, with a count of GPUs in stock
     instant-deploy presets VM shapes with a per-instance hourly rate and the
                            locations that currently have stock
+
+Capacity: bare-metal gives GPUs in stock per location and fabric (a count); presets give the locations with stock
+(yes per listed location, one provider-wide no when none is listed). Locations are ids, not region names.
 """
 
 import asyncio
@@ -13,7 +16,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
-from models import ComputeListing, RawResponse
+from models import CapacityObservation, ComputeListing, RawResponse
 from providers.base import PollingPolicy, Provider, find_endpoint, to_decimal
 
 if TYPE_CHECKING:
@@ -130,3 +133,42 @@ class VoltageParkProvider(Provider):
                     )
                 )
         return listings
+
+    @staticmethod
+    def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
+        out = []
+        for snapshot in find_endpoint(by_endpoint, BARE_METAL)[:1]:
+            for loc in (snapshot.payload or {}).get("results") or []:
+                specs = loc.get("specs_per_node") or {}
+                raw_name, node_gpus = specs.get("gpu_model"), specs.get("gpu_count") or 0
+                if not raw_name or not node_gpus or not loc.get("id"):
+                    continue
+                for fabric in ("ethernet", "infiniband"):
+                    free = loc.get(f"gpu_count_{fabric}")
+                    if loc.get(f"gpu_price_{fabric}") is None:
+                        continue  # not sold on this fabric
+                    reserved = [loc.get(k) for k in loc if k.startswith(f"reserved_gpu_count_{fabric}")]
+                    out.append(CapacityObservation(
+                        provider="voltagepark", sku=f"{raw_name}:bare-metal:{fabric}", region=f"location:{loc['id']}",
+                        raw_gpu_name=raw_name, canonical_gpu_name=canonical.canonical_gpu_name(raw_name), gpu_count=node_gpus,
+                        in_stock=None if not isinstance(free, int) else free > 0,
+                        available_count=free if isinstance(free, int) else None, count_unit="gpu" if isinstance(free, int) else None,
+                        raw_value=f"gpu_count_{fabric}={free}; reserved={reserved}", source=BARE_METAL,
+                        observed_at=snapshot.fetched_at))
+        for snapshot in find_endpoint(by_endpoint, PRESETS)[:1]:
+            for preset in snapshot.payload if isinstance(snapshot.payload, list) else []:
+                gpus = (preset.get("resources") or {}).get("gpus") or {}
+                if len(gpus) != 1:
+                    continue
+                raw_name, spec = next(iter(gpus.items()))
+                count, places = (spec or {}).get("count") or 0, preset.get("location_ids_with_availability")
+                if not count or not isinstance(places, list):
+                    continue
+                for place in places or [None]:
+                    out.append(CapacityObservation(
+                        provider="voltagepark", sku=f"{raw_name}:vm:{count}x",
+                        region=None if place is None else f"location:{place}", raw_gpu_name=raw_name,
+                        canonical_gpu_name=canonical.canonical_gpu_name(raw_name), gpu_count=count, in_stock=place is not None,
+                        raw_value="location has availability" if place else "no location has availability",
+                        source=PRESETS, observed_at=snapshot.fetched_at))
+        return out

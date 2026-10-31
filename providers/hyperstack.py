@@ -1,4 +1,10 @@
-"""Hyperstack (NexGen Cloud Infrahub): VMs priced per GPU-hour, on-demand and spot."""
+"""Hyperstack (NexGen Cloud Infrahub): VMs priced per GPU-hour, on-demand and spot.
+
+Capacity: /core/stocks gives, per region and GPU model, `configurations` (deployable VMs per size, e.g.
+{"1x": 4, "2x": 2, "4x": 1} for 4 free GPUs) and `available` (GPUs, a floor estimate such as "10+"). Each
+GPU flavor gets one row: in_stock from the flavor's own `stock_available` flag, available_count from the
+configurations count for its size, in VMs.
+"""
 
 import asyncio
 import logging
@@ -7,7 +13,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
-from models import ComputeListing, RawResponse
+from models import CapacityObservation, ComputeListing, RawResponse
 from providers.base import Provider, PollingPolicy, find_endpoint, to_decimal
 
 if TYPE_CHECKING:
@@ -128,3 +134,41 @@ class HyperstackProvider(Provider):
         if unpriced:
             log.warning("hyperstack: no pricebook entry for %s", sorted(unpriced))
         return listings
+
+    @staticmethod
+    def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
+        flavor_rows, stock_rows = find_endpoint(by_endpoint, "/core/flavors"), find_endpoint(by_endpoint, "/core/stocks")
+        if not flavor_rows or not stock_rows:
+            return []
+        stocks = (stock_rows[0].payload or {}).get("stocks")
+        if not isinstance(stocks, list):
+            raise ValueError("hyperstack: /core/stocks has no `stocks` list - response reshaped")
+        vms: dict[tuple[str, str, int], int] = {}
+        model_word: dict[tuple[str, str], str] = {}
+        for region_stock in stocks:
+            region = region_stock.get("region")
+            for model in region_stock.get("models") or []:
+                model_word[(region, model.get("model"))] = str(model.get("available"))
+                for size, count in (model.get("configurations") or {}).items():
+                    try:
+                        vms[(region, model["model"], int(size.rstrip("xX")))] = int(count)
+                    except (ValueError, KeyError, TypeError):
+                        continue
+        region_rows = find_endpoint(by_endpoint, "/core/regions")
+        country = {r.get("name"): r.get("country")
+                   for r in ((region_rows[0].payload or {}).get("regions") or [] if region_rows else [])}
+        out = []
+        for group in (flavor_rows[0].payload or {}).get("data") or []:
+            for f in group.get("flavors") or []:
+                n, api_name, region = f.get("gpu_count") or 0, f.get("gpu") or "", f.get("region_name")
+                if not n or not f.get("name"):
+                    continue
+                flag, count = f.get("stock_available"), vms.get((region, api_name, n))
+                out.append(CapacityObservation(
+                    provider="hyperstack", sku=f["name"], region=region, country=country.get(region),
+                    raw_gpu_name=api_name, canonical_gpu_name=canonical.canonical_gpu_name(api_name), gpu_count=n,
+                    in_stock=flag if isinstance(flag, bool) else None, available_count=count,
+                    count_unit=None if count is None else "instance",
+                    raw_value=f"stock_available={flag}; {n}x VMs={count}; model GPUs={model_word.get((region, api_name))}",
+                    source="/core/stocks", observed_at=stock_rows[0].fetched_at))
+        return out

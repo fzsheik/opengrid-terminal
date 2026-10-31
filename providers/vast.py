@@ -4,6 +4,18 @@ Offers are queried one GPU model at a time. A model can have hundreds of
 offers at wildly different prices, and the cheapest is often one unverified
 host, so each model becomes two listings: the median ask (the typical price)
 and the cheapest ask (what a router would actually grab).
+
+Capacity (only with VAST_API_KEY): a census per GPU model, two searches of verified on-demand machines, one for
+rentable offers and one for offers that are not rentable now. A keyed search returns up to CENSUS_CAP offers (the
+public one stops at 64), and only a keyed search returns machines that are not rentable. An offer is a slice of one
+machine: `gpu_ids` names its GPUs and `gpu_frac` its share of the machine, so
+
+    free GPUs  = distinct gpu_ids across the rentable offers
+    total GPUs = per machine, num_gpus / gpu_frac, summed over every machine either search returned
+
+A non-rentable offer can contain free GPUs (an 8x slice of a machine with 2 GPUs busy), so busy is total - free,
+never a count of non-rentable offers. "Total" means GPUs on verified machines listed on Vast now; a host that has
+delisted its machine is in neither search. Prices are untouched by the census (normalize skips census rows).
 """
 
 import asyncio
@@ -16,7 +28,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
-from models import ComputeListing, RawResponse
+from models import CapacityObservation, ComputeListing, RawResponse
 from providers.base import PollingPolicy, Provider, find_endpoint, reshaped
 
 if TYPE_CHECKING:
@@ -41,6 +53,15 @@ RATE_PAUSE_SECONDS = 1.2
 # The API returns at most this many offers per query however large the limit,
 # so a book this size is cut off and its counts are lower bounds.
 API_CAP = 64
+# A keyed search stops at this many offers (checked 2026-10-30, "truncated": false regardless); a census that hits it
+# is incomplete, so its counts are withheld.
+CENSUS_CAP = 512
+CENSUS_FIELDS = ("machine_id", "num_gpus", "gpu_frac", "gpu_ids", "geolocation", "rentable")
+
+
+def _census_query(gpu_name: str, rentable: bool) -> dict:
+    return {"verified": {"eq": True}, "rentable": {"eq": rentable}, "type": "on-demand",
+            "gpu_name": {"eq": gpu_name}, "limit": 5000}
 
 
 def _query(gpu_name: str) -> str:
@@ -70,10 +91,10 @@ def _keep(offer: dict) -> dict:
 
 class VastProvider(Provider):
     name = "vast"
-    # One request per GPU model, paced to the 1/second limit: about 25 seconds.
-    polling = PollingPolicy(interval_seconds=900, timeout_seconds=120)
+    # One request per GPU model (three with a key, for the census), paced to the 1/second limit: 25-70 seconds.
+    polling = PollingPolicy(interval_seconds=900, timeout_seconds=180)
 
-    def __init__(self, client: httpx.AsyncClient | None = None):
+    def __init__(self, client: httpx.AsyncClient | None = None, api_key: str | None = None):
         super().__init__(
             client
             or httpx.AsyncClient(
@@ -82,6 +103,14 @@ class VastProvider(Provider):
                 timeout=40,
             )
         )
+        self._api_key = api_key
+
+    async def _census(self, gpu_name: str, rentable: bool) -> RawResponse:
+        query = _census_query(gpu_name, rentable)
+        raw = await self.post(ENDPOINT, json=query, headers={"Authorization": f"Bearer {self._api_key}"})
+        offers = (raw.payload or {}).get("offers") if isinstance(raw.payload, dict) else None
+        payload = None if offers is None else [{k: o.get(k) for k in CENSUS_FIELDS} for o in offers]
+        return reshaped(raw, payload, request={"census": True, "gpu_name": gpu_name, "rentable": rentable})
 
     async def _one(self, gpu_name: str) -> RawResponse:
         raw = await self.get(ENDPOINT, params={"q": _query(gpu_name)})
@@ -94,20 +123,61 @@ class VastProvider(Provider):
     async def fetch(self) -> list[RawResponse]:
         # The API allows one request per second and answers 429 beyond it, so
         # go one model at a time, with one retry after the stated wait.
+        calls = [lambda n=n: self._one(n) for n in GPU_NAMES]
+        if self._api_key:
+            calls += [lambda n=n, r=r: self._census(n, r) for n in GPU_NAMES for r in (True, False)]
         responses = []
-        for name in GPU_NAMES:
-            raw = await self._one(name)
+        for call in calls:
+            raw = await call()
             if raw.status_code == 429:
                 await asyncio.sleep(2)
-                raw = await self._one(name)
+                raw = await call()
             responses.append(raw)
             await asyncio.sleep(RATE_PAUSE_SECONDS)
         return responses
 
     @staticmethod
+    def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
+        """One provider-wide row per GPU model whose census has both halves: free and total GPUs."""
+        halves: dict[str, dict[bool, "RawSnapshot"]] = {}
+        for snap in find_endpoint(by_endpoint, ENDPOINT):
+            req = snap.request or {}
+            if req.get("census") and isinstance(req.get("rentable"), bool):
+                halves.setdefault(req["gpu_name"], {})[req["rentable"]] = snap
+        out = []
+        for gpu_name, pair in halves.items():
+            if set(pair) != {True, False}:
+                continue  # half a census would read as all-free or all-busy
+            free_offers, busy_offers = pair[True].payload, pair[False].payload
+            if not isinstance(free_offers, list) or not isinstance(busy_offers, list):
+                raise ValueError(f"vast: census for {gpu_name} is not an offer list - response reshaped")
+            free_ids, per_machine = set(), {}
+            for o in free_offers + busy_offers:
+                n, frac = o.get("num_gpus"), o.get("gpu_frac")
+                if isinstance(n, int) and n > 0 and isinstance(frac, (int, float)) and frac > 0:
+                    per_machine[o.get("machine_id")] = max(per_machine.get(o.get("machine_id"), 0), round(n / frac))
+            for o in free_offers:
+                free_ids.update(o.get("gpu_ids") or [])
+            capped = max(len(free_offers), len(busy_offers)) >= CENSUS_CAP
+            free, total = len(free_ids), sum(per_machine.values())
+            out.append(CapacityObservation(
+                provider="vast", sku=gpu_name, region=None, country=None, raw_gpu_name=gpu_name,
+                canonical_gpu_name=canonical.canonical_gpu_name(gpu_name), gpu_count=1,
+                in_stock=bool(free_offers),
+                available_count=None if capped else free, total_count=None if capped else total,
+                count_unit=None if capped else "gpu",
+                raw_value=(f"free_gpus={free}; total_gpus={total}; machines={len(per_machine)}; "
+                           f"rentable_offers={len(free_offers)}; other_offers={len(busy_offers)}"
+                           + ("; capped" if capped else "")),
+                source=ENDPOINT, observed_at=pair[True].fetched_at))
+        return out
+
+    @staticmethod
     def normalize(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:
         listings = []
         for snapshot in find_endpoint(by_endpoint, ENDPOINT):
+            if (snapshot.request or {}).get("census"):
+                continue  # capacity census rows (keyed, verified-only); prices come from the public search
             gpu_name = (snapshot.request or {}).get("gpu_name")
             offers = [
                 o
