@@ -66,9 +66,35 @@ the browser's password popup. Basic auth still works for scripts. Changing `APP_
   run at once. It is logged and skipped, and prices and capacity are unaffected. Not fixed yet.
 - Most counts cover the whole market. Exceptions: Nebius's counts will be capped at our quota, and Crusoe's may be.
   See the methodology page.
+- Found after shipping:
+  - **Jarvislabs had no prices from Oct 25 to Oct 30.** The old pricing-page scraper broke around midday on
+    Oct 25 and failed every poll until today's switch to the API. The gap cannot be backfilled: the failed polls
+    stored errors, and the API has no history.
+  - **Nebius has had no prices since Oct 19** (the last good fetch was Oct 19 15:55 UTC). Every poll of its
+    pricing page has failed since, and it has 0 listings now.
+  - Neither break raised an alert. The health view marked them "degraded" / "down", but nothing notifies anyone.
+- Railway's `railway.toml` config format stops working on 2026-12-01. Run `railway config migrate` before then.
+
+### To do: treat every non-API source as likely to break
+Any price or capacity feed that isn't read from an official API or CLI should be assumed to fail eventually
+and silently, whether it's a scraped page or a third party's listing. Jarvislabs and Nebius both broke this way.
+1. **Alert on silence.** Raise an ops alert when any provider has had no successful poll for more than a few
+   hours, and again when its listings drop to 0. Highest priority: it would have caught both breaks within hours.
+2. **Label the source on every row.** Put each listing's and capacity row's source type in the API and on the
+   page: official API / CLI, published pricing file, scraped page, or via an aggregator. Then readers can weigh
+   scraped data accordingly.
+3. **Move every scraped provider to an official source, or flag it as fragile.**
+   - **Scraped pages:** Nebius (down since Oct 19; has an API, needs the service account), CoreWeave, Together,
+     Hot Aisle, Massed Compute (the API needs the emailed token).
+   - **Via Shadeform (secondhand):** Crusoe, Latitude prices, Denvr, Boost Run, Horizon, Phyntec, Scaleway
+     prices. These are not broken today, but a third party's listing can lag or be wrong.
+   - **Pricing files:** AWS, Oracle. Official, but parsed from files, so a format change breaks them.
+4. **Fail loudly on shape changes.** A page that parses to zero rows should count as a failure, never as a
+   provider with nothing for sale. Most scrapers already do this; check that all of them do.
 
 ### Next
-1. Nebius service account, then Nebius capacity with the market vs account flag.
+1. Alerts on silence (to-do 1), then Nebius prices back via its API (service account), plus Nebius capacity
+   with the market vs account flag.
 2. Fix the 6 date-dependent test suites so a red test means a real problem again.
 3. Reserved pricing data model, then turn on the stored reserved and commitment prices.
 4. Accounts to request: Massed Compute token, GCP service account, Crusoe, Oracle, AWS.
