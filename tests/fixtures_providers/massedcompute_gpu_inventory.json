@@ -1,0 +1,389 @@
+{
+ "gpu_inventory": {
+  "gpu_1x_a6000": {
+   "instance_type": {
+    "name": "gpu_1x_a6000",
+    "description": "1x RTX A6000 (48GB)",
+    "price_cents_per_hour": 57,
+    "specs": {
+     "vcpu_count": 6,
+     "memory_gib": 48,
+     "storage_gb": 256
+    }
+   },
+   "regions_with_capacity_available": [
+    {
+     "name": "us-central-1",
+     "description": "Wichita, KS"
+    },
+    {
+     "name": "us-central-2",
+     "description": "Kansas City, MO"
+    },
+    {
+     "name": "us-central-3",
+     "description": "Des Moines, IA"
+    }
+   ],
+   "capacity_available": 14
+  },
+  "gpu_8x_a6000": {
+   "instance_type": {
+    "name": "gpu_8x_a6000",
+    "description": "8x RTX A6000 (48GB)",
+    "price_cents_per_hour": 456,
+    "specs": {
+     "vcpu_count": 62,
+     "memory_gib": 384,
+     "storage_gb": 2048
+    }
+   },
+   "regions_with_capacity_available": [
+    {
+     "name": "us-central-3",
+     "description": "Des Moines, IA"
+    }
+   ],
+   "capacity_available": 1
+  },
+  "gpu_1x_h100": {
+   "instance_type": {
+    "name": "gpu_1x_h100",
+    "description": "1x H100 (80GB)",
+    "price_cents_per_hour": 273,
+    "specs": {
+     "vcpu_count": 20,
+     "memory_gib": 128,
+     "storage_gb": 1250
+    }
+   },
+   "regions_with_capacity_available": [],
+   "capacity_available": 0
+  },
+  "gpu_1x_l40": {
+   "instance_type": {
+    "name": "gpu_1x_l40",
+    "description": "1x L40 (48GB)",
+    "price_cents_per_hour": 86,
+    "specs": {
+     "vcpu_count": 14,
+     "memory_gib": 72,
+     "storage_gb": 625
+    }
+   },
+   "regions_with_capacity_available": [
+    {
+     "name": "us-central-2",
+     "description": "Kansas City, MO"
+    },
+    {
+     "name": "us-central-3",
+     "description": "Des Moines, IA"
+    }
+   ],
+   "capacity_available": 39
+  },
+  "gpu_1x_l40_spot": {
+   "instance_type": {
+    "name": "gpu_1x_l40_spot",
+    "description": "1x L40 (48GB) [Spot]",
+    "price_cents_per_hour": 78,
+    "specs": {
+     "vcpu_count": 14,
+     "memory_gib": 72,
+     "storage_gb": 625
+    }
+   },
+   "regions_with_capacity_available": [
+    {
+     "name": "us-central-2",
+     "description": "Kansas City, MO"
+    },
+    {
+     "name": "us-central-3",
+     "description": "Des Moines, IA"
+    }
+   ],
+   "capacity_available": 39
+  },
+  "gpu_2x_l40_spot": {
+   "instance_type": {
+    "name": "gpu_2x_l40_spot",
+    "description": "2x L40 (48GB) [Spot]",
+    "price_cents_per_hour": 155,
+    "specs": {
+     "vcpu_count": 26,
+     "memory_gib": 144,
+     "storage_gb": 1250
+    }
+   },
+   "regions_with_capacity_available": [
+    {
+     "name": "us-central-2",
+     "description": "Kansas City, MO"
+    },
+    {
+     "name": "us-central-3",
+     "description": "Des Moines, IA"
+    }
+   ],
+   "capacity_available": 19
+  },
+  "gpu_1x_a6000_low_ram": {
+   "instance_type": {
+    "name": "gpu_1x_a6000_low_ram",
+    "description": "1x RTX A6000 (48GB) [ALT Config]",
+    "price_cents_per_hour": 55,
+    "specs": {
+     "vcpu_count": 6,
+     "memory_gib": 32,
+     "storage_gb": 256
+    }
+   },
+   "regions_with_capacity_available": [],
+   "capacity_available": 0
+  },
+  "gpu_1x_a6000_spot": {
+   "instance_type": {
+    "name": "gpu_1x_a6000_spot",
+    "description": "1x RTX A6000 (48GB) [Spot]",
+    "price_cents_per_hour": 50,
+    "specs": {
+     "vcpu_count": 6,
+     "memory_gib": 32,
+     "storage_gb": 256
+    }
+   },
+   "regions_with_capacity_available": [],
+   "capacity_available": 0
+  },
+  "gpu_2x_a6000_nvlink": {
+   "instance_type": {
+    "name": "gpu_2x_a6000_nvlink",
+    "description": "2x RTX A6000 (48GB) NVLink",
+    "price_cents_per_hour": 124,
+    "specs": {
+     "vcpu_count": 14,
+     "memory_gib": 96,
+     "storage_gb": 512
+    }
+   },
+   "regions_with_capacity_available": [],
+   "capacity_available": 0
+  },
+  "gpu_1x_a6000_high_ram": {
+   "instance_type": {
+    "name": "gpu_1x_a6000_high_ram",
+    "description": "1x RTX A6000 (48GB) [Premium]",
+    "price_cents_per_hour": 57,
+    "specs": {
+     "vcpu_count": 6,
+     "memory_gib": 96,
+     "storage_gb": 300
+    }
+   },
+   "regions_with_capacity_available": [
+    {
+     "name": "us-central-1",
+     "description": "Wichita, KS"
+    },
+    {
+     "name": "us-central-2",
+     "description": "Kansas City, MO"
+    },
+    {
+     "name": "us-central-3",
+     "description": "Des Moines, IA"
+    }
+   ],
+   "capacity_available": 9
+  },
+  "gpu_1x_l40s": {
+   "instance_type": {
+    "name": "gpu_1x_l40s",
+    "description": "1x L40S (48GB)",
+    "price_cents_per_hour": 97,
+    "specs": {
+     "vcpu_count": 12,
+     "memory_gib": 72,
+     "storage_gb": 625
+    }
+   },
+   "regions_with_capacity_available": [
+    {
+     "name": "us-central-2",
+     "description": "Kansas City, MO"
+    },
+    {
+     "name": "us-central-3",
+     "description": "Des Moines, IA"
+    }
+   ],
+   "capacity_available": 41
+  },
+  "gpu_8x_A100_SXM4": {
+   "instance_type": {
+    "name": "gpu_8x_A100_SXM4",
+    "description": "8x A100 SXM4 (80GB)",
+    "price_cents_per_hour": 1104,
+    "specs": {
+     "vcpu_count": 126,
+     "memory_gib": 800,
+     "storage_gb": 5000
+    }
+   },
+   "regions_with_capacity_available": [
+    {
+     "name": "us-central-3",
+     "description": "Des Moines, IA"
+    }
+   ],
+   "capacity_available": 1
+  },
+  "gpu_1x_DGX_A100": {
+   "instance_type": {
+    "name": "gpu_1x_DGX_A100",
+    "description": "1x DGX A100 (80GB)",
+    "price_cents_per_hour": 138,
+    "specs": {
+     "vcpu_count": 16,
+     "memory_gib": 120,
+     "storage_gb": 1000
+    }
+   },
+   "regions_with_capacity_available": [
+    {
+     "name": "us-central-2",
+     "description": "Kansas City, MO"
+    },
+    {
+     "name": "us-east-1",
+     "description": "Beltsville, MD"
+    }
+   ],
+   "capacity_available": 16
+  },
+  "gpu_1x_pro_6000_blackwell_low_storage": {
+   "instance_type": {
+    "name": "gpu_1x_pro_6000_blackwell_low_storage",
+    "description": "1x RTX PRO 6000 Blackwell (96GB) [Reduced Storage]",
+    "price_cents_per_hour": 219,
+    "specs": {
+     "vcpu_count": 16,
+     "memory_gib": 144,
+     "storage_gb": 350
+    }
+   },
+   "regions_with_capacity_available": [],
+   "capacity_available": 0
+  },
+  "gpu_4x_h200_nvl_nvlink": {
+   "instance_type": {
+    "name": "gpu_4x_h200_nvl_nvlink",
+    "description": "4x H200 NVL (141GB) NVLink",
+    "price_cents_per_hour": 1528,
+    "specs": {
+     "vcpu_count": 62,
+     "memory_gib": 720,
+     "storage_gb": 3000
+    }
+   },
+   "regions_with_capacity_available": [],
+   "capacity_available": 0
+  },
+  "gpu_1x_h100_nvl": {
+   "instance_type": {
+    "name": "gpu_1x_h100_nvl",
+    "description": "1x H100 NVL",
+    "price_cents_per_hour": 311,
+    "specs": {
+     "vcpu_count": 18,
+     "memory_gib": 128,
+     "storage_gb": 750
+    }
+   },
+   "regions_with_capacity_available": [
+    {
+     "name": "us-central-3",
+     "description": "Des Moines, IA"
+    }
+   ],
+   "capacity_available": 7
+  },
+  "gpu_8x_H100_SXM5": {
+   "instance_type": {
+    "name": "gpu_8x_H100_SXM5",
+    "description": "8x H100 SXM5 (80GB)",
+    "price_cents_per_hour": 2512,
+    "specs": {
+     "vcpu_count": 126,
+     "memory_gib": 976,
+     "storage_gb": 2800
+    }
+   },
+   "regions_with_capacity_available": [],
+   "capacity_available": 0
+  },
+  "gpu_8x_b300_SXM6": {
+   "instance_type": {
+    "name": "gpu_8x_b300_SXM6",
+    "description": "8x B300 SXM6",
+    "price_cents_per_hour": 5280,
+    "specs": {
+     "vcpu_count": 280,
+     "memory_gib": 2800,
+     "storage_gb": 6000
+    }
+   },
+   "regions_with_capacity_available": [],
+   "capacity_available": 0
+  },
+  "gpu_8x_pro_4500_blackwell": {
+   "instance_type": {
+    "name": "gpu_8x_pro_4500_blackwell",
+    "description": "8x RTX PRO 4500 Blackwell (32GB)",
+    "price_cents_per_hour": 736,
+    "specs": {
+     "vcpu_count": 126,
+     "memory_gib": 592,
+     "storage_gb": 6000
+    }
+   },
+   "regions_with_capacity_available": [
+    {
+     "name": "us-central-3",
+     "description": "Des Moines, IA"
+    }
+   ],
+   "capacity_available": 5
+  },
+  "gpu_1x_A30": {
+   "instance_type": {
+    "name": "gpu_1x_A30",
+    "description": "1x A30 (24GB)",
+    "price_cents_per_hour": 35,
+    "specs": {
+     "vcpu_count": 16,
+     "memory_gib": 48,
+     "storage_gb": 256
+    }
+   },
+   "regions_with_capacity_available": [],
+   "capacity_available": 0
+  },
+  "cpu_mini_amd_epyc": {
+   "instance_type": {
+    "name": "cpu_mini_amd_epyc",
+    "description": "Mini AMD EPYC",
+    "price_cents_per_hour": 12,
+    "specs": {
+     "vcpu_count": 8,
+     "memory_gib": 32,
+     "storage_gb": 400
+    }
+   },
+   "regions_with_capacity_available": [],
+   "capacity_available": 0
+  }
+ }
+}

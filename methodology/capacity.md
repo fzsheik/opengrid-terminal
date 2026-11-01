@@ -27,7 +27,7 @@ being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute and Verda each
 | Vast | Keyed census: `POST /api/v0/bundles/`, verified on-demand offers, rentable and not rentable, per GPU model | count (free + total) | Free GPUs = distinct `gpu_ids` in rentable offers; total = each machine's GPUs (`num_gpus / gpu_frac`) over every machine either search returns. Provider-wide. Total means GPUs on verified machines listed now. A census of 512 offers (the search cap) withholds counts. Prices still from the public search. |
 | Latitude | Latitude's own `GET /plans` (API key) | count, tier | Per plan and location: in stock (`locations.in_stock`), servers in stock (`in_stock_count`), and the region's `stock_level` as tier. Count unit is servers. Without the key, Shadeform's boolean. Prices still from Shadeform. |
 | Crusoe, Denvr, Boost Run, Horizon, Phyntec | Shadeform `availability` | boolean | Whether Shadeform can launch the type in that region now. |
-| Massed Compute | Shadeform `availability` (prices still from its own page) | boolean | As above. Skus are Shadeform's type names, so they join to listings by GPU and count, not by sku. |
+| Massed Compute | Its own `GET /api/v1/gpu-inventory` (API key) | count | `capacity_available`: instances of that product (GPU, count, spot or not) that can be launched now, provider-wide; the in-stock regions (`regions_with_capacity_available`) are kept in raw_value. Count unit is instances. Sku is the listing sku. Counts for different sizes of one GPU draw on the same pool, so never add them up. Without the key, Shadeform's boolean (skus are Shadeform's type names, joined to listings by GPU and count); never both. |
 
 **Not covered, and why.** Salad: a demand flag, not stock. Nebius, OVHcloud and the hyperscalers:
 need an account. Vultr: its availability endpoint is empty for every GPU plan. CoreWeave, Together, Hot Aisle, IBM:
@@ -54,7 +54,7 @@ observation keeps its shape:
   A tier or a count implies it (`LOW` means in stock; zero free GPUs means not); a boolean is it.
 - **`tier`** (`low` / `medium` / `high`) only where the provider gives a level. A provider word OpenGrid does not
   recognise is never guessed: `tier` and `in_stock` stay null and the word is kept in `raw_value`.
-- **`available_count` / `total_count`** only where the provider gives counts (Lium). Their ratio is real utilization.
+- **`available_count` / `total_count`** only where the provider gives counts (Lium, Massed Compute, ...). Their ratio is real utilization.
 - **`raw_value`** is always the provider's own word or number, for audit.
 
 Rows key on `(provider, sku, region)` and use the same `sku` as the provider's price listings, so capacity joins to

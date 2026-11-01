@@ -92,6 +92,7 @@ class Settings(BaseSettings):
     lambda_api_key: str | None = None
     jarvis_api_key: str | None = None          # Jarvislabs misc/server_meta (prices, spot, reserved, capacity)
     gcp_api_key: str | None = None             # Google Cloud Billing Catalog API (restricted to that API)
+    massedcompute_api_key: str | None = None   # Massed Compute gpu-inventory API (read-only token); unset: the price page
     runpod_api_key: str | None = None
     digitalocean_api_key: str | None = None
     thunder_api_key: str | None = None         # Thunder's terms allow automated access only with an account key

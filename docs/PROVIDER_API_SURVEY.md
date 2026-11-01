@@ -65,7 +65,7 @@ Groups are the registry's own provider classes (`provider_meta.py`): 4 hyperscal
 | boostrun | availability via Shadeform [d] | none found | none found |
 | horizon | availability via Shadeform [d] | none found | none found |
 | phyntec | availability via Shadeform [d] | none found | none found |
-| massedcompute | availability via Shadeform (60 types) [d] | none found | none found |
+| massedcompute | `capacity_available` count per product, `regions_with_capacity_available` [live, key; read since 2026-11-01] | none found | none found |
 | coreweave | none | none (utilization is a console-only Grafana) | Flex and Reserved Instances via account executive |
 | together | reserved tiers on the pricing page [d] | cluster API needs a key (401) | reserved clusters 1 to 90 days+ |
 | jarvislabs | none | SDK `gpu_availability()` with a key [d] | none found |
@@ -95,7 +95,7 @@ cross-check their own feeds.
 | nebius | committed usage [sales]; Capacity Blocks [docs] | **Capacity Blocks: `CapacityBlockGroupService`, `CapacityIntervalService`** (gRPC, public protobufs github.com/nebius/api; REST `GET /capacity/v1/capacity-intervals` returns 401) [spec/live] | **`ResourceAdviceService/List`: on_demand / preemptible / reserved `availability_level` (HIGH, MEDIUM, LOW, LIMIT_REACHED, UNKNOWN) + `data_state`** [spec], tenant-scoped and quota-capped | availability level + freshness | pricing web page only |
 | digitalocean | 12-month GPU reserved rates on the pricing page [sales/docs] | none | `available` and `regions` per size [live, key] | none | sizes |
 | lium | none found | none | `available_gpu_count` per executor [live, public] | **utilization = 1 - available / total: 395 GPUs, 363 free, about 8%**; `active` and `is_responsive` are null publicly, so idle cannot be told from unreachable [live] | executors |
-| massedcompute | none found | none | none found | none | pricing page |
+| massedcompute | none found | none | `GET vm.massedcompute.com/api/v1/gpu-inventory` (Bearer, read-only token) [live, key] | none | gpu-inventory API; pricing page without the key |
 | verda | **commitment ladder: 1 mo 2%, 3 mo 3%, 6 mo 4%, 1 yr 8%, 2 yr 25%** [live, public] | long-term clusters [spec] | `instance-availability`, `cluster-availability` [spec, key] | `dynamic_price` / `max_dynamic_price` / spot price [live] | instance types |
 | voltagepark | `reserved_gpu_count_*` on bare-metal locations [live] | reserved infiniband clusters [live] | locations + hostnodes, `location_ids_with_availability` [live] | none | locations, presets |
 | crusoe | reservations list [spec, acct] | reservations [spec, acct] | quotas [spec, acct]; `GET /capacities` exists in the spec but returns 401 [live]; public view only through Shadeform | **`reservations/gpu-tracking`** and PromQL metrics [spec, acct] | via Shadeform |

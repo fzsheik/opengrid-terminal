@@ -92,6 +92,9 @@ def build_fetchers() -> list[Provider]:
     if settings.gcp_api_key:
         fetchers.append(GcpProvider(settings.gcp_api_key))
 
+    # The official inventory API with a key (prices + capacity counts); without one, the public page + Shadeform.
+    fetchers.append(MassedComputeProvider(api_key=settings.massedcompute_api_key))
+
     # Public prices; a key adds capacity (Vast's free/total census, Latitude's own stock, Verda's per-location
     # yes/no). The poller only makes Verda's token call and GETs (providers/verda.py); launching is
     # routing/adapters/verda.py, behind the execution gates (routing/control.py).
@@ -118,7 +121,6 @@ def build_fetchers() -> list[Provider]:
             VoltageParkProvider,
             LiumProvider,
             NebiusProvider,
-            MassedComputeProvider,
             AwsProvider,
             CrusoeProvider,
             DenvrProvider,
