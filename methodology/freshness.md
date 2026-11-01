@@ -37,6 +37,15 @@ Rules:
 - Detection lag, `observed_at - provider_changed_at`, is how late OpenGrid learned of a change. It is measured only
   for `exact` rows that have a bracket and whose provider time falls inside it.
 
+**AWS spot is read as a change log.** Each poll asks DescribeSpotPriceHistory for the window since that region's
+previous successful poll (StartTime = its EndTime, at most 24 hours back; a fresh process resumes from the last
+stored poll, else looks back one hour). AWS returns the price in force at the start plus every change inside the
+window, each with its exact time, so no change between polls is lost, whatever the poll interval. The listing shows
+the newest price; every earlier change in the window gets its own history row with AWS's time as
+`provider_changed_at`. OpenGrid learned of all of them at that fetch, so their `observed_at` is the fetch time (one
+microsecond apart, in AWS's order) and they share the bracket (previous poll, this poll]. A change already recorded
+(at or before the last row's own time) is never written twice.
+
 Rows written before this field existed are filled by a backfill that re-reads the stored raw responses (no new
 fetching): `python -m changed_at backfill [--provider P] [--since DATE] [--dry-run]`. It writes only empty fields, so
 it can be run again safely. Raw bodies are kept 30 days and fetch records 90 days, so provider times can be

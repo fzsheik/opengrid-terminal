@@ -27,6 +27,16 @@ class RawResponse(BaseModel):
     payload: dict | list | None = None
 
 
+class PriceChange(BaseModel):
+    """A price a listing had between two polls and no longer has, from a provider change log (AWS spot)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    provider_changed_at: datetime
+    price_per_gpu_hour: Decimal | None
+    price_per_instance_hour: Decimal | None
+
+
 class ComputeListing(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -82,6 +92,9 @@ class ComputeListing(BaseModel):
     # current state, so excluded from model_dump(). None: the provider gives no time (most do not).
     provider_changed_at: datetime | None = Field(default=None, exclude=True)
     changed_at_basis: Literal["exact", "date_only", "lower_bound"] | None = Field(default=None, exclude=True)
+    # Earlier prices from a provider change log that came and went since the previous poll (AWS spot), oldest
+    # first, each with its exact time. History only: record_observations() writes one row each.
+    superseded: tuple[PriceChange, ...] = Field(default=(), exclude=True)
 
 
 class CapacityObservation(BaseModel):

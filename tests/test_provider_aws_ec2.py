@@ -3,7 +3,7 @@ Capacity Block offerings stored raw (and the new-account limit answer stored onc
 
 Fixtures (tests/fixtures_providers/aws_ec2_*.xml) are REAL responses captured 2026-11-01 with the read-only key,
 trimmed by the request itself (five instance types, two regions); account ids replaced by 123456789012:
-    aws_ec2_spot_us-east-{1,2}.xml              DescribeSpotPriceHistory, StartTime = EndTime = now, Linux/UNIX
+    aws_ec2_spot_us-east-{1,2}.xml              DescribeSpotPriceHistory (a change-log window), Linux/UNIX
                                                 (p5.48xlarge, p5en.48xlarge, p6-b200.48xlarge, g6e.xlarge, m5.large)
     aws_ec2_placement_{p5,p6-b200}.48xlarge.xml GetSpotPlacementScores, 1 instance, six regions
     aws_ec2_capacity_blocks_limit.xml           DescribeCapacityBlockOfferings on this new account
@@ -134,7 +134,10 @@ def test_requests_are_signed_read_only_calls():
         assert SECRET not in auth and SECRET not in req.content.decode()
     spot = [f for _, f, _ in m.calls if f["Action"] == "DescribeSpotPriceHistory"]
     assert sorted(r for r, f, _ in m.calls if f["Action"] == "DescribeSpotPriceHistory") == sorted(SPOT_REGIONS)
-    assert all(f["StartTime"] == f["EndTime"] and f["ProductDescription.1"] == "Linux/UNIX" for f in spot)
+    # A change log: a fresh process with no stored poll looks back SPOT_COLD_WINDOW (test_spot_change_log.py has more).
+    t = lambda v: datetime.strptime(v, "%Y-%m-%dT%H:%M:%SZ")  # noqa: E731
+    assert all(t(f["EndTime"]) - t(f["StartTime"]) == aws.SPOT_COLD_WINDOW and f["ProductDescription.1"] == "Linux/UNIX"
+               for f in spot)
     assert {v for k, v in spot[0].items() if k.startswith("InstanceType.")} == set(aws.GPU_INSTANCES)
 
 

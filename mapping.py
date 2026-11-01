@@ -582,9 +582,11 @@ AWS = ProviderMapping(
         "List prices: big buyers rarely pay them, so AWS sits well above the neoclouds. "
         "p5.48xlarge is 8x H100 at $55.04/hr = $6.88 per GPU-hour.",
         "On-demand: only us-east-1 Linux. Polled hourly; list prices change rarely.",
-        "Spot (with the read-only key): DescribeSpotPriceHistory with StartTime = EndTime = now returns the price "
-        "in effect now per type and AZ, in us-east-1, us-east-2, us-west-2, eu-west-2, eu-north-1 and "
-        "ap-northeast-1. A region answer with no GPU row is a failed fetch.",
+        "Spot (with the read-only key): DescribeSpotPriceHistory as a change log, StartTime = the previous "
+        "successful poll, EndTime = now: the price in effect at the start plus every change since, per type and AZ, "
+        "in us-east-1, us-east-2, us-west-2, eu-west-2, eu-north-1 and ap-northeast-1. The listing is the newest "
+        "price; each earlier change is its own history row with AWS's exact timestamp (methodology/freshness.md). "
+        "A region answer with no GPU row is a failed fetch.",
         "The Spot Advisor feed (interruption band r 0-4 = <5% .. >20%, savings s %) is stored raw with its "
         "Last-Modified header and read only by spot_advice(); never shown on public pages or APIs (AWS site "
         "terms). Routing has no hook for it: best execution ranks on-demand only and reliability is OpenGrid's "

@@ -224,6 +224,27 @@ def _change_time(listing: ComputeListing, previous: ListingObservation | None,
     return {"prev_observed_at": bracket, "provider_changed_at": provider_at, "changed_at_basis": basis}
 
 
+def _superseded(listing: ComputeListing, previous) -> list[ComputeListing]:
+    """The prices a change log says this listing had since the last recorded one, as listings to record first.
+
+    Only changes newer than the last recorded row's own time (its provider time, else its fetch time) count, so
+    re-reading the same log never writes a change twice. A listing seen for the first time records only its current
+    price. OpenGrid learned of every one at this fetch, so each row's observed_at is the fetch time, minus one
+    microsecond per later change (the history key is per listing and time, and the order stays the provider's);
+    provider_changed_at holds the provider's exact time.
+    """
+    if not listing.superseded or previous is None:
+        return []
+    cutoff = getattr(previous, "provider_changed_at", None) or previous.observed_at
+    events = sorted((e for e in listing.superseded if e.provider_changed_at > cutoff),
+                    key=lambda e: e.provider_changed_at)
+    return [listing.model_copy(update={
+        "price_per_gpu_hour": e.price_per_gpu_hour, "price_per_instance_hour": e.price_per_instance_hour,
+        "provider_changed_at": e.provider_changed_at, "changed_at_basis": "exact", "superseded": (),
+        "observed_at": listing.observed_at - timedelta(microseconds=len(events) - i)})
+        for i, e in enumerate(events)]
+
+
 def record_observations(listings: list[ComputeListing],
                         seen: dict[tuple[str, str], datetime] | None = None) -> int:
     """Write an observation per listing whose price or supply moved.
@@ -240,22 +261,25 @@ def record_observations(listings: list[ComputeListing],
     seen = seen or {}
     with SessionLocal.begin() as s:
         previous = _last_observations(s, listings)
-        rows = [
-            {
-                "provider": listing.provider,
-                "listing_id": listing.listing_id,
-                "observed_at": listing.observed_at,
-                "price_per_gpu_hour": listing.price_per_gpu_hour,
-                "price_per_instance_hour": listing.price_per_instance_hour,
-                "available": listing.available,
-                "capacity": listing.capacity,
-                "capacity_unit": listing.capacity_unit,
-                **{f: getattr(listing, f) for f in OBSERVED_PROVENANCE},
-                **_change_time(listing, prev, seen.get(key)),
-            }
-            for listing in listings
-            if _moved(listing, prev := previous.get(key := (listing.provider, listing.listing_id)))
-        ]
+        rows = []
+        for listing in listings:
+            key = (listing.provider, listing.listing_id)
+            prev = previous.get(key)
+            for step in (*_superseded(listing, prev), listing):
+                if _moved(step, prev):
+                    rows.append({
+                        "provider": step.provider,
+                        "listing_id": step.listing_id,
+                        "observed_at": step.observed_at,
+                        "price_per_gpu_hour": step.price_per_gpu_hour,
+                        "price_per_instance_hour": step.price_per_instance_hour,
+                        "available": step.available,
+                        "capacity": step.capacity,
+                        "capacity_unit": step.capacity_unit,
+                        **{f: getattr(step, f) for f in OBSERVED_PROVENANCE},
+                        **_change_time(step, prev, seen.get(key)),
+                    })
+                    prev = step
         if not rows:
             return 0
         s.execute(

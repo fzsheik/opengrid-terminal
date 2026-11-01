@@ -39,9 +39,23 @@ async def poll_once(provider: Provider) -> dict:
     return result
 
 
+def _last_ok(name: str) -> dict:
+    """Each endpoint's newest successful fetch time for one provider (normalize's loose index scan)."""
+    with normalize.SessionLocal() as s:
+        return dict(s.execute(normalize._NEWEST_PER_ENDPOINT, {"p": name}).all())
+
+
+async def _resume(provider: Provider) -> None:
+    try:
+        provider.resume(await asyncio.to_thread(_last_ok, provider.name))
+    except Exception:  # noqa: BLE001 - a provider that cannot resume starts fresh
+        log.exception("%s: could not read its last stored poll; starting fresh", provider.name)
+
+
 async def poll_provider(provider: Provider) -> None:
     """Poll one provider forever on its own policy."""
     interval = provider.polling.interval_seconds
+    await _resume(provider)
     while True:
         started = time.monotonic()
         try:

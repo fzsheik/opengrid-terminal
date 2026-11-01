@@ -61,6 +61,11 @@ class Provider(ABC):
     async def aclose(self) -> None:
         await self._client.aclose()
 
+    def resume(self, last_ok: "dict[str, datetime]") -> None:
+        """Called once by the poller before the first poll with each endpoint's newest stored successful fetch time,
+        so a provider that queries "since the last poll" (AWS spot) can pick up where a previous process stopped.
+        Default: nothing to resume."""
+
     async def call(self, method: str, path: str, *, client: httpx.AsyncClient | None = None, **kw) -> RawResponse:
         """One HTTP call, recorded whether or not it worked. `client` overrides the provider's own (a second API
         host, such as GCP's Compute API beside its Billing API)."""
