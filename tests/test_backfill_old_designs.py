@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import scratchdb  # noqa: E402,F401  (first: isolates the process from real networks)
 
 from backfill.__main__ import _day  # noqa: E402
-from backfill.parsers import azure, coreweave, lambda_, runpod, verda  # noqa: E402
+from backfill.parsers import azure, coreweave, denvr, lambda_, runpod, verda  # noqa: E402
 from backfill.sources import sources  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_backfill"
@@ -267,6 +267,19 @@ def test_datacrunch_2021_and_2024_tables():
     _raises(verda.datacrunch_products, bad, AT, contains="price")
 
 
+# ---------------------------------------------------------------------------------------------------------- Denvr
+
+def test_denvr_denvrdata_2025_list_before_header():
+    ls, used = _src("www.denvrdata.com/pricing").parse(
+        (FIX / "denvr_denvrdata_2025-07_list_before_header.html").read_bytes(), AT)
+    by = {l.listing_id: l for l in ls}
+    h = by["nvidia-h100-sxm:8x:80gb"]             # the id www.denvr.com/pricing rows of the same shape carry
+    assert h.price_per_gpu_hour == D("2.10") and h.canonical_gpu_name == "NVIDIA H100 80GB SXM5" and h.gpu_count == 8
+    assert len(ls) == 7 and not any(l.price_per_gpu_hour in (D("0.31"), D("1.59")) for l in ls), "CPU rows"
+    page = _fix("denvr_denvrdata_2025-07_list_before_header.html")
+    _raises(denvr.denvr_table, page.replace("$2.10 / GPU", "$2.10 / GPU / mo"), AT, contains="unreadable")
+
+
 TESTS = [test_since_accepts_year_and_month,
          test_azure_vm_page_2018_names_without_s, test_azure_vm_page_2022_spot_column,
          test_azure_vm_page_2020_spot_savings_and_trailing_cell, test_azure_vm_page_old_and_new_designs_fail_loudly,
@@ -276,7 +289,8 @@ TESTS = [test_since_accepts_year_and_month,
          test_lambda_2022_reserved_table_with_the_same_header_is_skipped, test_lambda_dec_2023_price_in_force_on_capture_day,
          test_lambda_2024_per_gpu_prices_and_reserved_rows,
          test_runpod_next_data_list_reads_only_offered_clouds, test_runpod_next_data_map_and_lowest_price_designs,
-         test_datacrunch_2020_type_codes, test_datacrunch_2021_and_2024_tables]
+         test_datacrunch_2020_type_codes, test_datacrunch_2021_and_2024_tables,
+         test_denvr_denvrdata_2025_list_before_header]
 
 if __name__ == "__main__":
     for t in TESTS:
