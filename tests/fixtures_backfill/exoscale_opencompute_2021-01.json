@@ -1,0 +1,13 @@
+{
+"_source": "https://web.archive.org/web/20210103084118/https://portal.exoscale.com/api/pricing/opencompute",
+"usd": {
+"running_gpu_huge": "2.82083000",
+"running_gpu_large": "2.25417000",
+"running_gpu_medium": "1.71111000",
+"running_gpu_small": "1.16806000",
+"running_gpu2_huge": "3.31944000",
+"running_gpu2_large": "2.65278000",
+"running_gpu2_medium": "2.01389000",
+"running_gpu2_small": "1.37500000"
+}
+}
