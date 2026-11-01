@@ -7,8 +7,8 @@ Kind: **observed** (the provider's own report). Code: `capacity.py`, each provid
 
 ## Providers and what each reports
 
-Eighteen providers, every one read from data its own module fetches and stores raw first. Most of it was already
-being fetched for prices; Koyeb, Linode, Scaleway and Massed Compute each add a capacity source.
+Twenty providers, every one read from data its own module fetches and stores raw first. Most of it was already
+being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute and Verda each add a capacity source.
 
 | Provider | Source | Shape | What the provider says |
 |---|---|---|---|
@@ -21,6 +21,7 @@ being fetched for prices; Koyeb, Linode, Scaleway and Massed Compute each add a 
 | Voltage Park | `/bare-metal/locations`, `/instant-deploy-presets/` | count, boolean | GPUs in stock per location and fabric; VM presets list the locations with stock. Locations are ids. |
 | Hyperbolic | `/v2/alpha/on-demand/rental-options` | count | `totalAvailable` GPUs per option; in stock only when the option is enabled. When `totalAvailable` is missing (as it often is), in_stock is unknown. |
 | Linode (Akamai) | `GET /v4/regions/availability` (all pages) | boolean | Whether the plan can be launched in that region now. |
+| Verda | `GET /v1/instance-availability`, on-demand and spot (Cloud API credentials) | boolean | Per location, the instance types that can be deployed now. Every priced GPU type gets a row at every location in the response: in stock exactly when the location lists it. Sku is the listing_id (`<type>`, `<type>:spot`); spot is asked separately and differs. Without credentials, no capacity; prices are public either way. |
 | Lambda | `regions_with_capacity_available` | boolean | Where there is stock, never how much. A type with no listed region gets one provider-wide `false`. |
 | DigitalOcean | `/v2/sizes` `available` + `regions` | boolean | Whether new Droplets can be created with the size, and where. Not confirmed to track live stock. |
 | Vast | Keyed census: `POST /api/v0/bundles/`, verified on-demand offers, rentable and not rentable, per GPU model | count (free + total) | Free GPUs = distinct `gpu_ids` in rentable offers; total = each machine's GPUs (`num_gpus / gpu_frac`) over every machine either search returns. Provider-wide. Total means GPUs on verified machines listed now. A census of 512 offers (the search cap) withholds counts. Prices still from the public search. |
@@ -28,7 +29,7 @@ being fetched for prices; Koyeb, Linode, Scaleway and Massed Compute each add a 
 | Crusoe, Denvr, Boost Run, Horizon, Phyntec | Shadeform `availability` | boolean | Whether Shadeform can launch the type in that region now. |
 | Massed Compute | Shadeform `availability` (prices still from its own page) | boolean | As above. Skus are Shadeform's type names, so they join to listings by GPU and count, not by sku. |
 
-**Not covered, and why.** Salad: a demand flag, not stock. Verda, Nebius, OVHcloud and the hyperscalers:
+**Not covered, and why.** Salad: a demand flag, not stock. Nebius, OVHcloud and the hyperscalers:
 need an account. Vultr: its availability endpoint is empty for every GPU plan. CoreWeave, Together, Hot Aisle, IBM:
 no capacity data found.
 

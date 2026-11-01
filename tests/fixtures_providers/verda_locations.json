@@ -1,0 +1,26 @@
+[
+ {
+  "code": "FIN-01",
+  "name": "Finland 1",
+  "country_code": "FI",
+  "is_private_networks_enabled": false,
+  "private_network_auto_subnet": null,
+  "is_legacy_networking_enabled": true
+ },
+ {
+  "code": "FIN-02",
+  "name": "Finland 2",
+  "country_code": "FI",
+  "is_private_networks_enabled": false,
+  "private_network_auto_subnet": null,
+  "is_legacy_networking_enabled": true
+ },
+ {
+  "code": "FIN-03",
+  "name": "Finland 3",
+  "country_code": "FI",
+  "is_private_networks_enabled": true,
+  "private_network_auto_subnet": "10.128.16.0/20",
+  "is_legacy_networking_enabled": true
+ }
+]

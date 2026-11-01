@@ -538,7 +538,8 @@ AWS = ProviderMapping(
 VERDA = ProviderMapping(
     provider="verda",
     display_name="Verda (formerly DataCrunch)",
-    endpoints={"GET /v1/instance-types": "every instance type with on-demand and spot price; anonymous"},
+    endpoints={"GET /v1/instance-types": "every instance type with on-demand and spot price; anonymous",
+               "GET /v1/instance-availability": "capacity only (capacity tables), with Cloud API credentials"},
     fields=_fields(
         "verda",
         sku=(RAW, "instance_type", 'e.g. "8H100.80S.176V"'),
@@ -552,7 +553,7 @@ VERDA = ProviderMapping(
         market_type=(DERIVED, "price_per_hour -> on_demand, spot_price -> spot"),
         provider_tier=(DERIVED, '"confidential" for ".CC" types'),
         interruptible=(DERIVED, "= (market_type == spot)"),
-        available=(ABSENT, "-", "availability needs a login; stock is unknown"),
+        available=(ABSENT, "-", "listings are provider-wide; per-location stock is in the capacity tables (credentials)"),
         capacity=(ABSENT, "-"),
         capacity_unit=(ABSENT, "-"),
         vcpu=(RAW, "cpu.number_of_cores"),
