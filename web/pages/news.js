@@ -2,7 +2,8 @@
    region-specific views are just links (/news?provider=vast, /news?gpu=h100, /news?region=Europe).
    Relevance components come from the list item (else /v1/news/{id}) on hover; family suggestions from /v1/news/families. Source health from /v1/news/sources, topic
    catalogue from /v1/news/topics. view=timeline overlays /v1/timeline for one GPU: prices, availability,
-   market events and news on one axis, related in time, not necessarily causal. */
+   market events and news on one axis, related in time, not necessarily causal; below it the GPU's major shifts
+   (/v1/shifts) with the items stored around each, under the same not-causal heading. */
 (() => {
   const { h, fmt, Lib: L } = OG;
   const REGIONS = ["US", "Canada", "Europe", "UK", "APAC", "Middle East", "LATAM", "Africa"];
@@ -170,7 +171,9 @@
         const priceBox = h("div", { class: "box box-p" }), availBox = h("div", { class: "box box-p nw-avail" });
         body.replaceChildren(h("p", { class: "nw-nc" }, h("b", {}, "Related, not necessarily causal. "), d.note || ""),
           h("div", { class: "lbl" }, `${L.shortGpu(d.gpu)} · ${d.prices.basis === "market_lowest" ? "market lowest and median provider price" : "provider lowest"} · ${pts.length} hourly point${pts.length === 1 ? "" : "s"}`),
-          priceBox, h("div", { class: "lbl nw-gap" }, "Available listings (observed)"), availBox, legend(d, evs));
+          priceBox, h("div", { class: "lbl nw-gap" }, "Available listings (observed)"), availBox, legend(d, evs),
+          // Major shifts for this GPU over its whole history (observed and archived), each with its stored items.
+          OG.section("Major shifts for this GPU", OG.shiftsPanel(ctx, { gpu: f.gpu, provider: f.provider || null, limit: 15 }, { slot: "nw-shifts", empty: "No major shift recorded for this GPU." })));
         if (times.length < 2) {
           priceBox.replaceChildren(OG.insufficient(`${pts.length} hourly sample${pts.length === 1 ? "" : "s"} in the last ${st.win}${pts[0] ? ` (lowest ${fmt.price(pts[0].lowest)}, median ${fmt.price(pts[0].median)} at ${fmt.dateTime(pts[0].hour)})` : ""}. The overlay needs at least two hours of the rollup. ${evs.length} marker${evs.length === 1 ? "" : "s"} in the window are listed below.`, "History building"));
           availBox.previousSibling.remove(); availBox.remove();

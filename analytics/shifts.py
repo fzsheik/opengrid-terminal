@@ -488,8 +488,10 @@ def related_items(s, sh: dict) -> list[dict]:
         cand[key] = {"item_type": kind, "ref_id": ref, "at": t, "title": title, "snapshot": snap, "match": match,
                      "hours_from_shift": round((t - at).total_seconds() / 3600, 2),
                      "position": "before" if t <= at else "after", "score": score,
-                     "score_components": {base_name: round(base, 4), "proximity": p, "match_weight": MATCH_WEIGHT[match],
-                                          "formula": f"0.5 * {base_name} + 0.3 * proximity + 0.2 * match_weight"}}
+                     "score_components": {base_name: round(base * 100) if base_name == "relevance" else round(base, 4),
+                                          "proximity": p, "match_weight": MATCH_WEIGHT[match],
+                                          "formula": f"0.5 * {base_name}{'/100' if base_name == 'relevance' else ''}"
+                                                     " + 0.3 * proximity + 0.2 * match_weight"}}
 
     def add_news(rows, match):
         for n in rows:
