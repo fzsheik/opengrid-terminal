@@ -5,6 +5,52 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-01 (third release) — Reserved prices page, ECB currency conversion, Hot Aisle and Crusoe stock
+
+### What shipped
+
+**Reserved prices, in their own section.** A new `/reserved` page (GPUs group) and `GET /v1/reserved` /
+`GET /v1/reserved/summary` (public like `/v1/capacity`) show reserved and committed GPU prices, computed on read from
+raw responses already stored (no new polling): Azure (1/3/5 years), GCP (1/3-year GPU-only commitments, Iowa),
+Jarvislabs (1/3/6 months, 1/2 years), Latitude (month/year plans, USD only), Together (3-30 to 181+ days) and Verda
+(its 2-25% ladder applied to on-demand, marked derived). Each row has term, effective $/GPU-hour, whole-term price
+where given, the matching on-demand price and the saving (Azure 8x H100: $7.87 1y, $5.40 3y, $4.92 5y vs $12.29
+on-demand). None of it enters listings, indices, spreads or statistics; tests prove those are identical with reserved
+data stored. Methodology: `/methodology/reserved-prices`.
+
+**Currency conversion at the ECB euro reference rate.** Each ECB response is stored raw; EUR->USD is parsed from it
+(migration `0026_fx`). A price uses the rate already published (16:00 Frankfurt) when it was fetched, so weekends and
+holidays carry the last rate; if the rate is more than 5 days old nothing is converted (fail closed). Converted
+listings stay USD for every statistic and carry provenance (original currency and amount, rate, rate date) in
+`/listings`, `/history` and `/v1/fx`. **Scaleway** is the first converted feed: from 1 Nov 2026 its prices are
+Scaleway's own EUR list prices, not Shadeform's resale listing, counted once. Existing products keep their listing ids,
+so the 1 Nov step of -3% to -7% (H100 $3.30 -> $3.20, L4 $0.95 -> $0.88, B300 $9.01 -> $8.38/GPU) is a source change,
+not a market move. Scaleway's H100-SXM 2/4/8 are listed for the first time. Methodology: `/methodology/fx`.
+
+**Hot Aisle stock from its own API** (`HOTAISLE_API_KEY` + `HOTAISLE_TEAM`, the team handle). VM `Quantity` per type
+becomes count capacity joined to page skus; prices stay from hotaisle.xyz/pricing because the API lists only in-stock
+sizes (its price is cross-checked each poll and never published; it matched the page on 1 Nov). Open item: Hot Aisle's
+AUP bans "harvesting or scraping" for account holders, so get written OK for reading the price page.
+
+**Crusoe stock from Crusoe itself** (`CRUSOE_ACCESS_KEY_ID` + `CRUSOE_SECRET_KEY`). HMAC-signed read-only GETs on
+`api.cloud.crusoe.ai/v1` (`/capacities`, `/locations`, the VM type catalogue). Capacity is yes/no per type and location
+(`quantity` is only ever 0/1). Without the keys, or when the API is over 6 hours behind, capacity falls back to
+Shadeform's yes/no; never both. Prices still come from Shadeform (Crusoe's API publishes none).
+
+### Planned but not shipped, and why
+
+| Item | Why not |
+|---|---|
+| OVHcloud EUR catalogues | They price the same products as the World USD catalogue already read; needs a rule for which list counts. |
+| GCP regions beyond Iowa, AWS spot listings | Built separately on the new read-only GCP service account and AWS IAM user; next release. |
+
+### Deploy notes
+- New Railway variables: `HOTAISLE_API_KEY`, `HOTAISLE_TEAM`, `CRUSOE_ACCESS_KEY_ID`, `CRUSOE_SECRET_KEY`.
+- Migration `0026_fx` runs at startup. The first FX run also loads the ECB 90-day file.
+- Full suite before push: 95 of 96 test files pass (Python and web); `test_jobs_e2e` fails here and on main.
+
+---
+
 ## 2026-11-01 (second release) — Nebius back, silence alerts, 24 capacity providers, four raw sources
 
 ### What shipped
