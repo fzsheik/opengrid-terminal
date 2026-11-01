@@ -368,8 +368,10 @@ from api import reconcile as reconcile_api  # noqa: E402
 from api import uptime as uptime_api  # noqa: E402  (registers the uptime background job)
 from api import probes as probes_api  # noqa: E402  (registers the probe_local + probe_rollup jobs)
 from api import capacity as capacity_api  # noqa: E402
+from api import reserved as reserved_api  # noqa: E402  (read-only; never part of listings or statistics)
 
-for _module in (execution_api, partners_api, product_api, reconcile_api, uptime_api, probes_api, capacity_api):
+for _module in (execution_api, partners_api, product_api, reconcile_api, uptime_api, probes_api, capacity_api,
+                reserved_api):
     app.include_router(_module.router)
 
 from api import jobs as jobs_api  # noqa: E402  (OpenGrid Jobs; registers the job_sync background job)
