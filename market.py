@@ -8,6 +8,8 @@ Which listings count (the same rules the leaderboard used):
     - a canonical GPU, on-demand, not interruptible
     - not Vast's "cheapest" row (one host's ask; its median row stands for Vast)
     - not a "from $x" floor price
+    - not resold capacity (provider_tier "resold:<cloud>": Hugging Face Endpoints on AWS/GCP/Azure, GPU.ai's
+      pooled inventory): another cloud's GPUs at a reseller's price, so counting them would count a cloud twice
     - in stock, or stock unknown (a sold-out listing is not a price you can pay)
 
 Only PUBLIC listings count (methodology/data-visibility.md): `_ELIGIBLE`, which every public statistic uses,
@@ -34,6 +36,9 @@ from sqlalchemy import text
 import normalize
 from providers import PROVIDERS
 
+# Listings that resell another cloud's capacity carry provider_tier "resold:<underlying cloud>" and never vote.
+RESOLD_PREFIX = "resold:"
+
 MIN_SPAN = timedelta(minutes=30)  # a change over less than two polls is not a trend
 MAX_HOURS = 24 * 90
 
@@ -42,6 +47,7 @@ _ELIGIBLE_ANY_TIER = """
     AND c.market_type = 'on_demand'
     AND COALESCE(c.interruptible, false) = false
     AND COALESCE(c.provider_tier, '') NOT IN ('cheapest', 'from_price', 'gpu-attachment')
+    AND COALESCE(c.provider_tier, '') NOT LIKE 'resold:%'
 """
 # The public-tier filter for compute_listings aliased `c`. Fail closed: anything not exactly 'public' is out.
 PUBLIC_SQL = "c.visibility = 'public'"

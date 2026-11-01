@@ -708,6 +708,16 @@ PHYNTEC = _shadeform("phyntec", "Phyntec", [
     'Shadeform\'s cloud directory files it as "evergreen" (its former name); its instance types say "phyntec".',
     "Its own site prints monthly reservations only (not converted); the hourly price is Shadeform's.",
 ])
+PAPERSPACE = _shadeform("paperspace", "Paperspace", [
+    "Shadeform's rate is Paperspace's own on-demand list price plus $0.04/GPU-h ($0.10 on the A100s), checked "
+    "against paperspace.com/pricing on 2026-11-01: it is Shadeform's resale price, stored as such.",
+    "Paperspace's page prints 3-year commitment rates for the H100 ($2.24) and A100-80G ($1.15); not read.",
+    'Its H100 is "NVIDIA HGX H100" on its own page but pcie in Shadeform, so it is relabelled and stays unmapped; '
+    '"V100" and "V100_32G" stay unmapped (form factor not stated by Paperspace; no 32 GB canonical).',
+    "A DigitalOcean product, but a separate catalogue from DigitalOcean's GPU Droplets (read from DigitalOcean's "
+    "own API): no machine type is in both.",
+    "A catalogue with no priced Paperspace type fails the normalize (no other source): never 'nothing for sale'.",
+])
 
 
 COREWEAVE = ProviderMapping(
@@ -1351,6 +1361,219 @@ CLORE = ProviderMapping(
 )
 
 
+AKASH = ProviderMapping(
+    provider="akash",
+    display_name="Akash Network (bid-derived market summary)",
+    endpoints={"GET console-api.akash.network/v1/gpu-prices":
+               "per GPU (vendor, model, ram, interface): free/total GPUs and a USD summary of providers' bids"},
+    fields=_fields(
+        "akash",
+        sku=(DERIVED, "vendor-model-ram-interface", 'e.g. "nvidia-h100-80Gi-SXM5"'),
+        listing_id=(DERIVED, "= sku", "one summary listing per GPU row"),
+        raw_gpu_name=(DERIVED, '"{vendor} {model} {ram} {interface}"', 'e.g. "nvidia h100 80Gi SXM5"'),
+        gpu_count=(CONSTANT, "1", "bids are on single-GPU orders"),
+        region=(ABSENT, "-", "a network-wide summary"),
+        country=(ABSENT, "-"),
+        price_per_gpu_hour=(RAW, "models[].price.weightedAverage",
+                            "each provider's chosen bid, weighted by its allocatable GPUs; min/max/avg/med kept raw"),
+        price_per_instance_hour=(DERIVED, "= price_per_gpu_hour", "single GPU"),
+        currency=(RAW, 'price.currency (must be "USD")', "uakt bids converted by Akash at that day's AKT price"),
+        provider_tier=(CONSTANT, '"weighted"', "a market summary, not one host's ask"),
+        available=(DERIVED, "availability.available > 0"),
+        capacity=(RAW, "availability.available", "GPUs not allocated; also a capacity row (count shape)"),
+        capacity_unit=(CONSTANT, '"gpu"'),
+        vcpu=(ABSENT, "-"),
+        ram_gb=(ABSENT, "-"),
+        storage_gb=(ABSENT, "-"),
+    ),
+    quirks=[
+        "Akash has no price list: the Console derives prices from bids (its own words: 'a temporary solution'). "
+        "Per provider it takes the pricing bot's newest bid, else that provider's cheapest single-GPU bid on the "
+        "same RAM+interface, else same RAM, else any variant of the model, over 14 then 31 days.",
+        "So a row's price can be up to 31 days old and, when a provider never bid on the exact variant, can come "
+        "from another RAM/interface of the same model. Stated, not corrected: the summary hides which bids were used.",
+        "One listing per row at weightedAverage; min/max/avg/med stay in the stored raw response, never listings.",
+        "A row with price null (no bid in 31 days) gets a capacity row and no listing.",
+        "Odd bids show through (B300 at $0.23 on 2026-11-01); the quality floor holds such values (quality/checks.py).",
+    ],
+)
+
+
+HYDRAHOST = ProviderMapping(
+    provider="hydrahost",
+    display_name="Hydra Host (bare-metal marketplace)",
+    endpoints={"GET brokkr.hydrahost.com/api/v1/inventory?page=N&pageSize=100":
+               "every listed device: location, stockStatus, specs, on-demand and interruptible prices in cents"},
+    fields=_fields(
+        "hydrahost",
+        sku=(RAW, "data[].id", "a device uuid; also the capacity row's sku"),
+        listing_id=(DERIVED, 'id, or id + ":interruptible"', "one per device and price kind"),
+        raw_gpu_name=(RAW, "specs.gpu.model", 'nvidia-smi names, e.g. "NVIDIA H100 80GB HBM3"'),
+        gpu_count=(RAW, "specs.gpu.count"),
+        region=(RAW, "location", 'a state or country word, e.g. "Texas", "Singapore"'),
+        country=(DERIVED, "location -> ISO code (US states -> US)", "None for a word not in the table"),
+        price_per_gpu_hour=(DERIVED, "listing.{onDemand,interruptible}Price.perHour.perGpu / 100", "cents"),
+        price_per_instance_hour=(DERIVED, "perHour.total / 100", "must equal perGpu x GPUs within 1% or skipped"),
+        currency=(CONSTANT, '"USD"', "category-prices states USD; the inventory's figures are its cents"),
+        market_type=(DERIVED, '"on_demand", or "spot" for the interruptible price'),
+        provider_tier=(CONSTANT, '"baremetal"'),
+        interruptible=(DERIVED, "= (market_type == spot)"),
+        available=(DERIVED, 'stockStatus == "on demand"', '"reserve" / "preorder" -> False; another word -> None'),
+        capacity=(ABSENT, "-", "stock words are capacity rows (boolean shape)"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, "specs.cpu.totalThreads"),
+        ram_gb=(RAW, "specs.memory.total"),
+        storage_gb=(RAW, "specs.storage.total"),
+    ),
+    quirks=[
+        "Prices are cents: 8x L40S perHour.perGpu 59.375 = $0.59; its interruptible 42.5 equals the 0.425 USD "
+        "category start price (checked 2026-11-01).",
+        "A marketplace of independent suppliers: one listing per device, including suppliers outside the US.",
+        "isInterruptibleOnly devices give only the interruptible listing.",
+        '"reserve" and "preorder" devices are listed with available False: a real price, not rentable now.',
+        "CPU-only servers (no GPU model) are skipped. IPs, disk serials and OS lists are not stored.",
+    ],
+)
+
+
+CUDO = ProviderMapping(
+    provider="cudo",
+    display_name="CUDO Compute (VMs and bare metal)",
+    endpoints={
+        "GET rest.compute.cudo.org/v1/vms/machine-types": "VM GPU, vCPU and RAM prices per data centre; free GPUs",
+        "GET rest.compute.cudo.org/v1/machines-types": "bare-metal server prices per commitment term; free servers",
+    },
+    fields=_fields(
+        "cudo",
+        sku=(DERIVED, '"vm:{machineType}" or "baremetal:{id}"'),
+        listing_id=(DERIVED, "{sku}@{dataCenterId}"),
+        raw_gpu_name=(RAW, "gpuModelId", 'e.g. "nvidia-h100"'),
+        gpu_count=(DERIVED, "1 for a VM (priced per GPU); bare metal: gpus"),
+        region=(RAW, "dataCenterId", 'e.g. "no-kristiansand-1"'),
+        country=(DERIVED, "dataCenterId prefix -> ISO code"),
+        price_per_gpu_hour=(DERIVED, "VM: gpuPriceHr + vCPU x vcpuPriceHr + RAM x memoryGibPriceHr; metal: priceHr / gpus",
+                            "USD decimal strings, not cents"),
+        price_per_instance_hour=(DERIVED, "VM: = per GPU; metal: prices[COMMITMENT_TERM_NONE].priceHr"),
+        currency=(CONSTANT, '"USD"', "not stated by the API; the console prices in USD"),
+        provider_tier=(DERIVED, '"vm" | "baremetal"'),
+        available=(DERIVED, "capacity > 0"),
+        capacity=(RAW, "VM totalGpuFree (gpu) | metal machinesFree (instance)"),
+        capacity_unit=(DERIVED, '"gpu" | "instance"'),
+        vcpu=(DERIVED, "VM: max(1, minVcpuPerGpu); metal: cpuCores"),
+        ram_gb=(DERIVED, "VM: ceil(vCPU / maxVcpuPerMemoryGib); metal: memoryGib", "GiB"),
+        storage_gb=(DERIVED, "metal: diskSizeGib; VM: None", "VM boot disk billed extra"),
+    ),
+    quirks=[
+        "VMs are a la carte; the listing is the smallest 1-GPU VM the API allows (e.g. H100: 1 vCPU, 5 GiB). "
+        "Boot disk and IPv4 are extra and not added.",
+        "Only in-stock or recently stocked types are returned (Norway and Sweden on 2026-11-01).",
+        "Bare-metal commitment terms other than COMMITMENT_TERM_NONE are not read.",
+        "CAPABILITIES.md recorded 'public on-demand closed 2026-03-31' in Oct 2026; unconfirmed on 2026-11-01 "
+        "while the API still states no-commitment prices and free capacity.",
+        '"nvidia-a100-pcie" (memory not stated) and "nvidia-l40s-graphics" stay unmapped.',
+    ],
+)
+
+
+GPUAI = ProviderMapping(
+    provider="gpuai",
+    display_name="GPU.ai (reseller; never in market statistics)",
+    endpoints={"GET api.gpu.ai/v1/pricing?limit=200[&cursor=]": "every offering: GPU, count, region, price, launchable count"},
+    fields=_fields(
+        "gpuai",
+        sku=(DERIVED, '"{gpu_type}x{gpu_count}:{deployment_type}/{capacity_class}"', 'e.g. "h100_sxmx1:container/secure"'),
+        listing_id=(RAW, "offering_id"),
+        raw_gpu_name=(RAW, "gpu_type", 'a slug, e.g. "h100_sxm"'),
+        gpu_count=(RAW, "gpu_count"),
+        region=(RAW, "region", 'e.g. "us-east", "eu-west"'),
+        country=(DERIVED, 'region prefix "us"/"ca" -> US/CA', "eu-*/asia-pacific: None"),
+        price_per_gpu_hour=(DERIVED, "= price_per_hour / gpu_count"),
+        price_per_instance_hour=(RAW, "price_per_hour", "the whole offering (x2 = 2 x the x1 price)"),
+        currency=(CONSTANT, '"USD"', "not stated by the API; the pricing page prints $"),
+        market_type=(RAW, 'tier (only "on_demand" is read)'),
+        provider_tier=(CONSTANT, '"resold:undisclosed"', "excluded from market math (market.RESOLD_PREFIX)"),
+        available=(DERIVED, "available > 0"),
+        capacity=(RAW, "available", "launchable offerings"),
+        capacity_unit=(CONSTANT, '"instance"'),
+        vcpu=(RAW, "cpu_cores"),
+        ram_gb=(RAW, "ram_gb"),
+        storage_gb=(RAW, "storage_gb", "None for containers (disk billed per GB-hour)"),
+    ),
+    quirks=[
+        'Its terms say "We aggregate GPU inventory from multiple providers" and the API never says whose: '
+        "listings are resold:undisclosed and never vote in the market, indices or routing validation.",
+        "Container offerings bill disk at 0.00014 $/GB-h on top; not added.",
+        '"community" offerings (consumer hosts) and "secure" ones are separate skus.',
+        'Unmapped: "a100_80gb" (form factor), "rtx_pro_6000" / "rtx_pro_4500" (edition).',
+    ],
+)
+
+
+EXOSCALE = ProviderMapping(
+    provider="exoscale",
+    display_name="Exoscale",
+    endpoints={"GET portal.exoscale.com/api/pricing/opencompute": "hourly rates per running_<family>_<size>, CHF/EUR/USD"},
+    fields=_fields(
+        "exoscale",
+        sku=(DERIVED, '"{family}.{size}"', 'e.g. "gpu3.large"'),
+        listing_id=(DERIVED, "= sku"),
+        raw_gpu_name=(LOOKUP, "providers/exoscale.py FAMILIES (from the pricing page)", "the feed names no GPU"),
+        gpu_count=(LOOKUP, "FAMILIES[family][size]", "e.g. gpu3: 1/2/4/8, gpu2: 1/2/3/4"),
+        region=(LOOKUP, "the family's zones on the pricing page", 'e.g. "AT-VIE-2"'),
+        country=(DERIVED, "zone prefix when all zones share one", "None for RTX PRO 6000 (DE/HR/CH/AT)"),
+        price_per_gpu_hour=(DERIVED, "= usd[key] / GPUs"),
+        price_per_instance_hour=(RAW, "usd.running_<family>_<size>", "decimal string"),
+        currency=(RAW, 'the "usd" map', "same nominal figures as chf/eur on 2026-11-01"),
+        provider_tier=(CONSTANT, '"vm"'),
+        available=(ABSENT, "-", "no stock signal"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(LOOKUP, "FAMILIES (pricing page)"),
+        ram_gb=(LOOKUP, "FAMILIES (pricing page)"),
+        storage_gb=(ABSENT, "-", "local storage billed extra, min 100 GB"),
+    ),
+    quirks=[
+        "The keyless feed has no GPU model (why it was declined in Oct 2026): the family -> GPU, count, vCPU, RAM "
+        "and zone table is taken from Exoscale's own pricing page and held in code; unknown keys are skipped.",
+        'The legacy "gpu" family is in the feed but not on the page: skipped, not guessed.',
+        "Local storage is billed on top; GPU access requires account screening.",
+        "A30 and RTX PRO 6000 (edition not stated) stay unmapped.",
+    ],
+)
+
+
+HUGGINGFACE = ProviderMapping(
+    provider="huggingface",
+    display_name="Hugging Face Inference Endpoints (resold AWS/GCP/Azure; never in market statistics)",
+    endpoints={"GET api.endpoints.huggingface.cloud/v2/provider": "vendors -> regions -> computes with pricePerHour"},
+    fields=_fields(
+        "huggingface",
+        sku=(RAW, "computes[].id", 'e.g. "aws-us-east-1-nvidia-a100-x2"; names the cloud'),
+        listing_id=(RAW, "computes[].id"),
+        raw_gpu_name=(DERIVED, '"{vendor} {architecture} {gpuMemoryGb / numAccelerators}GB"', 'e.g. "aws Nvidia A100 80GB"'),
+        gpu_count=(RAW, "numAccelerators"),
+        region=(RAW, "regions[].name", 'the cloud\'s region code, e.g. "us-east-1", "us-east4"'),
+        country=(DERIVED, "us-* -> US; a small table for others", "None when not in the table"),
+        price_per_gpu_hour=(DERIVED, "= pricePerHour / numAccelerators"),
+        price_per_instance_hour=(RAW, "pricePerHour", "the whole instance: A100 x2 = 2 x x1"),
+        currency=(CONSTANT, '"USD"', "the pricing page prints $/hour"),
+        provider_tier=(DERIVED, '"resold:{vendor}"', "the underlying cloud; excluded from market math"),
+        available=(DERIVED, 'compute, region and vendor status all "available"'),
+        capacity=(ABSENT, "-", "status words are capacity rows (boolean shape)"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, "numCpus"),
+        ram_gb=(RAW, "memoryGb"),
+        storage_gb=(ABSENT, "-"),
+    ),
+    quirks=[
+        "Resells AWS, GCP and Azure capacity, which OpenGrid reads directly: provider_tier resold:<cloud>, so "
+        "a listing is stored and shown but never votes in the market view, rollups, indices or routing validation.",
+        "Deprecated computes, CPU computes and AWS Inferentia (neuron) are skipped.",
+        "The GPU name carries the cloud, since the form factor follows from its instance family.",
+    ],
+)
+
+
 MODAL = ProviderMapping(
     provider="modal",
     display_name="Modal (serverless GPU)",
@@ -1729,7 +1952,7 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         SALAD, HYPERSTACK, LAMBDA, RUNPOD,
         HYPERBOLIC, VOLTAGEPARK, LIUM, VAST, NEBIUS, MASSEDCOMPUTE,
         DIGITALOCEAN, AWS,
-        VERDA, CRUSOE, LATITUDE, DENVR, BOOSTRUN, HORIZON, PHYNTEC,
+        VERDA, CRUSOE, LATITUDE, DENVR, BOOSTRUN, HORIZON, PHYNTEC, PAPERSPACE,
         COREWEAVE, TOGETHER, JARVISLABS, HOTAISLE, VULTR,
         GCP,
         AZURE,
@@ -1742,6 +1965,12 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         CIVO, ATLANTICNET, DEEPINFRA,
         E2E, SIMPLEPOD,
         CLORE,
+        AKASH,
+        HYDRAHOST,
+        CUDO,
+        GPUAI,
+        EXOSCALE,
+        HUGGINGFACE,
     )
 }  # fmt: skip
 

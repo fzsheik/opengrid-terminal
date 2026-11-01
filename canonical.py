@@ -242,6 +242,15 @@ _add("NVIDIA H100 80GB PCIe", "H100 pcie")
 _add("NVIDIA H100 80GB PCIe NVLink", "H100 pcie nvlink")
 _add("NVIDIA GH200 96GB", "GH200 pcie")
 _add("Intel Gaudi 2 96GB", "GAUDI2 pcie")
+# Paperspace via Shadeform. The RTX A4000/A5000/A6000 exist only as PCIe cards, so the tag cannot mislead.
+# Left unmapped: "V100 pcie" (Paperspace's page says only "V100 16 GB"; Shadeform's interconnect tag is wrong
+# on its H100), "V100_32G pcie" (no canonical 32 GB V100 yet) and the H100, relabelled in providers/shadeform.py
+# because Paperspace's page says HGX (SXM) where Shadeform says pcie. "A100 pcie nvlink" (Paperspace's A100x8, 40 GB
+# PCIe cards bridged with NVLink) has no canonical NVLink 40 GB variant yet.
+_add("NVIDIA RTX A4000 16GB", "A4000 pcie")
+_add("NVIDIA RTX A5000 24GB", "A5000 pcie")
+_add("NVIDIA RTX A6000 48GB", "A6000 pcie")
+_add(None, "A100 pcie nvlink", "V100 pcie", "V100_32G pcie", "H100 (Paperspace: HGX per its page, pcie per Shadeform)")
 # Crusoe's own type catalogue (GET /projects/{id}/compute/vms/types, `gpu_type`), read for capacity only.
 # Each names model, memory and form factor; H100 SXM is SXM5 only and A100 SXM SXM4 only.
 _add("NVIDIA H100 80GB SXM5", "H100-SXM-80GB")
@@ -503,6 +512,73 @@ _add("NVIDIA A100 40GB SXM4", "A100SXM440GB 40GB")
 _add("NVIDIA A100 80GB PCIe", "A100 80GB PCIe 80GB")
 _add("NVIDIA Tesla V100 16GB SXM2", "Tesla V100SXM216GB 16GB")
 _add("NVIDIA H100 94GB NVL", "H100 NVL 94GB")
+
+# Akash Network (console-api /v1/gpu-prices): "<vendor> <model> <ram> <interface>", ram in GiB as Akash writes
+# it. Mapped where model, memory and interface fix one product. Left unmapped: "rtx5000 16Gi" (Quadro RTX 5000,
+# no canonical yet), "v100 32Gi" (no 32 GB V100 canonical), "gtx1050 2Gi", "m4000", "p4", "p40" (no canonical).
+_add("NVIDIA A100 80GB SXM4", "nvidia a100 80Gi SXM4")
+_add("NVIDIA A10G 24GB", "nvidia a10g 24Gi PCIe")
+_add("NVIDIA B300 288GB SXM", "nvidia b300 288Gi SXM6")
+_add("NVIDIA H100 80GB SXM5", "nvidia h100 80Gi SXM5")
+_add("NVIDIA RTX PRO 6000 96GB SE", "nvidia pro6000se 96Gi PCIe")
+_add("NVIDIA RTX PRO 6000 Blackwell 96GB Workstation", "nvidia pro6000we 96Gi PCIe")
+_add("NVIDIA GTX 1050 Ti 4GB", "nvidia gtx1050ti 4Gi PCIe")
+_add("NVIDIA RTX 3060 12GB", "nvidia rtx3060 12Gi PCIe")
+_add("NVIDIA RTX 3060 Ti 8GB", "nvidia rtx3060ti 8Gi PCIe")
+_add("NVIDIA RTX 3090 24GB", "nvidia rtx3090 24Gi PCIe")
+_add("NVIDIA RTX 3090 Ti 24GB", "nvidia rtx3090ti 24Gi PCIe")
+_add("NVIDIA RTX 4000 Ada 20GB", "nvidia rtx4000ada 20Gi PCIe")
+_add("NVIDIA RTX 4000 SFF Ada 20GB", "nvidia rtx4000sada 20Gi PCIe")
+_add("NVIDIA RTX 4080 16GB", "nvidia rtx4080 16Gi PCIe")
+_add("NVIDIA RTX 4090 24GB", "nvidia rtx4090 24Gi PCIe")
+_add("NVIDIA RTX 5090 32GB", "nvidia rtx5090 32Gi PCIe")
+_add("NVIDIA T4 16GB", "nvidia t4 16Gi PCIe")
+_add("NVIDIA Tesla V100 16GB SXM2", "nvidia v100 16Gi SXM2")
+# CUDO Compute (rest.compute.cudo.org): gpuModelId. Its VM catalogue names nvidia-h100 "H100 SXM" (SXM5 80GB).
+# Unmapped: "nvidia-a100-pcie" (40 or 80 GB not stated) and "nvidia-l40s-graphics" (an L40S in graphics
+# mode, priced apart; kept apart rather than merged).
+_add("NVIDIA H100 80GB SXM5", "nvidia-h100")
+_add("NVIDIA H100 94GB NVL", "nvidia-h100-nvl-pcie")
+_add("NVIDIA L40S 48GB", "nvidia-l40s")
+_add(None, "nvidia-a100-pcie", "nvidia-l40s-graphics")
+# GPU.ai (api.gpu.ai /v1/pricing): gpu_type slugs ("b200", "l40", "l40s" are already mapped above).
+# Unmapped: "a100_80gb" (SXM or PCIe not stated), "rtx_pro_6000" and "rtx_pro_4500" (edition not stated).
+_add("NVIDIA H100 80GB SXM5", "h100_sxm")
+_add("NVIDIA H100 80GB PCIe", "h100_pcie")
+_add("NVIDIA H200 141GB SXM5", "h200_sxm")
+_add("NVIDIA B300 288GB SXM", "b300")
+_add("NVIDIA L4 24GB", "l4")
+_add("NVIDIA RTX 2000 Ada 16GB", "rtx_2000_ada")
+_add("NVIDIA RTX 4000 Ada 20GB", "rtx_4000_ada")
+_add("NVIDIA RTX 6000 Ada 48GB", "rtx_6000_ada")
+_add("NVIDIA RTX A6000 48GB", "rtx_a6000")
+_add("NVIDIA RTX A4000 16GB", "rtx_a4000")
+_add("NVIDIA RTX 3090 24GB", "rtx_3090")
+_add("NVIDIA RTX 4090 24GB", "rtx_4090")
+_add("NVIDIA RTX 5090 32GB", "rtx_5090")
+_add(None, "a100_80gb", "rtx_pro_6000", "rtx_pro_4500")
+# Exoscale: "Exoscale <family> (<GPU from its pricing page>)". Unmapped: the A30 (no canonical yet) and the RTX PRO
+# 6000 (the page says Blackwell 96GB, not which edition).
+_add("NVIDIA Tesla V100 16GB", "Exoscale GPU2 (Tesla V100 16GB)")
+_add("NVIDIA A40 48GB", "Exoscale GPU3 (NVIDIA A40 48GB)")
+_add("NVIDIA RTX A5000 24GB", "Exoscale GPUA5000 (NVIDIA RTX A5000 24GB)")
+_add("NVIDIA RTX 3080 Ti 12GB", "Exoscale GPU3080ti (NVIDIA RTX 3080 Ti 12GB)")
+_add(None, "Exoscale GPUA30 (NVIDIA A30 24GB)", "Exoscale GPURTX6000PRO (NVIDIA RTX PRO 6000 Blackwell 96GB)")
+# Hugging Face Inference Endpoints: "<cloud> <architecture> <GB per GPU>". The form factor follows from the cloud's
+# instance family: AWS's only 80 GB A100 is p4de (SXM4); GCP's A100 80GB is a2-ultragpu (SXM4), its H100 a3 (SXM5);
+# both clouds' H200 are SXM; the cloud RTX PRO 6000 is the Server Edition. Resold rows never vote (market.py).
+_add("NVIDIA T4 16GB", "aws Nvidia T4 16GB", "gcp Nvidia T4 16GB")
+_add("NVIDIA A10G 24GB", "aws Nvidia A10G 24GB")
+_add("NVIDIA L4 24GB", "aws Nvidia L4 24GB", "gcp Nvidia L4 24GB")
+_add("NVIDIA L40S 48GB", "aws Nvidia L40S 48GB")
+_add("NVIDIA A100 80GB SXM4", "aws Nvidia A100 80GB", "gcp Nvidia A100 80GB")
+_add("NVIDIA H100 80GB SXM5", "gcp Nvidia H100 80GB")
+_add("NVIDIA H200 141GB SXM5", "aws Nvidia H200 141GB", "gcp Nvidia H200 141GB")
+_add("NVIDIA RTX PRO 6000 96GB SE", "aws Nvidia RTX PRO 6000 Blackwell 96GB")
+# Hydra Host inventory: nvidia-smi names, already mapped above, except Quadro RTX 8000 (no canonical yet).
+_add(None, "Quadro RTX 8000")
+_add(None, "nvidia rtx5000 16Gi PCIe", "nvidia v100 32Gi PCIe", "nvidia gtx1050 2Gi PCIe", "nvidia m4000 8Gi PCIe",
+     "nvidia p4 8Gi PCIe", "nvidia p40 24Gi PCIe")
 
 # --------------------------------------------------------------------------
 # Seen, deliberately not mapped

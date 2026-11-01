@@ -11,6 +11,7 @@ from providers.base import (
     gather_limited,
     to_decimal,
 )
+from providers.akash import AkashProvider
 from providers.arkane import ArkaneProvider
 from providers.atlanticnet import AtlanticNetProvider
 from providers.aws import AwsProvider
@@ -21,11 +22,16 @@ from providers.civo import CivoProvider
 from providers.clore import CloreProvider
 from providers.coreweave import CoreWeaveProvider
 from providers.crusoe import CrusoeProvider
+from providers.cudo import CudoProvider
 from providers.deepinfra import DeepInfraProvider
 from providers.digitalocean import DigitalOceanProvider
 from providers.e2e import E2EProvider
+from providers.exoscale import ExoscaleProvider
 from providers.gcp import GcpProvider
+from providers.gpuai import GpuAiProvider
 from providers.hotaisle import HotAisleProvider
+from providers.huggingface import HuggingFaceProvider
+from providers.hydrahost import HydraHostProvider
 from providers.hyperbolic import HyperbolicProvider
 from providers.hyperstack import HyperstackProvider
 from providers.ibm import IbmProvider
@@ -50,6 +56,7 @@ from providers.shadeform import (
     DenvrProvider,
     HorizonProvider,
     LatitudeProvider,
+    PaperspaceProvider,
     PhyntecProvider,
 )
 from providers.scaleway import ScalewayProvider
@@ -111,6 +118,13 @@ PROVIDERS: dict[str, type[Provider]] = {
         BasetenProvider,
         BeamProvider,
         CloreProvider,
+        PaperspaceProvider,
+        AkashProvider,
+        HydraHostProvider,
+        CudoProvider,
+        GpuAiProvider,
+        ExoscaleProvider,
+        HuggingFaceProvider,
     )
 }
 
@@ -165,6 +179,13 @@ __all__ = [
     "BasetenProvider",
     "BeamProvider",
     "CloreProvider",
+    "PaperspaceProvider",
+    "AkashProvider",
+    "HydraHostProvider",
+    "CudoProvider",
+    "GpuAiProvider",
+    "ExoscaleProvider",
+    "HuggingFaceProvider",
     "find_endpoint",
     "gather_limited",
     "to_decimal",

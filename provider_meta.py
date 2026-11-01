@@ -72,6 +72,9 @@ _ALL = [
                  "prices as listed by Shadeform; owns its H100/H200 clusters in Iceland"),
     ProviderMeta("phyntec", "Phyntec", "neocloud", "aggregator", "api.shadeform.ai", "https://phyntec.net",
                  "prices as listed by Shadeform; own RTX 4090/5090 bare metal in Wyoming"),
+    ProviderMeta("paperspace", "Paperspace", "neocloud", "aggregator", "api.shadeform.ai", "https://www.paperspace.com",
+                 "DigitalOcean's GPU cloud; prices as listed by Shadeform, $0.04-0.10/GPU-h above Paperspace's own "
+                 "on-demand list (2026-11-01)"),
     ProviderMeta("coreweave", "CoreWeave", "neocloud", "public_page", "www.coreweave.com", "https://www.coreweave.com",
                  "on-demand and spot instance prices; per-GPU rate = instance price / GPU count"),
     ProviderMeta("together", "Together AI", "neocloud", "public_page", "www.together.ai", "https://www.together.ai",
@@ -124,6 +127,26 @@ _ALL = [
     ProviderMeta("e2e", "E2E Networks", "general_cloud", "public_pricing_file", "www.e2enetworks.com",
                  "https://www.e2enetworks.com/pricing",
                  "Indian cloud; USD on-demand list from its pricing.json feed, per GPU-hour; INR-only spot and committed rates not read"),
+    ProviderMeta("akash", "Akash Network", "decentralized", "public_api", "console-api.akash.network",
+                 "https://akash.network",
+                 "open GPU marketplace; Akash Console's bid-derived summary: the allocatable-weighted average of each "
+                 "provider's chosen bid (up to 31 days old), per GPU; free/total GPU counts"),
+    ProviderMeta("hydrahost", "Hydra Host", "marketplace", "public_api", "brokkr.hydrahost.com", "https://hydrahost.com",
+                 "bare-metal servers from independent suppliers; one listing per device, on-demand and interruptible "
+                 "(cents per hour in the API); deployable now only when stockStatus is \"on demand\""),
+    ProviderMeta("cudo", "CUDO Compute", "neocloud", "public_api", "rest.compute.cudo.org", "https://www.cudocompute.com",
+                 "VMs (smallest 1-GPU config: GPU + minimum vCPU and RAM; disk extra) and bare metal (no-commitment "
+                 "price per server); free GPUs / servers per data centre"),
+    ProviderMeta("gpuai", "GPU.ai", "marketplace", "public_api", "api.gpu.ai", "https://gpu.ai",
+                 "reseller: aggregates other providers' GPUs (its terms) without naming them; listed as "
+                 "resold:undisclosed and kept out of market statistics"),
+    ProviderMeta("exoscale", "Exoscale", "general_cloud", "public_api", "portal.exoscale.com", "https://www.exoscale.com",
+                 "Swiss cloud; USD map of its public price feed; GPU model and size per family from its pricing page; "
+                 "local storage extra; GPU access after account screening"),
+    ProviderMeta("huggingface", "Hugging Face Inference Endpoints", "general_cloud", "public_api",
+                 "api.endpoints.huggingface.cloud", "https://endpoints.huggingface.co",
+                 "managed endpoints on AWS, GCP and Azure capacity; listings are resold:<cloud> and kept out of "
+                 "market statistics"),
     ProviderMeta("simplepod", "SimplePod", "marketplace", "public_api", "api.simplepod.ai", "https://simplepod.ai",
                  "own racks plus community hosts; one listing per open on-demand offer (Docker and VM); disk billed extra"),
     ProviderMeta("clore", "Clore.ai", "marketplace", "authenticated_api", "api.clore.ai", "https://clore.ai",

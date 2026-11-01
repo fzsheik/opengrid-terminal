@@ -354,7 +354,11 @@ def test_scaleway_counted_once():
         assert ScalewayProvider.normalize({"/v1/instances/types": [snap(shade)]}) == [], "a Shadeform body alone: nothing"
     for cls in PROVIDERS.values():
         if issubclass(cls, ShadeformCloud):
-            assert cls.cloud != "scaleway" and cls.normalize({"/v1/instances/types": [snap(shade)]}) == [], cls.name
+            assert cls.cloud != "scaleway", cls.name
+            try:
+                assert cls.normalize({"/v1/instances/types": [snap(shade)]}) == [], cls.name
+            except ValueError:
+                assert cls.name == "paperspace", cls.name  # no Paperspace row is a failed read, never Scaleway rows
     try:
         type("ScalewayAgain", (ShadeformCloud,), {"name": "scw2", "cloud": "scaleway"})
         raise AssertionError("a Shadeform reader for Scaleway must be refused")

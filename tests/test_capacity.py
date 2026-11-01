@@ -29,9 +29,10 @@ from providers.lium import LiumProvider  # noqa: E402
 from providers import PROVIDERS  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_capacity"
-SUPPORTED = ["aws", "boostrun", "clore", "crusoe", "deepinfra", "denvr", "digitalocean", "horizon", "hotaisle", "hyperbolic", "hyperstack", "jarvislabs",
-             "koyeb", "lambda", "latitude", "linode", "lium", "massedcompute", "phyntec", "runpod", "salad", "scaleway",
-             "thundercompute", "vast", "verda", "voltagepark"]
+SUPPORTED = ["akash", "aws", "boostrun", "clore", "crusoe", "cudo", "deepinfra", "denvr", "digitalocean", "gpuai", "horizon",
+             "hotaisle", "huggingface", "hydrahost", "hyperbolic", "hyperstack", "jarvislabs",
+             "koyeb", "lambda", "latitude", "linode", "lium", "massedcompute", "paperspace", "phyntec", "runpod", "salad",
+             "scaleway", "thundercompute", "vast", "verda", "voltagepark"]
 DB = "og_test_capacity"
 T0 = datetime(2026, 10, 30, 12, 0, tzinfo=timezone.utc)
 

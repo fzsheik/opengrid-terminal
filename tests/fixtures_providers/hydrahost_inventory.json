@@ -1,0 +1,3489 @@
+{
+ "data": [
+  {
+   "id": "67df38a5-89a4-421c-853f-e6cec92c3ec0",
+   "name": "rackscentral-h-b8cef6f0c779",
+   "location": "Singapore",
+   "role": "Server",
+   "stockStatus": "reserve",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 64,
+     "count": 2,
+     "model": "AMD EPYC 7763 64-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 128,
+     "totalCores": 128,
+     "totalThreads": 256
+    },
+    "gpu": {
+     "count": 8,
+     "model": "NVIDIA L40S"
+    },
+    "memory": {
+     "total": 2036
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 4,
+     "nvmeSize": 28614,
+     "ssdCount": 1,
+     "ssdSize": 447,
+     "total": 29061
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 44175,
+      "perCpu": 176700,
+      "total": 353400
+     },
+     "perWeek": {
+      "perGpu": 9975,
+      "perCpu": 39900,
+      "total": 79800
+     },
+     "perHour": {
+      "perGpu": 59.375,
+      "perCpu": 237.5,
+      "total": 475
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": 31620,
+      "perCpu": 126480,
+      "total": 252960
+     },
+     "perWeek": {
+      "perGpu": 7140,
+      "perCpu": 28560,
+      "total": 57120
+     },
+     "perHour": {
+      "perGpu": 42.5,
+      "perCpu": 170,
+      "total": 340
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "ssd",
+     "disks": [
+      "0x538f6016200add55"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.01000000000000005cd2e48c35715351",
+      "eui.01000000000000005cd2e4c1a9755351",
+      "eui.01000000000000005cd2e45f8d755351",
+      "eui.01000000000000005cd2e4a035715351"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "a9232f13-7b33-45ae-a380-0e51cb6559d6",
+   "name": "sesterce-h-c4cbe1d5c7dc",
+   "location": "France",
+   "role": "Server",
+   "stockStatus": "reserve",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "NAT",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 48,
+     "count": 2,
+     "model": "INTEL(R) XEON(R) PLATINUM 8568Y+",
+     "threadsPerCore": 1,
+     "threadsPerCpu": 48,
+     "totalCores": 96,
+     "totalThreads": 96
+    },
+    "gpu": {
+     "count": 8,
+     "model": "NVIDIA H200"
+    },
+    "memory": {
+     "total": 3072
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 5,
+     "nvmeSize": 12818,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 12818
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 279000,
+      "perCpu": 1116000,
+      "total": 2232000
+     },
+     "perWeek": {
+      "perGpu": 63000,
+      "perCpu": 252000,
+      "total": 504000
+     },
+     "perHour": {
+      "perGpu": 375,
+      "perCpu": 1500,
+      "total": 3000
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "xfs",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.36555430584183650025384300000002",
+      "eui.36555430584183660025384300000002",
+      "eui.36555430584183640025384300000002",
+      "eui.36555430584183630025384300000002"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "xfs",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.005043e60d000001"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "9eb9ed34-1028-4e14-9ae6-38a70869a3de",
+   "name": "7cc2555412eb",
+   "location": "Norway",
+   "role": "Server",
+   "stockStatus": "preorder",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 56,
+     "count": 2,
+     "model": "INTEL(R) XEON(R) PLATINUM 8570",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 112,
+     "totalCores": 112,
+     "totalThreads": 224
+    },
+    "gpu": {
+     "count": 8,
+     "model": "NVIDIA H100 80GB HBM3"
+    },
+    "memory": {
+     "total": 2048
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 6,
+     "nvmeSize": 13712,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 13712
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 167400,
+      "perCpu": 669600,
+      "total": 1339200
+     },
+     "perWeek": {
+      "perGpu": 37800,
+      "perCpu": 151200,
+      "total": 302400
+     },
+     "perHour": {
+      "perGpu": 225,
+      "perCpu": 900,
+      "total": 1800
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": 137640,
+      "perCpu": 550560,
+      "total": 1101120
+     },
+     "perWeek": {
+      "perGpu": 31080,
+      "perCpu": 124320,
+      "total": 248640
+     },
+     "perHour": {
+      "perGpu": 185,
+      "perCpu": 740,
+      "total": 1480
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.01000000000000005cd2e4957fdc5651",
+      "eui.01000000000000005cd2e4e797dc5651",
+      "eui.01000000000000005cd2e4cafadb5651",
+      "eui.01000000000000005cd2e40497dc5651"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.000000000000000100a0752449031148",
+      "eui.000000000000000100a075244903111b"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "5d039c3a-4f21-41ae-9abd-cdd46852bf36",
+   "name": "sesterce-h-c4cbe1d5c794",
+   "location": "France",
+   "role": "Server",
+   "stockStatus": "reserve",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "NAT",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 48,
+     "count": 2,
+     "model": "INTEL(R) XEON(R) PLATINUM 8568Y+",
+     "threadsPerCore": 1,
+     "threadsPerCpu": 48,
+     "totalCores": 96,
+     "totalThreads": 96
+    },
+    "gpu": {
+     "count": 8,
+     "model": "NVIDIA H200"
+    },
+    "memory": {
+     "total": 3072
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 5,
+     "nvmeSize": 11937,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 11937
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 193440,
+      "perCpu": 773760,
+      "total": 1547520
+     },
+     "perWeek": {
+      "perGpu": 43680,
+      "perCpu": 174720,
+      "total": 349440
+     },
+     "perHour": {
+      "perGpu": 260,
+      "perCpu": 1040,
+      "total": 2080
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "xfs",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "CN0WW56VFCP0047H003C"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "xfs",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "S6UTNC0X418429      ",
+      "S6UTNC0X418433      ",
+      "S6UTNC0X418430      ",
+      "S6UTNC0X418427      "
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "d8e460aa-4ca1-4653-bddf-a537fe40ec82",
+   "name": "sesterce-h-c4cbe1d7f2a8",
+   "location": "France",
+   "role": "Server",
+   "stockStatus": "reserve",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "NAT",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 48,
+     "count": 2,
+     "model": "INTEL(R) XEON(R) PLATINUM 8568Y+",
+     "threadsPerCore": 1,
+     "threadsPerCpu": 48,
+     "totalCores": 96,
+     "totalThreads": 96
+    },
+    "gpu": {
+     "count": 8,
+     "model": "NVIDIA H200"
+    },
+    "memory": {
+     "total": 3072
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 5,
+     "nvmeSize": 12818,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 12818
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 193440,
+      "perCpu": 773760,
+      "total": 1547520
+     },
+     "perWeek": {
+      "perGpu": 43680,
+      "perCpu": 174720,
+      "total": 349440
+     },
+     "perHour": {
+      "perGpu": 260,
+      "perCpu": 1040,
+      "total": 2080
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "xfs",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.36555430588019050025384700000002",
+      "eui.36555430588018710025384700000002",
+      "eui.36555430588018700025384700000002",
+      "eui.36555430588018660025384700000002"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "xfs",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.0050437407000001"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "e504a5e6-27ee-4f13-b31d-599a427c292b",
+   "name": "3cecef2e84c4",
+   "location": "United Kingdom",
+   "role": "Server",
+   "stockStatus": "preorder",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "NAT",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 64,
+     "count": 2,
+     "model": "AMD EPYC 7702 64-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 128,
+     "totalCores": 128,
+     "totalThreads": 256
+    },
+    "gpu": {
+     "count": 7,
+     "model": "NVIDIA GeForce RTX 5090"
+    },
+    "memory": {
+     "total": 514
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 2,
+     "nvmeSize": 7452,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 7452
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 55269,
+      "perCpu": 193440,
+      "total": 386880
+     },
+     "perWeek": {
+      "perGpu": 12480,
+      "perCpu": 43680,
+      "total": 87360
+     },
+     "perHour": {
+      "perGpu": 74.28571428571429,
+      "perCpu": 260,
+      "total": 520
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": 38263,
+      "perCpu": 133920,
+      "total": 267840
+     },
+     "perWeek": {
+      "perGpu": 8640,
+      "perCpu": 30240,
+      "total": 60480
+     },
+     "perHour": {
+      "perGpu": 51.42857142857143,
+      "perCpu": 180,
+      "total": 360
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.6479a780e0000108",
+      "eui.6479a780e0000028"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "6efac7aa-e739-4bc1-a549-cb0801b638c2",
+   "name": "3cecefe41a1b",
+   "location": "Texas",
+   "role": "Server",
+   "stockStatus": "preorder",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 16,
+     "count": 1,
+     "model": "AMD EPYC 7313P 16-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 32,
+     "totalCores": 16,
+     "totalThreads": 32
+    },
+    "gpu": {
+     "count": null,
+     "model": null
+    },
+    "memory": {
+     "total": 130
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 4,
+     "nvmeSize": 14307,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 14307
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 37200,
+      "total": 37200
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 8400,
+      "total": 8400
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 50,
+      "total": 50
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 37200,
+      "total": 37200
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 8400,
+      "total": 8400
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 50,
+      "total": 50
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.3634483058a224370025384e00000001",
+      "eui.3634483058a224200025384e00000001",
+      "eui.36344830594024550025384e00000001",
+      "eui.36344830594024680025384e00000001"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "5484dc84-6083-4ed0-87a7-8f408f579908",
+   "name": "3cecefe41a11",
+   "location": "Texas",
+   "role": "Server",
+   "stockStatus": "preorder",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 16,
+     "count": 1,
+     "model": "AMD EPYC 7313P 16-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 32,
+     "totalCores": 16,
+     "totalThreads": 32
+    },
+    "gpu": {
+     "count": null,
+     "model": null
+    },
+    "memory": {
+     "total": 130
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 4,
+     "nvmeSize": 14307,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 14307
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 7440,
+      "total": 7440
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 1680,
+      "total": 1680
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 10,
+      "total": 10
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 3720,
+      "total": 3720
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 840,
+      "total": 840
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 5,
+      "total": 5
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.3634483058a224230025384e00000001",
+      "eui.3634483057b078300025384a00000001",
+      "eui.3634483058a224260025384e00000001",
+      "eui.36344830594024440025384e00000001"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "24211db2-dee7-4239-a07a-770ae45867ea",
+   "name": "3cecefdc7e6d",
+   "location": "Texas",
+   "role": "Server",
+   "stockStatus": "preorder",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 32,
+     "count": 1,
+     "model": "AMD EPYC 7543P 32-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 64,
+     "totalCores": 32,
+     "totalThreads": 64
+    },
+    "gpu": {
+     "count": null,
+     "model": null
+    },
+    "memory": {
+     "total": 66
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 2,
+     "nvmeSize": 7154,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 7154
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 744,
+      "total": 744
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 168,
+      "total": 168
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 1,
+      "total": 1
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 744,
+      "total": 744
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 168,
+      "total": 168
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 1,
+      "total": 1
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.000000000000000100a075234293246b",
+      "eui.3634483057b078450025385300000001"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "7edb46a7-b30e-418a-98d0-d055b49df006",
+   "name": "3cecefddfd08",
+   "location": "Texas",
+   "role": "Server",
+   "stockStatus": "preorder",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 32,
+     "count": 1,
+     "model": "AMD EPYC 7513 32-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 64,
+     "totalCores": 32,
+     "totalThreads": 64
+    },
+    "gpu": {
+     "count": null,
+     "model": null
+    },
+    "memory": {
+     "total": 66
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 2,
+     "nvmeSize": 7154,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 7154
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 744,
+      "total": 744
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 168,
+      "total": 168
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 1,
+      "total": 1
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 744,
+      "total": 744
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 168,
+      "total": 168
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 1,
+      "total": 1
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.36344830583231250025384e00000001",
+      "eui.3634483057b054690025385300000001"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "244028c1-c724-49e8-af83-9df9b7943945",
+   "name": "3cecefdfaba5",
+   "location": "Texas",
+   "role": "Server",
+   "stockStatus": "preorder",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 32,
+     "count": 1,
+     "model": "AMD EPYC 7513 32-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 64,
+     "totalCores": 32,
+     "totalThreads": 64
+    },
+    "gpu": {
+     "count": null,
+     "model": null
+    },
+    "memory": {
+     "total": 66
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 2,
+     "nvmeSize": 7154,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 7154
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 744,
+      "total": 744
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 168,
+      "total": 168
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 1,
+      "total": 1
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 744,
+      "total": 744
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 168,
+      "total": 168
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 1,
+      "total": 1
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.000000000000000100a07523429342b5",
+      "eui.000000000000000100a075234293903e"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "778170de-8201-4d8a-9fc5-25e1cba280a5",
+   "name": "3cecefdcc013",
+   "location": "Texas",
+   "role": "Server",
+   "stockStatus": "preorder",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 16,
+     "count": 1,
+     "model": "AMD EPYC 7313P 16-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 32,
+     "totalCores": 16,
+     "totalThreads": 32
+    },
+    "gpu": {
+     "count": null,
+     "model": null
+    },
+    "memory": {
+     "total": 130
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 4,
+     "nvmeSize": 14307,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 14307
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 37200,
+      "total": 37200
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 8400,
+      "total": 8400
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 50,
+      "total": 50
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 37200,
+      "total": 37200
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 8400,
+      "total": 8400
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 50,
+      "total": 50
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.3634483057b078470025385300000001",
+      "eui.36344830594024670025384e00000001",
+      "eui.3634483057b078430025385300000001",
+      "eui.36344830594024690025384e00000001"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "6fc5bebd-524c-4b4d-b096-af92c3d7bf44",
+   "name": "rackscentral-h-08c0eb6aa1cb",
+   "location": "Singapore",
+   "role": "Server",
+   "stockStatus": "on demand",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 64,
+     "count": 2,
+     "model": "AMD EPYC 7763 64-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 128,
+     "totalCores": 128,
+     "totalThreads": 256
+    },
+    "gpu": {
+     "count": 5,
+     "model": "NVIDIA L40S"
+    },
+    "memory": {
+     "total": 2048
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 4,
+     "nvmeSize": 28616,
+     "ssdCount": 1,
+     "ssdSize": 447,
+     "total": 29063
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 70680,
+      "perCpu": 176700,
+      "total": 353400
+     },
+     "perWeek": {
+      "perGpu": 15960,
+      "perCpu": 39900,
+      "total": 79800
+     },
+     "perHour": {
+      "perGpu": 95,
+      "perCpu": 237.5,
+      "total": 475
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": 50592,
+      "perCpu": 126480,
+      "total": 252960
+     },
+     "perWeek": {
+      "perGpu": 11424,
+      "perCpu": 28560,
+      "total": 57120
+     },
+     "perHour": {
+      "perGpu": 68,
+      "perCpu": 170,
+      "total": 340
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "ssd",
+     "disks": [
+      "0x538f6016200ad94e"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.01000000000000005cd2e48460715351",
+      "eui.01000000000000005cd2e48660715351",
+      "eui.01000000000000005cd2e43960715351",
+      "eui.01000000000000005cd2e4516c755351"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "b8e25a7c-f59b-4475-988b-0b9bb1325e1a",
+   "name": "h-c4c6e686aa3a",
+   "location": "Malaysia",
+   "role": "Server",
+   "stockStatus": "preorder",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "NAT",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 48,
+     "count": 2,
+     "model": "INTEL(R) XEON(R) PLATINUM 8568Y+",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 96,
+     "totalCores": 96,
+     "totalThreads": 192
+    },
+    "gpu": {
+     "count": 8,
+     "model": "NVIDIA H200"
+    },
+    "memory": {
+     "total": 2048
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 10,
+     "nvmeSize": 30406,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 30406
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 230640,
+      "perCpu": 922560,
+      "total": 1845120
+     },
+     "perWeek": {
+      "perGpu": 52080,
+      "perCpu": 208320,
+      "total": 416640
+     },
+     "perHour": {
+      "perGpu": 310,
+      "perCpu": 1240,
+      "total": 2480
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": 189720,
+      "perCpu": 758880,
+      "total": 1517760
+     },
+     "perWeek": {
+      "perGpu": 42840,
+      "perCpu": 171360,
+      "total": 342720
+     },
+     "perHour": {
+      "perGpu": 255,
+      "perCpu": 1020,
+      "total": 2040
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.3634483057c049580025384e00000002",
+      "eui.3634483057c041980025384e00000002",
+      "eui.3634483057c041950025384e00000002",
+      "eui.3634483057c042000025384e00000002",
+      "eui.3634483057c041970025384e00000002",
+      "eui.3634483057c049590025384e00000002",
+      "eui.3634483057c041960025384e00000002",
+      "eui.3634483057c049600025384e00000002"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.36363530587064180025385400000001",
+      "eui.36363530587064160025385400000001"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "8b9f45de-de4c-41ea-aa52-d0a246e281a9",
+   "name": "h-5079731ea284",
+   "location": "New York",
+   "role": "Server",
+   "stockStatus": "reserve",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 48,
+     "count": 2,
+     "model": "Intel(R) Xeon(R) 6747P",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 96,
+     "totalCores": 96,
+     "totalThreads": 192
+    },
+    "gpu": {
+     "count": 8,
+     "model": "NVIDIA B200"
+    },
+    "memory": {
+     "total": 2048
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 6,
+     "nvmeSize": 16095,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 16095
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 316200,
+      "perCpu": 1264800,
+      "total": 2529600
+     },
+     "perWeek": {
+      "perGpu": 71400,
+      "perCpu": 285600,
+      "total": 571200
+     },
+     "perHour": {
+      "perGpu": 425,
+      "perCpu": 1700,
+      "total": 3400
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": 234360,
+      "perCpu": 937440,
+      "total": 1874880
+     },
+     "perWeek": {
+      "perGpu": 52920,
+      "perCpu": 211680,
+      "total": 423360
+     },
+     "perHour": {
+      "perGpu": 315,
+      "perCpu": 1260,
+      "total": 2520
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.36335530592428460025384e00000001",
+      "eui.36335530592428360025384e00000001",
+      "eui.36335530592427910025384e00000001",
+      "eui.36335530592428480025384e00000001"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.36363530588031090025384a00000001",
+      "eui.36363530588031170025384a00000001"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "7ca1c186-762d-421d-8faa-8272a09fc0a1",
+   "name": "rackscentral-h-b8cef6f0cf29",
+   "location": "Singapore",
+   "role": "Server",
+   "stockStatus": "preorder",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 64,
+     "count": 2,
+     "model": "AMD EPYC 7763 64-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 128,
+     "totalCores": 128,
+     "totalThreads": 256
+    },
+    "gpu": {
+     "count": 5,
+     "model": "NVIDIA L40S"
+    },
+    "memory": {
+     "total": 2036
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 4,
+     "nvmeSize": 28614,
+     "ssdCount": 1,
+     "ssdSize": 447,
+     "total": 29061
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 70680,
+      "perCpu": 176700,
+      "total": 353400
+     },
+     "perWeek": {
+      "perGpu": 15960,
+      "perCpu": 39900,
+      "total": 79800
+     },
+     "perHour": {
+      "perGpu": 95,
+      "perCpu": 237.5,
+      "total": 475
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": 50592,
+      "perCpu": 126480,
+      "total": 252960
+     },
+     "perWeek": {
+      "perGpu": 11424,
+      "perCpu": 28560,
+      "total": 57120
+     },
+     "perHour": {
+      "perGpu": 68,
+      "perCpu": 170,
+      "total": 340
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "ssd",
+     "disks": [
+      "0x538f6016200ad932"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.01000000000000005cd2e49934715351",
+      "eui.01000000000000005cd2e46b7d755351",
+      "eui.01000000000000005cd2e4e17d755351",
+      "eui.01000000000000005cd2e4ee35715351"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "01d7db09-0b3f-46c5-b00f-5722091314c2",
+   "name": "rackscentral-h-84160c3501a9",
+   "location": "Singapore",
+   "role": "Server",
+   "stockStatus": "on demand",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 64,
+     "count": 2,
+     "model": "AMD EPYC 7763 64-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 128,
+     "totalCores": 128,
+     "totalThreads": 256
+    },
+    "gpu": {
+     "count": null,
+     "model": null
+    },
+    "memory": {
+     "total": 2036
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 4,
+     "nvmeSize": 28614,
+     "ssdCount": 1,
+     "ssdSize": 447,
+     "total": 29061
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 96720,
+      "total": 193440
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 21840,
+      "total": 43680
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 130,
+      "total": 260
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "ssd",
+     "disks": [
+      "0x538f6016200add6b"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.01000000000000005cd2e42697755351",
+      "eui.01000000000000005cd2e4631d715351",
+      "eui.01000000000000005cd2e4f05f715351",
+      "eui.01000000000000005cd2e4f750715351"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "30686ca3-7f95-4339-959f-c0fb76fcd471",
+   "name": "rackscentral-h-b8cef6eb5073",
+   "location": "Singapore",
+   "role": "Server",
+   "stockStatus": "reserve",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 64,
+     "count": 2,
+     "model": "AMD EPYC 7763 64-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 128,
+     "totalCores": 128,
+     "totalThreads": 256
+    },
+    "gpu": {
+     "count": 8,
+     "model": "NVIDIA L40S"
+    },
+    "memory": {
+     "total": 2036
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 4,
+     "nvmeSize": 28614,
+     "ssdCount": 1,
+     "ssdSize": 447,
+     "total": 29061
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 44175,
+      "perCpu": 176700,
+      "total": 353400
+     },
+     "perWeek": {
+      "perGpu": 9975,
+      "perCpu": 39900,
+      "total": 79800
+     },
+     "perHour": {
+      "perGpu": 59.375,
+      "perCpu": 237.5,
+      "total": 475
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": 31620,
+      "perCpu": 126480,
+      "total": 252960
+     },
+     "perWeek": {
+      "perGpu": 7140,
+      "perCpu": 28560,
+      "total": 57120
+     },
+     "perHour": {
+      "perGpu": 42.5,
+      "perCpu": 170,
+      "total": 340
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "ssd",
+     "disks": [
+      "0x538f60162008e3ed"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.01000000000000005cd2e4de81485351",
+      "eui.01000000000000005cd2e40a71485351",
+      "eui.01000000000000005cd2e4be6c3e5351",
+      "eui.01000000000000005cd2e4e46c3e5351"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "f8f60f10-55d4-4e20-bd5f-c914f823f1ae",
+   "name": "rackscentral-h-b8cef6f233db",
+   "location": "Singapore",
+   "role": "Server",
+   "stockStatus": "reserve",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 64,
+     "count": 2,
+     "model": "AMD EPYC 7763 64-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 128,
+     "totalCores": 128,
+     "totalThreads": 256
+    },
+    "gpu": {
+     "count": 4,
+     "model": "NVIDIA L40S"
+    },
+    "memory": {
+     "total": 2036
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 4,
+     "nvmeSize": 28614,
+     "ssdCount": 1,
+     "ssdSize": 447,
+     "total": 29061
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 88350,
+      "perCpu": 176700,
+      "total": 353400
+     },
+     "perWeek": {
+      "perGpu": 19950,
+      "perCpu": 39900,
+      "total": 79800
+     },
+     "perHour": {
+      "perGpu": 118.75,
+      "perCpu": 237.5,
+      "total": 475
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": 63240,
+      "perCpu": 126480,
+      "total": 252960
+     },
+     "perWeek": {
+      "perGpu": 14280,
+      "perCpu": 28560,
+      "total": 57120
+     },
+     "perHour": {
+      "perGpu": 85,
+      "perCpu": 170,
+      "total": 340
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "ssd",
+     "disks": [
+      "0x538f6016200ad2ff"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.01000000000000005cd2e4b6ec6f5351",
+      "eui.01000000000000005cd2e4d0e66f5351",
+      "eui.01000000000000005cd2e471e66f5351",
+      "eui.01000000000000005cd2e4c4e66f5351"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "62849d12-f41c-4a61-87cd-9bebb11f63fe",
+   "name": "rackscentral-h-84160c359d31",
+   "location": "Singapore",
+   "role": "Server",
+   "stockStatus": "on demand",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 64,
+     "count": 2,
+     "model": "AMD EPYC 7763 64-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 128,
+     "totalCores": 128,
+     "totalThreads": 256
+    },
+    "gpu": {
+     "count": null,
+     "model": null
+    },
+    "memory": {
+     "total": 2036
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 4,
+     "nvmeSize": 28614,
+     "ssdCount": 1,
+     "ssdSize": 447,
+     "total": 29061
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 276768,
+      "total": 553536
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 62496,
+      "total": 124992
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 372,
+      "total": 744
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "ssd",
+     "disks": [
+      "0x538f60162008e41d"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.01000000000000005cd2e4a56c3e5351",
+      "eui.01000000000000005cd2e4fa70485351",
+      "eui.01000000000000005cd2e4ee80485351",
+      "eui.01000000000000005cd2e4ba80485351"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.622Z"
+  },
+  {
+   "id": "8e490804-4db6-4c1f-a020-c1d1d2232852",
+   "name": "905a0874a374",
+   "location": "Texas",
+   "role": "Server",
+   "stockStatus": "preorder",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 16,
+     "count": 1,
+     "model": "AMD EPYC 7313 16-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 32,
+     "totalCores": 16,
+     "totalThreads": 32
+    },
+    "gpu": {
+     "count": null,
+     "model": null
+    },
+    "memory": {
+     "total": 128
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 4,
+     "nvmeSize": 14308,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 14308
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 37200,
+      "total": 37200
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 8400,
+      "total": 8400
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 50,
+      "total": 50
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 37200,
+      "total": 37200
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 8400,
+      "total": 8400
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 50,
+      "total": 50
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.3634483057b078630025385300000001",
+      "eui.3634483057b078540025385300000001",
+      "eui.36344830594023410025384e00000001",
+      "eui.36344830594024650025384e00000001"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.623Z"
+  },
+  {
+   "id": "5475306f-17cd-4948-a579-6b8d809a6c01",
+   "name": "rackscentral-h-b8cef6f0cf23",
+   "location": "Singapore",
+   "role": "Server",
+   "stockStatus": "on demand",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 64,
+     "count": 2,
+     "model": "AMD EPYC 7763 64-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 128,
+     "totalCores": 128,
+     "totalThreads": 256
+    },
+    "gpu": {
+     "count": 5,
+     "model": "NVIDIA L40S"
+    },
+    "memory": {
+     "total": 2048
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 4,
+     "nvmeSize": 28616,
+     "ssdCount": 1,
+     "ssdSize": 447,
+     "total": 29063
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 70680,
+      "perCpu": 176700,
+      "total": 353400
+     },
+     "perWeek": {
+      "perGpu": 15960,
+      "perCpu": 39900,
+      "total": 79800
+     },
+     "perHour": {
+      "perGpu": 95,
+      "perCpu": 237.5,
+      "total": 475
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": 50592,
+      "perCpu": 126480,
+      "total": 252960
+     },
+     "perWeek": {
+      "perGpu": 11424,
+      "perCpu": 28560,
+      "total": 57120
+     },
+     "perHour": {
+      "perGpu": 68,
+      "perCpu": 170,
+      "total": 340
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "ssd",
+     "disks": [
+      "0x538f6016200ad7f7"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.01000000000000005cd2e4656c755351",
+      "eui.01000000000000005cd2e4fc6c755351",
+      "eui.01000000000000005cd2e42834715351",
+      "eui.01000000000000005cd2e4746f755351"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.623Z"
+  },
+  {
+   "id": "c33e3794-70a0-4c1c-9466-cbcfbacfb339",
+   "name": "ac1f6b9f7473",
+   "location": "Colorado",
+   "role": "Server",
+   "stockStatus": "reserve",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 16,
+     "count": 2,
+     "model": "Intel(R) Xeon(R) Silver 4216 CPU @ 2.10GHz",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 32,
+     "totalCores": 32,
+     "totalThreads": 64
+    },
+    "gpu": {
+     "count": 4,
+     "model": "Quadro RTX 8000"
+    },
+    "memory": {
+     "total": 384
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 1,
+     "nvmeSize": 238,
+     "ssdCount": 8,
+     "ssdSize": 7154,
+     "total": 7392
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": true,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 27900,
+      "perCpu": 55800,
+      "total": 111600
+     },
+     "perWeek": {
+      "perGpu": 6300,
+      "perCpu": 12600,
+      "total": 25200
+     },
+     "perHour": {
+      "perGpu": 37.5,
+      "perCpu": 75,
+      "total": 150
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": 18600,
+      "perCpu": 37200,
+      "total": 74400
+     },
+     "perWeek": {
+      "perGpu": 4200,
+      "perCpu": 8400,
+      "total": 16800
+     },
+     "perHour": {
+      "perGpu": 25,
+      "perCpu": 50,
+      "total": 100
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "ssd",
+     "disks": [
+      "0x55cd2e415172d64d",
+      "0x55cd2e41511c2208",
+      "0x55cd2e415172de74",
+      "0x55cd2e41511bae4a",
+      "0x55cd2e41511bb009",
+      "0x55cd2e415172dd59",
+      "0x55cd2e41511baf58",
+      "0x55cd2e41511bae4e"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.0000000001000000e4d25cac14345101"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": true,
+   "interruptibleNoticePeriod": 300000,
+   "availableAt": "2026-11-01T23:07:08.623Z"
+  },
+  {
+   "id": "fc6ca4fb-fe63-4281-862e-1cea3d0f5284",
+   "name": "h-107c6154c287",
+   "location": "Malaysia",
+   "role": "Server",
+   "stockStatus": "preorder",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "NAT",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 48,
+     "count": 2,
+     "model": "INTEL(R) XEON(R) PLATINUM 8568Y+",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 96,
+     "totalCores": 96,
+     "totalThreads": 192
+    },
+    "gpu": {
+     "count": 8,
+     "model": "NVIDIA H200"
+    },
+    "memory": {
+     "total": 2048
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 10,
+     "nvmeSize": 30406,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 30406
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 230640,
+      "perCpu": 922560,
+      "total": 1845120
+     },
+     "perWeek": {
+      "perGpu": 52080,
+      "perCpu": 208320,
+      "total": 416640
+     },
+     "perHour": {
+      "perGpu": 310,
+      "perCpu": 1240,
+      "total": 2480
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": 189720,
+      "perCpu": 758880,
+      "total": 1517760
+     },
+     "perWeek": {
+      "perGpu": 42840,
+      "perCpu": 171360,
+      "total": 342720
+     },
+     "perHour": {
+      "perGpu": 255,
+      "perCpu": 1020,
+      "total": 2040
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.36344630542064330025384500000001",
+      "eui.36344630542064340025384500000001"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.36344830583517130025384e00000001",
+      "eui.36344830583530940025384e00000001",
+      "eui.36344830585053250025385400000001",
+      "eui.36344830583517100025384e00000001",
+      "eui.36344830585053410025385400000001",
+      "eui.36344830585053430025385400000001",
+      "eui.36344830585053390025385400000001",
+      "eui.36344830585053380025385400000001"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.623Z"
+  },
+  {
+   "id": "36b5af03-9458-4276-b01e-3d5907489a42",
+   "name": "h-107c615482c0",
+   "location": "Malaysia",
+   "role": "Server",
+   "stockStatus": "preorder",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "NAT",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 48,
+     "count": 2,
+     "model": "INTEL(R) XEON(R) PLATINUM 8568Y+",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 96,
+     "totalCores": 96,
+     "totalThreads": 192
+    },
+    "gpu": {
+     "count": 8,
+     "model": "NVIDIA H200"
+    },
+    "memory": {
+     "total": 2048
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 10,
+     "nvmeSize": 30406,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 30406
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 230640,
+      "perCpu": 922560,
+      "total": 1845120
+     },
+     "perWeek": {
+      "perGpu": 52080,
+      "perCpu": 208320,
+      "total": 416640
+     },
+     "perHour": {
+      "perGpu": 310,
+      "perCpu": 1240,
+      "total": 2480
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": 189720,
+      "perCpu": 758880,
+      "total": 1517760
+     },
+     "perWeek": {
+      "perGpu": 42840,
+      "perCpu": 171360,
+      "total": 342720
+     },
+     "perHour": {
+      "perGpu": 255,
+      "perCpu": 1020,
+      "total": 2040
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.36344630542064300025384500000001",
+      "eui.36344630542064320025384500000001"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.36344830583516820025384e00000001",
+      "eui.36344830583531310025384e00000001",
+      "eui.36344830583517120025384e00000001",
+      "eui.36344830583517020025384e00000001",
+      "eui.36344830583531240025384e00000001",
+      "eui.36344830583517110025384e00000001",
+      "eui.36344830583351670025384e00000001",
+      "eui.36344830583531100025384e00000001"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.623Z"
+  },
+  {
+   "id": "98fb9ca0-8387-4e5e-94de-9136f4d4e58c",
+   "name": "346f11062c58",
+   "location": "Colorado",
+   "role": "Server",
+   "stockStatus": "on demand",
+   "isTeeCapable": true,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 64,
+     "count": 2,
+     "model": "Intel(R) Xeon(R) 6767P",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 128,
+     "totalCores": 128,
+     "totalThreads": 256
+    },
+    "gpu": {
+     "count": 8,
+     "model": "NVIDIA B200"
+    },
+    "memory": {
+     "total": 3072
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 10,
+     "nvmeSize": 30404,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 30404
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": true,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 632400,
+      "perCpu": 2529600,
+      "total": 5059200
+     },
+     "perWeek": {
+      "perGpu": 142800,
+      "perCpu": 571200,
+      "total": 1142400
+     },
+     "perHour": {
+      "perGpu": 850,
+      "perCpu": 3400,
+      "total": 6800
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": 632400,
+      "perCpu": 2529600,
+      "total": 5059200
+     },
+     "perWeek": {
+      "perGpu": 142800,
+      "perCpu": 571200,
+      "total": 1142400
+     },
+     "perHour": {
+      "perGpu": 850,
+      "perCpu": 3400,
+      "total": 6800
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.3633553058a194020025384e00000001",
+      "eui.3633553058a194030025384e00000001",
+      "eui.3633553058a153540025384e00000001",
+      "eui.3633553058a153570025384e00000001",
+      "eui.3633553058a146120025384e00000001",
+      "eui.3633553058a146130025384e00000001",
+      "eui.3633553058a145360025384e00000001",
+      "eui.3633553058a145350025384e00000001"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.36363530595012000025384700000001",
+      "eui.36363530595011140025384700000001"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.623Z"
+  },
+  {
+   "id": "c2d6e146-6abf-4478-bbc8-47bdf00c4a71",
+   "name": "h-c4cbe1d35916",
+   "location": "India",
+   "role": "Server",
+   "stockStatus": "preorder",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "NAT",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 60,
+     "count": 2,
+     "model": "INTEL(R) XEON(R) PLATINUM 8580",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 120,
+     "totalCores": 120,
+     "totalThreads": 240
+    },
+    "gpu": {
+     "count": null,
+     "model": null
+    },
+    "memory": {
+     "total": 3072
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 6,
+     "nvmeSize": 118039,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 118039
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 818400,
+      "total": 1636800
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 184800,
+      "total": 369600
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 1100,
+      "total": 2200
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 520800,
+      "total": 1041600
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 117600,
+      "total": 235200
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 700,
+      "total": 1400
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.36555530583006900025384300000003",
+      "eui.36555530583006920025384300000003"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.000000000000000100a075223e37ca3d",
+      "eui.000000000000000100a075223e358f7f",
+      "eui.000000000000000100a0752447d6116c",
+      "eui.000000000000000100a0752449bd0f70"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.623Z"
+  },
+  {
+   "id": "ade0c92b-ea0f-4eb6-9c69-13d08ff09d3f",
+   "name": "massedcompute-h-ac1f6b2505b8",
+   "location": "Missouri",
+   "role": "Server",
+   "stockStatus": "on demand",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "NAT",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 22,
+     "count": 2,
+     "model": "Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 44,
+     "totalCores": 44,
+     "totalThreads": 88
+    },
+    "gpu": {
+     "count": 8,
+     "model": "NVIDIA RTX A6000"
+    },
+    "memory": {
+     "total": 512
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 0,
+     "nvmeSize": 0,
+     "ssdCount": 8,
+     "ssdSize": 32119,
+     "total": 32119
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 44640,
+      "perCpu": 178560,
+      "total": 357120
+     },
+     "perWeek": {
+      "perGpu": 10080,
+      "perCpu": 40320,
+      "total": 80640
+     },
+     "perHour": {
+      "perGpu": 60,
+      "perCpu": 240,
+      "total": 480
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": null,
+      "total": null
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "ssd",
+     "disks": [
+      "0x5002538c403b7a2e"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data1",
+     "diskType": "ssd",
+     "disks": [
+      "0x5002538f31a294f2",
+      "0x5002538f329024f3",
+      "0x5002538f32808e9d",
+      "0x5002538f54a13133"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "ssd",
+     "disks": [
+      "0x5002538f34313026"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data2",
+     "diskType": "ssd",
+     "disks": [
+      "0x5002538f34909621",
+      "0x5002538f3490949c"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.623Z"
+  },
+  {
+   "id": "e7662f5d-de4e-480d-ac8b-52f7ed28077b",
+   "name": "rackscentral-h-08c0eb6aabc7",
+   "location": "Singapore",
+   "role": "Server",
+   "stockStatus": "reserve",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 64,
+     "count": 2,
+     "model": "AMD EPYC 7763 64-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 128,
+     "totalCores": 128,
+     "totalThreads": 256
+    },
+    "gpu": {
+     "count": 7,
+     "model": "NVIDIA L40S"
+    },
+    "memory": {
+     "total": 2036
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 4,
+     "nvmeSize": 28614,
+     "ssdCount": 1,
+     "ssdSize": 447,
+     "total": 29061
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 50486,
+      "perCpu": 176700,
+      "total": 353400
+     },
+     "perWeek": {
+      "perGpu": 11400,
+      "perCpu": 39900,
+      "total": 79800
+     },
+     "perHour": {
+      "perGpu": 67.85714285714286,
+      "perCpu": 237.5,
+      "total": 475
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": 36137,
+      "perCpu": 126480,
+      "total": 252960
+     },
+     "perWeek": {
+      "perGpu": 8160,
+      "perCpu": 28560,
+      "total": 57120
+     },
+     "perHour": {
+      "perGpu": 48.57142857142857,
+      "perCpu": 170,
+      "total": 340
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "ssd",
+     "disks": [
+      "0x538f6016200ada36"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.01000000000000005cd2e4607d755351",
+      "eui.01000000000000005cd2e46c3b715351",
+      "eui.01000000000000005cd2e4697d755351",
+      "eui.01000000000000005cd2e46e7d755351"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.623Z"
+  },
+  {
+   "id": "e14f35fa-ba04-473e-8ccd-02ff8f1c068e",
+   "name": "rackscentral-h-b8cef6f0d313",
+   "location": "Singapore",
+   "role": "Server",
+   "stockStatus": "reserve",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 64,
+     "count": 2,
+     "model": "AMD EPYC 7763 64-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 128,
+     "totalCores": 128,
+     "totalThreads": 256
+    },
+    "gpu": {
+     "count": 8,
+     "model": "NVIDIA L40S"
+    },
+    "memory": {
+     "total": 2036
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 4,
+     "nvmeSize": 28614,
+     "ssdCount": 1,
+     "ssdSize": 447,
+     "total": 29061
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 44175,
+      "perCpu": 176700,
+      "total": 353400
+     },
+     "perWeek": {
+      "perGpu": 9975,
+      "perCpu": 39900,
+      "total": 79800
+     },
+     "perHour": {
+      "perGpu": 59.375,
+      "perCpu": 237.5,
+      "total": 475
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": 31620,
+      "perCpu": 126480,
+      "total": 252960
+     },
+     "perWeek": {
+      "perGpu": 7140,
+      "perCpu": 28560,
+      "total": 57120
+     },
+     "perHour": {
+      "perGpu": 42.5,
+      "perCpu": 170,
+      "total": 340
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "ssd",
+     "disks": [
+      "0x538f6016200add33"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.01000000000000005cd2e4cba9755351",
+      "eui.01000000000000005cd2e45434715351",
+      "eui.01000000000000005cd2e44334715351",
+      "eui.01000000000000005cd2e4e785755351"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.623Z"
+  },
+  {
+   "id": "8701f6d8-3e5e-4ff6-b93c-1f8b3e1291e7",
+   "name": "rackscentral-h-b8cef6eb452d",
+   "location": "Singapore",
+   "role": "Server",
+   "stockStatus": "reserve",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 64,
+     "count": 2,
+     "model": "AMD EPYC 7763 64-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 128,
+     "totalCores": 128,
+     "totalThreads": 256
+    },
+    "gpu": {
+     "count": 4,
+     "model": "NVIDIA L40S"
+    },
+    "memory": {
+     "total": 2036
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 4,
+     "nvmeSize": 28614,
+     "ssdCount": 1,
+     "ssdSize": 447,
+     "total": 29061
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": 88350,
+      "perCpu": 176700,
+      "total": 353400
+     },
+     "perWeek": {
+      "perGpu": 19950,
+      "perCpu": 39900,
+      "total": 79800
+     },
+     "perHour": {
+      "perGpu": 118.75,
+      "perCpu": 237.5,
+      "total": 475
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": 63240,
+      "perCpu": 126480,
+      "total": 252960
+     },
+     "perWeek": {
+      "perGpu": 14280,
+      "perCpu": 28560,
+      "total": 57120
+     },
+     "perHour": {
+      "perGpu": 85,
+      "perCpu": 170,
+      "total": 340
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "ssd",
+     "disks": [
+      "0x538f601620088c04"
+     ]
+    },
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/data0",
+     "diskType": "nvme",
+     "disks": [
+      "eui.01000000000000005cd2e45571485351",
+      "eui.01000000000000005cd2e4b770485351",
+      "eui.01000000000000005cd2e4b470485351",
+      "eui.01000000000000005cd2e43071485351"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.623Z"
+  },
+  {
+   "id": "513676e9-607f-41ee-956e-4d4a9ee8d521",
+   "name": "3cecefdfac17",
+   "location": "Texas",
+   "role": "Server",
+   "stockStatus": "preorder",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 16,
+     "count": 1,
+     "model": "AMD EPYC 7313P 16-Core Processor",
+     "threadsPerCore": 2,
+     "threadsPerCpu": 32,
+     "totalCores": 16,
+     "totalThreads": 32
+    },
+    "gpu": {
+     "count": null,
+     "model": null
+    },
+    "memory": {
+     "total": 130
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 4,
+     "nvmeSize": 14307,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 14307
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 7440,
+      "total": 7440
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 1680,
+      "total": 1680
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 10,
+      "total": 10
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 3720,
+      "total": 3720
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 840,
+      "total": 840
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 5,
+      "total": 5
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.000000000000000100a0752342937764",
+      "eui.000000000000000100a075234293be51",
+      "eui.000000000000000100a0752340d7cb47",
+      "eui.000000000000000100a0752340d7cc37"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.623Z"
+  },
+  {
+   "id": "889c9707-da55-4356-a4bc-3200880a6562",
+   "name": "905a0874a38a",
+   "location": "Texas",
+   "role": "Server",
+   "stockStatus": "preorder",
+   "isTeeCapable": false,
+   "networking": {
+    "ipv4": "203.0.113.10",
+    "ipv6": "",
+    "networkType": "Public",
+    "vpcCapable": false
+   },
+   "specs": {
+    "cpu": {
+     "coresPerCpu": 16,
+     "count": 1,
+     "model": "AMD EPYC 7313 16-Core Processor",
+     "threadsPerCore": 1,
+     "threadsPerCpu": 16,
+     "totalCores": 16,
+     "totalThreads": 16
+    },
+    "gpu": {
+     "count": null,
+     "model": null
+    },
+    "memory": {
+     "total": 130
+    },
+    "storage": {
+     "hddCount": 0,
+     "hddSize": 0,
+     "nvmeCount": 4,
+     "nvmeSize": 14307,
+     "ssdCount": 0,
+     "ssdSize": 0,
+     "total": 14307
+    }
+   },
+   "listing": {
+    "isInterruptibleOnly": false,
+    "isActive": true,
+    "onDemandPrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 7440,
+      "total": 7440
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 1680,
+      "total": 1680
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 10,
+      "total": 10
+     }
+    },
+    "interruptiblePrice": {
+     "perMonth": {
+      "perGpu": null,
+      "perCpu": 3720,
+      "total": 3720
+     },
+     "perWeek": {
+      "perGpu": null,
+      "perCpu": 840,
+      "total": 840
+     },
+     "perHour": {
+      "perGpu": null,
+      "perCpu": 5,
+      "total": 5
+     }
+    }
+   },
+   "activeReservationInvite": null,
+   "defaultDiskLayouts": [
+    {
+     "config": "lvm",
+     "format": "ext4",
+     "mountpoint": "/",
+     "diskType": "nvme",
+     "disks": [
+      "eui.000000000000000100a07523429342d8",
+      "eui.000000000000000100a0752342933f1d",
+      "eui.3634483058a224400025384e00000001",
+      "eui.3634483058a224390025384e00000001"
+     ]
+    }
+   ],
+   "supplierPolicyUrl": null,
+   "isInterruptibleDeployment": false,
+   "interruptibleNoticePeriod": null,
+   "availableAt": "2026-11-01T23:02:08.623Z"
+  }
+ ],
+ "meta": {
+  "page": 1,
+  "pageSize": 100,
+  "totalItems": 33,
+  "totalPages": 1
+ }
+}

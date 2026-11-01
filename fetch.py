@@ -10,6 +10,7 @@ from db import SessionLocal, init_db
 from models import RawResponse
 from providers import gcp_auth
 from providers import (
+    AkashProvider,
     CivoProvider,
     CloreProvider,
     AtlanticNetProvider,
@@ -20,13 +21,18 @@ from providers import (
     AzureProvider,
     BoostRunProvider,
     CoreWeaveProvider,
+    GpuAiProvider,
     HotAisleProvider,
+    HuggingFaceProvider,
+    HydraHostProvider,
     JarvislabsProvider,
     TogetherProvider,
     VultrProvider,
+    ExoscaleProvider,
     GcpProvider,
     HorizonProvider,
     PhyntecProvider,
+    PaperspaceProvider,
     LinodeProvider,
     OvhCloudProvider,
     ScalewayProvider,
@@ -41,6 +47,7 @@ from providers import (
     BasetenProvider,
     BeamProvider,
     CrusoeProvider,
+    CudoProvider,
     DenvrProvider,
     DigitalOceanProvider,
     ThunderComputeProvider,
@@ -148,6 +155,7 @@ def build_fetchers() -> list[Provider]:
             AzureProvider,
             HorizonProvider,
             PhyntecProvider,
+            PaperspaceProvider,
             LinodeProvider,
             OvhCloudProvider,
             ScalewayProvider,
@@ -162,6 +170,12 @@ def build_fetchers() -> list[Provider]:
             BasetenProvider,
             BeamProvider,
             NosanaProvider,
+            AkashProvider,
+            HydraHostProvider,
+            CudoProvider,
+            GpuAiProvider,
+            ExoscaleProvider,
+            HuggingFaceProvider,
         )
     )
     return fetchers

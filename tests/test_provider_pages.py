@@ -395,7 +395,7 @@ def test_registry():
     via = {c.cloud for c in PROVIDERS.values() if isinstance(c, type) and issubclass(c, ShadeformCloud)}
     direct = {n for n, c in PROVIDERS.items() if not issubclass(c, ShadeformCloud)}
     assert not (via & direct), via & direct
-    assert "vultr" not in via and "paperspace" not in via
+    assert "vultr" not in via  # Paperspace is read through Shadeform since 2026-11-01 (tests/test_provider_paperspace.py)
 
 
 # --------------------------------------------------------------------------
