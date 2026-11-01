@@ -7,7 +7,8 @@ only tables in the "GPU instances" section (<h2 id="gpu-instances">, which inclu
 table) are read; "Serverless containers" (per-container pricing, with CPU rows) is not. A table belongs to the
 nearest <h2 id> before it. Each priced cell becomes one listing of the
 printed GPU count; the raw name is the Hardware cell without its "Nx " prefix, the same name the live API gives
-("H100 SXM5 80GB", "B200 CC SXM6 180GB"). The serverless-container table (headed "Price (1x GPU)"), CPU and storage
+("H100 SXM5 80GB", "B200 CC SXM6 180GB"), looked up the way the live normalizer does it (providers.verda.canonical_name:
+"RTX PRO 6000 96GB" is the Server Edition, per Verda's product page). The serverless-container table (headed "Price (1x GPU)"), CPU and storage
 tables are ignored.
 """
 from __future__ import annotations
@@ -18,6 +19,7 @@ from datetime import datetime
 from backfill.parsers import dec, listing, slug, text
 from backfill.sources import own_page
 from models import ComputeListing
+from providers.verda import canonical_name
 
 HEADER = ("Hardware", "CPUs", "RAM", "GPU VRAM", "Price", "Spot price")
 _TABLE = re.compile(r"<table[^>]*>(?P<t>.*?)</table>", re.S)
@@ -63,10 +65,11 @@ def verda_instance_tables(page: str, at: datetime) -> list[ComputeListing]:
                 p = _PRICE.match(cell)
                 if p is None:
                     raise ValueError(f"verda(archive): {cells[0]} {market} cell {cell!r} is not '$x/h'")
-                out.append(listing("verda", sku=cells[0], listing_id=slug(f"{cells[0]} {cells[1]}v") + ("" if market == "on_demand" else ":spot"),
-                                   raw=name, count=count, instance_price=dec(p["v"]), at=at, market=market,
-                                   tier="verda-page", vcpu=int(cells[1]) if cells[1].isdigit() else None,
-                                   ram_gb=float(ram.group(1)) if ram else None))
+                o = listing("verda", sku=cells[0], listing_id=slug(f"{cells[0]} {cells[1]}v") + ("" if market == "on_demand" else ":spot"),
+                            raw=name, count=count, instance_price=dec(p["v"]), at=at, market=market,
+                            tier="verda-page", vcpu=int(cells[1]) if cells[1].isdigit() else None,
+                            ram_gb=float(ram.group(1)) if ram else None)
+                out.append(o.model_copy(update={"canonical_gpu_name": canonical_name(name)}))
     if not tables:
         raise ValueError("verda(archive): no 'Hardware ... Price | Spot price' instance table")
     if not out:
