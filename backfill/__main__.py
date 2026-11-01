@@ -2,6 +2,10 @@
 
     python -m backfill survey                          captures per source, nothing downloaded or stored
     python -m backfill import [--since 2025-10-21] [--until 2026-10-21] [--provider coreweave ...]
+    python -m backfill import --since 2016-01 --provider azure --no-aws     everything archived since Jan 2016
+
+--since / --until take YYYY, YYYY-MM or YYYY-MM-DD (--since: the period's first day; --until: its last). The default
+window is the last 365 days; parsers know designs back to 2016 (Azure), so a deeper --since is safe.
                               [--no-download] [--dry-run] [--no-aws] [--report report.json]
 
 Downloads go one at a time through backfill/wayback.py (polite, cached under OPENGRID_ARCHIVE_CACHE,
@@ -20,6 +24,23 @@ from backfill.sources import sources
 from backfill.wayback import Wayback
 
 
+def _day(s: str, *, end: bool = False) -> str:
+    """YYYY / YYYY-MM / YYYY-MM-DD (dashes optional) -> YYYYMMDD: the first day of the period, or with end=True
+    its last day."""
+    import calendar
+
+    d = s.replace("-", "")
+    if not d.isdigit() or len(d) not in (4, 6, 8):
+        raise SystemExit(f"backfill: date {s!r} is not YYYY, YYYY-MM or YYYY-MM-DD")
+    if len(d) == 8:
+        datetime.strptime(d, "%Y%m%d")
+        return d
+    y, m = int(d[:4]), int(d[4:6]) if len(d) == 6 else (12 if end else 1)
+    if not 2000 <= y <= 2100 or not 1 <= m <= 12:
+        raise SystemExit(f"backfill: date {s!r} has month {m}")
+    return f"{y:04d}{m:02d}{calendar.monthrange(y, m)[1] if end else 1:02d}"
+
+
 def main(argv=None) -> int:
     today = datetime.now(timezone.utc).date()
     ap = argparse.ArgumentParser(prog="python -m backfill", description="archived GPU price history")
@@ -35,7 +56,7 @@ def main(argv=None) -> int:
     p.add_argument("--report", help="write the full JSON report (failures, unmapped GPUs) here")
     a = ap.parse_args(argv)
 
-    since, until = a.since.replace("-", ""), a.until.replace("-", "")
+    since, until = _day(a.since), _day(a.until, end=True)
     srcs = [s for s in sources() if not a.provider or s.provider in a.provider]
     w = Wayback(log=lambda m: print(m, file=sys.stderr))
     if a.cmd == "survey":
