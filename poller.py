@@ -14,6 +14,7 @@ import time
 
 import normalize
 from fetch import build_fetchers, save
+from live.locks import refresh_provider
 from providers.base import Provider
 
 log = logging.getLogger(__name__)
@@ -32,7 +33,8 @@ async def poll_once(provider: Provider) -> dict:
 
     failed = sum(1 for r in responses if not r.ok)
     await asyncio.to_thread(save, responses)
-    result = await asyncio.to_thread(normalize.refresh, [provider.name])
+    # one normalize per provider at a time: a live stream (live/lium_stream.py) may re-normalize it too
+    result = await asyncio.to_thread(refresh_provider, provider.name)
     result["responses"] = len(responses)
     result["failed"] = failed
     result["ms"] = int((time.perf_counter() - started) * 1000)

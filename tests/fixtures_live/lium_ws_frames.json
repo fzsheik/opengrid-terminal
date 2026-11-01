@@ -1,0 +1,1633 @@
+[
+ {
+  "type": "snapshot",
+  "schema_version": 1,
+  "seq": 5956,
+  "ts": 1793575527.467543,
+  "executors": [
+   {
+    "id": "1ae25ea8-a420-4214-bddc-c9e73e16e659",
+    "machine_name": "NVIDIA B300 SXM6 PC",
+    "price_per_gpu": 6.7,
+    "pending_price_per_hour": null,
+    "price_change_effective_date": null,
+    "validator_hotkey": "5F7X5UpKSr26KU3jKfpLmT8kuKtBNyHhEnfS8xtxPCqCb13p",
+    "gpu_count": 8,
+    "available_gpu_count": 8,
+    "active": null,
+    "uptime_in_minutes": 5565,
+    "miner_hotkey": "5CfcVF9QsEdjKWKpNCi7NjZmjPxYN2rmR1sBhuMFHbbpdtEz",
+    "is_slow_machine": false,
+    "tier": "spot",
+    "offers_bare_metal": false,
+    "reliability_score": 99.8,
+    "frequent_rent_failures": false,
+    "gpu_power_limited": false,
+    "gpu_power_limit_w": 1100,
+    "gpu_power_limit_default_w": 1100,
+    "min_gpu_count_for_rental": null,
+    "max_cuda_version": 13.0,
+    "infiniband_fabric_rentable": true,
+    "roce_fabric_rentable": false,
+    "scheduled_notice": null,
+    "ncu_profiling_enabled": true,
+    "disk_health_ok": true,
+    "on_infiniband_fabric": true,
+    "on_roce_fabric": false,
+    "nvlink": true,
+    "gpu_class": "NVIDIA B300 SXM6 AC",
+    "gpu_class_display": "NVIDIA B300 SXM6",
+    "location": {
+     "country": "United States",
+     "country_code": "US",
+     "region": "MA",
+     "region_name": "Massachusetts",
+     "city": "Newburyport",
+     "zip": "01950",
+     "lat": 42.8108,
+     "lon": -70.87,
+     "timezone": "America/New_York"
+    },
+    "specs": {
+     "os": "Debian GNU/Linux 13 (trixie)",
+     "kernel": "6.11.0-1016-nvidia",
+     "is_spot": true,
+     "sysbox_runtime": true,
+     "storage_limit_supported": true,
+     "tdx_host_supported": true,
+     "tdx_attestation_passed": false,
+     "ncu_profiling_access": "unrestricted",
+     "gpu_power_cap_capable": true,
+     "available_port_count": 301,
+     "gpu": {
+      "count": 8,
+      "driver": "580.173.02",
+      "cuda_driver": 13000,
+      "details": [
+       {
+        "name": "NVIDIA B300 SXM6 PC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 PC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 PC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 PC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 PC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 PC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 PC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 PC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       }
+      ]
+     },
+     "gpu_metrics": {
+      "device": "NVIDIA B300 SXM6 PC",
+      "cc": "10.3",
+      "vram_gb": 287.4,
+      "sm_count": 148,
+      "clock_mhz": 2032,
+      "fp32_tflops": 9.6
+     },
+     "cpu": {
+      "count": 192,
+      "model": "Intel(R) Xeon(R) 6776P"
+     },
+     "ram": {
+      "total": 2856918864.0,
+      "pod_reserve": 85707565
+     },
+     "hard_disk": {
+      "total": 4081161216,
+      "free": 2410659640
+     },
+     "interconnect": {
+      "gpu_pairs": 28,
+      "nvlink_pairs": 28
+     }
+    },
+    "effective_upload_speed_mbps": 4573.539685311527,
+    "effective_download_speed_mbps": 3491.498496542135
+   },
+   {
+    "id": "c06a6fde-1933-48b6-a78e-886e9b86c143",
+    "machine_name": "NVIDIA B300 SXM6 PC",
+    "price_per_gpu": 6.8,
+    "pending_price_per_hour": null,
+    "price_change_effective_date": null,
+    "validator_hotkey": "5F7X5UpKSr26KU3jKfpLmT8kuKtBNyHhEnfS8xtxPCqCb13p",
+    "gpu_count": 8,
+    "available_gpu_count": 8,
+    "active": null,
+    "uptime_in_minutes": 675,
+    "miner_hotkey": "5CfcVF9QsEdjKWKpNCi7NjZmjPxYN2rmR1sBhuMFHbbpdtEz",
+    "is_slow_machine": false,
+    "tier": "spot",
+    "offers_bare_metal": false,
+    "reliability_score": 99.8,
+    "frequent_rent_failures": false,
+    "gpu_power_limited": false,
+    "gpu_power_limit_w": 1100,
+    "gpu_power_limit_default_w": 1100,
+    "min_gpu_count_for_rental": null,
+    "max_cuda_version": 13.0,
+    "infiniband_fabric_rentable": true,
+    "roce_fabric_rentable": false,
+    "scheduled_notice": null,
+    "ncu_profiling_enabled": true,
+    "disk_health_ok": true,
+    "on_infiniband_fabric": true,
+    "on_roce_fabric": false,
+    "nvlink": true,
+    "gpu_class": "NVIDIA B300 SXM6 AC",
+    "gpu_class_display": "NVIDIA B300 SXM6",
+    "location": {
+     "country": "United States",
+     "country_code": "US",
+     "region": "MA",
+     "region_name": "Massachusetts",
+     "city": "Newburyport",
+     "zip": "01950",
+     "lat": 42.8108,
+     "lon": -70.87,
+     "timezone": "America/New_York"
+    },
+    "specs": {
+     "os": "Debian GNU/Linux 13 (trixie)",
+     "kernel": "6.11.0-1016-nvidia",
+     "is_spot": true,
+     "sysbox_runtime": true,
+     "storage_limit_supported": true,
+     "tdx_host_supported": true,
+     "tdx_attestation_passed": false,
+     "ncu_profiling_access": "unrestricted",
+     "gpu_power_cap_capable": true,
+     "available_port_count": 300,
+     "gpu": {
+      "count": 8,
+      "driver": "580.173.02",
+      "cuda_driver": 13000,
+      "details": [
+       {
+        "name": "NVIDIA B300 SXM6 PC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 PC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 PC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 PC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 PC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 PC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 PC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 PC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       }
+      ]
+     },
+     "gpu_metrics": {
+      "device": "NVIDIA B300 SXM6 PC",
+      "cc": "10.3",
+      "vram_gb": 287.4,
+      "sm_count": 148,
+      "clock_mhz": 2032,
+      "fp32_tflops": 9.6
+     },
+     "cpu": {
+      "count": 192,
+      "model": "Intel(R) Xeon(R) 6776P"
+     },
+     "ram": {
+      "total": 2856918908.0,
+      "pod_reserve": 85707567
+     },
+     "hard_disk": {
+      "total": 4081161216,
+      "free": 3935464012
+     },
+     "interconnect": {
+      "gpu_pairs": 28,
+      "nvlink_pairs": 28
+     }
+    },
+    "effective_upload_speed_mbps": 4561.612479033616,
+    "effective_download_speed_mbps": 4338.069169830251
+   },
+   {
+    "id": "925dcca1-a369-41cb-a645-161426a03582",
+    "machine_name": "NVIDIA B300 SXM6 AC",
+    "price_per_gpu": 6.9,
+    "pending_price_per_hour": null,
+    "price_change_effective_date": null,
+    "validator_hotkey": "5F7X5UpKSr26KU3jKfpLmT8kuKtBNyHhEnfS8xtxPCqCb13p",
+    "gpu_count": 8,
+    "available_gpu_count": 8,
+    "active": null,
+    "uptime_in_minutes": 17340,
+    "miner_hotkey": "5CfdX1EjuydhvY3r8tHKLbdpkxDZKV6UoJY9PSk6G132LS3d",
+    "is_slow_machine": false,
+    "tier": "spot",
+    "offers_bare_metal": false,
+    "reliability_score": 98.8,
+    "frequent_rent_failures": false,
+    "gpu_power_limited": false,
+    "gpu_power_limit_w": 1100,
+    "gpu_power_limit_default_w": 1100,
+    "min_gpu_count_for_rental": null,
+    "max_cuda_version": 13.1,
+    "infiniband_fabric_rentable": false,
+    "roce_fabric_rentable": false,
+    "scheduled_notice": null,
+    "ncu_profiling_enabled": false,
+    "disk_health_ok": true,
+    "on_infiniband_fabric": false,
+    "on_roce_fabric": false,
+    "nvlink": true,
+    "gpu_class": "NVIDIA B300 SXM6 AC",
+    "gpu_class_display": "NVIDIA B300 SXM6",
+    "location": {
+     "country": "India",
+     "country_code": "IN",
+     "region": "TG",
+     "region_name": "Telangana",
+     "city": "Hyderabad",
+     "zip": "",
+     "lat": 17.38405,
+     "lon": 78.45636,
+     "timezone": "Asia/Kolkata"
+    },
+    "specs": {
+     "os": "Debian GNU/Linux 13 (trixie)",
+     "kernel": "7.0.0-1014-aws",
+     "is_spot": true,
+     "sysbox_runtime": true,
+     "storage_limit_supported": true,
+     "tdx_host_supported": true,
+     "tdx_attestation_passed": false,
+     "ncu_profiling_access": "restricted",
+     "gpu_power_cap_capable": true,
+     "available_port_count": 300,
+     "gpu": {
+      "count": 8,
+      "driver": "595.91.07",
+      "cuda_driver": 13020,
+      "details": [
+       {
+        "name": "NVIDIA B300 SXM6 AC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 AC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 AC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 AC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 AC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 AC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 AC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA B300 SXM6 AC",
+        "capacity": 275040,
+        "cuda": "10.3",
+        "power_limit": 1100,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       }
+      ]
+     },
+     "gpu_metrics": {
+      "device": "NVIDIA B300 SXM6 AC",
+      "cc": "10.3",
+      "vram_gb": 287.4,
+      "sm_count": 148,
+      "clock_mhz": 2032,
+      "fp32_tflops": 9.59
+     },
+     "cpu": {
+      "count": 192,
+      "model": "Intel(R) Xeon(R) Platinum 8559C"
+     },
+     "ram": {
+      "total": 4206760680.0,
+      "pod_reserve": 126202820
+     },
+     "hard_disk": {
+      "total": 8319862740,
+      "free": 6576165168
+     },
+     "interconnect": {
+      "gpu_pairs": 28,
+      "nvlink_pairs": 28
+     }
+    },
+    "effective_upload_speed_mbps": 8281.779684389683,
+    "effective_download_speed_mbps": 5909.119560696153
+   },
+   {
+    "id": "11ab90bf-b822-4ba2-a440-c480bf1c96af",
+    "machine_name": "NVIDIA GeForce RTX 5090",
+    "price_per_gpu": 0.87,
+    "pending_price_per_hour": null,
+    "price_change_effective_date": null,
+    "validator_hotkey": "5F7X5UpKSr26KU3jKfpLmT8kuKtBNyHhEnfS8xtxPCqCb13p",
+    "gpu_count": 1,
+    "available_gpu_count": 1,
+    "active": null,
+    "uptime_in_minutes": 14160,
+    "miner_hotkey": "5FbFNM1LWUTkxzj2maQ7PnBTXtSSuTzETVkBmgNCsYj9twkW",
+    "is_slow_machine": false,
+    "tier": "spot",
+    "offers_bare_metal": false,
+    "reliability_score": null,
+    "frequent_rent_failures": false,
+    "gpu_power_limited": false,
+    "gpu_power_limit_w": 575,
+    "gpu_power_limit_default_w": 575,
+    "min_gpu_count_for_rental": null,
+    "max_cuda_version": 13.1,
+    "infiniband_fabric_rentable": false,
+    "roce_fabric_rentable": false,
+    "scheduled_notice": null,
+    "ncu_profiling_enabled": false,
+    "disk_health_ok": true,
+    "on_infiniband_fabric": false,
+    "on_roce_fabric": false,
+    "nvlink": null,
+    "gpu_class": "NVIDIA GeForce RTX 5090",
+    "gpu_class_display": "NVIDIA GeForce RTX 5090",
+    "location": {
+     "country": "Romania",
+     "country_code": "RO",
+     "region": "PH",
+     "region_name": "Prahova",
+     "city": "Ploie\u015fti",
+     "zip": "100001",
+     "lat": 44.9467,
+     "lon": 26.0135,
+     "timezone": "Europe/Bucharest"
+    },
+    "specs": {
+     "os": "Debian GNU/Linux 13 (trixie)",
+     "kernel": "7.0.0-30-generic",
+     "is_spot": true,
+     "sysbox_runtime": true,
+     "storage_limit_supported": true,
+     "tdx_host_supported": false,
+     "tdx_attestation_passed": false,
+     "ncu_profiling_access": "restricted",
+     "gpu_power_cap_capable": true,
+     "available_port_count": 101,
+     "gpu": {
+      "count": 1,
+      "driver": "595.84",
+      "cuda_driver": 13020,
+      "details": [
+       {
+        "name": "NVIDIA GeForce RTX 5090",
+        "capacity": 32607,
+        "cuda": "12.0",
+        "power_limit": 575,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       }
+      ]
+     },
+     "gpu_metrics": {
+      "device": "NVIDIA GeForce RTX 5090",
+      "cc": "12.0",
+      "vram_gb": 33.7,
+      "sm_count": 170,
+      "clock_mhz": 2407,
+      "fp32_tflops": 10.12
+     },
+     "cpu": {
+      "count": 24,
+      "model": "Intel(R) Core(TM) Ultra 7 270K Plus"
+     },
+     "ram": {
+      "total": 32102712.0,
+      "pod_reserve": 4194304
+     },
+     "hard_disk": {
+      "total": 1920641288,
+      "free": 1725192184
+     },
+     "interconnect": {
+      "gpu_pairs": 0,
+      "nvlink_pairs": 0
+     }
+    },
+    "effective_upload_speed_mbps": 894.6193787777097,
+    "effective_download_speed_mbps": 844.1471482523511
+   },
+   {
+    "id": "1a01212e-070b-4597-8de9-6259ebf402ef",
+    "machine_name": "NVIDIA GeForce RTX 5090",
+    "price_per_gpu": 0.7,
+    "pending_price_per_hour": null,
+    "price_change_effective_date": null,
+    "validator_hotkey": "5F7X5UpKSr26KU3jKfpLmT8kuKtBNyHhEnfS8xtxPCqCb13p",
+    "gpu_count": 1,
+    "available_gpu_count": 1,
+    "active": null,
+    "uptime_in_minutes": 12690,
+    "miner_hotkey": "5FbFNM1LWUTkxzj2maQ7PnBTXtSSuTzETVkBmgNCsYj9twkW",
+    "is_slow_machine": false,
+    "tier": "spot",
+    "offers_bare_metal": false,
+    "reliability_score": null,
+    "frequent_rent_failures": false,
+    "gpu_power_limited": false,
+    "gpu_power_limit_w": 575,
+    "gpu_power_limit_default_w": 575,
+    "min_gpu_count_for_rental": null,
+    "max_cuda_version": 13.1,
+    "infiniband_fabric_rentable": false,
+    "roce_fabric_rentable": false,
+    "scheduled_notice": null,
+    "ncu_profiling_enabled": false,
+    "disk_health_ok": true,
+    "on_infiniband_fabric": false,
+    "on_roce_fabric": false,
+    "nvlink": null,
+    "gpu_class": "NVIDIA GeForce RTX 5090",
+    "gpu_class_display": "NVIDIA GeForce RTX 5090",
+    "location": {
+     "country": "Romania",
+     "country_code": "RO",
+     "region": "PH",
+     "region_name": "Prahova",
+     "city": "Ploie\u015fti",
+     "zip": "100022",
+     "lat": 44.9467,
+     "lon": 26.0135,
+     "timezone": "Europe/Bucharest"
+    },
+    "specs": {
+     "os": "Debian GNU/Linux 13 (trixie)",
+     "kernel": "7.0.0-31-generic",
+     "is_spot": true,
+     "sysbox_runtime": true,
+     "storage_limit_supported": true,
+     "tdx_host_supported": false,
+     "tdx_attestation_passed": false,
+     "ncu_profiling_access": "restricted",
+     "gpu_power_cap_capable": true,
+     "available_port_count": 101,
+     "gpu": {
+      "count": 1,
+      "driver": "595.84",
+      "cuda_driver": 13020,
+      "details": [
+       {
+        "name": "NVIDIA GeForce RTX 5090",
+        "capacity": 32607,
+        "cuda": "12.0",
+        "power_limit": 575,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       }
+      ]
+     },
+     "gpu_metrics": {
+      "device": "NVIDIA GeForce RTX 5090",
+      "cc": "12.0",
+      "vram_gb": 33.7,
+      "sm_count": 170,
+      "clock_mhz": 2407,
+      "fp32_tflops": 4.6
+     },
+     "cpu": {
+      "count": 24,
+      "model": "Intel(R) Core(TM) Ultra 7 270K Plus"
+     },
+     "ram": {
+      "total": 32102628.0,
+      "pod_reserve": 4194304
+     },
+     "hard_disk": {
+      "total": 1920641288,
+      "free": 1734404028
+     },
+     "interconnect": {
+      "gpu_pairs": 0,
+      "nvlink_pairs": 0
+     }
+    },
+    "effective_upload_speed_mbps": 142.7704467464713,
+    "effective_download_speed_mbps": 182.2090799376236
+   },
+   {
+    "id": "1c7bca29-4461-4f19-a767-42935ccaf349",
+    "machine_name": "NVIDIA GeForce RTX 5090",
+    "price_per_gpu": 0.6,
+    "pending_price_per_hour": null,
+    "price_change_effective_date": null,
+    "validator_hotkey": "5F7X5UpKSr26KU3jKfpLmT8kuKtBNyHhEnfS8xtxPCqCb13p",
+    "gpu_count": 8,
+    "available_gpu_count": 8,
+    "active": null,
+    "uptime_in_minutes": 7620,
+    "miner_hotkey": "5H1LVPFhh2t1GmoiEngN4P9cB21TRoeYXgy9sXSXpzeRBvkP",
+    "is_slow_machine": false,
+    "tier": "secure",
+    "offers_bare_metal": false,
+    "reliability_score": 99.8,
+    "frequent_rent_failures": false,
+    "gpu_power_limited": null,
+    "gpu_power_limit_w": null,
+    "gpu_power_limit_default_w": null,
+    "min_gpu_count_for_rental": null,
+    "max_cuda_version": 13.1,
+    "infiniband_fabric_rentable": false,
+    "roce_fabric_rentable": false,
+    "scheduled_notice": null,
+    "ncu_profiling_enabled": false,
+    "disk_health_ok": true,
+    "on_infiniband_fabric": false,
+    "on_roce_fabric": false,
+    "nvlink": false,
+    "gpu_class": "NVIDIA GeForce RTX 5090",
+    "gpu_class_display": "NVIDIA GeForce RTX 5090",
+    "location": {
+     "country": "Hong Kong",
+     "country_code": "HK",
+     "region": "",
+     "region_name": "Kowloon",
+     "city": "Hong Kong",
+     "zip": "999077",
+     "lat": 22.3193,
+     "lon": 114.169,
+     "timezone": "Asia/Hong_Kong"
+    },
+    "specs": {
+     "os": "Debian GNU/Linux 13 (trixie)",
+     "kernel": "6.8.0-147-generic",
+     "is_spot": false,
+     "sysbox_runtime": true,
+     "storage_limit_supported": true,
+     "tdx_host_supported": true,
+     "tdx_attestation_passed": false,
+     "ncu_profiling_access": "restricted",
+     "gpu_power_cap_capable": true,
+     "available_port_count": 302,
+     "gpu": {
+      "count": 8,
+      "driver": "610.43.02",
+      "cuda_driver": 13030,
+      "details": [
+       {
+        "name": "NVIDIA GeForce RTX 5090",
+        "capacity": 32607,
+        "cuda": "12.0",
+        "power_limit": 402,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA GeForce RTX 5090",
+        "capacity": 32607,
+        "cuda": "12.0",
+        "power_limit": 402,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA GeForce RTX 5090",
+        "capacity": 32607,
+        "cuda": "12.0",
+        "power_limit": 402,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA GeForce RTX 5090",
+        "capacity": 32607,
+        "cuda": "12.0",
+        "power_limit": 402,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA GeForce RTX 5090",
+        "capacity": 32607,
+        "cuda": "12.0",
+        "power_limit": 402,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA GeForce RTX 5090",
+        "capacity": 32607,
+        "cuda": "12.0",
+        "power_limit": 402,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA GeForce RTX 5090",
+        "capacity": 32607,
+        "cuda": "12.0",
+        "power_limit": 402,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA GeForce RTX 5090",
+        "capacity": 32607,
+        "cuda": "12.0",
+        "power_limit": 402,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       }
+      ]
+     },
+     "gpu_metrics": {
+      "device": "NVIDIA GeForce RTX 5090",
+      "cc": "12.0",
+      "vram_gb": 33.7,
+      "sm_count": 170,
+      "clock_mhz": 2407,
+      "fp32_tflops": 4.53
+     },
+     "cpu": {
+      "count": 128,
+      "model": "INTEL(R) XEON(R) GOLD 6530"
+     },
+     "ram": {
+      "total": 527976948.0,
+      "pod_reserve": 15839308
+     },
+     "hard_disk": {
+      "total": 7499379032,
+      "free": 7296696836
+     },
+     "interconnect": {
+      "gpu_pairs": 28,
+      "nvlink_pairs": 0
+     }
+    },
+    "effective_upload_speed_mbps": 352.1719915503202,
+    "effective_download_speed_mbps": 318.52270975374336
+   },
+   {
+    "id": "1d319933-1180-4663-8b8b-0c4860bbd199",
+    "machine_name": "NVIDIA RTX A6000",
+    "price_per_gpu": 0.42,
+    "pending_price_per_hour": null,
+    "price_change_effective_date": null,
+    "validator_hotkey": "5F7X5UpKSr26KU3jKfpLmT8kuKtBNyHhEnfS8xtxPCqCb13p",
+    "gpu_count": 2,
+    "available_gpu_count": 2,
+    "active": null,
+    "uptime_in_minutes": 253695,
+    "miner_hotkey": "5DhzqmmkD99d8MFbEEFgtQYSUWyYHRLNJKpVjYQFn5d6hJsv",
+    "is_slow_machine": false,
+    "tier": "secure",
+    "offers_bare_metal": false,
+    "reliability_score": 99.4,
+    "frequent_rent_failures": false,
+    "gpu_power_limited": null,
+    "gpu_power_limit_w": null,
+    "gpu_power_limit_default_w": null,
+    "min_gpu_count_for_rental": null,
+    "max_cuda_version": 13.0,
+    "infiniband_fabric_rentable": false,
+    "roce_fabric_rentable": false,
+    "scheduled_notice": null,
+    "ncu_profiling_enabled": false,
+    "disk_health_ok": true,
+    "on_infiniband_fabric": false,
+    "on_roce_fabric": false,
+    "nvlink": false,
+    "gpu_class": "NVIDIA RTX A6000",
+    "gpu_class_display": "NVIDIA RTX A6000",
+    "location": {
+     "country": "United States",
+     "country_code": "US",
+     "region": "IA",
+     "region_name": "Iowa",
+     "city": "Des Moines",
+     "zip": "50309",
+     "lat": 41.5876,
+     "lon": -93.6194,
+     "timezone": "America/Chicago"
+    },
+    "specs": {
+     "os": "Debian GNU/Linux 13 (trixie)",
+     "kernel": "6.8.0-90-generic",
+     "is_spot": false,
+     "sysbox_runtime": true,
+     "storage_limit_supported": false,
+     "tdx_host_supported": false,
+     "tdx_attestation_passed": false,
+     "ncu_profiling_access": "restricted",
+     "gpu_power_cap_capable": true,
+     "available_port_count": 302,
+     "gpu": {
+      "count": 2,
+      "driver": "580.126.09",
+      "cuda_driver": 13000,
+      "details": [
+       {
+        "name": "NVIDIA RTX A6000",
+        "capacity": 49140,
+        "cuda": "8.6",
+        "power_limit": 210,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       },
+       {
+        "name": "NVIDIA RTX A6000",
+        "capacity": 49140,
+        "cuda": "8.6",
+        "power_limit": 210,
+        "pcie": null,
+        "pcie_speed": null,
+        "memory_speed": null,
+        "graphics_speed": null
+       }
+      ]
+     },
+     "gpu_metrics": {
+      "device": "NVIDIA RTX A6000",
+      "cc": "8.6",
+      "vram_gb": 50.9,
+      "sm_count": 84,
+      "clock_mhz": 1800,
+      "fp32_tflops": 2.88
+     },
+     "cpu": {
+      "count": 14,
+      "model": "Intel(R) Xeon(R) CPU E5-2695 v4 @ 2.10GHz"
+     },
+     "ram": {
+      "total": 98969404.0,
+      "pod_reserve": 4194304
+     },
+     "hard_disk": {
+      "total": 527158980,
+      "free": 428976736
+     },
+     "interconnect": {
+      "gpu_pairs": 1,
+      "nvlink_pairs": 0
+     }
+    },
+    "effective_upload_speed_mbps": 2559.8332245547736,
+    "effective_download_speed_mbps": 2528.8514326322106
+   }
+  ]
+ },
+ {
+  "type": "upsert",
+  "schema_version": 1,
+  "seq": 5957,
+  "ts": 1793575556.53793,
+  "executor_id": "63243c2c-a318-440b-b0a2-b24699e8f763",
+  "executor": {
+   "id": "63243c2c-a318-440b-b0a2-b24699e8f763",
+   "machine_name": "NVIDIA GeForce RTX 3090",
+   "price_per_gpu": 0.4,
+   "pending_price_per_hour": null,
+   "price_change_effective_date": null,
+   "validator_hotkey": "5F7X5UpKSr26KU3jKfpLmT8kuKtBNyHhEnfS8xtxPCqCb13p",
+   "gpu_count": 1,
+   "available_gpu_count": 1,
+   "active": null,
+   "uptime_in_minutes": 235275,
+   "miner_hotkey": "5CAkSQvcGpiS2UnvP3Bv1rZUFx7osGEV4Zz5JfEXyThGgRPh",
+   "is_slow_machine": false,
+   "tier": "secure",
+   "offers_bare_metal": false,
+   "reliability_score": 98.9,
+   "frequent_rent_failures": false,
+   "gpu_power_limited": false,
+   "gpu_power_limit_w": 420,
+   "gpu_power_limit_default_w": 420,
+   "min_gpu_count_for_rental": null,
+   "max_cuda_version": 13.1,
+   "infiniband_fabric_rentable": false,
+   "roce_fabric_rentable": false,
+   "scheduled_notice": null,
+   "ncu_profiling_enabled": false,
+   "disk_health_ok": true,
+   "on_infiniband_fabric": false,
+   "on_roce_fabric": false,
+   "nvlink": null,
+   "gpu_class": "NVIDIA GeForce RTX 3090",
+   "gpu_class_display": "NVIDIA GeForce RTX 3090",
+   "location": {
+    "country": "Romania",
+    "country_code": "RO",
+    "region": "PH",
+    "region_name": "Prahova",
+    "city": "Ploie\u015fti",
+    "zip": "100169",
+    "lat": 44.9467,
+    "lon": 26.0135,
+    "timezone": "Europe/Bucharest"
+   },
+   "specs": {
+    "os": "Debian GNU/Linux 13 (trixie)",
+    "kernel": "6.17.0-35-generic",
+    "is_spot": false,
+    "sysbox_runtime": true,
+    "storage_limit_supported": false,
+    "tdx_host_supported": false,
+    "tdx_attestation_passed": false,
+    "ncu_profiling_access": "restricted",
+    "gpu_power_cap_capable": true,
+    "available_port_count": 21,
+    "gpu": {
+     "count": 1,
+     "driver": "595.71.05",
+     "cuda_driver": 13020,
+     "details": [
+      {
+       "name": "NVIDIA GeForce RTX 3090",
+       "capacity": 24576,
+       "cuda": "8.6",
+       "power_limit": 420,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      }
+     ]
+    },
+    "gpu_metrics": {
+     "device": "NVIDIA GeForce RTX 3090",
+     "cc": "8.6",
+     "vram_gb": 25.3,
+     "sm_count": 82,
+     "clock_mhz": 1860,
+     "fp32_tflops": 3.2
+    },
+    "cpu": {
+     "count": 16,
+     "model": "AMD Ryzen 7 3700X 8-Core Processor"
+    },
+    "ram": {
+     "total": 98781428.0,
+     "pod_reserve": 4194304
+    },
+    "hard_disk": {
+     "total": 975182612,
+     "free": 797527384
+    },
+    "interconnect": {
+     "gpu_pairs": 0,
+     "nvlink_pairs": 0
+    }
+   },
+   "effective_upload_speed_mbps": 935.0724290906512,
+   "effective_download_speed_mbps": 920.4702069828026
+  }
+ },
+ {
+  "type": "heartbeat",
+  "schema_version": 1,
+  "seq": 5957,
+  "ts": 1793575589.4996207
+ },
+ {
+  "type": "upsert",
+  "schema_version": 1,
+  "seq": 5958,
+  "ts": 1793575594.9948237,
+  "executor_id": "925dcca1-a369-41cb-a645-161426a03582",
+  "executor": {
+   "id": "925dcca1-a369-41cb-a645-161426a03582",
+   "machine_name": "NVIDIA B300 SXM6 AC",
+   "price_per_gpu": 6.6,
+   "pending_price_per_hour": null,
+   "price_change_effective_date": null,
+   "validator_hotkey": "5F7X5UpKSr26KU3jKfpLmT8kuKtBNyHhEnfS8xtxPCqCb13p",
+   "gpu_count": 8,
+   "available_gpu_count": 8,
+   "active": null,
+   "uptime_in_minutes": 17340,
+   "miner_hotkey": "5CfdX1EjuydhvY3r8tHKLbdpkxDZKV6UoJY9PSk6G132LS3d",
+   "is_slow_machine": false,
+   "tier": "spot",
+   "offers_bare_metal": false,
+   "reliability_score": 98.8,
+   "frequent_rent_failures": false,
+   "gpu_power_limited": false,
+   "gpu_power_limit_w": 1100,
+   "gpu_power_limit_default_w": 1100,
+   "min_gpu_count_for_rental": null,
+   "max_cuda_version": 13.1,
+   "infiniband_fabric_rentable": false,
+   "roce_fabric_rentable": false,
+   "scheduled_notice": null,
+   "ncu_profiling_enabled": false,
+   "disk_health_ok": true,
+   "on_infiniband_fabric": false,
+   "on_roce_fabric": false,
+   "nvlink": true,
+   "gpu_class": "NVIDIA B300 SXM6 AC",
+   "gpu_class_display": "NVIDIA B300 SXM6",
+   "location": {
+    "country": "India",
+    "country_code": "IN",
+    "region": "TG",
+    "region_name": "Telangana",
+    "city": "Hyderabad",
+    "zip": "",
+    "lat": 17.38405,
+    "lon": 78.45636,
+    "timezone": "Asia/Kolkata"
+   },
+   "specs": {
+    "os": "Debian GNU/Linux 13 (trixie)",
+    "kernel": "7.0.0-1014-aws",
+    "is_spot": true,
+    "sysbox_runtime": true,
+    "storage_limit_supported": true,
+    "tdx_host_supported": true,
+    "tdx_attestation_passed": false,
+    "ncu_profiling_access": "restricted",
+    "gpu_power_cap_capable": true,
+    "available_port_count": 300,
+    "gpu": {
+     "count": 8,
+     "driver": "595.91.07",
+     "cuda_driver": 13020,
+     "details": [
+      {
+       "name": "NVIDIA B300 SXM6 AC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 AC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 AC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 AC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 AC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 AC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 AC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 AC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      }
+     ]
+    },
+    "gpu_metrics": {
+     "device": "NVIDIA B300 SXM6 AC",
+     "cc": "10.3",
+     "vram_gb": 287.4,
+     "sm_count": 148,
+     "clock_mhz": 2032,
+     "fp32_tflops": 9.59
+    },
+    "cpu": {
+     "count": 192,
+     "model": "Intel(R) Xeon(R) Platinum 8559C"
+    },
+    "ram": {
+     "total": 4206760680.0,
+     "pod_reserve": 126202820
+    },
+    "hard_disk": {
+     "total": 8319862740,
+     "free": 6576165168
+    },
+    "interconnect": {
+     "gpu_pairs": 28,
+     "nvlink_pairs": 28
+    }
+   },
+   "effective_upload_speed_mbps": 8281.779684389683,
+   "effective_download_speed_mbps": 5909.119560696153
+  }
+ },
+ {
+  "type": "upsert",
+  "schema_version": 1,
+  "seq": 5959,
+  "ts": 1793575604.0248873,
+  "executor_id": "c06a6fde-1933-48b6-a78e-886e9b86c143",
+  "executor": {
+   "id": "c06a6fde-1933-48b6-a78e-886e9b86c143",
+   "machine_name": "NVIDIA B300 SXM6 PC",
+   "price_per_gpu": 6.5,
+   "pending_price_per_hour": null,
+   "price_change_effective_date": null,
+   "validator_hotkey": "5F7X5UpKSr26KU3jKfpLmT8kuKtBNyHhEnfS8xtxPCqCb13p",
+   "gpu_count": 8,
+   "available_gpu_count": 8,
+   "active": null,
+   "uptime_in_minutes": 675,
+   "miner_hotkey": "5CfcVF9QsEdjKWKpNCi7NjZmjPxYN2rmR1sBhuMFHbbpdtEz",
+   "is_slow_machine": false,
+   "tier": "spot",
+   "offers_bare_metal": false,
+   "reliability_score": 99.8,
+   "frequent_rent_failures": false,
+   "gpu_power_limited": false,
+   "gpu_power_limit_w": 1100,
+   "gpu_power_limit_default_w": 1100,
+   "min_gpu_count_for_rental": null,
+   "max_cuda_version": 13.0,
+   "infiniband_fabric_rentable": true,
+   "roce_fabric_rentable": false,
+   "scheduled_notice": null,
+   "ncu_profiling_enabled": true,
+   "disk_health_ok": true,
+   "on_infiniband_fabric": true,
+   "on_roce_fabric": false,
+   "nvlink": true,
+   "gpu_class": "NVIDIA B300 SXM6 AC",
+   "gpu_class_display": "NVIDIA B300 SXM6",
+   "location": {
+    "country": "United States",
+    "country_code": "US",
+    "region": "MA",
+    "region_name": "Massachusetts",
+    "city": "Newburyport",
+    "zip": "01950",
+    "lat": 42.8108,
+    "lon": -70.87,
+    "timezone": "America/New_York"
+   },
+   "specs": {
+    "os": "Debian GNU/Linux 13 (trixie)",
+    "kernel": "6.11.0-1016-nvidia",
+    "is_spot": true,
+    "sysbox_runtime": true,
+    "storage_limit_supported": true,
+    "tdx_host_supported": true,
+    "tdx_attestation_passed": false,
+    "ncu_profiling_access": "unrestricted",
+    "gpu_power_cap_capable": true,
+    "available_port_count": 300,
+    "gpu": {
+     "count": 8,
+     "driver": "580.173.02",
+     "cuda_driver": 13000,
+     "details": [
+      {
+       "name": "NVIDIA B300 SXM6 PC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 PC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 PC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 PC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 PC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 PC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 PC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 PC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      }
+     ]
+    },
+    "gpu_metrics": {
+     "device": "NVIDIA B300 SXM6 PC",
+     "cc": "10.3",
+     "vram_gb": 287.4,
+     "sm_count": 148,
+     "clock_mhz": 2032,
+     "fp32_tflops": 9.6
+    },
+    "cpu": {
+     "count": 192,
+     "model": "Intel(R) Xeon(R) 6776P"
+    },
+    "ram": {
+     "total": 2856918908.0,
+     "pod_reserve": 85707567
+    },
+    "hard_disk": {
+     "total": 4081161216,
+     "free": 3935464012
+    },
+    "interconnect": {
+     "gpu_pairs": 28,
+     "nvlink_pairs": 28
+    }
+   },
+   "effective_upload_speed_mbps": 4561.612479033616,
+   "effective_download_speed_mbps": 4338.069169830251
+  }
+ },
+ {
+  "type": "upsert",
+  "schema_version": 1,
+  "seq": 5960,
+  "ts": 1793575609.3511047,
+  "executor_id": "1ae25ea8-a420-4214-bddc-c9e73e16e659",
+  "executor": {
+   "id": "1ae25ea8-a420-4214-bddc-c9e73e16e659",
+   "machine_name": "NVIDIA B300 SXM6 PC",
+   "price_per_gpu": 6.4,
+   "pending_price_per_hour": null,
+   "price_change_effective_date": null,
+   "validator_hotkey": "5F7X5UpKSr26KU3jKfpLmT8kuKtBNyHhEnfS8xtxPCqCb13p",
+   "gpu_count": 8,
+   "available_gpu_count": 8,
+   "active": null,
+   "uptime_in_minutes": 5565,
+   "miner_hotkey": "5CfcVF9QsEdjKWKpNCi7NjZmjPxYN2rmR1sBhuMFHbbpdtEz",
+   "is_slow_machine": false,
+   "tier": "spot",
+   "offers_bare_metal": false,
+   "reliability_score": 99.8,
+   "frequent_rent_failures": false,
+   "gpu_power_limited": false,
+   "gpu_power_limit_w": 1100,
+   "gpu_power_limit_default_w": 1100,
+   "min_gpu_count_for_rental": null,
+   "max_cuda_version": 13.0,
+   "infiniband_fabric_rentable": true,
+   "roce_fabric_rentable": false,
+   "scheduled_notice": null,
+   "ncu_profiling_enabled": true,
+   "disk_health_ok": true,
+   "on_infiniband_fabric": true,
+   "on_roce_fabric": false,
+   "nvlink": true,
+   "gpu_class": "NVIDIA B300 SXM6 AC",
+   "gpu_class_display": "NVIDIA B300 SXM6",
+   "location": {
+    "country": "United States",
+    "country_code": "US",
+    "region": "MA",
+    "region_name": "Massachusetts",
+    "city": "Newburyport",
+    "zip": "01950",
+    "lat": 42.8108,
+    "lon": -70.87,
+    "timezone": "America/New_York"
+   },
+   "specs": {
+    "os": "Debian GNU/Linux 13 (trixie)",
+    "kernel": "6.11.0-1016-nvidia",
+    "is_spot": true,
+    "sysbox_runtime": true,
+    "storage_limit_supported": true,
+    "tdx_host_supported": true,
+    "tdx_attestation_passed": false,
+    "ncu_profiling_access": "unrestricted",
+    "gpu_power_cap_capable": true,
+    "available_port_count": 301,
+    "gpu": {
+     "count": 8,
+     "driver": "580.173.02",
+     "cuda_driver": 13000,
+     "details": [
+      {
+       "name": "NVIDIA B300 SXM6 PC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 PC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 PC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 PC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 PC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 PC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 PC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      },
+      {
+       "name": "NVIDIA B300 SXM6 PC",
+       "capacity": 275040,
+       "cuda": "10.3",
+       "power_limit": 1100,
+       "pcie": null,
+       "pcie_speed": null,
+       "memory_speed": null,
+       "graphics_speed": null
+      }
+     ]
+    },
+    "gpu_metrics": {
+     "device": "NVIDIA B300 SXM6 PC",
+     "cc": "10.3",
+     "vram_gb": 287.4,
+     "sm_count": 148,
+     "clock_mhz": 2032,
+     "fp32_tflops": 9.6
+    },
+    "cpu": {
+     "count": 192,
+     "model": "Intel(R) Xeon(R) 6776P"
+    },
+    "ram": {
+     "total": 2856918864.0,
+     "pod_reserve": 85707565
+    },
+    "hard_disk": {
+     "total": 4081161216,
+     "free": 2410659640
+    },
+    "interconnect": {
+     "gpu_pairs": 28,
+     "nvlink_pairs": 28
+    }
+   },
+   "effective_upload_speed_mbps": 4573.539685311527,
+   "effective_download_speed_mbps": 3491.498496542135
+  }
+ }
+]
