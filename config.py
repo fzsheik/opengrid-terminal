@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     probes_local_enabled: bool = True
     probes_location: str | None = None            # this process's vantage-point name; default RAILWAY_REGION, else "local"
     probes_raw_retention_days: int = Field(default=30, ge=1)
+    # Archived price history sources (backfill/; methodology/archived-history.md).
+    # Daily raw copy of dstack's public gpuhunt catalogues (their S3 versions expire after ~90 days): catalog_snapshots.
+    gpuhunt_snapshot_enabled: bool = True
     # OpenGrid API keys are stored only as HMAC-SHA256(pepper, key). Required when deployed;
     # changing it invalidates every issued key. Unset in dev: a derived dev pepper, with a warning.
     api_key_pepper: str | None = None

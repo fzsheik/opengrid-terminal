@@ -266,6 +266,41 @@ def test_huang_monthly_medians_are_their_own_market():
         scratchdb.drop(DB)
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# 4. gpuhunt daily raw snapshot
+# ---------------------------------------------------------------------------------------------------------------
+
+def test_gpuhunt_snapshot_stores_each_version_once():
+    from backfill import gpuhunt
+    _db()
+    try:
+        zipped = b"PK\x03\x04 fake catalogue bytes"
+        calls = []
+
+        def handler(req):
+            calls.append(req.url.path)
+            if req.url.path == "/v3/aws/version":
+                return httpx.Response(200, text="20261101-20691\n")
+            if req.url.path == "/v3/aws/20261101-20691/catalog.zip":
+                return httpx.Response(200, content=zipped, headers={"last-modified": "Sun, 01 Nov 2026 23:13:51 GMT",
+                                                                    "content-type": "application/zip"})
+            if req.url.path == "/v3/gcp/version":
+                return httpx.Response(503)
+            return httpx.Response(404)
+        c = httpx.Client(transport=httpx.MockTransport(handler))
+        r = gpuhunt.snapshot(client=c, providers=("aws", "gcp"), min_interval=0)
+        assert r["aws"] == "stored 20261101-20691" and r["gcp"].startswith("error"), r
+        assert gpuhunt.snapshot(client=c, providers=("aws",), min_interval=0)["aws"] == "unchanged 20261101-20691"
+        assert calls.count("/v3/aws/20261101-20691/catalog.zip") == 1, "a stored version is never downloaded again"
+        (row,) = _q("SELECT * FROM catalog_snapshots")
+        assert bytes(row.body) == zipped and row.size == len(zipped) and row.source == "gpuhunt" and row.name == "aws"
+        assert row.licence.startswith("gpuhunt code MPL-2.0") and row.published_at.year == 2026
+        import jobs
+        assert "gpuhunt_snapshot" in jobs.JOBS and jobs.JOBS["gpuhunt_snapshot"].every_seconds == 86400
+    finally:
+        scratchdb.drop(DB)
+
+
 TESTS = [v for k, v in list(globals().items()) if k.startswith("test_") and callable(v)]
 
 if __name__ == "__main__":

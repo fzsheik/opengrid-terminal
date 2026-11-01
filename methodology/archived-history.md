@@ -78,6 +78,11 @@ can miss short price moves entirely. Stock is never inferred from an archived pa
      `wayback`) for the same provider, listing (provider, market, GPU count, and GPU or sku) and date (inside an
      AWS version's period; else the same UTC day) is not stored again: it is appended to the primary row's
      `corroboration` (source, document, date, its own stated price, licence), once.
+5. **Third-party catalogues kept raw.** dstack's gpuhunt publishes per-provider catalogues to a public S3 bucket
+   and old versions expire after about 90 days. The `gpuhunt_snapshot` job (daily; `gpuhunt_snapshot_enabled`)
+   stores each provider's current `catalog.zip` verbatim in `catalog_snapshots` (sha256, size, Last-Modified),
+   once per (provider, version). Nothing reads these into prices. Licence recorded: gpuhunt's code is MPL-2.0;
+   the bucket states no licence for the data.
 
 ## Parsing
 

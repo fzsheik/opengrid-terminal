@@ -9,6 +9,8 @@
                               Azure Retail Prices API: one "effective since" point per GPU size / region / market
     python -m backfill datasets [--only fsdl|huang] [--dry-run]
                               open datasets with licences: FSDL cloud-gpus.csv history (MIT), Huang Vast (CC BY)
+    python -m backfill gpuhunt-snapshot
+                              one pass of the daily gpuhunt catalogue copy (the server job does this daily)
 
 Downloads go one at a time through backfill/wayback.py (polite, cached under OPENGRID_ARCHIVE_CACHE,
 default ~/.cache/opengrid/wayback), so the first full import takes about an hour and a re-run takes seconds.
@@ -50,6 +52,7 @@ def main(argv=None) -> int:
     p = sub.add_parser("datasets", help="FSDL (MIT) and Huang/Zenodo (CC BY) as archived points")
     p.add_argument("--only", choices=("fsdl", "huang"), action="append")
     p.add_argument("--dry-run", action="store_true")
+    sub.add_parser("gpuhunt-snapshot", help="store today's gpuhunt catalogues raw (catalog_snapshots)")
     a = ap.parse_args(argv)
 
     if a.cmd == "datasets":
@@ -58,6 +61,10 @@ def main(argv=None) -> int:
             if not a.only or name in a.only:
                 r = mod.run(dry_run=a.dry_run)
                 print(json.dumps({k: v for k, v in r.items()}, default=str))
+        return 0
+    if a.cmd == "gpuhunt-snapshot":
+        from backfill import gpuhunt
+        print(json.dumps(gpuhunt.snapshot(), indent=1))
         return 0
 
     if a.cmd == "azure-since":
