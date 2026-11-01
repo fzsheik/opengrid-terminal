@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import scratchdb  # noqa: E402,F401  (first: isolates the process from real networks)
 
 from backfill.__main__ import _day  # noqa: E402
-from backfill.parsers import azure, coreweave, lambda_, runpod  # noqa: E402
+from backfill.parsers import azure, coreweave, lambda_, runpod, verda  # noqa: E402
 from backfill.sources import sources  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_backfill"
@@ -237,6 +237,36 @@ def test_runpod_next_data_map_and_lowest_price_designs():
     _raises(runpod.next_data_gpu_types, page.replace("__NEXT_DATA__", "x"), AT, contains="no __NEXT_DATA__")
 
 
+# ------------------------------------------------------------------------------------------- DataCrunch (Verda)
+
+DC = "datacrunch.io/products"
+
+
+def test_datacrunch_2020_type_codes():
+    ls, used = _src(DC).parse((FIX / "datacrunch_products_2020-09_type_codes.html").read_bytes(), AT)
+    assert used.endswith("datacrunch_products")
+    by = {l.listing_id: l for l in ls}
+    v = by["1V100.6V"]                              # the instance type is the live API's listing id
+    assert v.provider == "verda" and v.raw_gpu_name == "Tesla V100 16GB" and v.canonical_gpu_name == "NVIDIA Tesla V100 16GB"
+    assert v.price_per_instance_hour == D("0.65") and v.gpu_count == 1
+    assert by["8V100.48M"].gpu_count == 8, "bare metal type"
+
+
+def test_datacrunch_2021_and_2024_tables():
+    by = {l.listing_id: l for l in verda.datacrunch_products(_fix("datacrunch_products_2021-09_gpu_model.html"), AT)}
+    assert by["1A100.22V"].canonical_gpu_name is None, "'A100 80GB' does not say SXM or PCIe"
+    assert by["1A100.22V"].price_per_instance_hour == D("2.20"), "on-demand, not weekly / monthly"
+    assert by["8A6000.80V"].canonical_gpu_name == "NVIDIA RTX A6000 48GB"
+    by = {l.listing_id: l for l in verda.datacrunch_products(_fix("datacrunch_products_2024-04_cpu_rows.html"), AT)}
+    h = by["8H100.80S.176V"]
+    assert h.canonical_gpu_name == "NVIDIA H100 80GB SXM5" and h.price_per_instance_hour == D("30.50")
+    assert by["1A100.40S.22V"].canonical_gpu_name == "NVIDIA A100 40GB SXM4"
+    assert not any(l.listing_id.startswith("CPU.") for l in by.values())
+    _raises(verda.datacrunch_products, _fix("datacrunch_products_2022-05_script_filled.html"), AT, contains="by script")
+    bad = _fix("datacrunch_products_2021-09_gpu_model.html").replace("$2.20/h", "€2.20/h", 1)
+    _raises(verda.datacrunch_products, bad, AT, contains="price")
+
+
 TESTS = [test_since_accepts_year_and_month,
          test_azure_vm_page_2018_names_without_s, test_azure_vm_page_2022_spot_column,
          test_azure_vm_page_2020_spot_savings_and_trailing_cell, test_azure_vm_page_old_and_new_designs_fail_loudly,
@@ -245,7 +275,8 @@ TESTS = [test_since_accepts_year_and_month,
          test_lambda_2022_pricing_page_vram_in_cell_reserved_ignored,
          test_lambda_2022_reserved_table_with_the_same_header_is_skipped, test_lambda_dec_2023_price_in_force_on_capture_day,
          test_lambda_2024_per_gpu_prices_and_reserved_rows,
-         test_runpod_next_data_list_reads_only_offered_clouds, test_runpod_next_data_map_and_lowest_price_designs]
+         test_runpod_next_data_list_reads_only_offered_clouds, test_runpod_next_data_map_and_lowest_price_designs,
+         test_datacrunch_2020_type_codes, test_datacrunch_2021_and_2024_tables]
 
 if __name__ == "__main__":
     for t in TESTS:
