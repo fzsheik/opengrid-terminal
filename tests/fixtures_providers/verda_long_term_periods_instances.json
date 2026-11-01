@@ -1,0 +1,42 @@
+[
+ {
+  "code": "1_MONTH",
+  "name": "1 month",
+  "is_enabled": true,
+  "unit_name": "month",
+  "unit_value": 1,
+  "discount_percentage": 2
+ },
+ {
+  "code": "3_MONTHS",
+  "name": "3 months",
+  "is_enabled": true,
+  "unit_name": "month",
+  "unit_value": 3,
+  "discount_percentage": 3
+ },
+ {
+  "code": "6_MONTHS",
+  "name": "6 months",
+  "is_enabled": true,
+  "unit_name": "month",
+  "unit_value": 6,
+  "discount_percentage": 4
+ },
+ {
+  "code": "1_YEAR",
+  "name": "1 year",
+  "is_enabled": true,
+  "unit_name": "year",
+  "unit_value": 1,
+  "discount_percentage": 8
+ },
+ {
+  "code": "2_YEARS",
+  "name": "2 years",
+  "is_enabled": true,
+  "unit_name": "year",
+  "unit_value": 2,
+  "discount_percentage": 25
+ }
+]

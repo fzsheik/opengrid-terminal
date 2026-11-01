@@ -1,0 +1,88 @@
+[
+ {
+  "id": "fb300f00-0000-4000-8000-fb300f000008",
+  "cluster_type": "8GB300",
+  "cpu": {
+   "description": "256 CPU",
+   "number_of_cores": 256
+  },
+  "gpu": {
+   "description": "8x GB300 SXM6 288GB",
+   "number_of_gpus": 8
+  },
+  "gpu_memory": {
+   "description": "2304GB GPU RAM",
+   "size_in_gigabytes": 2304
+  },
+  "memory": {
+   "description": "1800GB RAM",
+   "size_in_gigabytes": 1800
+  },
+  "model": "GB300 Cluster",
+  "name": "GB300 SXM6 288GB",
+  "price_per_hour": "104.4",
+  "currency": "usd",
+  "manufacturer": "NVIDIA",
+  "node_details": [
+   {
+    "GPU VRAM": "1152 GB"
+   },
+   {
+    "AMD Turin CPU": "128 cores"
+   },
+   {
+    "InfiniBand": "3200 Gbit/s"
+   },
+   {
+    "Ethernet": "100 Gbit/s"
+   },
+   {
+    "Uplink": "5 Gbit/s"
+   }
+  ],
+  "supported_os": []
+ },
+ {
+  "id": "fb300f00-0000-4000-8000-fb300f000012",
+  "cluster_type": "12GB300",
+  "cpu": {
+   "description": "384 CPU",
+   "number_of_cores": 384
+  },
+  "gpu": {
+   "description": "12x GB300 SXM6 288GB",
+   "number_of_gpus": 12
+  },
+  "gpu_memory": {
+   "description": "3456GB GPU RAM",
+   "size_in_gigabytes": 3456
+  },
+  "memory": {
+   "description": "2700GB RAM",
+   "size_in_gigabytes": 2700
+  },
+  "model": "GB300 Cluster",
+  "name": "GB300 SXM6 288GB",
+  "price_per_hour": "156.6",
+  "currency": "usd",
+  "manufacturer": "NVIDIA",
+  "node_details": [
+   {
+    "GPU VRAM": "1152 GB"
+   },
+   {
+    "AMD Turin CPU": "128 cores"
+   },
+   {
+    "InfiniBand": "3200 Gbit/s"
+   },
+   {
+    "Ethernet": "100 Gbit/s"
+   },
+   {
+    "Uplink": "5 Gbit/s"
+   }
+  ],
+  "supported_os": []
+ }
+]

@@ -92,9 +92,12 @@ def build_fetchers() -> list[Provider]:
     if settings.gcp_api_key:
         fetchers.append(GcpProvider(settings.gcp_api_key))
 
-    # Public prices; a key adds capacity (Vast's free/total census, Latitude's own stock).
+    # Public prices; a key adds capacity (Vast's free/total census, Latitude's own stock, Verda's per-location
+    # yes/no). The poller only makes Verda's token call and GETs (providers/verda.py); launching is
+    # routing/adapters/verda.py, behind the execution gates (routing/control.py).
     fetchers.append(VastProvider(api_key=settings.vast_api_key))
     fetchers.append(LatitudeProvider(api_key=settings.latitude_api_key))
+    fetchers.append(VerdaProvider(client_id=settings.verda_client_id, client_secret=settings.verda_client_secret))
 
     if settings.thunder_api_key:
         fetchers.append(ThunderComputeProvider(settings.thunder_api_key))
@@ -117,7 +120,6 @@ def build_fetchers() -> list[Provider]:
             NebiusProvider,
             MassedComputeProvider,
             AwsProvider,
-            VerdaProvider,
             CrusoeProvider,
             DenvrProvider,
             BoostRunProvider,

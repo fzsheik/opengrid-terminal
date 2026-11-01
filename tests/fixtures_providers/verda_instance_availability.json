@@ -1,0 +1,44 @@
+[
+ {
+  "location_code": "FIN-01",
+  "availabilities": [
+   "1A100.22V",
+   "2A100.44V",
+   "4A6000.40V",
+   "CPU.4V.16G",
+   "CPU.8V.32G",
+   "CPU.16V.64G"
+  ]
+ },
+ {
+  "location_code": "FIN-02",
+  "availabilities": [
+   "8H100.80S.176V",
+   "1A100.22V",
+   "2A100.44V",
+   "CPU-TURIN.96V.384G",
+   "CPU-TURIN.180V.720G",
+   "CPU.4V.16G",
+   "CPU.16V.64G"
+  ]
+ },
+ {
+  "location_code": "FIN-03",
+  "availabilities": [
+   "1A100.22V",
+   "8RTXPRO6000.240V",
+   "CPU-TURIN.4V.16G",
+   "CPU-TURIN.8V.32G",
+   "CPU-TURIN.16V.64G",
+   "CPU-TURIN.32V.128G",
+   "CPU.4V.16G",
+   "CPU.8V.32G",
+   "CPU.16V.64G",
+   "CPU.4V.16G.CC",
+   "CPU.8V.32G.CC",
+   "CPU.16V.64G.CC",
+   "CPU.32V.128G.CC",
+   "CPU.64V.256G.CC"
+  ]
+ }
+]

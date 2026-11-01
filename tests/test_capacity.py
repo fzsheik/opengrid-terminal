@@ -30,7 +30,7 @@ from providers import PROVIDERS  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_capacity"
 SUPPORTED = ["boostrun", "crusoe", "denvr", "digitalocean", "horizon", "hyperbolic", "hyperstack", "jarvislabs", "koyeb",
-             "lambda", "latitude", "linode", "lium", "massedcompute", "phyntec", "runpod", "scaleway", "vast", "voltagepark"]
+             "lambda", "latitude", "linode", "lium", "massedcompute", "phyntec", "runpod", "scaleway", "vast", "verda", "voltagepark"]
 DB = "og_test_capacity"
 T0 = datetime(2026, 10, 30, 12, 0, tzinfo=timezone.utc)
 
