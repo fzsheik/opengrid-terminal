@@ -853,18 +853,26 @@ GCP = ProviderMapping(
     provider="gcp",
     display_name="Google Cloud Compute Engine (hyperscaler list price)",
     endpoints={"GET /v1/services/6F81-5844-456A/skus":
-               "Cloud Billing Catalog API, paged; key in the X-Goog-Api-Key header (GCP_API_KEY)"},
+               "Cloud Billing Catalog API, paged; key in the X-Goog-Api-Key header (GCP_API_KEY)",
+               "GET /compute/v1/projects/{project}/aggregated/machineTypes":
+               "machine types per zone with their shape (service account, compute.readonly; every 6 h)",
+               "GET /compute/v1/projects/{project}/aggregated/acceleratorTypes":
+               "attachable GPU types per zone (service account; every 6 h)",
+               "POST /compute/v1/projects/{project}/regions/{region}/advice/calendarMode":
+               "calendar-mode reservation advice, a few shapes x regions; stored raw only, never reserves"},
     fields=_fields(
         "gcp",
         sku=(RAW, "machine type | attachable accelerator type", 'e.g. "a3-highgpu-8g"; "nvidia-tesla-t4"'),
         listing_id=(DERIVED, "{sku}:{region}"),
         raw_gpu_name=(LOOKUP, "MACHINES / ATTACHABLE in providers/gcp.py", 'the GCP accelerator type, e.g. "nvidia-h100-80gb"'),
         gpu_count=(LOOKUP, "MACHINES in providers/gcp.py", "1 for an attachable GPU"),
-        region=(CONSTANT, '"us-central1"', "REGIONS: group-priced SKUs do not say where a machine is sold"),
-        country=(DERIVED, '"US" for us-* regions'),
+        region=(RAW, "Compute Engine zone lists: a region with a zone offering the proven shape (and every component "
+                     "priced there)", '"us-central1" only without the service account (FALLBACK_REGIONS)'),
+        country=(LOOKUP, "COUNTRY in providers/gcp.py", '"US" for us-* regions'),
         price_per_gpu_hour=(DERIVED, "= VM price / gpu_count | the attachable GPU SKU"),
         price_per_instance_hour=(DERIVED, "GPUs x GPU SKU + vCPUs x core SKU + GiB x RAM SKU + SSD GiB x SSD SKU / 730",
-                                 "each shape reproduces Google's Iowa page price exactly (tests/test_provider_gcp.py)"),
+                                 "each shape reproduces Google's Iowa page price exactly, and G2/G4 its per-region "
+                                 "page prices in every region the page embeds (tests/test_provider_gcp.py)"),
         provider_tier=(DERIVED, '"hyperscaler" (machine types) | "gpu-attachment" (GPU only, host VM extra)'),
         available=(ABSENT, "-", "a price list says nothing about capacity"),
         capacity=(ABSENT, "-"),

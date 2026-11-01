@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from config import settings
 from db import SessionLocal, init_db
 from models import RawResponse
+from providers import gcp_auth
 from providers import (
     CivoProvider,
     CloreProvider,
@@ -90,7 +91,15 @@ def build_fetchers() -> list[Provider]:
         fetchers.append(JarvislabsProvider(settings.jarvis_api_key))
 
     if settings.gcp_api_key:
-        fetchers.append(GcpProvider(settings.gcp_api_key))
+        # Prices from the Billing Catalog key; a read-only service account adds Compute Engine's zone lists (regions
+        # beyond Iowa) and calendar-mode advice (providers/gcp.py). A key that cannot be read is skipped, unnamed.
+        sa = None
+        if settings.gcp_service_account_json:
+            try:
+                sa = gcp_auth.load(settings.gcp_service_account_json.get_secret_value())
+            except gcp_auth.GcpAuthError as exc:
+                log.warning("%s; GCP regions stay Iowa only", exc)
+        fetchers.append(GcpProvider(settings.gcp_api_key, service_account=sa, project_id=settings.gcp_project_id))
 
     # The official inventory API with a key (prices + capacity counts); without one, the public page + Shadeform.
     fetchers.append(MassedComputeProvider(api_key=settings.massedcompute_api_key))

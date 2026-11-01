@@ -53,7 +53,8 @@ BUCKET_LABEL = {k: label for k, _, label in TERM_BUCKETS}
 SOURCES: dict[str, dict[str, str]] = {
     "azure": {"source": "Azure Retail Prices API, priceType 'Reservation' (eastus, eastus2)",
               "method": "whole-term price / (8,760 h x years) / GPUs per VM"},
-    "gcp": {"source": "Cloud Billing Catalog API, Commit1Yr / Commit3Yr GPU SKUs (us-central1)",
+    "gcp": {"source": "Cloud Billing Catalog API, Commit1Yr / Commit3Yr GPU SKUs, in the regions "
+                     "Compute Engine offers the GPU (us-central1 without the service account)",
             "method": "GPU SKU only: vCPUs, memory and Local SSD are billed on top; compared with the same GPU SKU on demand"},
     "jarvislabs": {"source": "Jarvislabs misc/server_meta, reserved_pricing",
                    "method": "per GPU-hour, as quoted"},

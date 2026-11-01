@@ -76,7 +76,8 @@ _ALL = [
                  "only plans Vultr marks deployable on demand"),
     ProviderMeta("gcp", "Google Cloud", "hyperscaler", "authenticated_api", "cloudbilling.googleapis.com",
                  "https://cloud.google.com/compute/gpus-pricing",
-                 "Cloud Billing Catalog API (API key); us-central1 VM prices assembled from GPU, vCPU, RAM and SSD SKUs"),
+                 "Cloud Billing Catalog API (API key); VM prices assembled from GPU, vCPU, RAM and SSD SKUs, in the regions "
+                 "Compute Engine offers each machine type (read-only service account; Iowa only without it)"),
     ProviderMeta("azure", "Microsoft Azure", "hyperscaler", "public_api", "prices.azure.com",
                  "https://azure.microsoft.com/pricing/details/virtual-machines/linux/",
                  "Retail Prices API, pay-as-you-go Linux list prices in eastus and eastus2; "

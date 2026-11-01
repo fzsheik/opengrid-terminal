@@ -17,7 +17,7 @@ A price counts as reserved when the provider publishes it for a stated commitmen
 | Provider | What OpenGrid reads | Terms |
 |---|---|---|
 | Azure | Reserved-instance prices from the public Retail Prices API (`priceType eq 'Reservation'`), eastus and eastus2 | 1, 3, 5 years |
-| GCP | Committed-use prices for the GPU SKU from the Cloud Billing Catalog (`Commit1Yr`, `Commit3Yr`), us-central1 | 1, 3 years |
+| GCP | Committed-use prices for the GPU SKU from the Cloud Billing Catalog (`Commit1Yr`, `Commit3Yr`), in every region Compute Engine offers the GPU (us-central1 without the service account) | 1, 3 years |
 | Jarvislabs | `reserved_pricing` in the `misc/server_meta` catalogue, per GPU-hour | 1, 3, 6 months; 1, 2 years |
 | Latitude | Each GPU plan's `month` and `year` price per region, from Latitude's plans API | 1 month, 1 year |
 | Together AI | The GPU Clusters reserved columns of together.ai/pricing, per GPU-hour | 3-30, 31-90, 91-180, 181+ days |
