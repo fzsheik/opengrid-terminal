@@ -554,9 +554,31 @@ def test_deepinfra_internal_listings_route():
         assert ":api" not in r.text and f"{api_price:g}" not in r.text, url
 
 
+def test_reserved_and_provider_lists():
+    """The reserved view's on-demand comparison reads public listings only; a wholly internal provider is on no
+    public provider list (feed health included)."""
+    import reserved
+    from analytics import providers as prov
+
+    with W["Session"].begin() as s:
+        s.add(_listing("jarvislabs", f"jarvislabs:{TOKEN}:h100", H100, SECRET, W["now"], W["start"]))
+    seen = {}
+    real = reserved.build
+    try:
+        reserved.build = lambda raw, listings, now, intervals: (seen.setdefault("l", listings), ([], []))[1]
+        reserved.load()
+    finally:
+        reserved.build = real
+    assert not [l for l in seen["l"] if TOKEN in l["listing_id"]], seen["l"]
+    cache.clear_all()
+    with W["Session"]() as s:
+        raw = set(s.execute(text("SELECT DISTINCT provider FROM raw_snapshots")).scalars())
+    assert HIDDEN in raw and HIDDEN not in prov.feed_health(), "raw data is there; the public list omits it"
+
+
 TESTS = [test_registry, test_derived_tables_have_no_internal_rows, test_every_public_route_is_clean,
          test_public_posts_are_clean, test_routing_and_recommend_see_internal, test_admin_view_labels_internal_rows,
-         test_save_stamps_the_tier, test_deepinfra_internal_listings_route]
+         test_save_stamps_the_tier, test_deepinfra_internal_listings_route, test_reserved_and_provider_lists]
 
 if __name__ == "__main__":
     saved = (settings.app_password, settings.public_pages, settings.public_rate_limit_per_minute,
