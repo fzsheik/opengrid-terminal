@@ -1,0 +1,200 @@
+"""Hand-maintained cost facts: what providers publish only on pricing pages and docs, each with a source and a date.
+
+Like canonical.py and hardware.py, this is a table edited by hand. Rules (methodology/full-cost.md):
+    * every value carries `source` (the page it was read from) and `verified_at` (the day it was read);
+    * `status` is "checked" when the value was read on the provider's own page, "unverified" when it came from a
+      snippet, a third party or an ambiguous page. The estimator uses only checked values; an unverified one is
+      shown but counts as UNKNOWN;
+    * a cell the provider does not publish is ABSENT here, never 0, so the estimator reports it as unknown;
+      "free" is an explicit 0 with its source;
+    * prices are as published (`raw_unit`); per-GiB prices and tier bounds are converted to per-GB by the reader;
+    * a source that has a machine-readable price (AWS offer files, Azure Retail Prices, Oracle, Verda, Hyperstack,
+      Vultr, Vast) is NOT repeated here unless the machine-readable source lacks that component (AWS EBS: the
+      public EBS price map hashes its keys).
+
+Read 2026-11-01 from the pages listed (research pass for the full-cost spec). Re-check monthly.
+"""
+
+from __future__ import annotations
+
+V = "2026-11-01"  # verified_at for every row read in the 2026-11-01 pass
+
+# --------------------------------------------------------------------------- cost components
+# (provider, component, product, tiers [(start, end|None, price)], raw_unit, extra)
+#   raw_unit: "GB" | "GiB" | "GB-month" | "GiB-month" | "GB-hour" | "1k requests" | "month"
+#   extra keys: status, source, notes, allowance_scope, billed_when_stopped, region
+COMPONENTS: list[dict] = [
+    # ---- hyperscalers: only what their machine-readable sources lack
+    dict(provider="aws", component="block_storage", product="EBS gp3 (3,000 IOPS / 125 MB/s included)",
+         tiers=[(0, None, 0.08)], raw_unit="GB-month", status="checked", source="https://aws.amazon.com/ebs/pricing/",
+         region="us-east-1", notes="EBS's public price map hashes its keys, so gp3 is read from the page"),
+    dict(provider="gcp", component="egress_internet", product="Premium Tier, to North America",
+         tiers=[(0, 1, 0.0), (1, 1024, 0.12), (1024, 10240, 0.11), (10240, None, 0.08)], raw_unit="GiB",
+         status="checked", source="https://cloud.google.com/vpc/network-pricing", region="us-central1",
+         allowance_scope="account_month",
+         notes="Cloud Billing Catalog networking SKUs not read yet; tiers per month"),
+    dict(provider="gcp", component="egress_inter_zone", product="VM to VM, different zone, same region",
+         tiers=[(0, None, 0.01)], raw_unit="GiB", status="checked",
+         source="https://cloud.google.com/vpc/network-pricing", region="us-central1"),
+    dict(provider="gcp", component="block_storage", product="pd-balanced",
+         tiers=[(0, None, 0.10)], raw_unit="GiB-month", status="checked",
+         source="https://cloud.google.com/compute/disks-image-pricing", region="us-central1"),
+    dict(provider="gcp", component="object_requests_write", product="Cloud Storage Class A",
+         tiers=[(0, None, 0.005)], raw_unit="1k requests", status="checked",
+         source="https://cloud.google.com/storage/pricing"),
+    dict(provider="gcp", component="object_requests_read", product="Cloud Storage Class B",
+         tiers=[(0, None, 0.0004)], raw_unit="1k requests", status="checked",
+         source="https://cloud.google.com/storage/pricing"),
+    dict(provider="gcp", component="object_storage", product="Cloud Storage Standard",
+         tiers=[(0, None, 0.020)], raw_unit="GiB-month", status="unverified",
+         source="https://cloud.google.com/storage/pricing", notes="regional Standard price not confirmed on the page"),
+    dict(provider="digitalocean", component="egress_internet", product="Droplet transfer (team pool)",
+         tiers=[(0, 61440, 0.0), (61440, None, 0.01)], raw_unit="GiB", status="checked",
+         allowance_scope="team_pool_month",
+         source="https://docs.digitalocean.com/products/droplets/details/pricing/",
+         notes="8x H100 droplets include 60 TiB of transfer pooled across the team; inbound free"),
+    dict(provider="digitalocean", component="block_storage", product="Volumes",
+         tiers=[(0, None, 0.10)], raw_unit="GiB-month", status="checked",
+         source="https://docs.digitalocean.com/products/volumes/details/pricing/"),
+    dict(provider="vultr", component="egress_internet", product="Bandwidth overage beyond the plan allowance",
+         tiers=[(0, None, 0.01)], raw_unit="GB", status="checked",
+         source="https://docs.vultr.com/products/billing/bandwidth",
+         notes="the plan's included bandwidth (API field `bandwidth`) is applied first"),
+    # ---- neoclouds
+    dict(provider="coreweave", component="egress_internet", product="Internet egress",
+         tiers=[(0, None, 0.0)], raw_unit="GB", status="checked", source="https://www.coreweave.com/pricing"),
+    dict(provider="coreweave", component="shared_fs", product="Distributed file storage",
+         tiers=[(0, None, 0.07)], raw_unit="GB-month", status="checked", source="https://www.coreweave.com/pricing"),
+    dict(provider="coreweave", component="object_storage", product="AI Object Storage (hot)",
+         tiers=[(0, None, 0.06)], raw_unit="GB-month", status="checked", source="https://www.coreweave.com/pricing"),
+    dict(provider="lambda", component="egress_internet", product="Data transfer",
+         tiers=[(0, None, 0.0)], raw_unit="GB", status="checked", source="https://lambda.ai/pricing",
+         notes="no ingress or egress charges"),
+    dict(provider="lambda", component="shared_fs", product="Filesystem",
+         tiers=[(0, None, 0.20)], raw_unit="GiB-month", status="unverified",
+         source="https://docs.lambda.ai/public-cloud/filesystems/",
+         notes="the docs show $0.20 as an example; the real price is shown only when a filesystem is created"),
+    dict(provider="runpod", component="egress_internet", product="Data transfer",
+         tiers=[(0, None, 0.0)], raw_unit="GB", status="checked", source="https://www.runpod.io/pricing"),
+    dict(provider="runpod", component="shared_fs", product="Network volume",
+         tiers=[(0, 1000, 0.07), (1000, None, 0.05)], raw_unit="GB-month", status="checked",
+         source="https://docs.runpod.io/pods/storage/types", notes="billed hourly; tiers by volume size"),
+    dict(provider="runpod", component="block_storage", product="Volume disk (running)",
+         tiers=[(0, None, 0.10)], raw_unit="GB-month", status="checked", billed_when_stopped=True,
+         source="https://docs.runpod.io/pods/storage/types", notes="$0.20/GB-month while the pod is stopped"),
+    dict(provider="nebius", component="egress_internet", product="Internet egress from VMs",
+         tiers=[(0, None, 0.0)], raw_unit="GiB", status="checked", source="https://nebius.com/prices",
+         notes="Object Storage egress is $0.015/GiB (not the VM path)"),
+    dict(provider="nebius", component="shared_fs", product="Shared filesystem",
+         tiers=[(0, None, 0.08)], raw_unit="GiB-month", status="checked", source="https://nebius.com/prices"),
+    dict(provider="nebius", component="block_storage", product="Network SSD",
+         tiers=[(0, None, 0.071)], raw_unit="GiB-month", status="checked", billed_when_stopped=True,
+         source="https://nebius.com/prices"),
+    dict(provider="nebius", component="object_storage", product="Object Storage (standard)",
+         tiers=[(0, None, 0.0147)], raw_unit="GiB-month", status="checked", source="https://nebius.com/prices"),
+    dict(provider="together", component="egress_internet", product="Data transfer",
+         tiers=[(0, None, 0.0)], raw_unit="GB", status="checked", source="https://www.together.ai/pricing"),
+    dict(provider="together", component="shared_fs", product="Shared filesystem",
+         tiers=[(0, None, 0.16)], raw_unit="GiB-month", status="checked", source="https://www.together.ai/pricing"),
+    dict(provider="crusoe", component="egress_internet", product="Data transfer",
+         tiers=[(0, None, 0.0)], raw_unit="GB", status="checked", source="https://www.crusoe.ai/cloud/pricing"),
+    dict(provider="crusoe", component="block_storage", product="Persistent disk",
+         tiers=[(0, None, 0.08)], raw_unit="GiB-month", status="checked", source="https://www.crusoe.ai/cloud/pricing"),
+    dict(provider="crusoe", component="shared_fs", product="Shared disk",
+         tiers=[(0, None, 0.07)], raw_unit="GB-month", status="unverified", source="https://www.crusoe.ai/cloud/pricing",
+         notes="unit (GB or GiB) not confirmed"),
+    dict(provider="hyperstack", component="egress_internet", product="Data transfer",
+         tiers=[(0, None, 0.0)], raw_unit="GB", status="checked", source="https://www.hyperstack.cloud/gpu-pricing"),
+    dict(provider="voltagepark", component="egress_internet", product="Data transfer",
+         tiers=[(0, None, 0.0)], raw_unit="GB", status="checked", source="https://www.voltagepark.com/pricing",
+         notes='"no hidden ingress/egress fees"'),
+    dict(provider="lium", component="block_storage", product="Volume",
+         tiers=[(0, None, 0.00005)], raw_unit="GB-hour", status="checked", billed_when_stopped=True,
+         source="https://docs.lium.io/billing", notes="billed while detached too"),
+]
+
+# --------------------------------------------------------------------------- billing increments
+# provider -> increment_s, minimum_s (None = not published), status, source, notes; `products` overrides by SKU prefix.
+BILLING: dict[str, dict] = {
+    "aws": dict(increment_s=1, minimum_s=60, status="checked", source="https://aws.amazon.com/ec2/pricing/on-demand/"),
+    "gcp": dict(increment_s=1, minimum_s=60, status="checked", source="https://cloud.google.com/compute/gpus-pricing"),
+    "azure": dict(increment_s=1, minimum_s=None, status="checked",
+                  source="https://azure.microsoft.com/en-us/pricing/details/virtual-machines/linux/",
+                  notes="a 5-minute minimum since mid-2025 is reported but not confirmed"),
+    "oracle": dict(increment_s=1, minimum_s=60, status="checked",
+                   source="https://docs.oracle.com/en-us/iaas/Content/Billing/Concepts/billingoverview.htm",
+                   products={"BM.": dict(increment_s=1, minimum_s=3600, notes="bare metal: 1-hour minimum")}),
+    "digitalocean": dict(increment_s=1, minimum_s=60, status="checked",
+                         source="https://docs.digitalocean.com/products/droplets/details/pricing/",
+                         notes="powered-off droplets still bill"),
+    "vultr": dict(increment_s=3600, minimum_s=3600, status="checked",
+                  source="https://docs.vultr.com/products/billing", notes="hourly, capped at 730 h a month"),
+    "lambda": dict(increment_s=60, minimum_s=60, status="checked", source="https://docs.lambda.ai/public-cloud/billing/"),
+    "runpod": dict(increment_s=1, minimum_s=1, status="checked", source="https://docs.runpod.io/pods/pricing",
+                   notes="an hour of credit must be on the account to start"),
+    "nebius": dict(increment_s=1, minimum_s=1, status="checked",
+                   source="https://docs.nebius.com/compute/resources/pricing"),
+    "together": dict(increment_s=3600, minimum_s=3600, status="checked",
+                     source="https://docs.together.ai/docs/gpu-clusters-overview"),
+    "crusoe": dict(increment_s=None, minimum_s=None, status="unverified", source="https://www.crusoe.ai/cloud/pricing",
+                   notes='page says "per hour (or per second)"'),
+    "vast": dict(increment_s=1, minimum_s=1, status="checked", source="https://docs.vast.ai/documentation/reference/billing"),
+    "hyperstack": dict(increment_s=60, minimum_s=60, status="checked",
+                       source="https://docs.hyperstack.cloud/docs/billing-and-payment/"),
+    "verda": dict(increment_s=600, minimum_s=600, status="checked", source="https://docs.verda.com/billing",
+                  notes="prepaid in 10-minute increments; unused time is refunded"),
+    "lium": dict(increment_s=1, minimum_s=1, status="checked", source="https://docs.lium.io/billing"),
+    "thunder": dict(increment_s=60, minimum_s=60, status="checked", source="https://www.thundercompute.com/pricing"),
+}
+
+# --------------------------------------------------------------------------- node fabric and deployability
+# (provider, SKU / listing-id prefix) -> facts. First match wins; "" matches every SKU of the provider.
+#   node_fabric: infiniband | roce | efa | tcpx | ethernet ; gbps per node ; frontend_gbps ; multi_node ;
+#   on_demand_deployable (None = unknown, read from the API where one exists).
+FABRIC: list[dict] = [
+    dict(provider="aws", sku="p5.48xlarge", node_fabric="efa", node_fabric_gbps=3200, multi_node=True,
+         status="checked", source="https://aws.amazon.com/ec2/instance-types/p5/"),
+    dict(provider="aws", sku="p5en.48xlarge", node_fabric="efa", node_fabric_gbps=3200, multi_node=True,
+         status="checked", source="https://aws.amazon.com/ec2/instance-types/p5/"),
+    dict(provider="aws", sku="p6-b200.48xlarge", node_fabric="efa", node_fabric_gbps=3200, multi_node=True,
+         status="checked", source="https://aws.amazon.com/ec2/instance-types/p6/"),
+    dict(provider="gcp", sku="a3-highgpu-8g", node_fabric="tcpx", node_fabric_gbps=1000, multi_node=True,
+         status="checked", source="https://cloud.google.com/compute/docs/accelerator-optimized-machines"),
+    dict(provider="gcp", sku="a3-megagpu-8g", node_fabric="tcpx", node_fabric_gbps=1800, multi_node=True,
+         status="checked", source="https://cloud.google.com/compute/docs/accelerator-optimized-machines",
+         notes="GPUDirect-TCPXO"),
+    dict(provider="gcp", sku="a3-ultragpu-8g", node_fabric="roce", node_fabric_gbps=3600, multi_node=True,
+         status="checked", source="https://cloud.google.com/compute/docs/accelerator-optimized-machines"),
+    dict(provider="gcp", sku="a4-highgpu-8g", node_fabric="roce", node_fabric_gbps=3600, multi_node=True,
+         status="checked", source="https://cloud.google.com/compute/docs/accelerator-optimized-machines"),
+    dict(provider="azure", sku="Standard_ND96isr_H100_v5", node_fabric="infiniband", node_fabric_gbps=3200,
+         frontend_gbps=80, multi_node=True, status="checked",
+         source="https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/gpu-accelerated/ndh100v5-series"),
+    dict(provider="azure", sku="Standard_ND96isr_H200_v5", node_fabric="infiniband", node_fabric_gbps=3200,
+         multi_node=True, status="checked",
+         source="https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/gpu-accelerated/nd-h200-v5-series"),
+    dict(provider="oracle", sku="BM.GPU.H100.8", node_fabric="roce", node_fabric_gbps=3200, frontend_gbps=100,
+         multi_node=True, status="checked",
+         source="https://docs.oracle.com/en-us/iaas/Content/Compute/References/computeshapes.htm"),
+    dict(provider="digitalocean", sku="gpu-h100x8", node_fabric="ethernet", node_fabric_gbps=25, frontend_gbps=10,
+         multi_node=False, status="checked",
+         source="https://docs.digitalocean.com/products/droplets/details/features/",
+         notes="no RDMA fabric on this size: 10 Gbps public, 25 Gbps private"),
+    dict(provider="coreweave", sku="", node_fabric="infiniband", node_fabric_gbps=3200, multi_node=True,
+         status="checked", source="https://www.coreweave.com/products/networking", notes="HGX nodes"),
+    dict(provider="crusoe", sku="h100-80gb-sxm-ib", node_fabric="infiniband", node_fabric_gbps=3200, frontend_gbps=175,
+         multi_node=True, status="checked", source="https://docs.crusoe.ai/compute/virtual-machines/overview"),
+    dict(provider="hyperstack", sku="", node_fabric="ethernet", node_fabric_gbps=350, multi_node=False,
+         status="checked", source="https://docs.hyperstack.cloud/docs/hardware/flavors",
+         notes="SR-IOV Ethernet up to 350 Gbps (16 by default); no InfiniBand on on-demand flavors"),
+    dict(provider="voltagepark", sku="vm:", node_fabric="ethernet", node_fabric_gbps=100, multi_node=False,
+         status="checked", source="https://www.voltagepark.com/pricing"),
+    dict(provider="voltagepark", sku="bm:", match="infiniband", node_fabric="infiniband", node_fabric_gbps=3200,
+         multi_node=True, status="checked", source="https://www.voltagepark.com/pricing"),
+    dict(provider="voltagepark", sku="bm:", match="ethernet", node_fabric="ethernet", node_fabric_gbps=None,
+         multi_node=False, status="checked", source="https://www.voltagepark.com/pricing"),
+    dict(provider="together", sku="", node_fabric="infiniband", node_fabric_gbps=3200, multi_node=True,
+         status="checked", source="https://docs.together.ai/docs/gpu-clusters-overview"),
+    dict(provider="verda", sku="", node_fabric=None, node_fabric_gbps=None, multi_node=False, status="checked",
+         source="https://verda.com/pricing", notes="InfiniBand only on instant clusters, not single instances"),
+]

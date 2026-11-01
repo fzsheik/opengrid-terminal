@@ -14,3 +14,4 @@ from store import uptime  # noqa: F401  (0022_uptime: external UptimeProject con
 from store import capacity  # noqa: F401  (0025_capacity: provider-reported capacity)
 from store import archive  # noqa: F401  (0025_archived_prices: archived price history, kind "archived")
 from store import fx  # noqa: F401  (0026_fx: ECB euro reference rates + FX provenance on listings)
+from store import cost  # noqa: F401  (0030_cost_components: raw snapshots of machine-readable cost sources)
