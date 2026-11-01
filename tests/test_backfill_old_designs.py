@@ -5,6 +5,7 @@
 Run:  .venv/bin/python tests/test_backfill_old_designs.py
 """
 
+import re
 import sys
 from datetime import datetime, timezone
 from decimal import Decimal as D
@@ -16,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import scratchdb  # noqa: E402,F401  (first: isolates the process from real networks)
 
 from backfill.__main__ import _day  # noqa: E402
-from backfill.parsers import azure, coreweave  # noqa: E402
+from backfill.parsers import azure, coreweave, lambda_  # noqa: E402
 from backfill.sources import sources  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_backfill"
@@ -131,10 +132,86 @@ def test_coreweave_a_la_carte_component_table():
     _raises(coreweave.coreweave_component_table, page.replace("GPU Component", "GPU Instance"), AT, contains="header")
 
 
+# --------------------------------------------------------------------------------------------------------- Lambda
+
+GC, GCP_ = "lambdalabs.com/service/gpu-cloud", "lambdalabs.com/service/gpu-cloud/pricing"
+
+
+def _lam(url, name, at):
+    ls, used = _src(url).parse((FIX / name).read_bytes(), at)
+    return {l.listing_id: l for l in ls}, used
+
+
+def test_lambda_2020_cards():
+    by, used = _lam(GC, "lambda_gpu-cloud_2020-05_cards.html", AT)
+    assert used.endswith("gpu_cloud_cards_2020")
+    v100 = by["nvidia-tesla-v100-16-gb:8x"]       # the id lambda.ai/pricing rows of the same product carry
+    assert v100.canonical_gpu_name == "NVIDIA Tesla V100 16GB" and v100.price_per_instance_hour == D("12.00")
+    assert v100.price_per_gpu_hour == D("1.5") and v100.vcpu == 92
+    assert by["gtx-1080-ti-11-gb:4x"].canonical_gpu_name is None and len(by) == 2
+
+
+def test_lambda_2021_pricing_page_vram_from_its_section():
+    by, used = _lam(GCP_, "lambda_gpu-cloud-pricing_2021-08_vram_each.html", AT)
+    assert used.endswith("pricing_tables_2021")
+    a6 = by["nvidia-a6000-48-gb:2x"]              # "2x A6000" under "(48 GiB VRAM each)"
+    assert a6.raw_gpu_name == "A6000 (48 GB)" and a6.canonical_gpu_name == "NVIDIA RTX A6000 48GB"
+    assert by["nvidia-quadro-rtx-6000-24-gb:1x"].price_per_instance_hour == D("1.25")
+    assert by["nvidia-tesla-v100-16-gb:8x"].price_per_instance_hour == D("12.00")   # "8x V100s"
+    page = _fix("lambda_gpu-cloud-pricing_2021-08_vram_each.html")
+    _raises(lambda_.pricing_tables_2021, re.sub(r"\(\d+ GiB VRAM each\)", "", page), AT, contains="no VRAM")
+
+
+def test_lambda_2022_pricing_page_vram_in_cell_reserved_ignored():
+    by, _ = _lam(GCP_, "lambda_gpu-cloud-pricing_2022-05_vram_in_cell.html", AT)
+    assert by["nvidia-a6000-48-gb:1x"].price_per_instance_hour == D("1.45")
+    assert by["nvidia-tesla-v100-16-gb:8x"].price_per_instance_hour == D("6.80")    # "Tesla V100s (16 GB)"
+    assert not any(l.price_per_instance_hour in (D("14.21"), D("10.66"), D("5.44")) for l in by.values()), "reserved"
+    assert len(by) == 7
+
+
+def test_lambda_2022_reserved_table_with_the_same_header_is_skipped():
+    by, used = _lam(GC, "lambda_gpu-cloud_2022-07_reserved_same_header.html", AT)
+    assert used.endswith("gpu_cloud_tables")
+    a100 = by["nvidia-a100-40-gb:1x"]
+    assert a100.canonical_gpu_name is None, "the page does not say SXM or PCIe: unmapped, not guessed"
+    assert a100.price_per_instance_hour == D("1.10")
+    assert by["nvidia-tesla-v100-16-gb:8x"].price_per_instance_hour == D("4.40")
+    assert not any(l.price_per_instance_hour in (D("10.00"), D("8.00"), D("3.20")) and l.gpu_count == 8
+                   for l in by.values()), "reserved rows"
+    assert len(by) == 10
+
+
+def test_lambda_dec_2023_price_in_force_on_capture_day():
+    name = "lambda_gpu-cloud_2023-12_two_price_columns.html"
+    before, _ = _lam(GC, name, datetime(2023, 12, 28, tzinfo=timezone.utc))
+    after, _ = _lam(GC, name, datetime(2024, 1, 1, 7, tzinfo=timezone.utc))
+    assert before["nvidia-h100-sxm-80-gb:8x"].price_per_instance_hour == D("20.72")
+    assert after["nvidia-h100-sxm-80-gb:8x"].price_per_instance_hour == D("27.92")
+    assert after["nvidia-h100-sxm-80-gb:8x"].canonical_gpu_name == "NVIDIA H100 80GB SXM5"
+    assert after["nvidia-a100-pcie-40-gb:4x"].canonical_gpu_name == "NVIDIA A100 40GB PCIe"
+
+
+def test_lambda_2024_per_gpu_prices_and_reserved_rows():
+    for name in ("lambda_gpu-cloud_2024-08_market_column.html", "lambda_gpu-cloud_2024-11_market_prefix.html"):
+        by, _ = _lam(GC, name, AT)
+        h100 = by["nvidia-h100-sxm-80-gb:8x"]
+        assert h100.price_per_gpu_hour == D("2.99") and h100.price_per_instance_hour == D("23.92"), name
+        assert all(l.market_type == "on_demand" for l in by.values())
+    by, _ = _lam(GC, "lambda_gpu-cloud_2024-11_market_prefix.html", AT)
+    assert by["nvidia-gh200-96-gb:1x"].canonical_gpu_name == "NVIDIA GH200 96GB" and len(by) == 18
+    page = _fix("lambda_gpu-cloud_2024-11_market_prefix.html")
+    _raises(lambda_.gpu_cloud_tables, page.replace("$4.29 / GPU / hr", "$4.29 / hr", 1), AT, contains="under header")
+
+
 TESTS = [test_since_accepts_year_and_month,
          test_azure_vm_page_2018_names_without_s, test_azure_vm_page_2022_spot_column,
          test_azure_vm_page_2020_spot_savings_and_trailing_cell, test_azure_vm_page_old_and_new_designs_fail_loudly,
-         test_coreweave_a_la_carte_component_table]
+         test_coreweave_a_la_carte_component_table,
+         test_lambda_2020_cards, test_lambda_2021_pricing_page_vram_from_its_section,
+         test_lambda_2022_pricing_page_vram_in_cell_reserved_ignored,
+         test_lambda_2022_reserved_table_with_the_same_header_is_skipped, test_lambda_dec_2023_price_in_force_on_capture_day,
+         test_lambda_2024_per_gpu_prices_and_reserved_rows]
 
 if __name__ == "__main__":
     for t in TESTS:
