@@ -405,7 +405,8 @@ def recency_mult(published_at: datetime | None, first_seen_at: datetime | None) 
 
 def classify(title: str | None, summary: str | None, *, source_tier: str = "press",
              source_topics=(), provider_hint: str | None = None,
-             published_at: datetime | None = None, first_seen_at: datetime | None = None) -> dict:
+             published_at: datetime | None = None, first_seen_at: datetime | None = None,
+             item_topics=()) -> dict:
     """Entities, topics and relevance for one item. Pure function of its inputs."""
     title, summary = title or "", summary or ""
     text = f"{title}\n{summary}"
@@ -430,6 +431,9 @@ def classify(title: str | None, summary: str | None, *, source_tier: str = "pres
         topics["neocloud_expansion"] = "derived"
     for t in source_topics:
         topics.setdefault(t, "source")
+    for t in item_topics:  # stated by the item's structure (an EDGAR 8-K item 2.02 is an earnings release)
+        if t in TOPIC_WEIGHT:
+            topics.setdefault(t, "item")
 
     # ---- relevance
     ent = 0.0

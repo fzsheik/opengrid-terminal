@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     public_base_url: str = "https://opengrid-terminal-production.up.railway.app"
     # Poll public news / regulatory feeds (news/sources.py) in the background.
     news_enabled: bool = True
+    # SEC EDGAR asks automated clients to declare who they are ("Company contact@domain"); set this to the
+    # operator's contact. Unset: "OpenGrid Terminal news (+public_base_url)", which EDGAR accepted when checked.
+    sec_user_agent: str | None = None
     # Poll UptimeProject (uptime/; methodology/uptime.md): external control-plane uptime + latency, CC BY 4.0.
     uptime_enabled: bool = True
     uptime_poll_seconds: int = Field(default=3600, ge=300)   # upstream caches 5 minutes; hourly buckets

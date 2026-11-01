@@ -21,6 +21,14 @@ from config import settings
 MAX_BYTES = 12 * 1024 * 1024
 TIMEOUT_SECONDS = 20.0
 USER_AGENT = f"OpenGridTerminal-News/1.0 (+{settings.public_base_url})"
+SEC_HOSTS = ("sec.gov", "data.sec.gov", "www.sec.gov", "efts.sec.gov")
+
+
+def sec_user_agent() -> str:
+    """The User-Agent the SEC's fair-access policy requires on data.sec.gov / www.sec.gov (settings.sec_user_agent)."""
+    return settings.sec_user_agent or f"OpenGrid Terminal news (+{settings.public_base_url})"
+
+
 ACCEPT = ("application/rss+xml, application/atom+xml, application/feed+json, application/json;q=0.9, "
           "application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5")
 
@@ -34,6 +42,8 @@ async def fetch(c: httpx.AsyncClient, url: str, etag: str | None = None, last_mo
     started_wall = datetime.now(timezone.utc)
     started = time.perf_counter()
     headers = {}
+    if httpx.URL(url).host in SEC_HOSTS:
+        headers["User-Agent"] = sec_user_agent()
     if etag:
         headers["If-None-Match"] = etag
     if last_modified:

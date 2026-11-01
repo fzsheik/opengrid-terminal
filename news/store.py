@@ -36,7 +36,7 @@ def _now() -> datetime:
 
 def sync_sources() -> None:
     """Mirror the registry into news_sources, keeping each row's fetch state."""
-    rows = [{k: v for k, v in registry.as_dict(s).items() if k != "key"} | {"consecutive_failures": 0}
+    rows = [{k: v for k, v in registry.as_dict(s).items() if k not in ("key", "day_dates")} | {"consecutive_failures": 0}
             for s in registry.SOURCES.values()]
     with normalize.SessionLocal.begin() as s:
         for r in rows:
@@ -71,10 +71,21 @@ def log_fetch(source_id: str, res: dict, items: int, new_items: int, error: str 
 
 # --------------------------------------------------------------------------- ingest
 
-def _classify(src: registry.Source, title, summary, published_at, first_seen_at) -> dict:
+def _classify(src: registry.Source, title, summary, published_at, first_seen_at, item_topics=()) -> dict:
     return cls.classify(title, summary, source_tier=src.trust_tier, source_topics=src.topics,
                         provider_hint=src.entity_hints.get("provider"),
-                        published_at=published_at, first_seen_at=first_seen_at)
+                        published_at=published_at, first_seen_at=first_seen_at, item_topics=item_topics)
+
+
+def seen_basis(item: NewsItem) -> datetime:
+    """The 'first seen' the recency multiplier is measured against. Live items: when OpenGrid first saw them. A
+    backfilled item was not news to anyone when OpenGrid read it years later: its lag is measured from the archive
+    capture that held it (Internet Archive), or taken as none when the archive itself dates the item (EDGAR,
+    GDELT, the feed's own archive pages)."""
+    if not item.backfilled:
+        return item.first_seen_at
+    cap = (item.provenance or {}).get("captured_at")
+    return datetime.fromisoformat(cap) if cap else item.published_at
 
 
 def _apply(s, item: NewsItem, c: dict, at: datetime) -> None:
@@ -94,25 +105,36 @@ def _newest(parsed: list[dict], n: int) -> list[dict]:
     return sorted(parsed, key=lambda d: d.get("published_at") or floor, reverse=True)[:n]
 
 
-def ingest(src: registry.Source, parsed: list[dict], fetched_at: datetime) -> dict:
-    """Store raw items, derive news_items. Returns {"items", "new_items", "updated"}."""
-    parsed = _newest(parsed, src.max_items)
+def ingest(src: registry.Source, parsed: list[dict], fetched_at: datetime, backfill: dict | None = None) -> dict:
+    """Store raw items, derive news_items. Returns {"items", "new_items", "updated"}.
+
+    backfill = {"origin", "archive_url", "captured_at"} for items recovered from an archive (news/history.py):
+    every raw row records where it was read and when the archive captured it; new items are marked backfilled
+    with that provenance; an item already stored (live or backfilled earlier) is never rewritten by an archive
+    copy, so live data always wins and a re-run adds nothing. The publish-time rules are the live ones, with the
+    capture time standing in for "now" (a date after the capture is not a publish time).
+    """
+    captured = (backfill or {}).get("captured_at")
+    horizon = captured or fetched_at
+    parsed = _newest(parsed, src.max_items if backfill is None else max(src.max_items, 2000))
     new = updated = 0
     with normalize.SessionLocal.begin() as s:
         prepared = []
         # Some site generators (Webflow-style blogs) stamp every item with the site's last publish
         # time, so 90 posts from 2023 all "published" this week. A timestamp shared by many items in
         # one feed is not a publish time: those items keep the stamp but are flagged inferred.
+        # Sources dated by day (release notes, the Federal Register) legitimately share stamps: exempt.
         stamps = Counter(d.get("published_at") for d in parsed if d.get("published_at"))
-        shared = {t for t, n in stamps.items() if n >= SHARED_STAMP_MIN}
+        day_dated = src.day_dates or src.kind == "federal_register"
+        shared = set() if day_dated else {t for t, n in stamps.items() if n >= SHARED_STAMP_MIN}
         for d in parsed:
             canon, uhash = dedupe.item_key(src.id, d, src.key)
             pub = d.get("published_at")
             if pub is not None and pub in shared:
                 prepared.append((d, canon, uhash, pub, True))
                 continue
-            inferred = pub is None or pub > fetched_at + FUTURE_TOLERANCE
-            prepared.append((d, canon, uhash, fetched_at if inferred else pub, inferred))
+            inferred = pub is None or pub > horizon + FUTURE_TOLERANCE
+            prepared.append((d, canon, uhash, horizon if inferred else pub, inferred))
         if not prepared:
             return {"items": 0, "new_items": 0, "updated": 0}
         existing = {r.url_hash: r for r in s.scalars(
@@ -132,31 +154,40 @@ def ingest(src: registry.Source, parsed: list[dict], fetched_at: datetime) -> di
             raw_id = s.execute(pg_insert(NewsRawItem).values(
                 source_id=src.id, fetched_at=fetched_at, raw_hash=rhash, guid=(d.get("guid") or None),
                 url=d.get("url"), payload={"parsed": parsed_fields, "raw": d.get("raw")},
+                origin=(backfill or {}).get("origin", "live"), archive_url=(backfill or {}).get("archive_url"),
+                captured_at=captured,
             ).on_conflict_do_nothing(constraint="uq_nri_source_hash").returning(NewsRawItem.id)).scalar()
             row = existing.get(uhash)
             if row is not None:
-                if raw_id is not None and row.source_id == src.id:
+                if backfill is None and raw_id is not None and row.source_id == src.id:
                     # A new version of an article we have: refresh text, keep identity and first_seen.
                     row.title, row.summary, row.author = d.get("title"), d.get("summary"), d.get("author")
                     row.title_key = dedupe.normalize_title(d.get("title")) or None
                     row.raw_item_id = raw_id
                     if not inferred:
                         row.published_at, row.published_at_inferred = pub, False
-                    _apply(s, row, _classify(src, row.title, row.summary, row.published_at, row.first_seen_at), fetched_at)
+                    _apply(s, row, _classify(src, row.title, row.summary, row.published_at, seen_basis(row),
+                                             d.get("topics") or ()), fetched_at)
                     updated += 1
                 continue
             tkey = dedupe.normalize_title(d.get("title")) or None
             item = NewsItem(source_id=src.id, url=d.get("url"), canonical_url=canon, url_hash=uhash,
                             title=d.get("title"), title_key=tkey, summary=d.get("summary"), author=d.get("author"),
                             published_at=pub, published_at_inferred=inferred, first_seen_at=fetched_at,
-                            raw_item_id=raw_id, relevance=0, relevance_components={}, topics=[], entities={})
+                            raw_item_id=raw_id, relevance=0, relevance_components={}, topics=[], entities={},
+                            backfilled=backfill is not None,
+                            provenance=None if backfill is None else {
+                                "method": backfill.get("origin"), "archive_url": backfill.get("archive_url"),
+                                "captured_at": captured.isoformat() if captured else None,
+                                "published_raw": d.get("published_raw"), "via": backfill.get("via")})
             s.add(item)
             s.flush()
             story = dedupe.find_story(tkey, pub, candidates) if tkey else None
             item.story_id = story if story is not None else item.id
             if tkey:
                 candidates.append({"story_id": item.story_id, "title_key": tkey, "at": pub})
-            _apply(s, item, _classify(src, item.title, item.summary, pub, fetched_at), fetched_at)
+            _apply(s, item, _classify(src, item.title, item.summary, pub, seen_basis(item) if backfill else fetched_at,
+                                      d.get("topics") or ()), fetched_at)
             new += 1
     return {"items": len(prepared), "new_items": new, "updated": updated}
 
@@ -169,9 +200,14 @@ def reclassify(batch: int = 500) -> dict:
             rows = list(s.scalars(select(NewsItem).where(NewsItem.id > last_id).order_by(NewsItem.id).limit(batch)))
             if not rows:
                 break
+            # Item-level topics (EDGAR item codes) live in the raw payload, like everything classification reads.
+            raw_ids = [r.raw_item_id for r in rows if r.raw_item_id]
+            item_topics = {rid: (p or {}).get("parsed", {}).get("topics") or () for rid, p in s.execute(
+                select(NewsRawItem.id, NewsRawItem.payload).where(NewsRawItem.id.in_(raw_ids)))} if raw_ids else {}
             for r in rows:
                 src = registry.get(r.source_id) or registry.Source(r.source_id, r.source_id, "", "rss", "trade_press", "press")
-                _apply(s, r, _classify(src, r.title, r.summary, r.published_at, r.first_seen_at), at)
+                _apply(s, r, _classify(src, r.title, r.summary, r.published_at, seen_basis(r),
+                                       item_topics.get(r.raw_item_id, ())), at)
             last_id = rows[-1].id
             done += len(rows)
     return {"reclassified": done}
@@ -193,8 +229,10 @@ def _has(pairs: list[tuple[str, str]]):
 
 
 def _filters(gpu=None, provider=None, region_group=None, topic=None, source=None, q=None,
-             t0=None, t1=None, min_relevance=None) -> list:
+             t0=None, t1=None, min_relevance=None, backfilled=None) -> list:
     w = []
+    if backfilled is not None:
+        w.append(NewsItem.backfilled.is_(bool(backfilled)))
     if gpu:
         w.append(_has(_gpu_terms(gpu)))
     if provider:
@@ -234,7 +272,10 @@ def item_dict(r: NewsItem, full: bool = False) -> dict:
         "providers": [p["id"] for p in (r.entities or {}).get("providers", [])],
         "regions": [g["group"] for g in (r.entities or {}).get("regions", [])],
         "relevance_components": r.relevance_components,
+        "backfilled": bool(r.backfilled),
     }
+    if r.backfilled:
+        d["provenance"] = r.provenance
     if full:
         d.update(canonical_url=r.canonical_url, entities=r.entities, relevance_components=r.relevance_components,
                  raw_item_id=r.raw_item_id, classified_at=r.classified_at)
@@ -327,6 +368,11 @@ def sources_health() -> list[dict]:
             FROM news_fetch_log WHERE fetched_at >= :since GROUP BY source_id"""), {"since": since})}
         counts = dict(s.execute(select(NewsItem.source_id, func.count()).group_by(NewsItem.source_id)).all())
         last_item = dict(s.execute(select(NewsItem.source_id, func.max(NewsItem.published_at)).group_by(NewsItem.source_id)).all())
+        # How far back the source reaches: the oldest item with a real publish time (flagged dates excluded).
+        reach = {r.source_id: r for r in s.execute(
+            select(NewsItem.source_id, func.min(NewsItem.published_at).label("oldest"),
+                   func.count().filter(NewsItem.backfilled.is_(True)).label("backfilled"))
+            .where(NewsItem.published_at_inferred.is_(False)).group_by(NewsItem.source_id))}
     out = []
     for src in registry.SOURCES.values():
         st, fx = state.get(src.id), stats.get(src.id)
@@ -339,6 +385,8 @@ def sources_health() -> list[dict]:
                     "new_items_24h": int(fx.new_items) if fx else 0,
                     "avg_fetch_ms_24h": round(float(fx.avg_ms)) if fx and fx.avg_ms is not None else None,
                     "items_stored": counts.get(src.id, 0), "newest_item_at": last_item.get(src.id),
+                    "oldest_dated_item_at": reach[src.id].oldest if src.id in reach else None,
+                    "backfilled_items": int(reach[src.id].backfilled) if src.id in reach else 0,
                     "health": _health(src, st)})
     return out
 
