@@ -92,6 +92,9 @@ def build_fetchers() -> list[Provider]:
     if settings.gcp_api_key:
         fetchers.append(GcpProvider(settings.gcp_api_key))
 
+    # The official inventory API with a key (prices + capacity counts); without one, the public page + Shadeform.
+    fetchers.append(MassedComputeProvider(api_key=settings.massedcompute_api_key))
+
     # Public prices; a key adds capacity (Vast's free/total census, Latitude's own stock).
     fetchers.append(VastProvider(api_key=settings.vast_api_key))
     fetchers.append(LatitudeProvider(api_key=settings.latitude_api_key))
@@ -115,7 +118,6 @@ def build_fetchers() -> list[Provider]:
             VoltageParkProvider,
             LiumProvider,
             NebiusProvider,
-            MassedComputeProvider,
             AwsProvider,
             VerdaProvider,
             CrusoeProvider,
