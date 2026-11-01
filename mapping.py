@@ -407,34 +407,48 @@ VAST = ProviderMapping(
 NEBIUS = ProviderMapping(
     provider="nebius",
     display_name="Nebius",
-    endpoints={"GET /prices": "the public price page; the GPU table is a block in its __NEXT_DATA__ JSON"},
+    endpoints={
+        "GET /prices": "the public price page (nebius.com); the GPU table is a block in its __NEXT_DATA__ JSON: on-demand",
+        "GET /billing/v1alpha1/spot-price": "public spot-price API (api.nebius.cloud, no authentication), paged; "
+                                            "one item per SKU (GPU platform x region): spot",
+    },
     fields=_fields(
         "nebius",
-        sku=(RAW, '"NVIDIA GPU Instances" table row: Item'),
-        listing_id=(RAW, '"NVIDIA GPU Instances" table row: Item'),
-        raw_gpu_name=(RAW, '"NVIDIA GPU Instances" table row: Item', 'e.g. "NVIDIA HGX H100"'),
-        gpu_count=(CONSTANT, "1", "the table prices one GPU-hour"),
-        region=(ABSENT, "-", "one price list with no region"),
-        country=(ABSENT, "-"),
-        price_per_gpu_hour=(RAW, "the current GPU-hour column", "picked by date when a dated column is present; see quirks"),
+        sku=(DERIVED, 'page: table Item; spot: "{Item}:{platform}"'),
+        listing_id=(DERIVED, 'page: table Item; spot: "{Item}:{platform}:{region}:spot"',
+                    "the on-demand ids are unchanged since the first fetch"),
+        raw_gpu_name=(LOOKUP, 'page: table Item; spot: computeInstance.platform via PLATFORMS',
+                      'e.g. "NVIDIA HGX H100" for both; an unknown platform keeps its productTitle'),
+        gpu_count=(CONSTANT, "1", "both price one GPU-hour"),
+        region=(RAW, "spot: region", 'e.g. "eu-north1"; the page has one price list with no region (None)'),
+        country=(LOOKUP, "spot: region via COUNTRY (docs.nebius.com regions)", "None on the page"),
+        price_per_gpu_hour=(RAW, 'page: the current on-demand GPU-hour column; spot: price.value',
+                            "page column picked by date when a dated column is present; see quirks"),
         price_per_instance_hour=(DERIVED, "= price_per_gpu_hour", "single GPU"),
-        provider_tier=(DERIVED, '"from_price" for "from $x" cells, else None', "a floor, not a quote"),
-        available=(ABSENT, "-", "the page says nothing about stock"),
+        market_type=(DERIVED, 'page -> "on_demand", spot API -> "spot"'),
+        provider_tier=(DERIVED, '"from_price" for "from $x" page cells, else None', "a floor, not a quote"),
+        interruptible=(DERIVED, "True for spot"),
+        available=(ABSENT, "-", "neither source says anything about stock"),
         capacity=(ABSENT, "-"),
         capacity_unit=(ABSENT, "-"),
-        vcpu=(RAW, "table row: vCPUs", "per-GPU share; None for a range"),
-        ram_gb=(RAW, "table row: RAM, GB", "per-GPU share; None for a range"),
+        vcpu=(RAW, "page: table row vCPUs", "per-GPU share; None for a range and for spot"),
+        ram_gb=(RAW, "page: table row RAM, GB", "per-GPU share; None for a range and for spot"),
         storage_gb=(ABSENT, "-"),
     ),
     quirks=[
-        'The GPU table is the block titled "NVIDIA GPU Instances" in the page\'s __NEXT_DATA__ JSON. '
-        'The "Preemptible NVIDIA GPU Instances" block (spot prices) is never read; there is no commitment table.',
-        'Since the Oct 2026 price change the table has one "GPU-hour" column. When a change is announced the page '
-        'adds a "GPU-hour (Effective <date>)" column; we use it once its date has arrived, else the plain one.',
+        'The GPU table is the block titled "NVIDIA GPU Instances" in the page\'s __NEXT_DATA__ JSON. Since late Oct '
+        '2026 it carries a "Preemptible, GPU-hour" column ("from $x" spot floors) next to "On-demand, GPU-hour"; '
+        "that column is stored but never a listing. Spot prices come from the spot-price API.",
+        'When a price change is announced the page adds a "GPU-hour (Effective <date>)" column; we use it once its '
+        "date has arrived, else the plain one.",
         '"Contact us" rows (GB200/GB300 NVL72) have no price and are skipped.',
-        '"NVIDIA RTX PRO 6000" does not say Workstation or Server Edition and stays unmapped.',
+        '"NVIDIA RTX PRO 6000" does not say Workstation or Server Edition on the page and stays unmapped, on both '
+        "markets (Nebius's docs call it Server Edition; not yet applied).",
         'L40S prices are "from $x": a floor over several CPU configs, tagged from_price.',
-        "A reshaped page (no block, two blocks, an unexpected column) fails the poll rather than recording nothing.",
+        "The spot API has spot prices only (no on-demand, reserved or commitment fields). Its 30-day history "
+        "(/spot-price/list-series) is not polled.",
+        "The two sources fail independently: a reshaped page (no block, two blocks, an unexpected column) or a spot "
+        "response with zero readable items fails that call only, never the other market.",
     ],
 )
 

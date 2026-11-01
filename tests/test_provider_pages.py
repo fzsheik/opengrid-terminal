@@ -317,9 +317,11 @@ def test_nebius():
     bad = nebius.extract(edit('"$4.50"', '"4.50 USD"'))
     assert raises(NebiusProvider.normalize, {"/prices": [snap(bad)]}), "an unparseable price cell fails"
 
-    raw = asyncio.run(NebiusProvider(_client(nebius.BASE_URL, _serve({"/prices": page}, "text/html"))).fetch())[0]
+    # The spot API is a second call (tests/test_provider_nebius.py); here it is a mock 404, never the network.
+    spot = lambda: _client(nebius.API_BASE_URL, _serve({}))
+    raw = asyncio.run(NebiusProvider(_client(nebius.BASE_URL, _serve({"/prices": page}, "text/html")), spot()).fetch())[0]
     assert raw.ok and raw.endpoint == "/prices" and raw.payload == payload
-    broken = asyncio.run(NebiusProvider(_client(nebius.BASE_URL, _serve({"/prices": "<html/>"}, "text/html"))).fetch())[0]
+    broken = asyncio.run(NebiusProvider(_client(nebius.BASE_URL, _serve({"/prices": "<html/>"}, "text/html")), spot()).fetch())[0]
     assert not broken.ok and "ValueError" in broken.error
 
 
