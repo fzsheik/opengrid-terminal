@@ -5,7 +5,7 @@ GET https://backendn.jarvislabs.net/misc/server_meta with `Authorization: Bearer
 
     price_per_hour            on-demand, per GPU-hour
     spot_price                spot, per GPU-hour (null when not offered)
-    reserved_pricing          1-month / 1-year / 2-year per GPU-hour (kept in raw; not a listing yet)
+    reserved_pricing          1 / 3 / 6-month and 1 / 2-year per GPU-hour (never a listing; reserved_prices() reads it)
     effective_num_free_devices  free GPUs for on-demand (what the SDK's own launch routing reads)
     spot_num_free_devices     free GPUs for spot
     num_gpus                  GPUs per server
@@ -21,6 +21,7 @@ Replaced the pricing-page scraper (2026-10-30): the API adds regions, spot price
 
 import logging
 import re
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -161,3 +162,49 @@ class JarvislabsProvider(Provider):
                            f"spot_free={r.get('spot_num_free_devices')}; gpus_per_server={r.get('num_gpus')}"),
                 source=ENDPOINT, observed_at=snapshot.fetched_at))
         return out
+
+
+# --------------------------------------------------------------------------- reserved (read on demand, never a listing)
+
+# reserved_pricing keys -> months of commitment. Jarvislabs labels them itself ("reserved_1m" ... "reserved_2y");
+# a key not in here is kept raw and never guessed.
+RESERVED_TERMS = {"reserved_1m": 1, "reserved_3m": 3, "reserved_6m": 6, "reserved_1y": 12, "reserved_2y": 24}
+
+
+@dataclass(frozen=True)
+class JarvisReservedPrice:
+    """One `reserved_pricing` rate: per GPU-hour for a commitment of `months`. Never a ComputeListing."""
+
+    raw_gpu_name: str
+    canonical_gpu_name: str | None
+    region: str
+    workload: str
+    term: str                  # the API's key, e.g. "reserved_1y"
+    months: int
+    price_per_gpu_hour: Decimal
+    listing_id: str            # the matching on-demand listing (same GPU, region, workload)
+
+
+def reserved_prices(by_endpoint: "dict[str, list[RawSnapshot]]") -> tuple[list[JarvisReservedPrice], str | None]:
+    """Every priced `reserved_pricing` cell in the stored catalogue, and the catalogue currency. Pure, read-only.
+
+    Not called by normalize(): nothing here becomes a listing, an index vote or a market statistic.
+    """
+    snapshot, rows = _rows(by_endpoint)
+    if snapshot is None:
+        return [], None
+    currency = snapshot.payload.get("currency") if isinstance(snapshot.payload, dict) else None
+    out = []
+    for r in rows:
+        name, region, workload = _name(r), r.get("region"), r.get("workload_type") or "any"
+        if not r.get("gpu_type") or not region or not isinstance(r.get("reserved_pricing"), dict):
+            continue
+        for key, price in r["reserved_pricing"].items():
+            months = RESERVED_TERMS.get(key)
+            if months is None or not isinstance(price, (int, float)) or isinstance(price, bool) or price <= 0:
+                continue
+            out.append(JarvisReservedPrice(
+                raw_gpu_name=name, canonical_gpu_name=canonical.canonical_gpu_name(name), region=region,
+                workload=workload, term=key, months=months, price_per_gpu_hour=Decimal(str(price)),
+                listing_id=f"{name}:1x:{region}:{workload}:on_demand"))
+    return out, currency

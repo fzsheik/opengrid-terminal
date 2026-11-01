@@ -33,7 +33,7 @@ import httpx
 
 import canonical
 from models import CapacityObservation, ComputeListing, RawResponse
-from providers.base import PollingPolicy, Provider, find_endpoint, reshaped
+from providers.base import PollingPolicy, Provider, find_endpoint, reshaped, to_decimal
 
 if TYPE_CHECKING:
     from tables import RawSnapshot
@@ -248,11 +248,7 @@ class LatitudeProvider(ShadeformCloud):
         data = snap.payload.get("data") if isinstance(snap.payload, dict) else None
         if not isinstance(data, list):
             raise ValueError("latitude: plans response has no data list - reshaped")
-        # Latitude's own GPU text ("NVIDIA H100 80GB") omits the variant; Shadeform's label for the same plan carries
-        # it, and is what the price listings map, so it wins where Shadeform lists the plan.
-        shade = find_endpoint(by_endpoint, ENDPOINT)
-        types = shade[0].payload.get("instance_types") if shade and isinstance(shade[0].payload, dict) else None
-        labels = {t.get("cloud_instance_type"): gpu_label(t) for t in types or [] if isinstance(t, dict)}
+        labels = _latitude_labels(by_endpoint)
         out = []
         for p in data:
             a = p.get("attributes") or {}
@@ -275,6 +271,69 @@ class LatitudeProvider(ShadeformCloud):
                         raw_value=f"stock_level={word}; in_stock={stocked}; in_stock_count={n}",
                         source=LATITUDE_PLANS, observed_at=snap.fetched_at))
         return out
+
+
+def _latitude_labels(by_endpoint: "dict[str, list[RawSnapshot]]") -> dict[str, str]:
+    """Plan slug -> Shadeform's GPU label. Latitude's own GPU text ("NVIDIA H100 80GB") omits the variant; Shadeform's
+    label for the same plan carries it, and is what the price listings map, so it wins where Shadeform lists the plan."""
+    shade = find_endpoint(by_endpoint, ENDPOINT)
+    types = shade[0].payload.get("instance_types") if shade and isinstance(shade[0].payload, dict) else None
+    return {t.get("cloud_instance_type"): gpu_label(t) for t in types or [] if isinstance(t, dict)}
+
+
+# Latitude plan price periods that are commitments -> (months, hours in the period). "hour" is pay-as-you-go.
+# 730 h is a twelfth of 8,760 (365 x 24), the same month Azure uses; leap days are ignored.
+LATITUDE_TERMS = {"month": (1, Decimal(730)), "year": (12, Decimal(8760))}
+
+
+@dataclass(frozen=True)
+class LatitudePlanPrice:
+    """A Latitude plan's monthly or yearly price in one region, per server, made comparable. Never a listing."""
+
+    slug: str
+    raw_gpu_name: str
+    canonical_gpu_name: str | None
+    gpu_count: int
+    region: str                 # Latitude's region name, e.g. "United States"
+    term: str                   # "month" or "year", Latitude's own key
+    months: int
+    term_price: Decimal         # the whole server for the whole period, as Latitude states it
+    term_hours: Decimal
+    price_per_gpu_hour: Decimal
+    hourly_per_gpu: Decimal | None  # the same plan's own "hour" price, per GPU (pay-as-you-go)
+
+
+def latitude_plan_prices(by_endpoint: "dict[str, list[RawSnapshot]]") -> tuple[list[LatitudePlanPrice], list[str]]:
+    """Monthly and yearly USD plan prices from the stored plans response, and the non-USD currencies skipped
+    (OpenGrid converts no currencies). Pure, read-only; nothing here becomes a listing or a statistic."""
+    rows = find_endpoint(by_endpoint, LATITUDE_PLANS)
+    data = rows[0].payload.get("data") if rows and isinstance(rows[0].payload, dict) else None
+    if not isinstance(data, list):
+        return [], []
+    labels = _latitude_labels(by_endpoint)
+    out, skipped = [], set()
+    for p in data:
+        a = p.get("attributes") or {}
+        gpu = (a.get("specs") or {}).get("gpu") or {}
+        count = gpu.get("count")
+        if not isinstance(count, int) or count <= 0 or not a.get("slug"):
+            continue
+        raw_name = labels.get(a["slug"]) or f"{gpu.get('type') or ''}".strip()
+        for r in a.get("regions") or []:
+            pricing = r.get("pricing") or {}
+            skipped.update(c for c in pricing if c != "USD")
+            usd = pricing.get("USD") if isinstance(pricing.get("USD"), dict) else {}
+            hourly = to_decimal(usd.get("hour"))
+            for term, (months, hours) in LATITUDE_TERMS.items():
+                price = to_decimal(usd.get(term))
+                if price is None or price <= 0 or not r.get("name"):
+                    continue
+                out.append(LatitudePlanPrice(
+                    slug=a["slug"], raw_gpu_name=raw_name, canonical_gpu_name=canonical.canonical_gpu_name(raw_name),
+                    gpu_count=count, region=r["name"], term=term, months=months, term_price=price, term_hours=hours,
+                    price_per_gpu_hour=price / hours / count,
+                    hourly_per_gpu=hourly / count if hourly is not None and hourly > 0 else None))
+    return out, sorted(skipped)
 
 
 class DenvrProvider(ShadeformCloud):
