@@ -95,7 +95,8 @@ def context(providers: list[str] | None = None, listing_keys: list[tuple[str, st
 
     with normalize.SessionLocal() as s:
         if providers is None:
-            providers = list(s.execute(text("SELECT DISTINCT provider FROM compute_listings")).scalars())
+            providers = list(s.execute(text("SELECT DISTINCT provider FROM compute_listings "
+                                            "WHERE visibility = 'public'")).scalars())
         last_ok = {
             r.provider: r.last_ok for r in s.execute(text(
                 """SELECT p AS provider, (SELECT max(fetched_at) FROM raw_snapshots r
@@ -107,7 +108,7 @@ def context(providers: list[str] | None = None, listing_keys: list[tuple[str, st
                LEFT JOIN LATERAL (SELECT observed_at FROM listing_observations o
                                   WHERE o.provider = c.provider AND o.listing_id = c.listing_id
                                   ORDER BY observed_at DESC LIMIT 1) o ON true
-               WHERE c.provider = ANY(:ps)"""
+               WHERE c.provider = ANY(:ps) AND c.visibility = 'public'"""
         params: dict = {"ps": list(providers)}
         if listing_keys is not None:
             q += " AND c.listing_id = ANY(:ids)"
@@ -192,8 +193,10 @@ _HEALTH = text(
         (SELECT count(*) FROM w WHERE NOT ok) AS failures_24h,
         (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_ms) FROM w WHERE duration_ms IS NOT NULL) AS p50,
         (SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) FROM w WHERE duration_ms IS NOT NULL) AS p95,
-        (SELECT count(*) FROM compute_listings WHERE provider = :p) AS listings_total,
-        (SELECT count(*) FROM compute_listings WHERE provider = :p AND observed_at >= :live_since) AS listings_now,
+        (SELECT count(*) FROM compute_listings WHERE provider = :p AND visibility = 'public') AS listings_total,
+        (SELECT count(*) FROM compute_listings WHERE provider = :p AND visibility = 'public'
+                                               AND observed_at >= :live_since) AS listings_now,
+        (SELECT count(*) FROM compute_listings WHERE provider = :p AND visibility <> 'public') AS internal_listings,
         (SELECT count(*) FROM quality_quarantine WHERE provider = :p AND status = 'pending') AS quarantined,
         (SELECT count(*) FROM quality_incidents WHERE provider = :p AND kind = 'schema_change'
                                                   AND last_seen >= :since) AS schema_changes_24h,
@@ -270,8 +273,9 @@ def provider_health(provider: str) -> dict:
         "failure_rate_24h": None if rate is None else round(rate, 4),
         "latency_ms_p50_24h": None if h.p50 is None else round(float(h.p50), 1),
         "latency_ms_p95_24h": None if h.p95 is None else round(float(h.p95), 1),
-        "listings_total": h.listings_total,
-        "listings_now": h.listings_now,
+        "listings_total": h.listings_total,      # public tier only
+        "listings_now": h.listings_now,          # public tier only
+        "internal_listings": h.internal_listings,  # ops only: public_health() drops it
         "listings_24h_ago": None if then is None else then.listings,
         "listings_24h_ago_at": None if then is None else then.polled_at,
         "listings_24h_ago_note": None if then is not None else "insufficient history (no screened poll near 24h ago)",
@@ -302,7 +306,11 @@ def all_provider_health() -> list[dict]:
 
 
 def public_health(h: dict) -> dict:
-    """Health without internal error text or endpoint paths."""
-    out = {k: v for k, v in h.items() if k not in ("last_failure", "open_incidents")}
+    """Health without internal error text, endpoint paths or internal-tier counts."""
+    out = {k: v for k, v in h.items() if k not in ("last_failure", "open_incidents", "internal_listings")}
     out["last_failure_at"] = h["last_failure"]["at"] if h.get("last_failure") else None
+    if h.get("internal_listings"):
+        # quality_polls counts every screened listing, internal ones too: not a public-tier number
+        out["listings_24h_ago"] = out["listings_24h_ago_at"] = None
+        out["listings_24h_ago_note"] = "not shown for this provider (the poll count includes non-public data)"
     return out

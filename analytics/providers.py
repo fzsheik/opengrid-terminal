@@ -377,7 +377,8 @@ def feed_health() -> dict[str, dict]:
             "avg_latency_ms_24h": None if r.latency_ms is None else float(r.latency_ms),
             "last_ok_fetch": (r.last_ok or ever.get(r.provider)).isoformat() if (r.last_ok or ever.get(r.provider)) else None,
             "last_fetch": r.last_fetch.isoformat(), "reason": None}
-    return out
+    # a wholly internal provider (provider_meta.INTERNAL_SOURCES) is not named on public provider lists
+    return {p: v for p, v in out.items() if provider_meta.is_public_provider(p)}
 
 
 def _pct(x):

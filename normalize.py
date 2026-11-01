@@ -18,6 +18,7 @@ from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 
 import canonical
+import provider_meta
 import quality  # lazy inside: its submodules import this module
 from db import SessionLocal
 from models import ComputeListing
@@ -143,6 +144,8 @@ def save(listings: list[ComputeListing]) -> int:
     for listing in listings:
         row = listing.model_dump()
         row["first_seen_at"] = listing.observed_at
+        # The tier is stamped here, from the registry, failing closed (provider_meta.enforce).
+        row["visibility"] = provider_meta.enforce(listing.provider, listing.visibility)
         rows.append(row)
     with SessionLocal.begin() as s:
         stmt = insert(ComputeListingRow).values(rows)
@@ -354,6 +357,7 @@ def history(q: str | None = None, limit: int = 200) -> list[dict]:
             o.fx_rate_date,
         )
         .join(c, (c.provider == o.provider) & (c.listing_id == o.listing_id))
+        .where(c.visibility == provider_meta.PUBLIC)  # legacy /history is public: public tier only
         .order_by(o.observed_at.desc(), o.provider, o.listing_id)
         .limit(limit)
     )
@@ -472,6 +476,7 @@ _PRICE_THEN = text(
     CROSS JOIN cutoff
     LEFT JOIN base b ON b.provider = c.provider AND b.listing_id = c.listing_id
     LEFT JOIN cov ON cov.provider = c.provider
+    WHERE c.visibility = 'public'
     """
 )
 
@@ -533,6 +538,7 @@ def listings(q: str | None = None, only_available: bool = False, limit: int | No
             prev.c.changed_at,
         )
         .outerjoin(prev, (prev.c.provider == t.provider) & (prev.c.listing_id == t.listing_id))
+        .where(t.visibility == provider_meta.PUBLIC)  # legacy /listings is public: public tier only
         .order_by(t.price_per_gpu_hour.nulls_last(), t.canonical_gpu_name, t.gpu_count)
     )
     if q:

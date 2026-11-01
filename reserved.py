@@ -348,7 +348,7 @@ _LISTINGS_SQL = """
     SELECT provider, listing_id, sku, raw_gpu_name, canonical_gpu_name, gpu_count, region, price_per_gpu_hour,
            currency, market_type, interruptible, provider_tier, observed_at
     FROM compute_listings
-    WHERE provider = ANY(:providers) AND market_type = 'on_demand'
+    WHERE provider = ANY(:providers) AND market_type = 'on_demand' AND visibility = 'public'
 """
 
 

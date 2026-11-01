@@ -222,9 +222,12 @@ def test_deepinfra_api_stock_page_prices():
     assert raws[1].payload == _api_body(), "raw first: the API body is stored as received (usd_per_hour included)"
     assert all("di-test-key" not in json.dumps(r.model_dump(mode="json")) for r in raws), "the key is never stored"
 
-    # Prices are the page's, key or no key: the API's usd_per_hour never reaches a listing.
+    # PUBLIC prices are the page's, key or no key. The API's usd_per_hour becomes INTERNAL listings only
+    # (provider_meta.INTERNAL_SOURCES; methodology/data-visibility.md), with their own ids.
     by = _by(raws)
-    keyed, page = by_id(DeepInfraProvider.normalize(by)), normalized("deepinfra")
+    everything, page = by_id(DeepInfraProvider.normalize(by)), normalized("deepinfra")
+    keyed = {k: v for k, v in everything.items() if v.visibility == "public"}
+    internal = {k: v for k, v in everything.items() if v.visibility == "internal"}
     assert keyed == by_id(DeepInfraProvider.normalize({deepinfra.ENDPOINT: by[deepinfra.ENDPOINT]}))
     assert set(keyed) == set(page) == {f"nvidia-b200:{n}x" for n in (1, 2, 4, 8)}
     for lid, l in keyed.items():
@@ -235,8 +238,15 @@ def test_deepinfra_api_stock_page_prices():
     assert keyed["nvidia-b200:8x"].vcpu == 128 and keyed["nvidia-b200:8x"].storage_gb == 15000, "page specs kept"
     published = {str(v) for l in keyed.values() for v in (l.price_per_gpu_hour, l.price_per_instance_hour)}
     assert not published & {"3.69", "7.38", "14.76", "29.52"}, published
-    # Only the API stored (no page yet): no listings at all, rather than API prices.
-    assert DeepInfraProvider.normalize({deepinfra.API_ENDPOINT: by[deepinfra.API_ENDPOINT]}) == []
+    assert set(internal) == {f"nvidia-b200:{n}x:api" for n in (1, 2, 4, 8)}, internal
+    for n in (1, 2, 4, 8):
+        i, p_ = internal[f"nvidia-b200:{n}x:api"], keyed[f"nvidia-b200:{n}x"]
+        assert i.sku == p_.sku and i.canonical_gpu_name == p_.canonical_gpu_name and i.gpu_count == n
+        assert i.price_per_gpu_hour == D("3.69") and i.price_per_instance_hour == D("3.69") * n, i
+        assert i.available is False and i.market_type == "on_demand" and i.vcpu == p_.vcpu, i
+    # Only the API stored (no page yet): no PUBLIC listing at all, never API prices in its place.
+    only_api = DeepInfraProvider.normalize({deepinfra.API_ENDPOINT: by[deepinfra.API_ENDPOINT]})
+    assert only_api and all(l.visibility == "internal" for l in only_api)
 
     # API stock joins to page skus.
     rows = DeepInfraProvider.normalize_capacity(by)
@@ -272,14 +282,15 @@ def test_deepinfra_api_failures_never_touch_prices():
             except ValueError:
                 pass
             assert len(DeepInfraProvider.normalize({deepinfra.ENDPOINT: _by([page])[deepinfra.ENDPOINT],
-                                                    deepinfra.API_ENDPOINT: [snap(body)]})) == 4
+                                                    deepinfra.API_ENDPOINT: [snap(body)]})) == 4, "page only"
     p, _ = _keyed(lambda r: (_ for _ in ()).throw(httpx.ConnectError("down")))
     page, api = _fetch(p)
     assert page.ok and not api.ok and api.payload is None
     # A broken page fails prices whatever the API says; the API never stands in.
     p, _ = _keyed(lambda r: httpx.Response(200, json=_api_body()), page_transport=_page(503, "maintenance"))
     page, api = _fetch(p)
-    assert not page.ok and api.ok and DeepInfraProvider.normalize(_by([page, api])) == []
+    assert not page.ok and api.ok
+    assert all(l.visibility == "internal" for l in DeepInfraProvider.normalize(_by([page, api]))), "no public row"
     assert DeepInfraProvider.normalize({}) == [] and DeepInfraProvider.normalize_capacity({}) == []
 
 
@@ -411,9 +422,12 @@ def test_deepinfra_keyed_pipeline():
         stored = capacity.save(capacity.normalize_all(["deepinfra"]))
         with Session() as s:
             listed = dict(s.execute(sql("SELECT sku, price_per_gpu_hour FROM compute_listings "
-                                        "WHERE provider = 'deepinfra'")).all())
+                                        "WHERE provider = 'deepinfra' AND visibility = 'public'")).all())
+            hidden = dict(s.execute(sql("SELECT listing_id, price_per_gpu_hour FROM compute_listings "
+                                        "WHERE provider = 'deepinfra' AND visibility = 'internal'")).all())
             cap = dict(s.execute(sql("SELECT sku, in_stock FROM capacity_current WHERE provider = 'deepinfra'")).all())
         assert listed == {f"{n}x NVIDIA B200": D("4.89") for n in (1, 2, 4, 8)}, listed
+        assert hidden == {f"nvidia-b200:{n}x:api": D("3.69") for n in (1, 2, 4, 8)}, hidden
         assert stored["current"] == 4 and set(cap) == set(listed) and not any(cap.values()), cap
     finally:
         scratchdb.drop(db)

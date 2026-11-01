@@ -300,7 +300,7 @@ def provider_gpu_context(provider: str, gpu: str, segment: str = "on_demand") ->
 
 _LISTING = text("""SELECT provider, listing_id, canonical_gpu_name AS gpu, observed_at AS last_seen, sku, region,
                           market_type, interruptible FROM compute_listings
-                   WHERE provider = :p AND listing_id = :l""")
+                   WHERE provider = :p AND listing_id = :l AND visibility = 'public'""")
 _LISTING_OBS = text("""
     SELECT observed_at, price_per_gpu_hour AS price, available FROM (
       SELECT observed_at, price_per_gpu_hour, available,

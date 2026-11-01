@@ -512,7 +512,7 @@ _OBS = text("""
         WHERE x.provider = c.provider AND x.listing_id = c.listing_id AND x.observed_at <= :h
         ORDER BY x.observed_at DESC LIMIT 1
     ) o
-    WHERE c.provider = :p AND c.canonical_gpu_name = :g""")
+    WHERE c.provider = :p AND c.canonical_gpu_name = :g AND c.visibility = 'public'""")
 # The snapshot that recorded the vote's price, plus the provider's latest successful round at or before H.
 _SNAPS = text("""
     SELECT id, endpoint, fetched_at, coalesce(payload_hash, sha256) AS sha FROM raw_snapshots

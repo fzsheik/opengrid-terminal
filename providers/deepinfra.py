@@ -19,10 +19,13 @@ The body is stored raw as received; a body with no readable rows is recorded as 
 "nothing in stock". Capacity fails open: an API failure never touches prices. Read-only: this module never
 calls POST /v1/containers (it starts a billed container).
 
-Why the API's `usd_per_hour` is never published (it stays in the raw payload only): on 2026-11-01 it quoted a
-B200 at $3.69 per GPU-hour while /gpu-instances and /pricing published $4.89, for every GPU a lower figure with
-no stated reason, so it may be specific to our account. DeepInfra's terms (s.17, last modified 2026-10-15) count
-non-public pricing as Confidential Information. So listings, indices and stats use the page price only.
+Why the API's `usd_per_hour` is INTERNAL (provider_meta.INTERNAL_SOURCES; methodology/data-visibility.md): on
+2026-11-01 it was lower than what /gpu-instances and /pricing published, for every GPU, with no stated reason, so
+it may be specific to our account; DeepInfra's terms (s.17, last modified 2026-10-15) count non-public pricing as
+Confidential Information. Each API row therefore becomes an INTERNAL listing ("<model>:<n>x:api", same sku as the
+page row): routing, recommendations and job placement may use it, but no public page, API answer, statistic,
+index or fixing ever reads it. The public listings are the page's, and only the page's: a broken page fails the
+public prices whatever the API says (the internal rows never stand in for them).
 
 Terms and robots: robots.txt allows /gpu-instances, and the terms do not mention automated reads of the API or
 the pages. DeepInfra's per-token model API prices live on other pages and are never read.
@@ -105,11 +108,11 @@ def _slug(s: str) -> str:
 
 
 def api_rows(payload) -> list[dict]:
-    """The readable rows of a gpu_availability body: config parsed, `available` passed through.
+    """The readable rows of a gpu_availability body: config parsed, `available` and `usd_per_hour` passed through.
 
-    `usd_per_hour` is deliberately not read (see the module docstring). Raises when the body lost its `gpus`
-    list, a row lost its gpu_config, or no config is readable, so a reshaped response fails the poll instead
-    of reading as "nothing in stock". A config in an unknown format is skipped with a warning.
+    `usd_per_hour` is internal-tier data (see the module docstring): only api_listings() reads it. Raises when the
+    body lost its `gpus` list, a row lost its gpu_config, or no config is readable, so a reshaped response fails
+    the poll instead of reading as "nothing in stock". A config in an unknown format is skipped with a warning.
     """
     gpus = payload.get("gpus") if isinstance(payload, dict) else None
     if not isinstance(gpus, list) or not gpus:
@@ -125,7 +128,8 @@ def api_rows(payload) -> list[dict]:
         count, code = int(m["count"]), m["code"]
         model = NAMES.get(code, code)
         rows.append({"config": g["gpu_config"], "count": count, "model": model, "sku": f"{count}x {model}",
-                     "name": f"{model} {int(m['vram'])}GB", "available": g.get("available")})
+                     "name": f"{model} {int(m['vram'])}GB", "available": g.get("available"),
+                     "usd_per_hour": g.get("usd_per_hour")})
     if not rows:
         raise ValueError("deepinfra: no readable gpu_config in gpu_availability - response reshaped")
     unknown = sorted({r["model"] for r in rows if r["model"] not in NAMES.values()})
@@ -188,9 +192,19 @@ class DeepInfraProvider(Provider):
 
     @staticmethod
     def normalize(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:
-        """One on-demand row of the price page becomes one listing. The API is never read here."""
+        """Public: one on-demand row of the price page, one listing. Internal: one per container-API row.
+
+        The two fail independently: an unreadable API body leaves the page listings untouched, and a broken page
+        leaves no public listing at all (never API prices in their place)."""
         rows = find_endpoint(by_endpoint, ENDPOINT)
-        return _page_listings(rows[0]) if rows else []
+        out = _page_listings(rows[0]) if rows else []
+        snaps = find_endpoint(by_endpoint, API_ENDPOINT)
+        if snaps:
+            try:
+                out += api_listings(snaps[0], {l.sku: l for l in out})
+            except ValueError as exc:
+                log.warning("deepinfra: container API body unreadable; no internal listings this round: %s", exc)
+        return out
 
     @staticmethod
     def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
@@ -198,7 +212,10 @@ class DeepInfraProvider(Provider):
         snaps = find_endpoint(by_endpoint, API_ENDPOINT)
         if not snaps:
             return []  # no key, or no stock call stored yet: the page has no stock
+        import provider_meta
+
         snapshot = snaps[0]
+        tier = provider_meta.visibility("deepinfra", API_ENDPOINT, "capacity")  # the in-stock flag is public
         out = []
         for r in api_rows(snapshot.payload):
             stock = r["available"] if isinstance(r["available"], bool) else None
@@ -206,8 +223,36 @@ class DeepInfraProvider(Provider):
                 provider="deepinfra", sku=r["sku"], region=None, raw_gpu_name=r["name"],
                 canonical_gpu_name=canonical.canonical_gpu_name(r["name"]), gpu_count=r["count"],
                 in_stock=stock, raw_value=f"available={r['available']!r}; gpu_config={r['config']}",
-                source=API_ENDPOINT, observed_at=snapshot.fetched_at))
+                source=API_ENDPOINT, observed_at=snapshot.fetched_at, visibility=tier))
         return out
+
+
+def api_listings(snapshot, page_by_sku: dict | None = None) -> list[ComputeListing]:
+    """INTERNAL listings from the container API's `usd_per_hour` (per instance), one per configuration.
+
+    Tier from the registry: provider_meta.visibility("deepinfra", API_ENDPOINT) (internal). Specs (vCPU, RAM, disk)
+    come from the page row with the same sku when there is one; `available` is the API's own flag. A row without a
+    positive numeric price is skipped, never guessed."""
+    import provider_meta
+
+    tier = provider_meta.visibility("deepinfra", API_ENDPOINT, "listings")
+    page_by_sku = page_by_sku or {}
+    out = []
+    for r in api_rows(snapshot.payload):
+        price = r["usd_per_hour"]
+        if isinstance(price, bool) or not isinstance(price, (int, float)) or price <= 0:
+            continue
+        inst = Decimal(str(price))
+        page = page_by_sku.get(r["sku"])
+        out.append(ComputeListing(
+            provider="deepinfra", sku=r["sku"], listing_id=f"{_slug(r['model'])}:{r['count']}x:api",
+            raw_gpu_name=r["name"], canonical_gpu_name=canonical.canonical_gpu_name(r["name"]), gpu_count=r["count"],
+            region=None, country=None, price_per_gpu_hour=inst / r["count"], price_per_instance_hour=inst,
+            currency="USD", market_type="on_demand", provider_tier="container", interruptible=False,
+            available=r["available"] if isinstance(r["available"], bool) else None, capacity=None, capacity_unit=None,
+            vcpu=page.vcpu if page else None, ram_gb=page.ram_gb if page else None,
+            storage_gb=page.storage_gb if page else None, observed_at=snapshot.fetched_at, visibility=tier))
+    return out
 
 
 def _page_listings(snapshot) -> list[ComputeListing]:

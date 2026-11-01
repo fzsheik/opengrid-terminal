@@ -12,6 +12,10 @@ Sampling rules (identical to market.price_at / stale_after):
       vanished records no "gone" row, so without this it would live forever
     - priced = price > 0 and not sold out; sold out = available is False
 
+Public tier only (methodology/data-visibility.md): internal listings never enter market_hourly, so nothing built
+on it (indices, fixings, structure, events, movers, percentiles) can count one. Observations are sampled only
+for the listings read here, so an internal listing's observations are never read either.
+
 Segments:
     on_demand   market.py's eligibility (canonical, on-demand, not interruptible,
                 not Vast's "cheapest" row, not a "from $x" floor)
@@ -60,6 +64,7 @@ _LISTINGS = text(f"""
       SELECT c.provider, c.listing_id, c.canonical_gpu_name AS gpu, COALESCE(c.region, '') AS region,
              c.country, c.observed_at AS last_seen, c.capacity_unit, {_SEGMENT_SQL} AS segment
       FROM compute_listings c
+      WHERE {market.PUBLIC_SQL}
     ) x WHERE segment IS NOT NULL
 """)
 

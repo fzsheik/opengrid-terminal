@@ -280,10 +280,11 @@ _RES = text("SELECT provider, listing_id, vcpu, ram_gb, storage_gb FROM compute_
             "WHERE canonical_gpu_name = ANY(:gpus)")
 
 
-def _listed_gpus() -> set[str]:
+def _listed_gpus(tier: str = "all") -> set[str]:
+    """GPUs with any current listing; tier="public" counts public listings only (a public recommendation)."""
+    where = "canonical_gpu_name IS NOT NULL" + (" AND visibility = 'public'" if tier != "all" else "")
     with normalize.SessionLocal() as s:
-        return {r[0] for r in s.execute(text("SELECT DISTINCT canonical_gpu_name FROM compute_listings "
-                                             "WHERE canonical_gpu_name IS NOT NULL"))}
+        return {r[0] for r in s.execute(text(f"SELECT DISTINCT canonical_gpu_name FROM compute_listings WHERE {where}"))}
 
 
 def _resources(gpus: list[str]) -> dict:
@@ -415,7 +416,8 @@ def select(spec, who, *, now: datetime | None = None) -> dict:
             eligible_out.append({**info, "listings": 0, "candidates": 0, "market": None})
             continue
         r = scoring.rank_listings(g["gpu"], count=count, region_group=region, max_price=max_price, mode=strategy,
-                                  weights=weights, strict_region=strict, limit=1000, now=now)
+                                  weights=weights, strict_region=strict, limit=1000, now=now,
+                                  tier="all")  # job placement reads both data tiers (methodology/data-visibility.md)
         rank_weights = r["weights"]
         excl += [{**_excl(e, g["gpu"], e["code"], e["reason"])} for e in r["exclusions"]]
         for c in r["multi_instance_alternatives"]:

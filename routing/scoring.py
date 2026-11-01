@@ -26,6 +26,12 @@ Each factor is normalized to 0..1 and reported with its raw value and data kind:
 
 A factor with weight but no value (thin history) scores a neutral 0.5 and says so ("imputed").
 See methodology/best-execution.md.
+
+Data tiers (methodology/data-visibility.md): `tier="public"` (the default, fail closed) ranks public listings only;
+`tier="all"` also ranks internal listings, each candidate labelled `visibility`. Only OpenGrid's own execution
+(route preview / route, job and workload placement, a keyed recommendation) passes "all"; public surfaces (GET
+/v1/best, the assistant, anonymous recommendations, reservations) never do. The market reference (`market`, the
+price factor's median) is always public-tier only.
 """
 
 from __future__ import annotations
@@ -44,6 +50,7 @@ from providers import PROVIDERS
 from routing import adapters
 
 METHODOLOGY_VERSION = "routing-1.0"
+TIERS = ("public", "all")  # rank_listings(tier=...): see the module docstring
 MODES = ("CHEAPEST", "FASTEST_AVAILABLE", "BALANCED", "MOST_STABLE", "USER_DEFINED")
 FACTORS = ("price", "availability_now", "region_match", "freshness", "availability_persistence",
            "price_stability", "integration_level", "reliability", "performance")
@@ -162,7 +169,7 @@ _LISTINGS = text(f"""
     SELECT c.provider, c.listing_id, c.sku, c.raw_gpu_name, c.canonical_gpu_name AS gpu, c.gpu_count,
            c.region, c.country, c.price_per_gpu_hour, c.price_per_instance_hour, c.market_type,
            c.provider_tier, c.interruptible, c.available, c.capacity, c.capacity_unit,
-           c.observed_at, c.first_seen_at, ({market._ELIGIBLE}) AS eligible
+           c.observed_at, c.first_seen_at, c.visibility, ({market._ELIGIBLE_ANY_TIER}) AS eligible
     FROM compute_listings c
     WHERE c.canonical_gpu_name = :gpu
 """)
@@ -475,14 +482,17 @@ def rank_listings(gpu: str, *, count: int = 1, region_group: str | None = None, 
                   mode: str = "BALANCED", weights: dict | None = None, exclude_providers=(),
                   include_providers=None, require_level: int = 0, require_available: bool = False,
                   limit: int = 25, now: datetime | None = None, strict_region: bool = False,
-                  rows: list[dict] | None = None) -> dict:
+                  rows: list[dict] | None = None, tier: str = "public") -> dict:
     """The best-execution ranking for one GPU. See the module docstring.
 
     strict_region: with a region_group, also EXCLUDE listings whose location is unknown
     (code region_unconfirmed) instead of scoring them 0.5 on region_match.
     rows: the GPU's listing rows from listing_rows(gpu), when the caller ranks the same GPU more than once (the
     recommender ranks each GPU at two counts); read fresh otherwise.
+    tier: "public" (default) ranks public listings only; "all" adds internal ones (see the module docstring).
     """
+    if tier not in TIERS:
+        raise ScoringError(f"tier must be one of {TIERS}")
     mode = (mode or "BALANCED").upper()
     if count < 1:
         raise ScoringError("count must be >= 1")
@@ -490,8 +500,11 @@ def rank_listings(gpu: str, *, count: int = 1, region_group: str | None = None, 
     now = now or datetime.now(timezone.utc)
     if rows is None:
         rows = listing_rows(gpu)
+    public_rows = [r for r in rows if r.get("visibility") == provider_meta.PUBLIC]
+    if tier == "public":
+        rows = public_rows      # an internal row is not even an exclusion on a public answer
     hist = history(gpu)
-    mkt = market_snapshot(rows, now)
+    mkt = market_snapshot(public_rows, now)
     excluded_set = {p.lower() for p in exclude_providers or ()}
     include_set = None if include_providers is None else {p.lower() for p in include_providers}
 
@@ -559,6 +572,7 @@ def rank_listings(gpu: str, *, count: int = 1, region_group: str | None = None, 
             "price_kind": "observed_market_price", "available": r["available"],
             "observed_at": _iso(r["observed_at"]), "age_seconds": round((now - r["observed_at"]).total_seconds()),
             "integration_level": lvl, "provisionable": lvl >= 2,
+            "visibility": r.get("visibility") or provider_meta.INTERNAL,
             "score": score(fs, w), "factors": fs,
         }
         c["explanation"] = explanation(c)
@@ -588,7 +602,7 @@ def rank_listings(gpu: str, *, count: int = 1, region_group: str | None = None, 
     return {
         "gpu": gpu, "count": count, "count_semantics": "GPUs per instance; one instance per route",
         "mode": mode, "weights": w, "region_group": region_group, "strict_region": bool(strict_region),
-        "max_price_per_gpu_hour": max_price,
+        "max_price_per_gpu_hour": max_price, "tier": tier,
         "as_of": now.isoformat(), "methodology_version": METHODOLOGY_VERSION,
         "market": mkt, "history_last_hour": hist["last_hour"],
         "candidates_total": len(cands), "candidates": cands[:limit],
@@ -643,7 +657,7 @@ def rank_variants(variants: list[str], *, family: str, limit: int = 25, **kw) ->
     base = last or rank_listings(variants[0], limit=0, **kw)
     return {
         **{k: base[k] for k in ("count", "count_semantics", "mode", "weights", "region_group", "strict_region",
-                                "max_price_per_gpu_hour", "as_of", "methodology_version", "history_last_hour",
+                                "tier", "max_price_per_gpu_hour", "as_of", "methodology_version", "history_last_hour",
                                 "not_used")},
         "gpu": family, "family": family, "variants": list(variants), "by_variant": per,
         "market": {"median": None, "low": None, "providers": None, "as_of": None, "kind": "observed_market_price",

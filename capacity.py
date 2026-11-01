@@ -20,6 +20,7 @@ from sqlalchemy import select, tuple_
 from sqlalchemy.dialects.postgresql import insert
 
 import normalize
+import provider_meta
 from models import CapacityObservation
 from providers import PROVIDERS, Provider
 from store.capacity import CapacityChange, CapacityCurrent
@@ -65,11 +66,13 @@ def save(observations: list[CapacityObservation]) -> dict:
         for key, o in latest.items():
             old = prev.get(key)
             moved = old is None or any(getattr(old, f) != getattr(o, f) for f in STATE)
+            tier = provider_meta.enforce(o.provider, o.visibility)  # stamped here, failing closed
             if moved:
                 changes.append(CapacityChange(provider=o.provider, sku=o.sku, region_key=key[2],
                                               canonical_gpu_name=o.canonical_gpu_name, observed_at=o.observed_at,
-                                              raw_value=o.raw_value, **{f: getattr(o, f) for f in STATE}))
-            rows.append({**o.model_dump(), "region_key": key[2],
+                                              raw_value=o.raw_value, visibility=tier,
+                                              **{f: getattr(o, f) for f in STATE}))
+            rows.append({**o.model_dump(), "visibility": tier, "region_key": key[2],
                          "first_seen_at": old.first_seen_at if old else now,
                          "changed_at": o.observed_at if moved else old.changed_at})
         stmt = insert(CapacityCurrent).values(rows)

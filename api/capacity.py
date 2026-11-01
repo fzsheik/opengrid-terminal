@@ -5,7 +5,8 @@
 
 Every value is the provider's own report, read from its API (kind: observed). Shapes differ by provider and are
 kept, not flattened: `in_stock` is comparable everywhere, `tier` and the counts only where the provider gives them.
-Methodology: /methodology/capacity.
+Public tier only: rows from an internal source (provider_meta.INTERNAL_SOURCES) are never returned here.
+Methodology: /methodology/capacity, /methodology/data-visibility.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -48,7 +49,8 @@ def _row(r: CapacityCurrent, now: datetime) -> dict:
 @router.get("/v1/capacity", tags=["capacity"], summary="Provider-reported capacity, by SKU and region")
 def current(gpu: str | None = Query(None, description="GPU slug or canonical name"), provider: str | None = None,
             in_stock: bool | None = None, who: Principal = Depends(READ)):
-    q = select(CapacityCurrent).order_by(CapacityCurrent.provider, CapacityCurrent.sku, CapacityCurrent.region_key)
+    q = (select(CapacityCurrent).where(CapacityCurrent.visibility == "public")
+         .order_by(CapacityCurrent.provider, CapacityCurrent.sku, CapacityCurrent.region_key))
     if gpu:
         q = q.where(CapacityCurrent.canonical_gpu_name == resolve_gpu(gpu))
     if _provider(provider):
@@ -64,7 +66,8 @@ def current(gpu: str | None = Query(None, description="GPU slug or canonical nam
 @router.get("/v1/capacity/history", tags=["capacity"], summary="Capacity state changes, newest first")
 def history(gpu: str | None = None, provider: str | None = None, sku: str | None = None, region: str | None = None,
             days: int = Query(7, ge=1, le=90), limit: int = Query(500, ge=1, le=5000), who: Principal = Depends(READ)):
-    q = select(CapacityChange).where(CapacityChange.observed_at >= datetime.now(timezone.utc) - timedelta(days=days))
+    q = select(CapacityChange).where(CapacityChange.visibility == "public",
+                                     CapacityChange.observed_at >= datetime.now(timezone.utc) - timedelta(days=days))
     if gpu:
         q = q.where(CapacityChange.canonical_gpu_name == resolve_gpu(gpu))
     if _provider(provider):

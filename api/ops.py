@@ -86,6 +86,32 @@ def ops_unmapped(who: Principal = Depends(admin)):
     return envelope(normalize.unmapped_gpus(), kind=OBSERVED, methodology=M_QUALITY)
 
 
+@router.get("/v1/ops/internal-data", summary="Ops: INTERNAL-tier data (never public): registry, listings, signals")
+def ops_internal_data(provider: str | None = None, who: Principal = Depends(admin)):
+    """Everything OpenGrid reads but may not republish, each row labelled visibility='internal'
+    (methodology/data-visibility.md). Admin only; never linked from a public page."""
+    import provider_meta
+    from routing import internal_data
+    from sqlalchemy import select
+
+    from store.capacity import CapacityCurrent
+
+    with normalize.SessionLocal() as s:
+        cap = [{c.name: getattr(r, c.name) for c in CapacityCurrent.__table__.columns}
+               for r in s.scalars(select(CapacityCurrent).where(CapacityCurrent.visibility != "public"))]
+    try:
+        bands = internal_data.spot_interruption_bands()
+    except Exception as exc:  # noqa: BLE001  (a missing / reshaped feed is reported, not raised)
+        bands, bands_err = [], f"{type(exc).__name__}: {exc}"[:300]
+    else:
+        bands_err = None
+    return envelope({"visibility": provider_meta.INTERNAL, "registry": provider_meta.visibility_registry(),
+                     "listings": internal_data.internal_listings(provider), "capacity": cap,
+                     "signals": {"aws_spot_interruption_bands": bands, "error": bands_err}},
+                    kind=OBSERVED, methodology="data-visibility",
+                    note="INTERNAL data: usable by routing, recommendations and deployment; never republish")
+
+
 @router.get("/v1/ops/jobs", summary="Ops: background job health")
 def ops_jobs(who: Principal = Depends(admin)):
     return envelope(ops.jobs_health(), kind=OBSERVED, methodology=M_QUALITY)
@@ -113,7 +139,7 @@ def trust_listings(gpu: str | None = None, provider: str | None = None,
                    limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0),
                    who: Principal = Depends(reader)):
     canonical = resolve_gpu(gpu) if gpu else None
-    q = f"SELECT {_LISTING_COLS} FROM compute_listings WHERE true"
+    q = f"SELECT {_LISTING_COLS} FROM compute_listings WHERE visibility = 'public'"  # public read: public tier
     params: dict = {}
     if canonical:
         q += " AND canonical_gpu_name = :g"
@@ -138,5 +164,8 @@ def trust_listings(gpu: str | None = None, provider: str | None = None,
 
 @router.get("/v1/trust/providers", summary="Provider feed health (no internal error text)")
 def trust_providers(who: Principal = Depends(reader)):
-    return envelope([trust.public_health(h) for h in trust.all_provider_health()],
+    import provider_meta  # a wholly internal provider is not named on public lists
+
+    return envelope([trust.public_health(h) for h in trust.all_provider_health()
+                     if provider_meta.is_public_provider(h["provider"])],
                     kind=OBSERVED, methodology=M_TRUST)

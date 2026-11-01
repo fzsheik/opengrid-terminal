@@ -47,7 +47,9 @@ def jobs_health() -> list[dict]:
 
 def stale_listings(include_aging: bool = True, provider: str | None = None) -> list[dict]:
     """Listings not seen recently, judged against each provider's own polling interval."""
-    q = "SELECT provider, listing_id, canonical_gpu_name, raw_gpu_name, region, observed_at FROM compute_listings"
+    # ops (admin only): both tiers, each row labelled with its visibility
+    q = ("SELECT provider, listing_id, canonical_gpu_name, raw_gpu_name, region, observed_at, visibility "
+         "FROM compute_listings")
     params = {}
     if provider:
         q += " WHERE provider = :p"

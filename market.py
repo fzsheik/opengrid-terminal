@@ -10,6 +10,10 @@ Which listings count (the same rules the leaderboard used):
     - not a "from $x" floor price
     - in stock, or stock unknown (a sold-out listing is not a price you can pay)
 
+Only PUBLIC listings count (methodology/data-visibility.md): `_ELIGIBLE`, which every public statistic uses,
+includes `c.visibility = 'public'`, so a new reader that reuses it can never count an internal row.
+`_ELIGIBLE_ANY_TIER` is the same rule without the tier, for routing / recommendations / job placement only.
+
 Two honesty rules for history:
     - A listing counts only until it was last seen (plus a few polls). One that
       vanished never records a "gone" row, so without this its last price would
@@ -33,12 +37,15 @@ from providers import PROVIDERS
 MIN_SPAN = timedelta(minutes=30)  # a change over less than two polls is not a trend
 MAX_HOURS = 24 * 90
 
-_ELIGIBLE = """
+_ELIGIBLE_ANY_TIER = """
     c.canonical_gpu_name IS NOT NULL
     AND c.market_type = 'on_demand'
     AND COALESCE(c.interruptible, false) = false
     AND COALESCE(c.provider_tier, '') NOT IN ('cheapest', 'from_price', 'gpu-attachment')
 """
+# The public-tier filter for compute_listings aliased `c`. Fail closed: anything not exactly 'public' is out.
+PUBLIC_SQL = "c.visibility = 'public'"
+_ELIGIBLE = f"{_ELIGIBLE_ANY_TIER}    AND {PUBLIC_SQL}\n"
 
 _LISTINGS = text(
     f"""
