@@ -580,6 +580,31 @@ _add(None, "Quadro RTX 8000")
 _add(None, "nvidia rtx5000 16Gi PCIe", "nvidia v100 32Gi PCIe", "nvidia gtx1050 2Gi PCIe", "nvidia m4000 8Gi PCIe",
      "nvidia p4 8Gi PCIe", "nvidia p40 24Gi PCIe")
 
+# Gcore (providers/gcore.py): bare-metal column model + per-GPU VRAM (the page prints SXM / PCIe). Its Virtual GPU
+# rows say only "H100" and "80 GB": "H100 80GB" stays unmapped (SXM or PCIe not stated).
+_add("NVIDIA H100 80GB SXM5", "H100 SXM 80GB")
+_add("NVIDIA A100 80GB SXM4", "A100 SXM 80GB")
+_add("NVIDIA L40S 48GB", "L40S PCIe 48GB")
+_add("NVIDIA H200 141GB SXM5", "H200 SXM 141GB")
+_add(None, "H100 80GB")
+
+# Fireworks AI (providers/fireworks.py): on-demand rows as printed. A bare H200 is the SXM part; B200, B300 and GB300
+# exist only as SXM boards / superchips. "H100 80 GB GPU" stays unmapped (SXM or PCIe not stated).
+_add("NVIDIA H200 141GB SXM5", "H200 141 GB GPU")
+_add("NVIDIA B200 180GB SXM", "B200 180 GB GPU")
+_add("NVIDIA B300 288GB SXM", "B300 288 GB GPU")
+_add("NVIDIA GB300 288GB", "GB300 288 GB GPU")
+_add(None, "H100 80 GB GPU")
+
+# IONOS Cloud (providers/ionos.py): GPU Model's vendor + GPU Type. NVIDIA's only PCIe H200 is the H200 NVL card
+# (see the Oracle note above); IONOS's docs describe PCIe passthrough of it.
+_add("NVIDIA H200 143GB NVL", "NVIDIA H200 PCIe")
+
+# Hetzner (providers/hetzner.py): the card's GPU line + per-GPU VRAM. The RTX PRO 4000 Blackwell SFF Edition has no
+# canonical model yet (not the full-height RTX PRO 4000 Blackwell, as the SFF Ada is not the RTX 4000 Ada).
+_add("NVIDIA RTX PRO 6000 Blackwell 96GB Max-Q", "NVIDIA RTX PRO 6000 Blackwell Max-Q 96GB")
+_add(None, "NVIDIA RTX PRO 4000 Blackwell SFF Edition 24GB")
+
 # --------------------------------------------------------------------------
 # Seen, deliberately not mapped
 # --------------------------------------------------------------------------

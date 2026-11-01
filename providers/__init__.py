@@ -27,14 +27,18 @@ from providers.deepinfra import DeepInfraProvider
 from providers.digitalocean import DigitalOceanProvider
 from providers.e2e import E2EProvider
 from providers.exoscale import ExoscaleProvider
+from providers.fireworks import FireworksProvider
+from providers.gcore import GcoreProvider
 from providers.gcp import GcpProvider
 from providers.gpuai import GpuAiProvider
+from providers.hetzner import HetznerProvider
 from providers.hotaisle import HotAisleProvider
 from providers.huggingface import HuggingFaceProvider
 from providers.hydrahost import HydraHostProvider
 from providers.hyperbolic import HyperbolicProvider
 from providers.hyperstack import HyperstackProvider
 from providers.ibm import IbmProvider
+from providers.ionos import IonosProvider
 from providers.jarvislabs import JarvislabsProvider
 from providers.koyeb import KoyebProvider
 from providers.lambda_labs import LambdaProvider
@@ -125,6 +129,10 @@ PROVIDERS: dict[str, type[Provider]] = {
         GpuAiProvider,
         ExoscaleProvider,
         HuggingFaceProvider,
+        GcoreProvider,
+        FireworksProvider,
+        IonosProvider,
+        HetznerProvider,
     )
 }
 
@@ -186,6 +194,10 @@ __all__ = [
     "GpuAiProvider",
     "ExoscaleProvider",
     "HuggingFaceProvider",
+    "GcoreProvider",
+    "FireworksProvider",
+    "IonosProvider",
+    "HetznerProvider",
     "find_endpoint",
     "gather_limited",
     "to_decimal",

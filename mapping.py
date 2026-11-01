@@ -1574,6 +1574,152 @@ HUGGINGFACE = ProviderMapping(
 )
 
 
+GCORE = ProviderMapping(
+    provider="gcore",
+    display_name="Gcore (GPU Cloud)",
+    endpoints={"GET gcore.com/pricing/ai": "the public price page: bare-metal GPU table and Virtual GPU table, EUR"},
+    fields=_fields(
+        "gcore",
+        sku=(DERIVED, '"{bare-metal|vm}:{shape}"', 'e.g. "bare-metal:8xH100 SXM", "vm:1xH100"'),
+        listing_id=(DERIVED, '"{kind}:{n}x-{model slug}"', 'e.g. "bare-metal:8x-h100-sxm"'),
+        raw_gpu_name=(DERIVED, "column / row model + per-GPU VRAM", 'e.g. "H100 SXM 80GB"; Virtual GPU "H100 80GB"'),
+        gpu_count=(RAW, 'shape "8×H100 SXM" / "1×H100"'),
+        region=(ABSENT, "-", "one price list for every GPU Cloud region"),
+        country=(ABSENT, "-"),
+        price_per_gpu_hour=(DERIVED, "= USD instance price / gpu count", _FX),
+        price_per_instance_hour=(DERIVED, '"€21.82 /hr" (bare metal) or "Cost per hour" (VM) x EUR->USD rate', _FX),
+        currency=(CONSTANT, '"USD"', "after conversion; the original is in original_currency"),
+        provider_tier=(DERIVED, '"bare-metal" or "vm"', "the table the offer comes from"),
+        available=(ABSENT, "-", "the page says nothing about stock"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, 'bare metal "vCPUs" row; VM "24 vCPU / 232 GB RAM"'),
+        ram_gb=(RAW, 'bare metal "RAM, GB" row; VM CPU/RAM cell'),
+        storage_gb=(RAW, 'VM "Storage" cell', "None for bare metal (mixed SSD + NVMe text, kept raw)"),
+        original_currency=(CONSTANT, '"EUR"', "the page prints €, excl. VAT"),
+        original_price_per_gpu_hour=(DERIVED, "EUR instance-hour price / gpu count"),
+        original_price_per_instance_hour=(RAW, "the printed € per hour"),
+        fx_rate=(LOOKUP, "fx_rates (ECB EUR->USD)", "the newest rate published before the fetch; fail closed if > 5 days old"),
+        fx_rate_date=(LOOKUP, "fx_rates.rate_date"),
+        fx_source=(CONSTANT, '"ecb"'),
+    ),
+    quirks=[
+        'Only self-serve ("Get started") bare-metal columns are read: 8×B300 (€48.00/hr) and GB300 NVL72 are '
+        '"Contact sales".',
+        "The bare-metal per-GPU figure must equal price / GPUs to the cent or the column is skipped.",
+        "Everywhere Inference (per-minute serverless inference, memory column not per-GPU consistent) is not read.",
+        'Virtual GPU rows do not say SXM or PCIe: "H100 80GB" stays unmapped.',
+        "robots.txt Content-Signal: ai-train=no, ai-input=no (flagged; prices are read into a market table).",
+        "A general-purpose cloud and CDN: never part of a neocloud index.",
+    ],
+)
+
+
+FIREWORKS = ProviderMapping(
+    provider="fireworks",
+    display_name="Fireworks AI (on-demand deployments; INTERNAL: terms forbid republishing)",
+    endpoints={"GET fireworks.ai/pricing": "the public price page; the 'On demand deployments' table, USD per GPU"},
+    fields=_fields(
+        "fireworks",
+        sku=(DERIVED, '"on-demand:{GPU Type}"', 'e.g. "on-demand:H100 80 GB GPU"'),
+        listing_id=(DERIVED, "GPU Type slug", 'e.g. "h100-80-gb-gpu"'),
+        raw_gpu_name=(RAW, "GPU Type", 'e.g. "B200 180 GB GPU"'),
+        gpu_count=(CONSTANT, "1", "priced per GPU"),
+        region=(ABSENT, "-", "region-restricted deployments cost 1.5x; not modelled"),
+        country=(ABSENT, "-"),
+        price_per_gpu_hour=(RAW, "Price ($) per hour", "checked against per minute x 60 within 1%"),
+        price_per_instance_hour=(DERIVED, "= price_per_gpu_hour", "one GPU"),
+        currency=(CONSTANT, '"USD"', "the page prints $"),
+        provider_tier=(CONSTANT, '"serverless"', "a dedicated inference deployment, billed per GPU second"),
+        available=(ABSENT, "-", "no stock signal"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(ABSENT, "-", "host included, not stated"),
+        ram_gb=(ABSENT, "-"),
+        storage_gb=(ABSENT, "-"),
+    ),
+    quirks=[
+        "INTERNAL ONLY: its Terms of Service allow automated access at a human request rate but forbid copying or "
+        "distributing any part of the Service, scraping included; register in provider_meta.INTERNAL_SOURCES.",
+        "Per-minute figures are rounded (H100 $0.134 x 60 = $8.04 vs $8.00): the hourly price is read.",
+        '"H100 80 GB GPU" stays unmapped (SXM or PCIe not stated).',
+        "Runs on other clouds' capacity; classed general_cloud like Baseten and Modal.",
+    ],
+)
+
+
+IONOS = ProviderMapping(
+    provider="ionos",
+    display_name="IONOS Cloud (Cloud GPU VM)",
+    endpoints={"GET docs.ionos.com/support/general-information/price-list/ionos-cloud-inc.md":
+               "IONOS CLOUD Inc.'s USD price list (Markdown); its Cloud GPU VM table"},
+    fields=_fields(
+        "ionos",
+        sku=(RAW, "Template", 'e.g. "H200-S"'),
+        listing_id=(RAW, "Template"),
+        raw_gpu_name=(DERIVED, "GPU Model's vendor + GPU Type", '"NVIDIA H200 PCIe"'),
+        gpu_count=(RAW, "Number of GPUs", "1/2/4/8"),
+        region=(CONSTANT, '"de/fra/2; gb/bhx"', "IONOS GPU VM docs: the only data centres with Cloud GPU VMs"),
+        country=(ABSENT, "-", "Germany and the UK"),
+        price_per_gpu_hour=(DERIVED, "= Price per hour / Number of GPUs"),
+        price_per_instance_hour=(RAW, "Price per hour", '"$3.261", the whole VM, net of tax'),
+        currency=(RAW, "the Inc. list prints $", "IONOS's own USD list; EUR / GBP lists not read"),
+        provider_tier=(CONSTANT, '"vm"'),
+        available=(ABSENT, "-", "no stock signal"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, "Dedicated CPUs", "dedicated AMD EPYC cores"),
+        ram_gb=(RAW, "RAM (GiB)"),
+        storage_gb=(RAW, "NVMe Storage (GB)"),
+    ),
+    quirks=[
+        "Read from the Markdown copy of the price list page (docs.ionos.com serves every page as .md).",
+        "The same templates are priced in EUR (3,00 €) and GBP (£2.554) for other IONOS entities; only USD is read.",
+        '"H200 PCIe" maps to the H200 NVL, NVIDIA\'s only PCIe H200.',
+        "A general-purpose cloud: never part of a neocloud index.",
+    ],
+)
+
+
+HETZNER = ProviderMapping(
+    provider="hetzner",
+    display_name="Hetzner (dedicated GPU servers)",
+    endpoints={"GET www.hetzner.com/dedicated-rootserver/matrix-gpu/": "the public GPU server matrix: one card per GEX model, EUR"},
+    fields=_fields(
+        "hetzner",
+        sku=(RAW, "card name", 'e.g. "GEX130"; a "New" badge is dropped'),
+        listing_id=(DERIVED, "lower-case sku", 'e.g. "gex45"'),
+        raw_gpu_name=(DERIVED, "spec GPU line model + per-GPU VRAM", 'e.g. "NVIDIA RTX PRO 6000 Blackwell Max-Q 96GB"'),
+        gpu_count=(RAW, 'GPU line "4x NVIDIA ..."', "1 when no multiplier"),
+        region=(RAW, "details panel locations, joined", 'e.g. "HEL1; FSN1"'),
+        country=(DERIVED, "the locations' flag when they agree", "None across countries"),
+        price_per_gpu_hour=(DERIVED, "= USD hourly price / gpu count", _FX),
+        price_per_instance_hour=(DERIVED, '"€ 0.3429 per hour, excl. VAT" x EUR->USD rate', _FX),
+        currency=(CONSTANT, '"USD"', "after conversion; the original is in original_currency"),
+        provider_tier=(CONSTANT, '"dedicated"'),
+        available=(ABSENT, "-", "no stock signal"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(ABSENT, "-", "the card prints physical cores, not vCPUs"),
+        ram_gb=(RAW, 'spec RAM line, e.g. "from 256 GB DDR5"', "the base configuration"),
+        storage_gb=(ABSENT, "-", "in the details panel only"),
+        original_currency=(CONSTANT, '"EUR"', "the page prints €, excl. VAT"),
+        original_price_per_gpu_hour=(DERIVED, "EUR hourly price / gpu count"),
+        original_price_per_instance_hour=(RAW, "the hourly price span"),
+        fx_rate=(LOOKUP, "fx_rates (ECB EUR->USD)", "the newest rate published before the fetch; fail closed if > 5 days old"),
+        fx_rate_date=(LOOKUP, "fx_rates.rate_date"),
+        fx_source=(CONSTANT, '"ecb"'),
+    ),
+    quirks=[
+        "The printed hourly rate is read (hourly billing, capped at the monthly price), not monthly / 730: the "
+        "monthly price is the cheaper full-month rate (GEX45 €214.00/month = €0.2932/h vs €0.3429/h hourly).",
+        "A one-time setup fee (about one month's price) applies and is not added.",
+        '"from monthly" models (GEX131) are priced at their base configuration; upgrades are not modelled.',
+        '"NVIDIA RTX PRO 4000 Blackwell SFF Edition 24GB" stays unmapped (no canonical SFF Blackwell).',
+    ],
+)
+
+
 MODAL = ProviderMapping(
     provider="modal",
     display_name="Modal (serverless GPU)",
@@ -1971,6 +2117,10 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         GPUAI,
         EXOSCALE,
         HUGGINGFACE,
+        GCORE,
+        FIREWORKS,
+        IONOS,
+        HETZNER,
     )
 }  # fmt: skip
 

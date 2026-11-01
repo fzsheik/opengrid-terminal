@@ -83,6 +83,8 @@ moves (at most once per TARGET business day); moves under the usual thresholds (
 |---|---|---|
 | Scaleway | Its own public catalogue (`api.scaleway.com/product-catalog`), EUR per minute, every general-availability GPU Instance type, one listing per type across the zones it is priced in. | 2026-11-01 |
 | Verda | Any instance type the API prices in EUR only (a type priced in both EUR and USD is read in USD only, so it is never counted twice). Every Verda type was USD on 2026-11-01, so nothing is converted yet. | 2026-11-01 |
+| Gcore | Its public AI pricing page (`gcore.com/pricing/ai`), EUR per hour excl. VAT: self-serve bare-metal GPU servers and Virtual GPU sizes. | 2026-11-01 |
+| Hetzner | Its public GPU server matrix (`hetzner.com/dedicated-rootserver/matrix-gpu/`), EUR per hour excl. VAT (the hourly rate it prints), one listing per GEX model. | 2026-11-01 |
 
 Not converted: OVHcloud's EU catalogues (EUR, GBP). OpenGrid reads OVHcloud's two USD catalogues (US and World),
 which already list the same flavors; reading an EU price list as well would need a rule for which of two official

@@ -22,6 +22,10 @@ from providers import (
     BoostRunProvider,
     CoreWeaveProvider,
     GpuAiProvider,
+    HetznerProvider,
+    IonosProvider,
+    FireworksProvider,
+    GcoreProvider,
     HotAisleProvider,
     HuggingFaceProvider,
     HydraHostProvider,
@@ -176,6 +180,10 @@ def build_fetchers() -> list[Provider]:
             GpuAiProvider,
             ExoscaleProvider,
             HuggingFaceProvider,
+            GcoreProvider,
+            FireworksProvider,
+            IonosProvider,
+            HetznerProvider,
         )
     )
     return fetchers

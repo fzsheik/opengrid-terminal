@@ -147,6 +147,19 @@ _ALL = [
                  "api.endpoints.huggingface.cloud", "https://endpoints.huggingface.co",
                  "managed endpoints on AWS, GCP and Azure capacity; listings are resold:<cloud> and kept out of "
                  "market statistics"),
+    ProviderMeta("gcore", "Gcore", "general_cloud", "public_page", "gcore.com", "https://gcore.com/cloud/ai-gpu",
+                 "GPU Cloud bare metal (self-serve 8-GPU servers) and Virtual GPU; EUR list prices excl. VAT converted "
+                 "to USD at the ECB reference rate"),
+    ProviderMeta("fireworks", "Fireworks AI", "general_cloud", "public_page", "fireworks.ai", "https://fireworks.ai",
+                 "on-demand (dedicated) inference deployments, USD per GPU-hour; INTERNAL: its terms forbid "
+                 "republishing the Service's content"),
+    ProviderMeta("ionos", "IONOS Cloud", "general_cloud", "public_page", "docs.ionos.com", "https://cloud.ionos.com",
+                 "Cloud GPU VM (H200 PCIe, 1/2/4/8 GPUs) from IONOS CLOUD Inc.'s published USD price list; "
+                 "Frankfurt and Worcester"),
+    ProviderMeta("hetzner", "Hetzner", "general_cloud", "public_page", "www.hetzner.com",
+                 "https://www.hetzner.com/dedicated-rootserver/matrix-gpu/",
+                 "dedicated GEX GPU servers at the printed hourly rate (EUR excl. VAT, converted at the ECB rate); "
+                 "a one-time setup fee applies"),
     ProviderMeta("simplepod", "SimplePod", "marketplace", "public_api", "api.simplepod.ai", "https://simplepod.ai",
                  "own racks plus community hosts; one listing per open on-demand offer (Docker and VM); disk billed extra"),
     ProviderMeta("clore", "Clore.ai", "marketplace", "authenticated_api", "api.clore.ai", "https://clore.ai",
