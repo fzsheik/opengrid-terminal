@@ -28,7 +28,7 @@ availability response names, is in stock exactly when the location lists it. The
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -38,7 +38,7 @@ import httpx
 import canonical
 import fx
 from models import CapacityObservation, ComputeListing, RawResponse
-from providers.base import PollingPolicy, Provider, find_endpoint, reshaped, to_decimal
+from providers.base import CAPACITY, PRICE, PollingPolicy, Provider, find_endpoint, reshaped, to_decimal
 
 if TYPE_CHECKING:
     from tables import RawSnapshot
@@ -83,8 +83,11 @@ def _catalogue(by_endpoint: "dict[str, list[RawSnapshot]]") -> "RawSnapshot | No
 
 class VerdaProvider(Provider):
     name = "verda"
-    # 3 anonymous requests per poll; 5 more with credentials (token, 2 availability, locations, clusters).
-    polling = PollingPolicy(interval_seconds=900, timeout_seconds=60)
+    # Prices: 3 anonymous requests every 6 min (spot dynamic_price moves in minutes). Capacity: 5 keyed requests
+    # (token, 2 availability, locations, clusters) every 2 min. Verda allows 500/min per project and 60/min per
+    # endpoint; the budget spends at most 30/min. Without credentials there is no capacity: prices only.
+    polling = PollingPolicy(interval_seconds=360, timeout_seconds=60, tier="fast", capacity_interval_seconds=120,
+                            rate_limit=(30, 60.0))
 
     def __init__(self, client: httpx.AsyncClient | None = None, client_id: str | None = None,
                  client_secret: str | None = None):
@@ -97,12 +100,14 @@ class VerdaProvider(Provider):
             )
         )
         self._creds = (client_id, client_secret) if client_id and client_secret else None
+        if not self._creds:
+            self.polling = replace(type(self).polling, capacity_interval_seconds=None)
         self._token: str | None = None
         self._refreshed = False
 
     async def fetch(self) -> list[RawResponse]:
-        out = [await self.get(ENDPOINT), await self.get(LADDER), await self.get(CLUSTER_TYPES)]
-        if self._creds:
+        out = [await self.get(ENDPOINT), await self.get(LADDER), await self.get(CLUSTER_TYPES)] if PRICE in self.due else []
+        if self._creds and CAPACITY in self.due:
             try:
                 out += await self._capacity()
             except Exception as exc:  # fail open: prices above are already in hand

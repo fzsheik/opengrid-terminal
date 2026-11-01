@@ -36,7 +36,8 @@ def endpoint_summary() -> list[dict]:
             func.count(func.distinct(RawSnapshot.sha256)).label("distinct_bodies"),
             func.max(RawSnapshot.fetched_at).label("last_fetch"),
             func.round(func.avg(RawSnapshot.duration_ms)).label("avg_ms"),
-            func.count().filter(RawSnapshot.ok.is_(False)).label("failures"),
+            func.count().filter(RawSnapshot.ok.is_(False), RawSnapshot.throttled.is_not(True)).label("failures"),
+            func.count().filter(RawSnapshot.throttled.is_(True)).label("throttled"),
         )
         .group_by(RawSnapshot.provider, RawSnapshot.endpoint)
         .order_by(RawSnapshot.provider, RawSnapshot.endpoint)

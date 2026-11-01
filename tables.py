@@ -45,6 +45,7 @@ class RawSnapshot(Base):
     __table_args__ = (
         Index("ix_raw_provider_endpoint_time", "provider", "endpoint", "fetched_at"),
         Index("ix_raw_inline_pending", "id", postgresql_where=text("payload IS NOT NULL AND payload_hash IS NULL")),
+        Index("ix_raw_throttled_time", "fetched_at", postgresql_where=text("throttled")),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -55,6 +56,9 @@ class RawSnapshot(Base):
     status_code: Mapped[int | None]
     duration_ms: Mapped[int | None]
     ok: Mapped[bool] = mapped_column(default=True)
+    # Refused for rate (429, or held back while the provider asked us to wait). ok is false (there is no body to
+    # read) but it is not a failure: health, ops errors and silence alerts leave it out. NULL on rows before 0028.
+    throttled: Mapped[bool | None] = mapped_column(Boolean)
     error: Mapped[str | None] = mapped_column(Text)
     sha256: Mapped[str | None] = mapped_column(String(64))
     # The POST body we sent. Salad's availability response carries no class id,

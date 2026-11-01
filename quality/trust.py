@@ -183,13 +183,15 @@ def listing_trust(row: dict, ctx: dict | None = None) -> dict:
 _HEALTH = text(
     """
     WITH w AS (
-        SELECT ok, duration_ms FROM raw_snapshots
+        SELECT ok, coalesce(throttled, false) AS throttled, duration_ms FROM raw_snapshots
         WHERE provider = :p AND fetched_at >= :since
     )
     SELECT
         (SELECT max(fetched_at) FROM raw_snapshots WHERE provider = :p AND ok) AS last_ok,
         (SELECT count(*) FROM w) AS fetches_24h,
-        (SELECT count(*) FROM w WHERE NOT ok) AS failures_24h,
+        -- a throttled answer (429) is the provider pacing us, not the source failing (methodology/freshness.md)
+        (SELECT count(*) FROM w WHERE NOT ok AND NOT throttled) AS failures_24h,
+        (SELECT count(*) FROM w WHERE throttled) AS throttled_24h,
         (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_ms) FROM w WHERE duration_ms IS NOT NULL) AS p50,
         (SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) FROM w WHERE duration_ms IS NOT NULL) AS p95,
         (SELECT count(*) FROM compute_listings WHERE provider = :p) AS listings_total,
@@ -204,11 +206,12 @@ _HEALTH = text(
 
 _LAST_FAIL = text(
     """SELECT fetched_at, endpoint, status_code, error FROM raw_snapshots
-       WHERE provider = :p AND NOT ok ORDER BY fetched_at DESC LIMIT 1"""
+       WHERE provider = :p AND NOT ok AND throttled IS NOT TRUE ORDER BY fetched_at DESC LIMIT 1"""
 )
 _CONSECUTIVE = text(
     """SELECT count(*) FROM raw_snapshots
-       WHERE provider = :p AND NOT ok AND fetched_at > coalesce(CAST(:last_ok AS timestamptz), '-infinity')"""
+       WHERE provider = :p AND NOT ok AND throttled IS NOT TRUE
+         AND fetched_at > coalesce(CAST(:last_ok AS timestamptz), '-infinity')"""
 )
 _THEN = text(
     """SELECT polled_at, listings FROM quality_polls
@@ -267,6 +270,7 @@ def provider_health(provider: str) -> dict:
         "consecutive_failures": consecutive,
         "fetches_24h": h.fetches_24h,
         "failures_24h": h.failures_24h,
+        "throttled_24h": h.throttled_24h,
         "failure_rate_24h": None if rate is None else round(rate, 4),
         "latency_ms_p50_24h": None if h.p50 is None else round(float(h.p50), 1),
         "latency_ms_p95_24h": None if h.p95 is None else round(float(h.p95), 1),

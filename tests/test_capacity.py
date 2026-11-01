@@ -509,7 +509,7 @@ def test_vast_census_row_budget_and_quota():
         posts.clear()
         asyncio.run(prov.fetch())
         assert posts == []
-        assert VastProvider.capacity_interval_seconds == int(vast_mod.CENSUS_MAX_GAP.total_seconds())
+        assert VastProvider.polling.capacity_interval_seconds == int(vast_mod.CENSUS_MAX_GAP.total_seconds())
     finally:
         vast_mod.RATE_PAUSE_SECONDS = pause
 

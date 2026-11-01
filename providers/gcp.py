@@ -356,7 +356,8 @@ def _listing(sku, accel, count, price, region, observed_at, tier, vcpu=None, ram
 class GcpProvider(Provider):
     name = "gcp"
     # List prices change rarely; the catalogue is ~7 pages, the Compute Engine zone lists ~5 more every 6 hours.
-    polling = PollingPolicy(interval_seconds=3600, timeout_seconds=180)
+    # Slow tier: the Catalog is 'up to 12 h old' by Google's own account, so every 6 h loses nothing.
+    polling = PollingPolicy(interval_seconds=21600, timeout_seconds=180, tier="slow")
 
     def __init__(self, api_key: str, client: httpx.AsyncClient | None = None,
                  service_account: "gcp_auth.ServiceAccount | None" = None, project_id: str | None = None,

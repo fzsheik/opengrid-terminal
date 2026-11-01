@@ -305,6 +305,9 @@ def polling():
             {
                 "provider": p.name,
                 "interval_seconds": p.polling.interval_seconds,
+                "tier": p.polling.tier,
+                "capacity_interval_seconds": p.polling.capacity_seconds,
+                "loop_seconds": p.polling.loop_seconds,
                 "timeout_seconds": p.polling.timeout_seconds,
             }
             for p in app.state.ingest.providers

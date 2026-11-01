@@ -38,7 +38,8 @@ COUNTRY_BY_REGION_PREFIX = {
 class DigitalOceanProvider(Provider):
     name = "digitalocean"
     # One request per poll (80 sizes fit in one page) against 5,000 requests/hour.
-    polling = PollingPolicy(interval_seconds=900, timeout_seconds=30)
+    # Medium tier: 1-2 requests every 5 min against 250/min and 5,000/h.
+    polling = PollingPolicy(interval_seconds=300, timeout_seconds=30, tier="medium", rate_limit=(100, 60.0))
 
     def __init__(self, api_key: str, client: httpx.AsyncClient | None = None):
         super().__init__(

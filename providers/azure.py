@@ -257,7 +257,8 @@ class AzureProvider(Provider):
     name = "azure"
     # Four requests per poll (consumption and reservations, two regions) against
     # ~10/min; list prices change monthly at most.
-    polling = PollingPolicy(interval_seconds=3600, timeout_seconds=60)
+    # Slow tier: list prices change monthly at most (effectiveStartDate); every 6 h, budget 5/min of Azure's ~10/min.
+    polling = PollingPolicy(interval_seconds=21600, timeout_seconds=60, tier="slow", rate_limit=(5, 60.0))
 
     def __init__(self, client: httpx.AsyncClient | None = None):
         super().__init__(

@@ -46,7 +46,8 @@ def gpu_name(label: str) -> str:
 class LinodeProvider(Provider):
     name = "linode"
     # One anonymous request per poll; list prices change rarely.
-    polling = PollingPolicy(interval_seconds=900, timeout_seconds=30)
+    # Medium tier: ~6-10 pages every 5 min against 200/min for paginated GETs.
+    polling = PollingPolicy(interval_seconds=300, timeout_seconds=30, tier="medium", rate_limit=(100, 60.0))
 
     def __init__(self, client: httpx.AsyncClient | None = None):
         super().__init__(

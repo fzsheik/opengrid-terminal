@@ -45,7 +45,8 @@ class LambdaProvider(Provider):
     name = "lambda"
     # 3 requests per poll. Lambda publishes no rate limit and returns no rate
     # headers, so this is kept small on purpose.
-    polling = PollingPolicy(interval_seconds=900, timeout_seconds=30)
+    # Fast tier: 3 requests every 2 min; Lambda documents 1 request/s, the budget spends at most 1 per 2 s.
+    polling = PollingPolicy(interval_seconds=120, timeout_seconds=30, tier="fast", rate_limit=(1, 2.0))
 
     def __init__(self, api_key: str, client: httpx.AsyncClient | None = None):
         super().__init__(

@@ -131,9 +131,11 @@ def _retry_after(raw: RawResponse) -> int | None:
 
 class VastProvider(Provider):
     name = "vast"
-    capacity_interval_seconds = int(CENSUS_MAX_GAP.total_seconds())
-    # One request per GPU model (three with a key, for the census), paced to the 1/second limit: 25-70 seconds.
-    polling = PollingPolicy(interval_seconds=900, timeout_seconds=180)
+    # Fast tier: the public search (one request per GPU model, ~18, paced to Vast's documented 1/second: ~25 s) every
+    # 5 minutes. Capacity is the keyed census, on its own daily row budget (1-12 h apart, unchanged): its cadence is
+    # the longest gap, CENSUS_MAX_GAP, for the stale flag and the capacity-silence alert.
+    polling = PollingPolicy(interval_seconds=300, timeout_seconds=180, tier="fast",
+                            capacity_interval_seconds=int(CENSUS_MAX_GAP.total_seconds()), rate_limit=(1, 1.0))
 
     def __init__(self, client: httpx.AsyncClient | None = None, api_key: str | None = None):
         super().__init__(
@@ -149,7 +151,9 @@ class VastProvider(Provider):
 
     async def _census(self, gpu_name: str, rentable: bool) -> RawResponse:
         query = _census_query(gpu_name, rentable)
-        raw = await self.post(ENDPOINT, json=query, headers={"Authorization": f"Bearer {self._api_key}"})
+        # backoff=False: a census quota refusal limits the key, not the public price search.
+        raw = await self.post(ENDPOINT, json=query, headers={"Authorization": f"Bearer {self._api_key}"},
+                              backoff=False)
         offers = (raw.payload or {}).get("offers") if isinstance(raw.payload, dict) else None
         payload = None if offers is None else [{k: o.get(k) for k in CENSUS_FIELDS} for o in offers]
         return reshaped(raw, payload, request={"census": True, "gpu_name": gpu_name, "rentable": rentable})

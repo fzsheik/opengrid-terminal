@@ -115,7 +115,8 @@ def extract(payload) -> dict:
 class OracleProvider(Provider):
     name = "oracle"
     # One request per poll; list prices change rarely.
-    polling = PollingPolicy(interval_seconds=3600, timeout_seconds=60)
+    # Slow tier: one public price list that changes by announcement; every 6 h.
+    polling = PollingPolicy(interval_seconds=21600, timeout_seconds=60, tier="slow")
 
     def __init__(self, client: httpx.AsyncClient | None = None):
         super().__init__(

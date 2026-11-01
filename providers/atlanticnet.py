@@ -95,7 +95,8 @@ def _gb(cell: str | None) -> float | None:
 class AtlanticNetProvider(Provider):
     name = "atlanticnet"
     # One page load per poll.
-    polling = PollingPolicy(interval_seconds=900, timeout_seconds=45)
+    # Slow tier: a scraped pricing page that changes by announcement; hourly (a quarter of the old footprint).
+    polling = PollingPolicy(interval_seconds=3600, timeout_seconds=45, tier="slow")
 
     def __init__(self, client: httpx.AsyncClient | None = None):
         super().__init__(

@@ -22,6 +22,9 @@ class RawResponse(BaseModel):
     status_code: int | None = None
     duration_ms: int | None = None
     ok: bool = True
+    # The provider refused for rate (HTTP 429, or a call skipped while it asked us to wait): not a failure of the
+    # source, so it never counts against provider health or opens a silence alert (methodology/freshness.md).
+    throttled: bool = False
     error: str | None = None
     request: dict | list | None = None
     payload: dict | list | None = None

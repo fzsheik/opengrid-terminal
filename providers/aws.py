@@ -61,7 +61,7 @@ import re
 import time
 import urllib.parse
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
@@ -71,7 +71,7 @@ import canonical
 import changed_at
 from models import CapacityObservation, ComputeListing, PriceChange, RawResponse
 from providers import aws_sigv4
-from providers.base import PollingPolicy, Provider, find_endpoint, gather_limited, reshaped, to_decimal
+from providers.base import PRICE, PollingPolicy, Provider, find_endpoint, gather_limited, reshaped, to_decimal
 
 if TYPE_CHECKING:
     from tables import RawSnapshot
@@ -208,8 +208,11 @@ def _keep(row: dict) -> dict:
 
 class AwsProvider(Provider):
     name = "aws"
-    # List prices change rarely and the file is large, so hourly is plenty.
-    polling = PollingPolicy(interval_seconds=3600, timeout_seconds=60)
+    # The price file and the Spot Advisor change rarely and are large: hourly (the price cadence). With the key the loop
+    # runs every 5 minutes for the spot change log (6 regions, ~1 page each, well inside EC2's Describe* bucket);
+    # placement scores are the capacity cadence (PLACEMENT_TTL). Without the key: hourly, nothing else.
+    polling = PollingPolicy(interval_seconds=3600, timeout_seconds=60, tier="medium", poll_seconds=300,
+                            capacity_interval_seconds=int(PLACEMENT_TTL.total_seconds()))
 
     def __init__(self, client: httpx.AsyncClient | None = None, access_key_id: str | None = None,
                  secret_access_key: str | None = None):
@@ -223,6 +226,8 @@ class AwsProvider(Provider):
         )
         # Both or neither: half a key pair cannot sign anything.
         self._keys = (access_key_id, secret_access_key) if access_key_id and secret_access_key else None
+        if not self._keys:  # no spot feed: nothing to run between hourly price polls
+            self.polling = replace(type(self).polling, poll_seconds=None, capacity_interval_seconds=None, tier="slow")
         # When each slow-moving call last ran in this process (placement scores, Capacity Blocks).
         self._last: dict[str, datetime] = {}
         # Per spot region, the EndTime of its last successful DescribeSpotPriceHistory: the next window's start.
@@ -236,7 +241,8 @@ class AwsProvider(Provider):
                 self._spot_since.setdefault(region, t)
 
     async def fetch(self) -> list[RawResponse]:
-        out = [*await self._prices(), await self._spot_advisor()]
+        # The price file and Spot Advisor on the price cadence; spot (a change log) on every loop.
+        out = [*await self._prices(), await self._spot_advisor()] if PRICE in self.due else []
         if self._keys:
             out += await self._ec2_market()
         return out
@@ -269,7 +275,9 @@ class AwsProvider(Provider):
             break
         ms = int((time.perf_counter() - started) * 1000)
         if code or not resp.is_success:
+            # EC2 throttling (RequestLimitExceeded, after the one retry) is the API pacing us, not a broken feed.
             return RawResponse(**base, status_code=resp.status_code, duration_ms=ms, ok=False,
+                               throttled=code == "RequestLimitExceeded" or resp.status_code == 429,
                                error=f"{code or resp.status_code}: {message or ''}"[:500]), code
         return RawResponse(**base, status_code=resp.status_code, duration_ms=ms, ok=True, payload=parsed), None
 

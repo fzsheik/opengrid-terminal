@@ -24,7 +24,7 @@ from store.capacity import CapacityChange, CapacityCurrent
 router = APIRouter()
 READ = require_scope("data:read")
 METHOD = "capacity"
-STALE_AFTER_POLLS = 3  # a row not refreshed within 3 of its provider's poll intervals is flagged stale
+STALE_AFTER_POLLS = 3  # a row not refreshed within 3 of its provider's capacity intervals is flagged stale
 
 
 def _provider(p: str | None) -> str | None:
@@ -35,7 +35,7 @@ def _provider(p: str | None) -> str | None:
 
 def _row(r: CapacityCurrent, now: datetime) -> dict:
     cls = PROVIDERS.get(r.provider)
-    interval = (cls.capacity_interval_seconds or cls.polling.interval_seconds) if cls else 900
+    interval = cls.polling.capacity_seconds if cls else 900  # the capacity cadence (PollingPolicy)
     return {"provider": r.provider, "sku": r.sku, "region": r.region, "country": r.country,
             "region_group": regions.region_group(r.provider, r.region, r.country),
             "gpu": r.canonical_gpu_name, "raw_gpu_name": r.raw_gpu_name, "gpu_count": r.gpu_count,
