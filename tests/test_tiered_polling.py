@@ -84,6 +84,8 @@ def test_retuned_providers_stay_within_documented_limits():
     for n in ("akash", "cudo", "gpuai", "huggingface", "hydrahost", "paperspace"):
         assert pol[n].interval_seconds == 900 and pol[n].tier == "medium", n
     assert pol["exoscale"].interval_seconds == 3600 and pol["exoscale"].tier == "slow"
+    for n in ("gcore", "fireworks", "ionos", "hetzner"):   # providers/batch-pages: price pages, hourly
+        assert pol[n].interval_seconds == 3600 and pol[n].tier == "slow", n
     for n, p in pol.items():
         assert p.loop_seconds >= 60, f"{n}: never faster than a minute"
 
