@@ -54,6 +54,17 @@ CLUSTER_TYPES = "/v1/cluster-types"
 MARKETS = {False: ("price_per_hour", ""), True: ("spot_price", ":spot")}
 
 
+# API names that drop the card's edition -> the name Verda's own product page gives the card. Only the lookup uses
+# it: raw_gpu_name keeps the API text. verda.com/rtx-pro-6000 (checked 2026-11-01) heads its page and spec section
+# "NVIDIA RTX PRO 6000 Blackwell Server Edition". The CC type ("RTX PRO 6000 CC 96GB") is not in here and stays
+# unmapped, like every confidential-computing type.
+PAGE_NAMES = {"RTX PRO 6000 96GB": "NVIDIA RTX PRO 6000 Blackwell Server Edition"}
+
+
+def canonical_name(raw_name: str) -> str | None:
+    return canonical.canonical_gpu_name(PAGE_NAMES.get(raw_name, raw_name))
+
+
 def is_confidential(instance_type: str) -> bool:
     """Confidential-computing types carry a ".CC" segment: "1RTXPRO6000.30V.CC", and with the CPU vendor after it,
     "8B300.240V.CC.AMD" / "...CC.INTEL" (Verda's real codes, tests/fixtures_providers/verda_*.json)."""
@@ -174,7 +185,7 @@ class VerdaProvider(Provider):
                     stocked = itype in types
                     out.append(CapacityObservation(
                         provider="verda", sku=itype + suffix, region=code, country=country.get(code),
-                        raw_gpu_name=raw_name, canonical_gpu_name=canonical.canonical_gpu_name(raw_name),
+                        raw_gpu_name=raw_name, canonical_gpu_name=canonical_name(raw_name),
                         gpu_count=count, in_stock=stocked,
                         raw_value=f"{'listed' if stocked else 'not listed'} at {code} ({market})",
                         source=AVAILABILITY + ("?is_spot=true" if spot else ""), observed_at=snap.fetched_at))
@@ -211,7 +222,7 @@ class VerdaProvider(Provider):
                         sku=itype,
                         listing_id=itype + suffix,
                         raw_gpu_name=raw_name,
-                        canonical_gpu_name=canonical.canonical_gpu_name(raw_name),
+                        canonical_gpu_name=canonical_name(raw_name),
                         gpu_count=count,
                         region=None,
                         country=None,

@@ -29,7 +29,7 @@ import fetch as fetch_mod  # noqa: E402
 from config import settings  # noqa: E402
 from providers.verda import (  # noqa: E402
     AVAILABILITY, CLUSTER_AVAILABILITY, CLUSTER_TYPES, ENDPOINT, LADDER, LOCATIONS, TOKEN, VerdaProvider,
-    is_confidential,
+    canonical_name, is_confidential,
 )
 
 FIX = Path(__file__).resolve().parent / "fixtures_providers"
@@ -139,6 +139,25 @@ def test_confidential_tier():
     assert tier["1RTXPRO6000.30V.CC"] == tier["1RTXPRO6000.30V.CC:spot"] == "confidential"
     assert tier["8B300.240V.CC.AMD"] == tier["8B300.240V.CC.AMD:spot"] == "confidential"
     assert {v for k, v in tier.items() if ".CC" not in k} == {None}
+
+
+def test_rtx_pro_6000_edition():
+    # Verda's API says "RTX PRO 6000 96GB" (no edition); its product page says Server Edition. Listings and
+    # capacity rows take the SE name; raw_gpu_name keeps the API text; the CC type stays unmapped.
+    import canonical
+    rows = {r.listing_id: r for r in VerdaProvider.normalize(by_endpoint())}
+    for lid in ("8RTXPRO6000.240V", "8RTXPRO6000.240V:spot"):
+        assert rows[lid].raw_gpu_name == "RTX PRO 6000 96GB", rows[lid].raw_gpu_name
+        assert rows[lid].canonical_gpu_name == "NVIDIA RTX PRO 6000 96GB SE", rows[lid].canonical_gpu_name
+    assert rows["1RTXPRO6000.30V.CC"].raw_gpu_name == "RTX PRO 6000 CC 96GB"
+    assert rows["1RTXPRO6000.30V.CC"].canonical_gpu_name is None, "confidential-computing type: not mapped"
+    cap = [r for r in VerdaProvider.normalize_capacity(by_endpoint()) if r.sku.startswith("8RTXPRO6000")]
+    assert cap and {r.canonical_gpu_name for r in cap} == {"NVIDIA RTX PRO 6000 96GB SE"}
+    # Not the Workstation or Max-Q card, and the shared words stay unmapped for everyone else (Arkane, E2E).
+    assert canonical_name("RTX PRO 6000 96GB") == "NVIDIA RTX PRO 6000 96GB SE"
+    assert canonical.canonical_gpu_name("RTX PRO 6000 96GB") is None
+    assert canonical_name("RTX PRO 6000 CC 96GB") is None
+    assert canonical_name("H100 SXM5 80GB") == "NVIDIA H100 80GB SXM5", "other names pass through unchanged"
 
 
 # --------------------------------------------------------------------------- normalize_capacity
@@ -320,7 +339,7 @@ def test_pipeline():
 
 
 if __name__ == "__main__":
-    for t in (test_confidential_tier, test_capacity_rows, test_capacity_edges, test_fetch_without_credentials, test_fetch_with_credentials,
+    for t in (test_confidential_tier, test_rtx_pro_6000_edition, test_capacity_rows, test_capacity_edges, test_fetch_without_credentials, test_fetch_with_credentials,
               test_token_refreshed_once_on_401, test_capacity_fails_open, test_registry, test_pipeline):
         t()
         print(t.__name__, "ok")

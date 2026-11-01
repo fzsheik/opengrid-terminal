@@ -215,8 +215,11 @@ _add("NVIDIA A10G 24GB", "NVIDIA A10G")
 # --------------------------------------------------------------------------
 # Verda, and Crusoe / Latitude / Denvr as listed by Shadeform.
 # Shadeform names are "<gpu_type> <variant>" built in providers/shadeform.py.
-# Left unmapped on purpose: Verda's "RTX PRO 6000 96GB" and every confidential-
-# computing ("CC") type, and Shadeform's "RTXPro6000 pcie": each hides a variant.
+# Left unmapped on purpose: every Verda confidential-computing ("CC") type, and
+# Shadeform's "RTXPro6000 pcie": each hides a variant. Verda's "RTX PRO 6000 96GB"
+# is NOT mapped here (Arkane, E2E print the same words for an unstated edition):
+# providers/verda.py looks it up under the name Verda's product page gives it,
+# "NVIDIA RTX PRO 6000 Blackwell Server Edition" (mapped above).
 # Verda's B300 lists 268GB (usable) for the card others call 288GB, the same
 # usable-versus-physical gap noted for the B200 above, so it shares a name.
 # --------------------------------------------------------------------------

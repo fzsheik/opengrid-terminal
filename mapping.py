@@ -574,6 +574,8 @@ VERDA = ProviderMapping(
         "as interruptible and never compared with on-demand.",
         'Confidential-computing (".CC") types cost slightly more for the same GPU and stay unmapped.',
         'The B300 is listed at 268GB (usable) against the 288GB others print; it shares one name.',
+        '"RTX PRO 6000 96GB" names no edition; Verda\'s product page says Server Edition, so the lookup uses that '
+        "name (PAGE_NAMES in providers/verda.py) while raw_gpu_name keeps the API text.",
     ],
 )
 
