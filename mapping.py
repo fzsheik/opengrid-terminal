@@ -1498,6 +1498,39 @@ GPUAI = ProviderMapping(
 )
 
 
+EXOSCALE = ProviderMapping(
+    provider="exoscale",
+    display_name="Exoscale",
+    endpoints={"GET portal.exoscale.com/api/pricing/opencompute": "hourly rates per running_<family>_<size>, CHF/EUR/USD"},
+    fields=_fields(
+        "exoscale",
+        sku=(DERIVED, '"{family}.{size}"', 'e.g. "gpu3.large"'),
+        listing_id=(DERIVED, "= sku"),
+        raw_gpu_name=(LOOKUP, "providers/exoscale.py FAMILIES (from the pricing page)", "the feed names no GPU"),
+        gpu_count=(LOOKUP, "FAMILIES[family][size]", "e.g. gpu3: 1/2/4/8, gpu2: 1/2/3/4"),
+        region=(LOOKUP, "the family's zones on the pricing page", 'e.g. "AT-VIE-2"'),
+        country=(DERIVED, "zone prefix when all zones share one", "None for RTX PRO 6000 (DE/HR/CH/AT)"),
+        price_per_gpu_hour=(DERIVED, "= usd[key] / GPUs"),
+        price_per_instance_hour=(RAW, "usd.running_<family>_<size>", "decimal string"),
+        currency=(RAW, 'the "usd" map', "same nominal figures as chf/eur on 2026-11-01"),
+        provider_tier=(CONSTANT, '"vm"'),
+        available=(ABSENT, "-", "no stock signal"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(LOOKUP, "FAMILIES (pricing page)"),
+        ram_gb=(LOOKUP, "FAMILIES (pricing page)"),
+        storage_gb=(ABSENT, "-", "local storage billed extra, min 100 GB"),
+    ),
+    quirks=[
+        "The keyless feed has no GPU model (why it was declined in Oct 2026): the family -> GPU, count, vCPU, RAM "
+        "and zone table is taken from Exoscale's own pricing page and held in code; unknown keys are skipped.",
+        'The legacy "gpu" family is in the feed but not on the page: skipped, not guessed.',
+        "Local storage is billed on top; GPU access requires account screening.",
+        "A30 and RTX PRO 6000 (edition not stated) stay unmapped.",
+    ],
+)
+
+
 MODAL = ProviderMapping(
     provider="modal",
     display_name="Modal (serverless GPU)",
@@ -1889,6 +1922,7 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         HYDRAHOST,
         CUDO,
         GPUAI,
+        EXOSCALE,
     )
 }  # fmt: skip
 

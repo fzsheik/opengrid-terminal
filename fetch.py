@@ -27,6 +27,7 @@ from providers import (
     JarvislabsProvider,
     TogetherProvider,
     VultrProvider,
+    ExoscaleProvider,
     GcpProvider,
     HorizonProvider,
     PhyntecProvider,
@@ -172,6 +173,7 @@ def build_fetchers() -> list[Provider]:
             HydraHostProvider,
             CudoProvider,
             GpuAiProvider,
+            ExoscaleProvider,
         )
     )
     return fetchers

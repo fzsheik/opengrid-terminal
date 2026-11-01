@@ -555,6 +555,13 @@ _add("NVIDIA RTX 3090 24GB", "rtx_3090")
 _add("NVIDIA RTX 4090 24GB", "rtx_4090")
 _add("NVIDIA RTX 5090 32GB", "rtx_5090")
 _add(None, "a100_80gb", "rtx_pro_6000", "rtx_pro_4500")
+# Exoscale: "Exoscale <family> (<GPU from its pricing page>)". Unmapped: the A30 (no canonical yet) and the RTX PRO
+# 6000 (the page says Blackwell 96GB, not which edition).
+_add("NVIDIA Tesla V100 16GB", "Exoscale GPU2 (Tesla V100 16GB)")
+_add("NVIDIA A40 48GB", "Exoscale GPU3 (NVIDIA A40 48GB)")
+_add("NVIDIA RTX A5000 24GB", "Exoscale GPUA5000 (NVIDIA RTX A5000 24GB)")
+_add("NVIDIA RTX 3080 Ti 12GB", "Exoscale GPU3080ti (NVIDIA RTX 3080 Ti 12GB)")
+_add(None, "Exoscale GPUA30 (NVIDIA A30 24GB)", "Exoscale GPURTX6000PRO (NVIDIA RTX PRO 6000 Blackwell 96GB)")
 # Hydra Host inventory: nvidia-smi names, already mapped above, except Quadro RTX 8000 (no canonical yet).
 _add(None, "Quadro RTX 8000")
 _add(None, "nvidia rtx5000 16Gi PCIe", "nvidia v100 32Gi PCIe", "nvidia gtx1050 2Gi PCIe", "nvidia m4000 8Gi PCIe",

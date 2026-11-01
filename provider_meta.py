@@ -132,6 +132,9 @@ _ALL = [
     ProviderMeta("gpuai", "GPU.ai", "marketplace", "public_api", "api.gpu.ai", "https://gpu.ai",
                  "reseller: aggregates other providers' GPUs (its terms) without naming them; listed as "
                  "resold:undisclosed and kept out of market statistics"),
+    ProviderMeta("exoscale", "Exoscale", "general_cloud", "public_api", "portal.exoscale.com", "https://www.exoscale.com",
+                 "Swiss cloud; USD map of its public price feed; GPU model and size per family from its pricing page; "
+                 "local storage extra; GPU access after account screening"),
     ProviderMeta("simplepod", "SimplePod", "marketplace", "public_api", "api.simplepod.ai", "https://simplepod.ai",
                  "own racks plus community hosts; one listing per open on-demand offer (Docker and VM); disk billed extra"),
     ProviderMeta("clore", "Clore.ai", "marketplace", "authenticated_api", "api.clore.ai", "https://clore.ai",
