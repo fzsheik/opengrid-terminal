@@ -8,7 +8,10 @@ but Thunder's terms (updated 2026-09-28, s.28) allow automated access only throu
 your own account's credentials, so the account's API token is always sent and the
 provider is not polled without one (THUNDER_API_KEY). With the key, GET /v2/status
 gives live stock per size ("available" / "unavailable"); any other word, or a size
-missing from it, leaves `available` unknown.
+missing from it, leaves `available` unknown. The same map is capacity
+(normalize_capacity, boolean shape, provider-wide, sku = the listing sku): one row per
+priced size the status map names. The status map also has a `gpu_type` map by GPU and
+count; it names sizes the price map does not ("a6000" x2-x8), so it is not read.
 
 Read: every `{gpu}_x{count}` key present in both maps. The rate is for the whole
 instance with its included vCPUs (the smallest vcpuOptions entry; the pricing page
@@ -32,7 +35,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
-from models import ComputeListing, RawResponse
+from models import CapacityObservation, ComputeListing, RawResponse
 from providers.base import PollingPolicy, Provider, find_endpoint, to_decimal
 
 if TYPE_CHECKING:
@@ -62,6 +65,42 @@ def _ram_gib(spec: dict, vcpu: int) -> int | None:
     return vcpu * per
 
 
+def _shape(key: str, spec) -> dict | None:
+    """The spec behind a `{gpu}_x{count}` key when it agrees with the key; None (logged) when it does not."""
+    if not isinstance(spec, dict):
+        log.warning("thundercompute: %s is priced but has no spec; skipped", key)
+        return None
+    count, vram, label = spec.get("gpuCount"), spec.get("vramGB"), spec.get("displayName")
+    if not isinstance(count, int) or not isinstance(vram, int) or not label or not spec.get("vcpuOptions"):
+        raise ValueError(f"thundercompute: spec {key} lost its gpuCount, vramGB, name or vCPUs")
+    if count != int(_KEY.match(key).group(2)):
+        log.warning("thundercompute: %s says gpuCount %r; skipped", key, count)
+        return None
+    stated = _VRAM_IN_NAME.search(label)
+    if stated and int(stated.group(1)) != vram:
+        log.warning("thundercompute: %s name %r disagrees with vramGB %r; skipped", key, label, vram)
+        return None
+    return spec
+
+
+def _raw_name(spec: dict) -> str:
+    return f"{_VRAM_IN_NAME.sub(' ', spec['displayName']).strip()} {spec['vramGB']}GB"
+
+
+def _maps(by_endpoint) -> tuple | None:
+    prices, specs = find_endpoint(by_endpoint, PRICING), find_endpoint(by_endpoint, SPECS)
+    if not prices or not specs:
+        return None
+    pricing = prices[0].payload.get("pricing") if isinstance(prices[0].payload, dict) else None
+    spec_map = specs[0].payload.get("specs") if isinstance(specs[0].payload, dict) else None
+    if not isinstance(pricing, dict) or not isinstance(spec_map, dict):
+        raise ValueError("thundercompute: pricing or specs map missing - response reshaped")
+    sizes = {k: v for k, v in pricing.items() if _KEY.match(k)}
+    if not sizes:
+        raise ValueError("thundercompute: no {gpu}_x{count} price keys - response reshaped")
+    return prices[0], sizes, spec_map
+
+
 class ThunderComputeProvider(Provider):
     name = "thundercompute"
     # Three small requests per poll; list prices change rarely.
@@ -83,44 +122,52 @@ class ThunderComputeProvider(Provider):
         return [await self.get(PRICING), await self.get(SPECS), await self.get(STATUS)]
 
     @staticmethod
+    def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
+        """One provider-wide boolean per priced size the status map names; an unknown word stays unknown."""
+        status = find_endpoint(by_endpoint, STATUS)
+        maps = _maps(by_endpoint)
+        if not status or maps is None:
+            return []
+        stock = status[0].payload.get("specs") if isinstance(status[0].payload, dict) else None
+        if not isinstance(stock, dict):
+            raise ValueError("thundercompute: status has no `specs` map - response reshaped")
+        _, sizes, spec_map = maps
+        out = []
+        for key in sorted(sizes):
+            if key not in stock:
+                continue  # not named: no statement either way
+            spec = _shape(key, spec_map.get(key))
+            if spec is None:
+                continue
+            raw_name = _raw_name(spec)
+            out.append(CapacityObservation(
+                provider="thundercompute", sku=key, region=None, raw_gpu_name=raw_name,
+                canonical_gpu_name=canonical.canonical_gpu_name(raw_name), gpu_count=spec["gpuCount"],
+                in_stock=_STOCK.get(stock[key]), raw_value=str(stock[key]), source=STATUS,
+                observed_at=status[0].fetched_at))
+        return out
+
+    @staticmethod
     def normalize(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:
         """One `{gpu}_x{count}` instance size becomes one listing."""
-        prices, specs = find_endpoint(by_endpoint, PRICING), find_endpoint(by_endpoint, SPECS)
-        if not prices or not specs:
+        maps = _maps(by_endpoint)
+        if maps is None:
             return []
-        snapshot = prices[0]
-        pricing = snapshot.payload.get("pricing") if isinstance(snapshot.payload, dict) else None
-        spec_map = specs[0].payload.get("specs") if isinstance(specs[0].payload, dict) else None
-        if not isinstance(pricing, dict) or not isinstance(spec_map, dict):
-            raise ValueError("thundercompute: pricing or specs map missing - response reshaped")
+        snapshot, sizes, spec_map = maps
         # Stock is optional: a failed or reshaped status call leaves `available` unknown.
         status = find_endpoint(by_endpoint, STATUS)
         stock = status[0].payload.get("specs") if status and isinstance(status[0].payload, dict) else None
         stock = stock if isinstance(stock, dict) else {}
-        sizes = {k: v for k, v in pricing.items() if _KEY.match(k)}
-        if not sizes:
-            raise ValueError("thundercompute: no {gpu}_x{count} price keys - response reshaped")
         listings = []
         for key, value in sorted(sizes.items()):
-            spec = spec_map.get(key)
-            if not isinstance(spec, dict):
-                log.warning("thundercompute: %s is priced but has no spec; skipped", key)
+            spec = _shape(key, spec_map.get(key))
+            if spec is None:
                 continue
-            count, vram, label = spec.get("gpuCount"), spec.get("vramGB"), spec.get("displayName")
-            vcpus = spec.get("vcpuOptions")
-            if not isinstance(count, int) or not isinstance(vram, int) or not label or not vcpus:
-                raise ValueError(f"thundercompute: spec {key} lost its gpuCount, vramGB, name or vCPUs")
-            if count != int(_KEY.match(key).group(2)):
-                log.warning("thundercompute: %s says gpuCount %r; skipped", key, count)
-                continue
-            stated = _VRAM_IN_NAME.search(label)
-            if stated and int(stated.group(1)) != vram:
-                log.warning("thundercompute: %s name %r disagrees with vramGB %r; skipped", key, label, vram)
-                continue
+            count, vcpus = spec["gpuCount"], spec["vcpuOptions"]
             price = to_decimal(value)
             if price is None or price <= 0:
                 continue
-            raw_name = f"{_VRAM_IN_NAME.sub(' ', label).strip()} {vram}GB"
+            raw_name = _raw_name(spec)
             vcpu = min(vcpus)
             listings.append(
                 ComputeListing(

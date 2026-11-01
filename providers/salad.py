@@ -1,4 +1,25 @@
-"""SaladCloud: idle consumer GPUs, priced per GPU-hour at four priority tiers."""
+"""SaladCloud: idle consumer GPUs, priced per GPU-hour at four priority tiers.
+
+Capacity (normalize_capacity, count shape, provider-wide): the per-class availability
+POST already fetched for prices returns `available_gpu_{high,medium,low,batch}`.
+Salad's API reference calls them "the number of available ... GPUs"; its availability
+guide says they are nodes "currently online and available to run workloads at each
+priority level", estimated, and that a workload "may be able to be allocated nodes
+from other workloads" (higher priority can preempt lower; the live counts are
+cumulative, high >= medium >= low >= batch). Salad sells one GPU per instance
+(gpu_count 1), so the unit is instances. There is no total. One row per class and
+priority, sku = the listing_id ("<class id>:<priority>", as RunPod), because the
+counts differ by priority; never add them up across priorities.
+
+`is_high_demand` (gpu-classes) is "Whether the GPU class is in high demand", with no
+threshold. It says nothing about stock, so it is kept in raw_value and mapped to
+neither a tier nor in_stock (methodology/capacity.md: never guessed).
+
+Terms: the SaladCloud terms (https://salad.com/terms/saladcloud/, updated 2026-09-29)
+count the API as part of the Site and forbid "any automated use of the Site, other
+than through the API in accordance with its documentation" (s.6 item 15); every call
+here is a documented, read-only API call with our own key, well inside 240/min.
+"""
 
 import logging
 from functools import partial
@@ -7,7 +28,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
-from models import ComputeListing, RawResponse
+from models import CapacityObservation, ComputeListing, RawResponse
 from providers.base import Provider, PollingPolicy, find_endpoint, gather_limited, to_decimal
 
 if TYPE_CHECKING:
@@ -27,6 +48,16 @@ SALAD_TIER_TO_AVAILABILITY = {
     "medium": "available_gpu_medium",
     "high": "available_gpu_high",
 }
+
+
+def _availability(by_endpoint) -> dict[str, "RawSnapshot"]:
+    """The availability row per class id. The response carries no class id, so match it back to the one we sent."""
+    availability: dict[str, "RawSnapshot"] = {}
+    for row in find_endpoint(by_endpoint, "sce-gpu-availability"):
+        asked = (row.request or {}).get("gpu_classes") or []
+        if asked and isinstance(row.payload, dict):
+            availability[asked[0]] = row
+    return availability
 
 
 class SaladProvider(Provider):
@@ -70,6 +101,40 @@ class SaladProvider(Provider):
         return out
 
     @staticmethod
+    def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
+        """Free nodes per GPU class and priority, from the same availability rows the listings read."""
+        classes_rows = find_endpoint(by_endpoint, "gpu-classes")
+        if not classes_rows:
+            return []
+        items = (classes_rows[0].payload or {}).get("items") if isinstance(classes_rows[0].payload, dict) else None
+        if not isinstance(items, list):
+            raise ValueError("salad: gpu-classes has no `items` list - response reshaped")
+        availability = _availability(by_endpoint)
+        out = []
+        for gpu_class in items:
+            class_id, raw_name = gpu_class.get("id"), gpu_class.get("name")
+            row = availability.get(class_id)
+            if not class_id or not raw_name or row is None:
+                continue  # no availability answer for this class: no statement
+            avail = row.payload
+            for price in gpu_class.get("prices") or []:
+                tier = price.get("priority")
+                field = SALAD_TIER_TO_AVAILABILITY.get(tier)
+                if field is None:
+                    continue  # logged by normalize()
+                count = avail.get(field)
+                ok = isinstance(count, int) and not isinstance(count, bool) and count >= 0
+                out.append(CapacityObservation(
+                    provider="salad", sku=f"{class_id}:{tier}", region=None, raw_gpu_name=raw_name,
+                    canonical_gpu_name=canonical.canonical_gpu_name(raw_name), gpu_count=1,
+                    in_stock=count > 0 if ok else None, available_count=count if ok else None,
+                    count_unit="instance" if ok else None,
+                    raw_value=(f"{field}={count}; on_call_gpu={avail.get('on_call_gpu')}; "
+                               f"is_high_demand={gpu_class.get('is_high_demand')}"),
+                    source="sce-gpu-availability", observed_at=row.fetched_at))
+        return out
+
+    @staticmethod
     def normalize(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:
         classes_rows = find_endpoint(by_endpoint, "gpu-classes")
         if not classes_rows:
@@ -77,13 +142,7 @@ class SaladProvider(Provider):
         snapshot = classes_rows[0]
         items = (snapshot.payload or {}).get("items") or []
 
-        # The availability response carries no class id, so match it back to the
-        # class id we sent in the request body.
-        availability: dict[str, dict] = {}
-        for row in find_endpoint(by_endpoint, "sce-gpu-availability"):
-            asked = (row.request or {}).get("gpu_classes") or []
-            if asked and isinstance(row.payload, dict):
-                availability[asked[0]] = row.payload
+        availability = _availability(by_endpoint)
 
         listings = []
         for gpu_class in items:
@@ -91,7 +150,7 @@ class SaladProvider(Provider):
             raw_name = gpu_class.get("name")
             if not class_id or not raw_name:
                 continue
-            avail = availability.get(class_id)
+            avail = availability[class_id].payload if class_id in availability else None
             for price in gpu_class.get("prices") or []:
                 tier = price.get("priority")
                 field = SALAD_TIER_TO_AVAILABILITY.get(tier)

@@ -7,7 +7,7 @@ Kind: **observed** (the provider's own report). Code: `capacity.py`, each provid
 
 ## Providers and what each reports
 
-Twenty-one providers, every one read from data its own module fetches and stores raw first. Most of it was already
+Twenty-four providers, every one read from data its own module fetches and stores raw first. Most of it was already
 being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute and Verda each add a capacity source.
 
 | Provider | Source | Shape | What the provider says |
@@ -27,10 +27,13 @@ being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute and Verda each
 | DeepInfra | `GET /v1/containers/gpu_availability` (API key) | boolean | `available` per GPU configuration (`8xB200-180GB`), the flag its dashboard shows as "Availability status". Not defined further. Provider-wide. Sku is the price page's (`8x NVIDIA B200`), so stock joins to page prices. Prices always come from the public page: the API's own `usd_per_hour` differs from it and is kept raw, never published. Without the key, no capacity. |
 | Vast | Keyed census: `POST /api/v0/bundles/`, verified on-demand offers, rentable and not rentable, per GPU model | count (free + total) | Free GPUs = distinct `gpu_ids` in rentable offers; total = each machine's GPUs (`num_gpus / gpu_frac`) over every machine either search returns. Provider-wide. Total means GPUs on verified machines listed now. A census of 512 offers (the search cap) withholds counts. Prices still from the public search. |
 | Latitude | Latitude's own `GET /plans` (API key) | count, tier | Per plan and location: in stock (`locations.in_stock`), servers in stock (`in_stock_count`), and the region's `stock_level` as tier. Count unit is servers. Without the key, Shadeform's boolean. Prices still from Shadeform. |
+| Clore.ai | `GET /v1/marketplace` (API key), the same call as prices | count (free + total) | Per GPU name, provider-wide: free GPUs = GPUs on servers with `rented: false` ("Is server rented on demand"), total = GPUs on every listed server. Counted over the servers the price book can hold (priced in USD, one GPU model, a GPU count that agrees with `gpu_array`), so free equals the listings' capacity. Sku is the listing sku (`RTX 4090 24GB`); a model with every server rented gets `false` and no price. Free means free of an on-demand rental: a spot renter on it can be displaced. |
+| Thunder Compute | `GET /v2/status` (API key), fetched with prices | boolean | `available` / `unavailable` per instance size (`specs` map), provider-wide. Sku is the listing sku (`h100_x8`); one row per priced size the map names. Its `gpu_type` map names sizes that have no price (A6000 x2-x8) and is not read. Not defined further by Thunder. |
+| Salad | `POST .../availability/sce-gpu-availability` per GPU class (API key), fetched with prices | count (free only) | `available_gpu_{high,medium,low,batch}`: free nodes at each priority; Salad sells one GPU per instance, so the unit is instances. Salad calls them estimates of online nodes; higher priority can preempt lower, so the counts are cumulative (high >= medium >= low >= batch in every live class) and never added up. No total. Sku is the listing_id (`<class id>:<priority>`), as RunPod, because counts differ by priority. `is_high_demand` ("Whether the GPU class is in high demand", no threshold) says nothing about stock: kept in raw_value, mapped to neither tier nor in_stock. |
 | Crusoe, Denvr, Boost Run, Horizon, Phyntec | Shadeform `availability` | boolean | Whether Shadeform can launch the type in that region now. |
 | Massed Compute | Its own `GET /api/v1/gpu-inventory` (API key) | count | `capacity_available`: instances of that product (GPU, count, spot or not) that can be launched now, provider-wide; the in-stock regions (`regions_with_capacity_available`) are kept in raw_value. Count unit is instances. Sku is the listing sku. Counts for different sizes of one GPU draw on the same pool, so never add them up. Without the key, Shadeform's boolean (skus are Shadeform's type names, joined to listings by GPU and count); never both. |
 
-**Not covered, and why.** Salad: a demand flag, not stock. Nebius, OVHcloud and the hyperscalers:
+**Not covered, and why.** Nebius, OVHcloud and the hyperscalers:
 need an account. Vultr: its availability endpoint is empty for every GPU plan. CoreWeave, Together, Hot Aisle, IBM:
 no capacity data found.
 
@@ -77,3 +80,5 @@ capacity error never stops prices from updating.
 - A provider's own report, not a launch test. "In stock" means the provider says so.
 - Tiers are each provider's own scale: Koyeb's `LOW` and another provider's `low` are not calibrated against each other.
 - Lium's counts include machines that are listed but may not be reachable; the public data does not say which.
+- Salad's counts are its own estimate of online nodes; its guide says a launch can still find nodes taken from
+  lower-priority work, and that nodes may not be reassigned at once.

@@ -131,6 +131,31 @@ def test_thundercompute():
     assert raises(ThunderComputeProvider.normalize, {PRICING: by_ep[PRICING], SPECS: [snap(lost)]})
 
 
+def test_capacity():
+    raws = _fetch(thunder_prov())
+    by_ep = {r.endpoint: [snap(r.payload)] for r in raws}
+    rows = {r.sku: r for r in ThunderComputeProvider.normalize_capacity(by_ep)}
+    listings = by_id(ThunderComputeProvider.normalize(by_ep))
+    assert set(rows) == set(listings), "one row per priced size, same sku as the listing"
+    assert {k for k, r in rows.items() if r.in_stock} == {"a100xl_x1", "a100xl_x2", "a100xl_x4", "a100xl_x8",
+                                                         "a6000_x1", "l40_x1", "l40_x2", "l40_x4"}
+    h = rows["h100_x8"]
+    assert (h.in_stock, h.raw_value, h.gpu_count, h.raw_gpu_name) == (False, "unavailable", 8, "NVIDIA H100 80GB")
+    assert h.region is None and h.tier is None and h.available_count is None and h.source == STATUS
+    assert rows["l40_x2"].canonical_gpu_name == "NVIDIA L40 48GB"
+    assert all(r.in_stock == listings[k].available for k, r in rows.items()), "agrees with the listing flag"
+    # An unknown word is kept, never guessed; a size the status map omits gets no row.
+    odd = json.loads(json.dumps(raws[2].payload))
+    odd["specs"]["a100xl_x1"] = "limited"
+    del odd["specs"]["l40_x1"]
+    rows = {r.sku: r for r in ThunderComputeProvider.normalize_capacity({**by_ep, STATUS: [snap(odd)]})}
+    assert rows["a100xl_x1"].in_stock is None and rows["a100xl_x1"].raw_value == "limited" and "l40_x1" not in rows
+    # No status call: no capacity (prices are unaffected). A reshaped status raises.
+    assert ThunderComputeProvider.normalize_capacity({PRICING: by_ep[PRICING], SPECS: by_ep[SPECS]}) == []
+    assert ThunderComputeProvider.normalize_capacity({}) == []
+    assert raises(ThunderComputeProvider.normalize_capacity, {**by_ep, STATUS: [snap({"sizes": []})]})
+
+
 def test_fetch_failures():
     """An error response is stored as a failed response, never as prices; normalize refuses it."""
     raws = _fetch(thunder_prov(key="wrong-key"))
@@ -208,6 +233,6 @@ def test_pipeline():
 
 
 if __name__ == "__main__":
-    for t in (test_thundercompute, test_fetch_failures, test_registry, test_pipeline):
+    for t in (test_thundercompute, test_capacity, test_fetch_failures, test_registry, test_pipeline):
         t()
         print(t.__name__, "ok")
