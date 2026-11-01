@@ -110,6 +110,12 @@ class Settings(BaseSettings):
     # location; prices stay via Shadeform. Never sent anywhere but api.cloud.crusoe.ai (providers/crusoe.py).
     crusoe_access_key_id: str | None = None
     crusoe_secret_key: str | None = None
+    # AWS IAM key pair for READ-ONLY EC2 market calls (providers/aws.py): DescribeSpotPriceHistory,
+    # GetSpotPlacementScores, DescribeCapacityBlockOfferings. SigV4-signed with providers/aws_sigv4.py; sent only to
+    # ec2.<region>.amazonaws.com, never stored or logged. Unset: the public price file and Spot Advisor feed only.
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
+    aws_default_region: str = "us-east-1"
     # Per-provider launch defaults (JSON), e.g. {"lambda": {"ssh_key": "opengrid"},
     # "hyperstack": {"ssh_key": "k", "image": "Ubuntu Server 22.04 LTS R535 CUDA 12.2",
     # "environments": {"CANADA-1": "default-CANADA-1"}}}. See routing/adapters/*.py.
