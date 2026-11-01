@@ -601,9 +601,18 @@ VERDA = ProviderMapping(
         vcpu=(RAW, "cpu.number_of_cores"),
         ram_gb=(RAW, "memory.size_in_gigabytes"),
         storage_gb=(RAW, "storage.size_in_gigabytes", "None if the field is absent"),
+        currency=(DERIVED, '"USD"; an EUR-only type is converted', "currency field per type"),
+        original_currency=(RAW, "currency", "set only on an EUR-only type (none seen as of 2026-11-01)"),
+        original_price_per_gpu_hour=(DERIVED, "EUR price / gpu.number_of_gpus", "EUR-only types"),
+        original_price_per_instance_hour=(RAW, "price_per_hour | spot_price in EUR", "EUR-only types"),
+        fx_rate=(LOOKUP, "fx_rates (ECB EUR->USD)", "EUR-only types; fail closed when stale (methodology/fx.md)"),
+        fx_rate_date=(LOOKUP, "fx_rates.rate_date", "EUR-only types"),
+        fx_source=(CONSTANT, '"ecb"', "EUR-only types"),
     ),
     quirks=[
         "Prices are for the whole instance, on-demand and spot alike; 8x types divide by 8.",
+        "A type priced in EUR only is converted at the ECB rate; a type priced in both is read in USD only. "
+        "Any other currency is skipped. Every type was USD on 2026-11-01.",
         "Spot is exactly half the on-demand price on every type seen, so it is kept apart "
         "as interruptible and never compared with on-demand.",
         'Confidential-computing (".CC") types cost slightly more for the same GPU and stay unmapped.',
@@ -1017,8 +1026,9 @@ OVHCLOUD = ProviderMapping(
         storage_gb=(DERIVED, "sum of blobs.technical.storage.disks capacity x number"),
     ),
     quirks=[
-        "Each subsidiary prices in its own currency; only the two USD catalogues are read (no FX). "
-        "The EU catalogues (EUR, GBP) are never converted.",
+        "Each subsidiary prices in its own currency; only the two USD catalogues are read. "
+        "The EU catalogues (EUR, GBP) are not read or converted: they price the same flavors as World, "
+        "so reading them would need a rule for which official price list counts (methodology/fx.md).",
         "Prices are integers in 1e-8 USD for the whole instance; a price that disagrees with its "
         "printed formattedPrice fails the poll.",
         'Only hourly ".consumption" addons are read; ".monthly" ones are never converted to hourly.',

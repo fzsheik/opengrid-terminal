@@ -4,7 +4,7 @@ Run:  .venv/bin/python tests/test_providers.py
 """
 
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal as D
 from pathlib import Path
 from types import SimpleNamespace
@@ -37,9 +37,16 @@ def test_verda():
         verda_type("EUR.1", 1, "2.00", "1.00", currency="eur"),
         verda_type("NOSPOT.1", 1, "2.00", None),
     ]
-    out = {l.listing_id: l for l in VerdaProvider.normalize({"/v1/instance-types": [snap(payload)]})}
+    import fx
+
+    real, fx.rate_at = fx.rate_at, lambda *a, **k: None  # no ECB rate stored: an EUR-only type is skipped
+    try:
+        out = {l.listing_id: l for l in VerdaProvider.normalize({"/v1/instance-types": [snap(payload)]})}
+    finally:
+        fx.rate_at = real
     assert "CPU.8V" not in out, "CPU-only types are not GPU listings"
-    assert not any(k.startswith("EUR") for k in out), "a non-USD price is skipped, never read as dollars"
+    assert not any(k.startswith("EUR") for k in out), "a non-USD price without a rate is skipped, never read as dollars"
+    assert all(l.original_currency is None and l.fx_rate is None for l in out.values()), "USD rows carry no FX"
     assert out["8H100.80S.176V"].price_per_gpu_hour == D("29.90") / 8, "per-instance price divides by GPU count"
     assert out["8H100.80S.176V"].price_per_instance_hour == D("29.90")
     spot = out["8H100.80S.176V:spot"]
@@ -49,6 +56,30 @@ def test_verda():
     assert out["8B200.240V.CC"].provider_tier == "confidential" and out["8B200.240V.CC"].canonical_gpu_name is None
     assert "NOSPOT.1" in out and "NOSPOT.1:spot" not in out, "no spot price, no spot listing"
     assert all(l.available is None for l in out.values()), "Verda stock is unknown, not sold out"
+
+
+def test_verda_eur_only_types_are_converted():
+    """An EUR-only type is converted at the ECB rate (with provenance); a type priced in both is read in USD only."""
+    import fx
+
+    payload = [
+        verda_type("1H100.80S.30V", 1, "3.737", "1.869"),
+        verda_type("1H100.80S.30V", 1, "3.40", "1.70", currency="eur"),   # same type in EUR: never a second listing
+        verda_type("EUR.1", 1, "2.00", "1.00", currency="eur"),
+        verda_type("GBP.1", 1, "2.00", "1.00", currency="gbp"),
+    ]
+    rate = fx.Rate("EUR", "USD", D("1.1172"), date(2026, 10, 2))
+    real, fx.rate_at = fx.rate_at, lambda at, base="EUR", quote="USD": fx.pick([rate], at)
+    try:
+        out = {l.listing_id: l for l in VerdaProvider.normalize({"/v1/instance-types": [snap(payload)]})}
+    finally:
+        fx.rate_at = real
+    assert set(out) == {"1H100.80S.30V", "1H100.80S.30V:spot", "EUR.1", "EUR.1:spot"}, set(out)
+    assert out["1H100.80S.30V"].price_per_instance_hour == D("3.737") and out["1H100.80S.30V"].original_currency is None
+    eur = out["EUR.1"]
+    assert eur.currency == "USD" and eur.original_currency == "EUR" and eur.original_price_per_instance_hour == D("2.000000")
+    assert eur.price_per_instance_hour == D("2.234400") and eur.fx_rate == D("1.1172") and eur.fx_rate_date == rate.rate_date
+    assert out["EUR.1:spot"].price_per_instance_hour == D("1.117200") and out["EUR.1:spot"].market_type == "spot"
 
 
 def sf_type(cloud, shade, cloud_type, gpu_type, n, cents, interconnect="pcie", nvlink=False, avail=None, dep="vm"):
@@ -109,5 +140,5 @@ def test_registry():
 
 
 if __name__ == "__main__":
-    for t in (test_verda, test_shadeform, test_regions, test_registry):
+    for t in (test_verda, test_verda_eur_only_types_are_converted, test_shadeform, test_regions, test_registry):
         t(); print(t.__name__, "ok")

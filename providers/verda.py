@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
+import fx
 from models import CapacityObservation, ComputeListing, RawResponse
 from providers.base import PollingPolicy, Provider, find_endpoint, reshaped, to_decimal
 
@@ -202,12 +203,22 @@ class VerdaProvider(Provider):
             return []
 
         listings = []
+        # A type also priced in USD is read in USD only: its EUR row is the same product (never counted twice).
+        in_usd = {it.get("instance_type") for it in snapshot.payload if (it.get("currency") or "").lower() == "usd"}
+        eur_rate = None
         for it in snapshot.payload:
             count = (it.get("gpu") or {}).get("number_of_gpus") or 0
             if not count:
                 continue  # CPU-only instance type
-            if (it.get("currency") or "").lower() != "usd":
-                log.warning("verda: %s is priced in %r, not USD; skipped", it.get("instance_type"), it.get("currency"))
+            currency = (it.get("currency") or "").upper()
+            if currency == "EUR" and it.get("instance_type") not in in_usd:
+                # EUR-only type: converted at the ECB rate in force at fetch time (fx.py), or skipped (fail closed).
+                eur_rate = eur_rate or fx.usd_rate("EUR", snapshot.fetched_at, context="verda")
+                if eur_rate is None:
+                    continue
+            elif currency != "USD":
+                if currency != "EUR":
+                    log.warning("verda: %s is priced in %r, not USD or EUR; skipped", it.get("instance_type"), it.get("currency"))
                 continue
             raw_name = it.get("name")
             itype = it["instance_type"]
@@ -216,6 +227,9 @@ class VerdaProvider(Provider):
                 price = to_decimal(it.get(price_key))
                 if price is None or price <= 0:
                     continue
+                # Both prices are for the whole instance.
+                prices = (fx.convert(price, count, "EUR", eur_rate) if currency == "EUR" else
+                          {"price_per_gpu_hour": price / count, "price_per_instance_hour": price, "currency": "USD"})
                 listings.append(
                     ComputeListing(
                         provider="verda",
@@ -226,10 +240,7 @@ class VerdaProvider(Provider):
                         gpu_count=count,
                         region=None,
                         country=None,
-                        # Both prices are for the whole instance.
-                        price_per_gpu_hour=price / count,
-                        price_per_instance_hour=price,
-                        currency="USD",
+                        **prices,
                         market_type=market,
                         # ".CC" types (also ".CC.AMD" / ".CC.INTEL") run in confidential-computing mode.
                         provider_tier="confidential" if is_confidential(itype) else None,
