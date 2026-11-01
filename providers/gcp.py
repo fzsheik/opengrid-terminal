@@ -28,6 +28,7 @@ These are list prices, which is why the provider class is "hyperscaler". Replace
 
 import logging
 import re
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -210,3 +211,75 @@ class GcpProvider(Provider):
                     continue
                 listings.append(_listing(accel, accel, 1, g, region, snapshot.fetched_at, "gpu-attachment"))
         return listings
+
+
+# --------------------------------------------------------------------------- commitments (read on demand, never a listing)
+
+# GPU key -> accelerator type, for every key that has one (machine GPUs and attachable GPUs).
+ACCELERATOR = {**{key: accel for _, key, accel, *_ in MACHINES.values()}, **ATTACHABLE}
+COMMIT_TERMS = {"Commit1Yr": 1, "Commit3Yr": 3}
+_COMMIT_DESC = re.compile(r"^Commitment v1: (?P<body>.+?) for (?P<years>\d+) Years?$")
+
+
+@dataclass(frozen=True)
+class GcpCommitPrice:
+    """A 1- or 3-year committed-use price of ONE GPU (the GPU SKU alone: vCPUs, memory and Local SSD are billed on
+    top and their commitment SKUs are not stored). Never a ComputeListing."""
+
+    gpu_key: str
+    accelerator: str
+    canonical_gpu_name: str | None
+    region: str
+    term_years: int
+    usage_type: str             # Google's own label, e.g. "Commit1Yr"
+    description: str            # the SKU description, verbatim
+    price_per_gpu_hour: Decimal
+    on_demand_gpu_hour: Decimal | None  # the same GPU SKU on demand, same region (same basis)
+    currency: str
+
+
+def commitment_prices(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[GcpCommitPrice]:
+    """Every GPU commitment SKU priced in REGIONS, one per (GPU, region, term). Pure, read-only.
+
+    A region priced twice with different values for one GPU and term is skipped, never guessed (as by_region does).
+    Not called by normalize(): nothing here becomes a listing, an index vote or a market statistic.
+    """
+    rows = find_endpoint(by_endpoint, ENDPOINT)
+    skus = rows[0].payload.get("skus") if rows and isinstance(rows[0].payload, dict) else None
+    if not isinstance(skus, list):
+        return []
+    patterns = {k: re.compile(p) for k, p in GPU.items() if k in ACCELERATOR}
+    found: dict[tuple[str, str, int], tuple[dict, Decimal, str]] = {}
+    conflict: set[tuple[str, str, int]] = set()
+    for s in skus:
+        years = COMMIT_TERMS.get((s.get("category") or {}).get("usageType"))
+        m = _COMMIT_DESC.match(s.get("description") or "")
+        if years is None or m is None or int(m["years"]) != years:
+            continue
+        key = next((k for k, rx in patterns.items() if rx.search(m["body"])), None)
+        price = unit_price(s)
+        if key is None or price is None or price <= 0:
+            continue
+        rates = ((s.get("pricingInfo") or [{}])[0].get("pricingExpression") or {})
+        if rates.get("usageUnit") != "h":
+            continue  # a GPU commitment is priced per hour; anything else is kept raw, never converted
+        tiers = rates.get("tieredRates") or [{}]
+        currency = (tiers[-1].get("unitPrice") or {}).get("currencyCode") or "USD"
+        for region in s.get("serviceRegions") or []:
+            if region not in REGIONS:
+                continue
+            k = (key, region, years)
+            if k in found and found[k][1] != price:
+                conflict.add(k)
+            found[k] = (s, price, currency)
+    on_demand = {k: by_region(skus, GPU[k]) for k in {k for k, _, _ in found}}
+    out = []
+    for (key, region, years), (s, price, currency) in sorted(found.items()):
+        if (key, region, years) in conflict:
+            log.warning("gcp: %s %d-year commitment priced twice in %s; skipped", key, years, region)
+            continue
+        out.append(GcpCommitPrice(
+            gpu_key=key, accelerator=ACCELERATOR[key], canonical_gpu_name=canonical.canonical_gpu_name(ACCELERATOR[key]),
+            region=region, term_years=years, usage_type=s["category"]["usageType"], description=s["description"],
+            price_per_gpu_hour=price, on_demand_gpu_hour=on_demand[key].get(region), currency=currency))
+    return out

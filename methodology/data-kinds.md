@@ -24,17 +24,20 @@ Quotes and execution prices live in routing and transaction records and are repo
 
 ## Reserved and committed list prices
 
-Some providers publish prices for a 1 to 5-year commitment. OpenGrid **stores these raw only**. They are not
-listings and never enter on-demand or spot prices, indices, spreads or market statistics. They wait on a
-reserved-price data model (term, upfront, per GPU-month vs hour).
+Some providers publish prices for a commitment, from a few days to 5 years. OpenGrid stores the responses raw and
+computes the reserved prices from them when they are read, in their own section: the `/reserved` page and
+`GET /v1/reserved`. They are not listings and never enter on-demand or spot prices, indices, spreads or market
+statistics. See [reserved prices](/methodology/reserved-prices) for terms, the effective price, derived versus
+quoted, and the on-demand comparison.
 
 | Provider | What is stored |
 |---|---|
 | Azure | 1, 3 and 5-year reserved-instance prices from the public Retail Prices API (`priceType eq 'Reservation'`), eastus and eastus2. |
 | GCP | 1 and 3-year commitment SKUs from the Cloud Billing Catalog. |
-| Jarvislabs | `reserved_pricing`: 1-month, 1-year and 2-year per GPU-hour. |
+| Jarvislabs | `reserved_pricing`: 1, 3 and 6-month and 1 and 2-year per GPU-hour. |
 | Together AI | GPU Clusters reserved columns from the public price page, per GPU-hour for 3-30, 31-90, 91-180 and 181+ day commitments, cells as printed ("Contact us" kept). Stored under `/pricing#reserved`; code: `providers/together.py` (`reserved_prices`). |
-| Latitude | GPU plans from Latitude's own plans API, stored verbatim (needs `LATITUDE_API_KEY`). |
+| Latitude | GPU plans from Latitude's own plans API, stored verbatim (needs `LATITUDE_API_KEY`): per region, `hour`, `month` and `year` prices in USD and BRL. |
+| Verda | The commitment ladder (`/v1/long-term/periods/instances`): a discount % per term, 1 month to 2 years. |
 
 **Azure conversion (derived).** Azure states a reservation as one price for the whole VM for the whole term,
 even though the row says "1 Hour". The comparable figure is:

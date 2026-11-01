@@ -5,8 +5,9 @@ Spec: https://api.verda.com/v1/openapi.json
 Prices (anonymous, always):
     GET /v1/instance-types               every instance type, on-demand and spot price, both per whole instance
 
-Stored raw, not read (anonymous, always; the reserved data model is undecided):
-    GET /v1/long-term/periods/instances  the commitment ladder (1 month 2% ... 2 years 25% off)
+Stored raw, never a listing (anonymous, always):
+    GET /v1/long-term/periods/instances  the commitment ladder (1 month 2% ... 2 years 25% off); commitment_ladder()
+                                         reads it for reserved.py, which applies it to on-demand prices (derived)
     GET /v1/cluster-types                the cluster catalogue (8-144 GPU clusters, price per hour)
 
 Capacity (only with VERDA_CLIENT_ID + VERDA_CLIENT_SECRET):
@@ -27,7 +28,9 @@ availability response names, is in stock exactly when the location lists it. The
 """
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import httpx
@@ -246,3 +249,37 @@ class VerdaProvider(Provider):
                     )
                 )
         return listings
+
+
+# --------------------------------------------------------------------------- commitment ladder (read on demand)
+
+@dataclass(frozen=True)
+class VerdaCommitment:
+    """One rung of Verda's long-term ladder: a discount % off the on-demand price for a commitment. Never a listing."""
+
+    code: str                   # Verda's own code, e.g. "1_YEAR"
+    name: str                   # Verda's own label, e.g. "1 year"
+    months: int
+    discount_pct: Decimal
+
+
+_UNIT_MONTHS = {"month": 1, "year": 12}
+
+
+def commitment_ladder(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[VerdaCommitment]:
+    """The enabled rungs of the stored ladder, shortest first. A rung in an unknown unit or with a discount outside
+    (0, 100) is kept raw, never guessed. Pure, read-only; normalize() never reads it."""
+    rows = by_endpoint.get(LADDER) or []
+    body = rows[0].payload if rows else None
+    if not isinstance(body, list):
+        return []
+    out = []
+    for r in body:
+        if not isinstance(r, dict) or r.get("is_enabled") is False:
+            continue
+        unit, value, pct = _UNIT_MONTHS.get(str(r.get("unit_name") or "")), r.get("unit_value"), to_decimal(r.get("discount_percentage"))
+        if unit is None or not isinstance(value, int) or value <= 0 or pct is None or not 0 < pct < 100:
+            continue
+        out.append(VerdaCommitment(code=str(r.get("code") or ""), name=str(r.get("name") or r.get("code") or ""),
+                                   months=unit * value, discount_pct=pct))
+    return sorted(out, key=lambda c: c.months)
