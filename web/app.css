@@ -2176,3 +2176,7 @@ details.dep-fold { margin-top: 10px; }
 .gp-src[open] { display: block; margin-top: 8px; }
 .gp-src > summary { display: inline; cursor: pointer; list-style: none; margin-right: 6px; }
 .gp-src > summary::-webkit-details-marker { display: none; }
+
+/* /reserved: a price cell is the effective $/GPU-hr plus a small saving line */
+.rv-cell { white-space: nowrap; }
+.rv-save { font: 600 var(--fs-2xs) var(--mono); }
