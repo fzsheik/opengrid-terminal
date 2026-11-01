@@ -49,8 +49,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 import routing.tracker  # noqa: F401  registers the routing_tracker job
 from accounts.auth import Principal, require_scope
 from api.common import INFERRED, TRANSACTION, envelope, gpu_slug, resolve_gpu_or_family
-from routing import (audit, capabilities, control, credentials, deployments, engine, guards, idempotency, quotes,
-                     scoring, transactions)
+from routing import (audit, capabilities, control, credentials, deployments, disclosure, engine, guards, idempotency,
+                     quotes, scoring, transactions)
 
 # Durable job heartbeats (execution_controls 'job:<name>') so the validation gate and the checklist can see
 # the reconcile / tracker workers from any process.
@@ -288,7 +288,7 @@ def route_preview(body: RouteBody, who: Principal = Depends(require_scope("route
         out = engine.preview(spec, who)
     except scoring.ScoringError as e:
         raise HTTPException(422, str(e))
-    return envelope(out, kind=INFERRED, methodology="routing")
+    return envelope(disclosure.redact(out, who), kind=INFERRED, methodology="routing")
 
 
 @router.post("/v1/route", summary="Route a workload: check, quote, then approval (SUPERVISED) or launch (LIVE)")
@@ -300,6 +300,7 @@ def route_execute(body: RouteBody, request: Request, who: Principal = Depends(re
             code, out = engine.route(spec, who)
         except scoring.ScoringError as e:
             raise HTTPException(422, str(e))
+        out = disclosure.redact(out, who)
         return code, envelope(out, kind=TRANSACTION if out.get("deployment") else INFERRED, methodology="routing",
                               also=["/methodology/execution-safety"])
 
@@ -318,7 +319,7 @@ def route_record(route_request_id: str, who: Principal = Depends(require_scope("
     if d is not None:
         r["deployment"] = deployments.public(d.deployment_id, detail=False)
         r["quote"] = quotes.get(d.quote_id) if d.quote_id else None
-    return envelope(r, methodology="routing")
+    return envelope(disclosure.redact(r, who), methodology="routing")
 
 
 class Approve(BaseModel):
@@ -358,7 +359,7 @@ def get_quote(quote_id: str, who: Principal = Depends(require_scope("route:previ
     q = quotes.get(quote_id, who)
     if q is None:
         raise HTTPException(404, "quote not found")
-    return envelope(q, kind=TRANSACTION, methodology="execution-safety")
+    return envelope(disclosure.redact(q, who), kind=TRANSACTION, methodology="execution-safety")
 
 
 # --------------------------------------------------------------------------
@@ -372,14 +373,15 @@ _STATUS_FILTER = "^(" + "|".join(deployments.STATUSES + ("live", "uncertain")) +
 def list_deployments(status: str | None = Query(None, pattern=_STATUS_FILTER),
                      limit: int = Query(200, ge=1, le=1000), offset: int = Query(0, ge=0),
                      who: Principal = Depends(require_scope("deployments:read"))):
-    return envelope(deployments.list_for(who, status, limit=limit, offset=offset), kind=TRANSACTION,
+    return envelope(disclosure.redact(deployments.list_for(who, status, limit=limit, offset=offset), who),
+                    kind=TRANSACTION,
                     methodology="routing", limit=limit, offset=offset)
 
 
 @router.get("/v1/deployments/{deployment_id}", summary="One deployment; refresh=true asks the provider")
 def get_deployment(deployment_id: str, refresh: bool = False,
                    who: Principal = Depends(require_scope("deployments:read"))):
-    return envelope(deployments.get(deployment_id, who, refresh_now=refresh), kind=TRANSACTION,
+    return envelope(disclosure.redact(deployments.get(deployment_id, who, refresh_now=refresh), who), kind=TRANSACTION,
                     methodology="routing")
 
 

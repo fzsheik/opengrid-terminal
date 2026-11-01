@@ -340,6 +340,9 @@ def _client():
     settings.public_pages = True
     settings.public_rate_limit_per_minute = 100_000
     settings.assistant_public_rate_limit_per_minute = 100_000
+    for kind in ("read", "write", "execute"):   # the keyed calls below are many previews in a row
+        setattr(settings, f"rate_limit_{kind}_per_minute", 100_000)
+        setattr(settings, f"account_rate_limit_{kind}_per_minute", 100_000)
     settings.api_key_pepper = settings.api_key_pepper or "test-pepper"
     ratelimit.reset()
     security.reset()
@@ -576,9 +579,237 @@ def test_reserved_and_provider_lists():
     assert HIDDEN in raw and HIDDEN not in prov.feed_health(), "raw data is there; the public list omits it"
 
 
+# ---------------------------------------------------------------- what a customer is SHOWN (routing/disclosure.py)
+
+VOLATILE = {"as_of", "route_request_id", "quote_id", "expires_at", "created_at", "expires_in_seconds", "age_seconds",
+            "request_id", "quote_note", "priced_at", "generated_at", "id", "approve", "reject", "job_id"}
+_IDS = re.compile(r"(rr|q|quote|req|job|dep)_[0-9a-f]{6,}|\d{4}-\d\d-\d\dT[\d:.]+(\+00:00|Z)?"
+                  r"|[\d.]+ ?(s|min|h|d) old")  # ids, timestamps, and the data age in explanations
+
+
+def _norm(obj):
+    if isinstance(obj, dict):
+        return {k: _norm(v) for k, v in obj.items() if k not in VOLATILE and not k.endswith("age_seconds")}
+    if isinstance(obj, list):
+        return [_norm(v) for v in obj]
+    if isinstance(obj, str):
+        return _IDS.sub("<id>", obj)
+    return obj
+
+
+def _set_internal_price(price: Decimal):
+    with W["Session"].begin() as s:
+        s.execute(text("UPDATE compute_listings SET price_per_gpu_hour = :p, price_per_instance_hour = :p * gpu_count "
+                       "WHERE visibility = 'internal'"), {"p": price})
+        s.execute(text("UPDATE listing_observations o SET price_per_gpu_hour = :p FROM compute_listings c "
+                       "WHERE c.provider = o.provider AND c.listing_id = o.listing_id AND c.visibility = 'internal'"),
+                  {"p": price})
+    cache.clear_all()
+
+
+def _keyed_world():
+    """A non-admin customer key (data:read + route:preview) and an internal twin of a public listing."""
+    from accounts import accounts as acc
+    from accounts import keys
+
+    if "key" in W:
+        return W["key"]
+    keys.reset_cache()
+    a = acc.create_account("visibility-customer", "v@example.com")
+    k = keys.create_key(a["id"], "customer", ["data:read", "route:preview"], rate_limit_per_minute=100_000)
+    with W["Session"].begin() as s:  # an internal row of a product that also has a public listing (DeepInfra-style)
+        pub = s.execute(text("SELECT provider, sku FROM compute_listings WHERE visibility = 'public' AND "
+                             "canonical_gpu_name = :g AND provider LIKE 'syn_%' ORDER BY provider LIMIT 1"),
+                        {"g": "NVIDIA A100 80GB SXM4"}).one()
+        row = _listing(pub.provider, f"{pub.provider}:{TOKEN}:twin", "NVIDIA A100 80GB SXM4", SECRET, W["now"], W["start"])
+        row.sku = pub.sku
+        s.add(row)
+        s.flush()
+        s.add(ListingObservation(provider=row.provider, listing_id=row.listing_id, observed_at=W["start"],
+                                 price_per_gpu_hour=SECRET, price_per_instance_hour=SECRET, available=True))
+    W["twin"] = (pub.provider, f"{pub.provider}:{TOKEN}:twin")
+    W["key"] = {"Authorization": f"Bearer {k['secret']}"}
+    return W["key"]
+
+
+LORA = {"workload_type": "fine_tuning", "frameworks": ["pytorch", "transformers", "peft"],
+        "model": {"name": "mistralai/Mistral-7B-v0.1"}, "training": {"method": "lora"}, "limit": 20}
+INFER = {"workload_type": "inference", "model": {"name": "x", "parameters_b": 7}, "limit": 20}
+JOB = {"name": "visibility-test", "job_type": "training", "template": "pytorch-mnist",
+       "config": {"epochs": 2, "batch_size": 128, "learning_rate": 0.001, "seed": 42},
+       "resources": {"gpu": "auto", "gpu_count": 1, "min_vram_gb": None, "region": None, "strict_region": False,
+                     "allow_spot": False},
+       "routing": {"strategy": "CHEAPEST", "weights": None},
+       "limits": {"max_price_per_gpu_hour_usd": 50, "max_total_cost_usd": 100, "max_runtime_minutes": 30},
+       "ssh_public_key": None, "sandbox": False}
+
+
+def _customer_calls(c, h) -> dict:
+    out = {}
+    for name, body in (("recommend_lora", LORA), ("recommend_infer", INFER)):
+        r = c.post("/v1/recommend", json=body, headers=h)
+        assert r.status_code == 200, (name, r.text[:300])
+        out[name] = r.json()["data"]
+    for g in (H100, "NVIDIA A100 80GB SXM4", ONLY_GPU):
+        for mode in ("CHEAPEST", "BALANCED"):
+            r = c.post("/v1/route/preview", json={"gpu": gpu_slug(g), "count": 1, "mode": mode,
+                                                  "duration_hours": 10}, headers=h)
+            assert r.status_code == 200, (g, r.text[:300])
+            d = r.json()["data"]
+            out[f"preview {g} {mode}"] = d
+            rec = c.get(f"/v1/route/{d['route_request_id']}", headers=h)
+            assert rec.status_code == 200, rec.text[:200]
+            out[f"record {g} {mode}"] = rec.json()["data"]
+            if d.get("quote_record"):
+                qr = c.get(f"/v1/quotes/{d['quote_record']['quote_id']}", headers=h)
+                out[f"quote {g} {mode}"] = qr.json().get("data")
+    r = c.post("/v1/jobs/preview", json=JOB, headers=h)
+    if r.status_code == 200:
+        out["job_preview"] = r.json()["data"]
+    else:
+        out["job_preview_status"] = r.status_code   # e.g. no adapter for synthetic providers: refused, no values
+    return out
+
+
+def _mcp_recommend(key_header) -> list:
+    """The hosted MCP endpoint's recommend tool (a live server: tools reach /v1 in-process with the caller's key)."""
+    import socket
+    import threading
+    import time
+
+    import httpx
+    import uvicorn
+
+    if "srv" not in W:
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        sock.close()
+        srv = uvicorn.Server(uvicorn.Config(main.app, host="127.0.0.1", port=port, lifespan="off", log_config=None,
+                                            access_log=False, log_level="warning"))
+        threading.Thread(target=srv.run, daemon=True).start()
+        for _ in range(200):
+            if srv.started:
+                break
+            time.sleep(0.05)
+        W["srv"], W["mcp"] = srv, f"http://127.0.0.1:{port}/mcp"
+    hdr = {"content-type": "application/json", "accept": "application/json, text/event-stream",
+           "mcp-protocol-version": "2025-06-18", **key_header}
+    out = []
+    for req in (LORA, INFER):
+        args = {"requirements": {k: v for k, v in req.items() if k != "limit"}, "limit": 10}
+        r = httpx.post(W["mcp"], json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                       "params": {"name": "opengrid_recommend_compute", "arguments": args}},
+                       headers=hdr, timeout=120)
+        assert r.status_code == 200, r.text[:300]
+        res = r.json()["result"]
+        assert not res.get("isError"), str(res)[:400]
+        out.append(res.get("structuredContent") or res)
+    return out
+
+
+def _price_leaks(obj) -> list[str]:
+    """Internal VALUES (either test price, as a number or in text; the capacity count). Names are not values: a
+    customer is told which provider an internal candidate is on, so it can be routed there."""
+    out = []
+
+    def walk(o, path="$"):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                walk(v, f"{path}.{k}")
+        elif isinstance(o, list):
+            for i, v in enumerate(o):
+                walk(v, f"{path}[{i}]")
+        elif isinstance(o, (int, float)) and not isinstance(o, bool) and (
+                0.00425 <= o <= 0.0044 or 0.0049 <= o <= 0.0050 or o == COUNT):
+            out.append(f"{path} = {o}")
+        elif isinstance(o, str) and (re.search(r"(?<![\d.])0\.00(43|49|50)", o) or _TEXT_COUNT.search(o)):
+            out.append(f"{path} = {o[:120]!r}")
+    walk(obj)
+    return out
+
+
+def test_customers_never_see_internal_values():
+    """A keyed NON-admin caller: recommend, route preview (+ its audit record and quote), job preview and MCP
+    recommend. Internal rows may choose and order candidates, but no value of theirs is shown: the responses are
+    IDENTICAL when only the internal prices change, and carry no internal price, name or count."""
+    c = _client()
+    h = _keyed_world()
+    runs = []
+    for price in (SECRET, Decimal("0.004987")):
+        _set_internal_price(price)
+        runs.append({**_customer_calls(c, h), "mcp": _mcp_recommend(h)})
+    _set_internal_price(SECRET)
+    for name in runs[0]:
+        a, b = _norm(runs[0][name]), _norm(runs[1][name])
+        if a != b:
+            ja, jb = json.dumps(a, sort_keys=True, default=str), json.dumps(b, sort_keys=True, default=str)
+            i = next(i for i in range(min(len(ja), len(jb))) if ja[i] != jb[i])
+            raise AssertionError(f"{name}: changes with the internal price: ...{ja[max(0, i - 200):i + 120]}")
+        bad = _price_leaks(runs[0][name]) + _price_leaks(runs[1][name])
+        assert not bad, (name, bad[:6])
+    # internal candidates still choose and order: shown, priced by the public twin or as a quote at execution
+    rec = runs[0]["recommend_infer"]
+    internal = [o for o in rec["options"] if o["visibility"] == "internal"]
+    assert internal, "internal options are offered to a keyed customer"
+    for o in internal:
+        assert o["price_basis"] in ("public_listing", "quote") and o["availability"] == "available via OpenGrid", o
+        assert set(o) <= __import__("routing.disclosure", fromlist=["x"]).SAFE_KEYS | {
+            "price_per_gpu_hour", "price_per_instance_hour", "price_basis", "availability", "price_note", "why",
+            "summary", "reason"}, sorted(o)
+        assert (o["price_per_gpu_hour"] is None) == (o["price_basis"] == "quote")
+    prev = runs[0][f"preview {H100} CHEAPEST"]
+    assert prev["selected"]["visibility"] == "internal" and prev["selected"]["price_per_gpu_hour"] is None, \
+        "the cheapest (internal) listing is still selected, shown without its price"
+    assert prev["quote"]["price_basis"] == "quote" and prev["quote"]["expected_cost_usd"] is None
+    twin = runs[0]["preview NVIDIA A100 80GB SXM4 CHEAPEST"]["selected"]
+    assert twin["listing_id"] == W["twin"][1] and twin["price_basis"] == "public_listing" and \
+        twin["price_per_gpu_hour"] > 0.5, twin
+    assert runs[0]["mcp"], "MCP recommend answered"
+
+
+def test_workload_market_reference_is_public():
+    """Job placement re-bases the price factor on a workload median: public candidates only, like routing's."""
+    from workloads import select as wsel
+
+    def cand(p, price, vis):
+        return {"gpu": H100, "provider": p, "price_per_gpu_hour": price, "visibility": vis,
+                "factors": {"price": {"value": 0.5, "raw": {}, "note": ""}}, "explanation": ""}
+    cs = [cand("a", 2.0, "public"), cand("b", 4.0, "public"), cand("c", 0.001, "internal"), cand("d", 0.002, "internal")]
+    real = wsel.scoring.explanation
+    try:
+        wsel.scoring.explanation = lambda c: ""
+        m = wsel._rebase_price(cs, {"price": 1.0})
+    finally:
+        wsel.scoring.explanation = real
+    assert m["median"] == 3.0 and m["pairs"] == 2, m
+
+
+def test_admins_still_see_internal_values():
+    from accounts import accounts as acc
+    from accounts import keys
+
+    c = _client()
+    _keyed_world()
+    a = acc.create_account("visibility-admin", "a@example.com")
+    k = keys.create_key(a["id"], "admin", ["admin", "data:read", "route:preview"], rate_limit_per_minute=100_000,
+                        platform_admin=True)
+    for h in (BASIC, {"Authorization": f"Bearer {k['secret']}"}):
+        r = c.post("/v1/recommend", json=INFER, headers=h)
+        assert r.status_code == 200, r.text[:300]
+        opts = r.json()["data"]["options"]
+        assert any(o["visibility"] == "internal" and abs(o["price_per_gpu_hour"] - float(SECRET)) < 1e-9
+                   for o in opts), [(o["listing_id"], o["price_per_gpu_hour"]) for o in opts][:6]
+        r = c.post("/v1/route/preview", json={"gpu": gpu_slug(H100), "count": 1, "mode": "CHEAPEST"}, headers=h)
+        sel = r.json()["data"]["selected"]
+        assert sel["visibility"] == "internal" and abs(sel["price_per_gpu_hour"] - float(SECRET)) < 1e-9, sel
+
+
 TESTS = [test_registry, test_derived_tables_have_no_internal_rows, test_every_public_route_is_clean,
          test_public_posts_are_clean, test_routing_and_recommend_see_internal, test_admin_view_labels_internal_rows,
-         test_save_stamps_the_tier, test_deepinfra_internal_listings_route, test_reserved_and_provider_lists]
+         test_save_stamps_the_tier, test_deepinfra_internal_listings_route, test_reserved_and_provider_lists,
+         test_customers_never_see_internal_values, test_workload_market_reference_is_public,
+         test_admins_still_see_internal_values]
 
 if __name__ == "__main__":
     saved = (settings.app_password, settings.public_pages, settings.public_rate_limit_per_minute,

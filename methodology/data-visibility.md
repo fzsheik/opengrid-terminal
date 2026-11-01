@@ -11,7 +11,7 @@ statistic.
 | Tier | May be used for | Never used for |
 |---|---|---|
 | **public** | Everything: pages, the public API, indices and index votes, fixings and settlement, market statistics (percentiles, spreads, dispersion, movers, events), exports and CSV downloads, archived history, reserved prices, currency-converted listings, assistant and MCP answers about the market. | (nothing) |
-| **internal** | Routing (route previews and routes), job placement, and recommendations made for an OpenGrid account (an API key or a signed-in operator). | Any public page or public API answer, any statistic, index vote, fixing, export or archived series, and the assistant. Anonymous recommendations use public data only. |
+| **internal** | Choosing and ordering candidates in routing (route previews and routes), job placement, and recommendations made for an OpenGrid account (an API key or a signed-in operator). | Any public page or public API answer, any statistic, index vote, fixing, export or archived series, and the assistant; and any value shown to a customer (see below). Anonymous recommendations use public data only. |
 
 A source is internal when OpenGrid has a right to read it but not to pass it on: for example prices a provider
 shows only to an account holder, prices the provider's terms treat as confidential, or a feed whose owner's
@@ -27,6 +27,22 @@ Every source is **public unless it is listed below**. The list lives in one plac
 |---|---|---|---|---|
 | DeepInfra | Container API (`/v1/containers/gpu_availability`), its hourly prices | Internal listings, ids ending `:api` | The API's prices are not the prices DeepInfra publishes on its price page and may be specific to OpenGrid's account; DeepInfra's terms treat non-public pricing as confidential information. DeepInfra's public listings stay the `/gpu-instances` price-page prices, and the same response's in-stock flag stays public capacity. | Routing, job placement, keyed recommendations |
 | AWS | Spot Instance Advisor (`spot-advisor-data.json`): interruption bands and average savings | Internal signals | AWS's site terms restrict gathering and republishing data from aws.amazon.com. | Available to routing (spot capacity is not ranked yet, so no route uses it today) |
+
+## What a customer is shown
+
+Internal data may decide which candidate OpenGrid recommends or routes to, and in what order, but its values are
+never shown to a customer, including customers with an API key, through the API, the hosted MCP tools or a route
+preview. An internal candidate is shown with:
+
+- the **public** list price of the same product (same provider and instance) when the provider publishes one, marked
+  `price_basis: "public_listing"`; otherwise **no price** (`price_per_gpu_hour: null`, `price_basis: "quote"`):
+  OpenGrid quotes it when the workload is executed;
+- the label "available via OpenGrid";
+- nothing computed from its internal price: no cost estimate, fee, saving, score, or comparison ("12% cheaper than
+  ...") against it, and no internal stock count or raw provider field.
+
+Comparisons and scores of other candidates that would be measured against an internal value are left out of that
+response. Only OpenGrid's operators and platform-admin keys see internal values, labelled `internal`.
 
 ## How it is enforced
 
@@ -46,6 +62,10 @@ Every source is **public unless it is listed below**. The list lives in one plac
   listings only.
 - **Wholly internal providers are not named publicly.** If every source of a provider is internal, the provider
   is also left out of public provider lists and feed-health reports.
+- **Customer responses are masked in one place.** Recommendations, route previews and routes (with their audit
+  records and quotes), deployments and job previews pass through one disclosure step before they are returned to a
+  non-admin caller (`routing/disclosure.py`). A test runs every such call twice with different internal prices: the
+  two responses must be identical.
 - **Operators see internal data, labelled.** The admin view (`GET /v1/ops/internal-data`, admin only) lists the
   registry, the internal listings and capacity rows, and internal signals, each marked `internal`.
 - **Tested on every public route.** A test seeds internal listings, capacity and archived prices that would be

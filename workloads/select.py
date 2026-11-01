@@ -325,6 +325,8 @@ def _rebase_price(cands: list[dict], weights: dict) -> dict | None:
     """Re-base the price factor on the workload's compatible market (see module docstring, step 6)."""
     best: dict[tuple, float] = {}
     for c in cands:
+        if c.get("visibility", "public") != "public":
+            continue  # the market reference is public-tier only (methodology/data-visibility.md), like routing's
         k = (c["gpu"], c["provider"])
         best[k] = min(best.get(k, math.inf), c["price_per_gpu_hour"])
     if not best:

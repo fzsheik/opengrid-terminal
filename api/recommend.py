@@ -22,6 +22,7 @@ from api.common import ESTIMATED, envelope
 from intelligence.estimate import estimate
 from intelligence.recommend import RecommendError, recommend
 from intelligence.requirements import WorkloadRequirements
+from routing import disclosure
 
 router = APIRouter()
 READ = require_scope("data:read")
@@ -79,6 +80,7 @@ async def recommend_route(request: Request, who: Principal = Depends(READ)):
         out = recommend(req, who, limit=limit)
     except RecommendError as e:
         raise HTTPException(422, {"code": e.code, "message": e.message}) from None
+    out = disclosure.redact(out, who)  # internal listings may rank, but only an admin sees their values
     return envelope(out, kind="mixed", methodology=METH,
                     kinds={"prices": "observed", "memory": ESTIMATED, "cost": ESTIMATED, "hardware": "theoretical",
                            "execution": "inferred"},
