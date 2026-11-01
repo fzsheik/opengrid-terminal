@@ -50,6 +50,7 @@ from providers.shadeform import (
     DenvrProvider,
     HorizonProvider,
     LatitudeProvider,
+    PaperspaceProvider,
     PhyntecProvider,
 )
 from providers.scaleway import ScalewayProvider
@@ -111,6 +112,7 @@ PROVIDERS: dict[str, type[Provider]] = {
         BasetenProvider,
         BeamProvider,
         CloreProvider,
+        PaperspaceProvider,
     )
 }
 
@@ -165,6 +167,7 @@ __all__ = [
     "BasetenProvider",
     "BeamProvider",
     "CloreProvider",
+    "PaperspaceProvider",
     "find_endpoint",
     "gather_limited",
     "to_decimal",

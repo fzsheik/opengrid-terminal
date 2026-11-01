@@ -64,6 +64,9 @@ _ALL = [
                  "prices as listed by Shadeform; owns its H100/H200 clusters in Iceland"),
     ProviderMeta("phyntec", "Phyntec", "neocloud", "aggregator", "api.shadeform.ai", "https://phyntec.net",
                  "prices as listed by Shadeform; own RTX 4090/5090 bare metal in Wyoming"),
+    ProviderMeta("paperspace", "Paperspace", "neocloud", "aggregator", "api.shadeform.ai", "https://www.paperspace.com",
+                 "DigitalOcean's GPU cloud; prices as listed by Shadeform, $0.04-0.10/GPU-h above Paperspace's own "
+                 "on-demand list (2026-11-01)"),
     ProviderMeta("coreweave", "CoreWeave", "neocloud", "public_page", "www.coreweave.com", "https://www.coreweave.com",
                  "on-demand and spot instance prices; per-GPU rate = instance price / GPU count"),
     ProviderMeta("together", "Together AI", "neocloud", "public_page", "www.together.ai", "https://www.together.ai",

@@ -697,6 +697,16 @@ PHYNTEC = _shadeform("phyntec", "Phyntec", [
     'Shadeform\'s cloud directory files it as "evergreen" (its former name); its instance types say "phyntec".',
     "Its own site prints monthly reservations only (not converted); the hourly price is Shadeform's.",
 ])
+PAPERSPACE = _shadeform("paperspace", "Paperspace", [
+    "Shadeform's rate is Paperspace's own on-demand list price plus $0.04/GPU-h ($0.10 on the A100s), checked "
+    "against paperspace.com/pricing on 2026-11-01: it is Shadeform's resale price, stored as such.",
+    "Paperspace's page prints 3-year commitment rates for the H100 ($2.24) and A100-80G ($1.15); not read.",
+    'Its H100 is "NVIDIA HGX H100" on its own page but pcie in Shadeform, so it is relabelled and stays unmapped; '
+    '"V100" and "V100_32G" stay unmapped (form factor not stated by Paperspace; no 32 GB canonical).',
+    "A DigitalOcean product, but a separate catalogue from DigitalOcean's GPU Droplets (read from DigitalOcean's "
+    "own API): no machine type is in both.",
+    "A catalogue with no priced Paperspace type fails the normalize (no other source): never 'nothing for sale'.",
+])
 
 
 COREWEAVE = ProviderMapping(
@@ -1714,7 +1724,7 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         SALAD, HYPERSTACK, LAMBDA, RUNPOD,
         HYPERBOLIC, VOLTAGEPARK, LIUM, VAST, NEBIUS, MASSEDCOMPUTE,
         DIGITALOCEAN, AWS,
-        VERDA, CRUSOE, LATITUDE, DENVR, BOOSTRUN, HORIZON, PHYNTEC,
+        VERDA, CRUSOE, LATITUDE, DENVR, BOOSTRUN, HORIZON, PHYNTEC, PAPERSPACE,
         COREWEAVE, TOGETHER, JARVISLABS, HOTAISLE, VULTR,
         GCP,
         AZURE,

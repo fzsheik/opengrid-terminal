@@ -3,7 +3,9 @@
 Shadeform resells other clouds' capacity and publishes every instance type, with
 its real cloud named in `cloud`, from one anonymous endpoint. Crusoe, Latitude.sh,
 Denvr, Boost Run, Horizon Compute and Phyntec have no usable public price feed of
-their own, so each is read from here and labelled "via-shadeform". Scaleway was
+their own, so each is read from here and labelled "via-shadeform". Paperspace
+(DigitalOcean's GPU cloud, a product line apart from DigitalOcean's own GPU Droplets read in
+providers/digitalocean.py) is read here too since 2026-11-01; see PaperspaceProvider. Scaleway was
 read here until 2026-11-01; it now has its own feed (providers/scaleway.py, its EUR
 list prices converted at the ECB rate), and NO_LONGER_READ keeps it out of here. The prices are Shadeform's listing of them, not the
 cloud's own page: where we can compare (Hyperstack, DigitalOcean, Voltage Park)
@@ -94,6 +96,9 @@ class ShadeformCloud(Provider):
 
     cloud: str
     polling = PollingPolicy(interval_seconds=900, timeout_seconds=45)
+    # gpu_label() -> the raw name to store instead, where this cloud's own page contradicts Shadeform's variant tag
+    # (an unmapped name is a visible to-do; a wrong variant would merge two products).
+    labels: dict[str, str] = {}
 
     def __init__(self, client: httpx.AsyncClient | None = None):
         super().__init__(
@@ -136,7 +141,7 @@ class ShadeformCloud(Provider):
             avail = t.get("availability") or []
             rental = rental_of(avail)  # a type offered only as spot is a spot listing
             in_stock, region, country = regions_of(avail, rental)
-            raw_name = gpu_label(t)
+            raw_name = cls.labels.get(gpu_label(t), gpu_label(t))
             price = Decimal(str(cents)) / 100  # integer cents per instance-hour
             listings.append(
                 ComputeListing(
@@ -168,10 +173,11 @@ class ShadeformCloud(Provider):
 
     @classmethod
     def normalize_capacity(cls, by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
-        return shadeform_capacity(cls.name, cls.cloud, by_endpoint)
+        return shadeform_capacity(cls.name, cls.cloud, by_endpoint, cls.labels)
 
 
-def shadeform_capacity(provider: str, cloud: str, by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
+def shadeform_capacity(provider: str, cloud: str, by_endpoint: "dict[str, list[RawSnapshot]]",
+                       labels: dict[str, str] | None = None) -> list[CapacityObservation]:
     """One (instance type, region) availability boolean in Shadeform's catalogue becomes one observation. Shared by
     the clouds read through Shadeform and by providers that use Shadeform only for capacity (Massed Compute)."""
     rows = find_endpoint(by_endpoint, ENDPOINT)
@@ -184,7 +190,7 @@ def shadeform_capacity(provider: str, cloud: str, by_endpoint: "dict[str, list[R
         if t.get("cloud") != cloud or not isinstance(count, int) or count < 1:
             continue
         avail = t.get("availability") or []
-        rental, raw_name = rental_of(avail), gpu_label(t)
+        rental, raw_name = rental_of(avail), (labels or {}).get(gpu_label(t), gpu_label(t))
         for a in avail:
             if a.get("rental_type") not in (rental, None) or not a.get("region"):
                 continue
@@ -352,3 +358,38 @@ class PhyntecProvider(ShadeformCloud):
     # monthly reservations only; the hourly rate is Shadeform's.
     name = "phyntec"
     cloud = "phyntec"
+
+
+class PaperspaceProvider(ShadeformCloud):
+    """Paperspace (paperspace.com, DigitalOcean's GPU cloud since 2023): its on-demand VMs as Shadeform lists them.
+
+    Paperspace publishes no keyless price API; its pricing page is server-rendered. Shadeform's anonymous catalogue
+    lists every Paperspace machine type with its real cloud named, so it is read here like the other via-shadeform
+    clouds (one fetch, Paperspace's rows only; never also read anywhere else, so it is counted once).
+
+    Price check against Paperspace's own pricing page (2026-11-01, robots.txt allows it): Shadeform's rate is
+    Paperspace's on-demand list price plus $0.04 per GPU-hour (A4000 0.76 -> 0.80, A5000 1.38 -> 1.42, A6000
+    1.89 -> 1.93, V100 2.30 -> 2.34, H100 5.95 -> 5.99) and $0.10 on the A100s (3.09 -> 3.19). That is Shadeform's
+    resale price, and is what is stored (a price you can pay through Shadeform); the gap is documented in
+    mapping.py. The page's $2.24 (H100) and $1.15 (A100-80G) are 3-year commitment rates, not read. This was the
+    reason Paperspace was declined on 2026-10-13 and 2026-10-21; it is now added with the gap stated.
+
+    GPU names: Shadeform tags the H100 type pcie, but Paperspace's own page calls it "NVIDIA HGX H100" (the SXM
+    baseboard), so it is stored as "H100 (Paperspace: HGX per its page, pcie per Shadeform)" and stays unmapped
+    rather than merged into either variant. "V100_32G" has no canonical 32 GB V100 yet and stays unmapped.
+
+    Terms: Shadeform's catalogue is already read under its terms; paperspace.com's robots.txt disallows nothing
+    on /pricing (the page is only used for the check above, not polled).
+    """
+
+    name = "paperspace"
+    cloud = "paperspace"
+    labels = {"H100 pcie": "H100 (Paperspace: HGX per its page, pcie per Shadeform)"}
+
+    @classmethod
+    def normalize(cls, by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:
+        listings = super().normalize(by_endpoint)
+        if find_endpoint(by_endpoint, ENDPOINT) and not listings:
+            # Paperspace has no other source here: a catalogue without it is a failed read, never "nothing for sale".
+            raise ValueError("paperspace: Shadeform's catalogue lists no priced Paperspace GPU type")
+        return listings
