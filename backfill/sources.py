@@ -54,7 +54,7 @@ def _text_parser(fn: Callable[[str, datetime], list[ComputeListing]]) -> tuple[s
 
 # Providers whose live modules are on a branch not merged yet (providers/batch-nokey): their archived pages are
 # registered already, so the history joins up as soon as the live provider lands.
-PENDING = {"paperspace", "akash", "hydrahost", "cudo", "gpuai", "exoscale", "huggingface"}
+PENDING = {"paperspace", "akash", "cudo", "exoscale", "huggingface"}
 
 RETIRED = {"jarvislabs", "gcp"}  # live pollers now on official APIs; page scrapers kept in backfill/retired/
 

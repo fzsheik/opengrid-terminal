@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import scratchdb  # noqa: E402,F401  (first: isolates the process from real networks)
 
 from backfill.__main__ import _day  # noqa: E402
-from backfill.parsers import akash, azure, coreweave, denvr, exoscale, huggingface, lambda_, paperspace, runpod, verda  # noqa: E402
+from backfill.parsers import akash, azure, coreweave, cudo, denvr, exoscale, huggingface, lambda_, paperspace, runpod, verda  # noqa: E402
 from backfill.sources import sources  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_backfill"
@@ -374,6 +374,21 @@ def test_huggingface_tables_keep_the_resold_tier():
             AT, contains="provider")
 
 
+def test_cudo_gpu_component_table():
+    ls, used = _src("www.cudocompute.com/pricing").parse((FIX / "cudo_pricing_2025-01.html").read_bytes(), AT)
+    by = {l.listing_id: l for l in ls}
+    h = by["vm-gpu:h100-sxm-80gb"]
+    assert h.raw_gpu_name == "nvidia-h100" and h.canonical_gpu_name == "NVIDIA H100 80GB SXM5", "the live gpuModelId"
+    assert h.price_per_gpu_hour == D("2.45") and h.provider_tier == "vm-gpu-component"
+    assert by["vm-gpu:a100-pcie-80gb"].canonical_gpu_name is None, "live leaves nvidia-a100-pcie unmapped"
+    assert not any(l.price_per_gpu_hour in (D("2.44"), D("2.30"), D("2.15")) for l in ls if "h100-sxm" in l.listing_id)
+    assert not any(l.price_per_gpu_hour < D("0.01") for l in ls), "the vCPU / memory table is not read"
+    ls, _ = _src("www.cudocompute.com/products/gpu-cloud").parse((FIX / "cudo_gpu-cloud_2025-03_dgx_tb.html").read_bytes(), AT)
+    assert any(l.listing_id == "vm-gpu:h200-sxm-141gb" for l in ls)
+    page = _fix("cudo_pricing_2025-01.html")
+    _raises(cudo.cudo_gpu_table, page.replace("$2.45", "€2.45", 1), AT, contains="on-demand cell")
+
+
 TESTS = [test_since_accepts_year_and_month,
          test_azure_vm_page_2018_names_without_s, test_azure_vm_page_2022_spot_column,
          test_azure_vm_page_2020_spot_savings_and_trailing_cell, test_azure_vm_page_old_and_new_designs_fail_loudly,
@@ -387,7 +402,7 @@ TESTS = [test_since_accepts_year_and_month,
          test_denvr_denvrdata_2025_list_before_header,
          test_paperspace_2018_and_2020_cards, test_paperspace_2023_copy_paste_and_2024_commitments_skipped,
          test_akash_gpu_prices_weighted_average_like_live, test_exoscale_opencompute_2021_like_live,
-         test_huggingface_tables_keep_the_resold_tier]
+         test_huggingface_tables_keep_the_resold_tier, test_cudo_gpu_component_table]
 
 if __name__ == "__main__":
     for t in TESTS:
