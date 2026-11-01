@@ -432,7 +432,8 @@ NEBIUS = ProviderMapping(
         'Since the Oct 2026 price change the table has one "GPU-hour" column. When a change is announced the page '
         'adds a "GPU-hour (Effective <date>)" column; we use it once its date has arrived, else the plain one.',
         '"Contact us" rows (GB200/GB300 NVL72) have no price and are skipped.',
-        '"NVIDIA RTX PRO 6000" does not say Workstation or Server Edition and stays unmapped.',
+        '"NVIDIA RTX PRO 6000" names no edition on the page; Nebius\'s docs (VM types) say Server Edition, so the '
+        'Nebius lookup (DOC_NAMES in providers/nebius.py) maps it there; the generic name stays unmapped elsewhere.',
         'L40S prices are "from $x": a floor over several CPU configs, tagged from_price.',
         "A reshaped page (no block, two blocks, an unexpected column) fails the poll rather than recording nothing.",
     ],

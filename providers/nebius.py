@@ -35,6 +35,17 @@ _GPU_TABLE = "NVIDIA GPU Instances"
 _LEAD = ["Item", "vCPUs", "RAM, GB"]
 _PRICE = re.compile(r"^(from )?\$(\d+(?:,\d{3})*(?:\.\d+)?)$")
 _EFFECTIVE = re.compile(r"Effective ([A-Z][a-z]+ \d{1,2}, \d{4})")
+# Nebius names that drop the card's edition -> the name Nebius's docs give it. Only the lookup uses it: raw_gpu_name
+# keeps the page's text. docs.nebius.com/compute/virtual-machines/types (checked 2026-11-01), GPU types table:
+# "NVIDIA RTX PRO 6000 Server Edition" for platforms gpu-rtx6000 and gpu-rtx6000-a. Scoped to Nebius on purpose:
+# Modal prints the same words for an unstated edition, so canonical.py never maps the generic name.
+DOC_NAMES = {"NVIDIA RTX PRO 6000": "NVIDIA RTX PRO 6000 Blackwell Server Edition"}
+
+
+def canonical_name(raw_name: str) -> str | None:
+    return canonical.canonical_gpu_name(DOC_NAMES.get(raw_name.strip(), raw_name))
+
+
 # Words that mark a column as something other than the on-demand rate.
 _NOT_ON_DEMAND = re.compile(r"spot|preemptible|reserv|commit|month|year", re.I)
 
@@ -159,7 +170,7 @@ class NebiusProvider(Provider):
                     sku=item,
                     listing_id=item,
                     raw_gpu_name=item,
-                    canonical_gpu_name=canonical.canonical_gpu_name(item),
+                    canonical_gpu_name=canonical_name(item),
                     gpu_count=1,
                     region=None,
                     country=None,
