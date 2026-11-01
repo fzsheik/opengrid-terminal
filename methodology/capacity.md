@@ -7,7 +7,7 @@ Kind: **observed** (the provider's own report). Code: `capacity.py`, each provid
 
 ## Providers and what each reports
 
-Twenty providers, every one read from data its own module fetches and stores raw first. Most of it was already
+Twenty-one providers, every one read from data its own module fetches and stores raw first. Most of it was already
 being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute and Verda each add a capacity source.
 
 | Provider | Source | Shape | What the provider says |
@@ -24,6 +24,7 @@ being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute and Verda each
 | Verda | `GET /v1/instance-availability`, on-demand and spot (Cloud API credentials) | boolean | Per location, the instance types that can be deployed now. Every priced GPU type gets a row at every location in the response: in stock exactly when the location lists it. Sku is the listing_id (`<type>`, `<type>:spot`); spot is asked separately and differs. Without credentials, no capacity; prices are public either way. |
 | Lambda | `regions_with_capacity_available` | boolean | Where there is stock, never how much. A type with no listed region gets one provider-wide `false`. |
 | DigitalOcean | `/v2/sizes` `available` + `regions` | boolean | Whether new Droplets can be created with the size, and where. Not confirmed to track live stock. |
+| DeepInfra | `GET /v1/containers/gpu_availability` (API key) | boolean | `available` per GPU configuration (`8xB200-180GB`), the flag its dashboard shows as "Availability status". Not defined further. Provider-wide. Sku is the price page's (`8x NVIDIA B200`), so stock joins to page prices. Prices always come from the public page: the API's own `usd_per_hour` differs from it and is kept raw, never published. Without the key, no capacity. |
 | Vast | Keyed census: `POST /api/v0/bundles/`, verified on-demand offers, rentable and not rentable, per GPU model | count (free + total) | Free GPUs = distinct `gpu_ids` in rentable offers; total = each machine's GPUs (`num_gpus / gpu_frac`) over every machine either search returns. Provider-wide. Total means GPUs on verified machines listed now. A census of 512 offers (the search cap) withholds counts. Prices still from the public search. |
 | Latitude | Latitude's own `GET /plans` (API key) | count, tier | Per plan and location: in stock (`locations.in_stock`), servers in stock (`in_stock_count`), and the region's `stock_level` as tier. Count unit is servers. Without the key, Shadeform's boolean. Prices still from Shadeform. |
 | Crusoe, Denvr, Boost Run, Horizon, Phyntec | Shadeform `availability` | boolean | Whether Shadeform can launch the type in that region now. |

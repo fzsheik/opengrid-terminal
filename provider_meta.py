@@ -104,7 +104,8 @@ _ALL = [
     ProviderMeta("atlanticnet", "Atlantic.Net", "general_cloud", "public_page", "www.atlantic.net",
                  "https://www.atlantic.net/gpu-server-hosting/", "GPU cloud plans, on-demand hourly; 1- and 3-year terms not read"),
     ProviderMeta("deepinfra", "DeepInfra", "neocloud", "public_page", "deepinfra.com", "https://deepinfra.com/gpu-instances",
-                 "GPU instances (containers billed by the minute); model API prices not read"),
+                 "GPU instances (containers billed by the minute); model API prices not read; with an account key, "
+                 "in-stock flags from its container API (its prices there are not published)"),
     ProviderMeta("e2e", "E2E Networks", "general_cloud", "public_pricing_file", "www.e2enetworks.com",
                  "https://www.e2enetworks.com/pricing",
                  "Indian cloud; USD on-demand list from its pricing.json feed, per GPU-hour; INR-only spot and committed rates not read"),

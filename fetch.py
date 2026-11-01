@@ -101,6 +101,8 @@ def build_fetchers() -> list[Provider]:
     fetchers.append(VastProvider(api_key=settings.vast_api_key))
     fetchers.append(LatitudeProvider(api_key=settings.latitude_api_key))
     fetchers.append(VerdaProvider(client_id=settings.verda_client_id, client_secret=settings.verda_client_secret))
+    # Public prices (its page); a key adds stock from its container API.
+    fetchers.append(DeepInfraProvider(api_key=settings.deepinfra_api_key))
 
     if settings.thunder_api_key:
         fetchers.append(ThunderComputeProvider(settings.thunder_api_key))
@@ -114,7 +116,6 @@ def build_fetchers() -> list[Provider]:
         for cls in (
             CivoProvider,
             AtlanticNetProvider,
-            DeepInfraProvider,
             E2EProvider,
             SimplePodProvider,
             HyperbolicProvider,

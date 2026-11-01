@@ -155,7 +155,7 @@ provider never holds up the others.
 | E2E Networks | general cloud | public pricing file (its USD on-demand list) |
 | Replicate · Baseten | general cloud | public page (serverless, whole-instance price per second) |
 | Modal · Beam | general cloud | public page (serverless GPU-only rate; CPU/RAM extra, kept out of indices) |
-| Arkane Cloud · VESSL AI · DeepInfra (GPU instances) | neocloud | public page (on-demand, per GPU-hour) |
+| Arkane Cloud · VESSL AI · DeepInfra (GPU instances) | neocloud | public page (on-demand, per GPU-hour); DeepInfra: a `DEEPINFRA_API_KEY` adds in-stock flags from its container API; prices stay from the page |
 | Mithril (ex-ML Foundry) | neocloud | public page (spot, published 7-day average) |
 | Scaleway | general cloud | aggregator (via Shadeform; its own catalogue is EUR-only) |
 | Crusoe · Denvr · Latitude.sh · Boost Run · Horizon Compute · Phyntec | neocloud | aggregator (via Shadeform) |
