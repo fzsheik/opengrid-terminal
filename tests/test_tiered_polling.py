@@ -79,6 +79,11 @@ def test_retuned_providers_stay_within_documented_limits():
         assert pol[n].interval_seconds == 3600 and pol[n].tier == "slow", n
     # Lium stays on its REST poll (the WebSocket is later); undocumented limits are unchanged
     assert pol["lium"].interval_seconds == 900 and pol["denvr"].interval_seconds == 900
+    # providers/batch-nokey: public no-key catalogues with undocumented limits stay medium (15 min); Exoscale's
+    # price list changes by announcement and polls hourly
+    for n in ("akash", "cudo", "gpuai", "huggingface", "hydrahost", "paperspace"):
+        assert pol[n].interval_seconds == 900 and pol[n].tier == "medium", n
+    assert pol["exoscale"].interval_seconds == 3600 and pol["exoscale"].tier == "slow"
     for n, p in pol.items():
         assert p.loop_seconds >= 60, f"{n}: never faster than a minute"
 

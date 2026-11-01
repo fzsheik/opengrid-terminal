@@ -70,9 +70,10 @@ about half of it.
 | medium | AWS | price file hourly; spot change log every 5 min (with key) | placement scores every 2 h | EC2 Describe* bucket 100, refill 20/s per region |
 | medium | Nebius | price page hourly; spot every 5 min | none | none documented (public) |
 | medium | Salad, DigitalOcean, Linode | 5 min | with price | 240/min, 250/min, 200/min (budget about half) |
+| medium | Akash, Cudo Compute, GPU.ai, Hugging Face, Hydra Host, Paperspace (via Shadeform) | 15 min | with price | undocumented (public, no key) |
 | medium | everyone else not listed | 15 min (unchanged) | with price | undocumented: unchanged |
 | slow | Azure, GCP, Oracle, IBM, OVHcloud, E2E, Mithril | 6 h | none | Azure ~10/min (budget 5/min) |
-| slow | CoreWeave, Together, Arkane, VESSL, Civo, Atlantic.Net, Modal, Replicate, Baseten, Beam (pages), Vultr | 1 h | none | site terms |
+| slow | CoreWeave, Together, Arkane, VESSL, Civo, Atlantic.Net, Modal, Replicate, Baseten, Beam (pages), Vultr, Exoscale | 1 h | none | site terms |
 
 Lium stays on its 15-minute REST poll for now; its WebSocket feed is a later step.
 
