@@ -97,7 +97,9 @@ PUBLIC_V1 = ("gpus", "markets", "indices", "history", "spreads", "events", "news
              "overview", "tape", "methodology", "timeline", "best", "capabilities", "opportunities", "trust",
              "families", "scopes", "fixings", "recommend", "assistant", "compare", "regions", "hardware", "uptime", "probes", "capacity", "fx",
              # Reserved / committed list prices (read-only, like capacity). Not "reservations" (private, below).
-             "reserved")
+             "reserved",
+             # Market context: public-domain numeric series (EIA, SEC EDGAR) beside prices (read-only).
+             "context")
 # POSTs that are public too: read-only computations over the request body (no writes, no provider calls, no
 # quotes; the market read is routing.scoring.rank_listings). Exactly these paths; the anonymous rate limit applies.
 # /v1/assistant: the OpenGrid Assistant is READ-ONLY (assistant/tools.py has no mutation tools; it writes no rows,

@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     login_failure_window_seconds: int = 300
     # Poll providers in the background. Off for read-only dev servers against a shared DB.
     poller_enabled: bool = True
+    # Market context (context/; methodology/market-context.md). Each source is off until configured.
+    eia_api_key: str | None = None               # free: https://www.eia.gov/opendata/register.php
+    sec_user_agent: str | None = None            # SEC fair access: "Company Name contact@company-domain" (required)
     # Ops alerts (alerts/ops.py): orphans, termination failures, ambiguous launches, kill switches.
     # Any HTTPS webhook (Slack/PagerDuty incoming webhooks work); signed with the secret.
     ops_alert_webhook_url: str | None = None
