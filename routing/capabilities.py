@@ -106,7 +106,8 @@ _REG: dict[str, dict] = {
         docs_checked="recalled", credential=COMMERCIAL, settings=[],
         notes="EC2 RunInstances / DescribeInstances / TerminateInstances support the full lifecycle, but need IAM "
               "credentials and SigV4 request signing (boto3 deliberately not added). GPU capacity usually needs "
-              "service-quota increases. OpenGrid reads the public price file only (list prices, no stock)."),
+              "service-quota increases. OpenGrid reads the public price file (list prices) and, with a read-only IAM key, "
+              "spot prices, spot placement scores and Capacity Block offerings (providers/aws.py); it never launches."),
     "nebius": dict(
         api=3, resource="vm", docs="https://docs.nebius.com/compute/", docs_checked="recalled",
         credential=COMMERCIAL, settings=[],

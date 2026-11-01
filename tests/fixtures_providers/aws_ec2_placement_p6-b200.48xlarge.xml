@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GetSpotPlacementScoresResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+    <requestId>5ec6fd5e-35c3-480d-9392-cb38b0647ee0</requestId>
+    <spotPlacementScoreSet>
+        <item>
+            <region>us-east-2</region>
+            <score>1</score>
+        </item>
+        <item>
+            <region>us-east-1</region>
+            <score>1</score>
+        </item>
+        <item>
+            <region>us-west-2</region>
+            <score>2</score>
+        </item>
+        <item>
+            <region>eu-north-1</region>
+            <score>1</score>
+        </item>
+    </spotPlacementScoreSet>
+</GetSpotPlacementScoresResponse>

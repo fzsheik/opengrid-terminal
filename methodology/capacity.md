@@ -7,8 +7,8 @@ Kind: **observed** (the provider's own report). Code: `capacity.py`, each provid
 
 ## Providers and what each reports
 
-Twenty-five providers, every one read from data its own module fetches and stores raw first. Most of it was already
-being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute, Verda, Hot Aisle and Crusoe each add a capacity source.
+Twenty-six providers, every one read from data its own module fetches and stores raw first. Most of it was already
+being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute, Verda, Hot Aisle, Crusoe and AWS each add a capacity source.
 
 | Provider | Source | Shape | What the provider says |
 |---|---|---|---|
@@ -32,11 +32,12 @@ being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute, Verda, Hot Ai
 | Thunder Compute | `GET /v2/status` (API key), fetched with prices | boolean | `available` / `unavailable` per instance size (`specs` map), provider-wide. Sku is the listing sku (`h100_x8`); one row per priced size the map names. Its `gpu_type` map names sizes that have no price (A6000 x2-x8) and is not read. Not defined further by Thunder. |
 | Salad | `POST .../availability/sce-gpu-availability` per GPU class (API key), fetched with prices | count (free only) | `available_gpu_{high,medium,low,batch}`: free nodes at each priority; Salad sells one GPU per instance, so the unit is instances. Salad calls them estimates of online nodes; higher priority can preempt lower, so the counts are cumulative (high >= medium >= low >= batch in every live class) and never added up. No total. Sku is the listing_id (`<class id>:<priority>`), as RunPod, because counts differ by priority. `is_high_demand` ("Whether the GPU class is in high demand", no threshold) says nothing about stock: kept in raw_value, mapped to neither tier nor in_stock. |
 | Crusoe | Crusoe's own `GET /v1/capacities` (signed API key pair) | boolean | `quantity` per VM type and location. Read as yes/no (quantity > 0), not a count: every row seen says 0 or 1, CPU types included, so it is not a stock level; the quantity is kept in raw_value. The API repeats each (type, location) row; one row per key. GPU types only, from Crusoe's type catalogue. Sku is the Crusoe product name, the same as the listing sku; regions are Crusoe's location names (`us-east1-a`). Without the key (or when its last capacity snapshot is over 6 hours older than Shadeform's), Shadeform's boolean; never both. Prices still from Shadeform: the API has none. |
+| AWS | `GetSpotPlacementScores` (read-only IAM key, SigV4) | tier | AWS's spot placement score, 1-10, per region: how likely a spot request for one instance of the type is to succeed now. Five fixed request configurations, one per type (`p5.48xlarge`, `p5en.48xlarge`, `p6-b200.48xlarge`, `p6-b300.48xlarge`, `p4d.24xlarge`), one instance each, regional scores over the six spot regions (us-east-1, us-east-2, us-west-2, eu-west-2, eu-north-1, ap-northeast-1). Refreshed every 2 hours, not every poll: AWS gives accounts with no spot history a low target-capacity limit and may refuse new configurations within 24 h, so the set is small and never changes. Sku is `<type>:spot` (spot only: the score says nothing about on-demand); region is the region code, so a row covers the spot listings in every AZ of that region (`<type>:<az>:spot`). A region AWS does not score gets no row. `in_stock` stays null: AWS says a score is a recommendation, not a guarantee of capacity. Without the key, no capacity; on-demand prices are public either way. |
 | Denvr, Boost Run, Horizon, Phyntec | Shadeform `availability` | boolean | Whether Shadeform can launch the type in that region now. |
 | Massed Compute | Its own `GET /api/v1/gpu-inventory` (API key) | count | `capacity_available`: instances of that product (GPU, count, spot or not) that can be launched now, provider-wide; the in-stock regions (`regions_with_capacity_available`) are kept in raw_value. Count unit is instances. Sku is the listing sku. Counts for different sizes of one GPU draw on the same pool, so never add them up. Without the key, Shadeform's boolean (skus are Shadeform's type names, joined to listings by GPU and count); never both. |
 
-**Not covered, and why.** Nebius, OVHcloud and the hyperscalers:
-need an account. (OVHcloud's anonymous dedicated-server list does give a delivery word, such as `1H-low`, `72H` or
+**Not covered, and why.** Nebius, OVHcloud and the other hyperscalers (GCP, Azure, Oracle):
+need an account. AWS on-demand has no capacity signal (spot placement scores are for spot only). (OVHcloud's anonymous dedicated-server list does give a delivery word, such as `1H-low`, `72H` or
 `unavailable`, per GPU server configuration and datacenter; it is stored raw only, because those bare-metal servers
 are not listings, so there is no price for a row to join to.) Vultr: its availability endpoint is empty for every GPU plan. CoreWeave, Together, IBM:
 no capacity data found.
@@ -57,6 +58,7 @@ provisional until the cross-provider standard is agreed; it lives in one diction
 | Koyeb | HIGH, MEDIUM, LOW | high, medium, low | None published. |
 | Latitude | high, medium, low, unavailable | high, medium, low; `unavailable` = out of stock | None published; region-level, so every location in the region gets the same word. |
 | Scaleway | available, scarce, shortage | high, low; `shortage` = out of stock | API reference lists the values only. Third-party guides: only `available` guarantees immediate creation; `shortage` fails at creation; `scarce` sometimes still creates. |
+| AWS | spot placement score 1-10 | 1-3 low, 4-6 medium, 7-10 high; `in_stock` null | Documented only at the ends: 10 = "highly likely - but not guaranteed - to succeed", 1 = "not likely to succeed at all". The score is for exactly the configuration asked (here one instance, regional, `capacity-optimized` allocation) at that moment; the same request can score differently an hour later. The cut points are OpenGrid's: three near-equal bands over the scale, with 7+ as high because AWS reserves its "highly likely" wording for the top end. The score itself is kept in `raw_value` (`placement score 8/10 (target 1 instance, regional)`). |
 
 ## One model, three shapes
 
@@ -64,7 +66,7 @@ Providers report capacity in shapes that cannot be converted into each other wit
 observation keeps its shape:
 
 - **`in_stock`** (true / false / null) is filled for every shape and is the only field comparable across providers.
-  A tier or a count implies it (`LOW` means in stock; zero free GPUs means not); a boolean is it.
+  A tier or a count implies it (`LOW` means in stock; zero free GPUs means not); a boolean is it. The one exception is AWS's spot placement score, a likelihood rather than a stock report: tier only, `in_stock` null.
 - **`tier`** (`low` / `medium` / `high`) only where the provider gives a level. A provider word OpenGrid does not
   recognise is never guessed: `tier` and `in_stock` stay null and the word is kept in `raw_value`.
 - **`available_count` / `total_count`** only where the provider gives counts (Lium, Massed Compute, ...). Their ratio is real utilization.
@@ -93,5 +95,7 @@ sources are never shown side by side. Their history stays in `capacity_changes`.
 - A provider's own report, not a launch test. "In stock" means the provider says so.
 - Tiers are each provider's own scale: Koyeb's `LOW` and another provider's `low` are not calibrated against each other.
 - Lium's counts include machines that are listed but may not be reachable; the public data does not say which.
+- AWS placement scores are a likelihood for one instance of one type, not a count; AWS says no score guarantees
+  that a spot request is fulfilled, and spot instances can still be interrupted after launch.
 - Salad's counts are its own estimate of online nodes; its guide says a launch can still find nodes taken from
   lower-priority work, and that nodes may not be reassigned at once.
