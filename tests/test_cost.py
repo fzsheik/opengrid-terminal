@@ -346,7 +346,7 @@ def test_vast_offer_components():
     assert r["components"]["egress_internet"]["amount"] == 0.5  # 100 GB x the offer's $0.005 upload
     assert r["components"]["storage"]["amount"] == round(500 * 0.133 * 10 / 730, 2)
     assert r["components"]["storage"]["billed_when_stopped"] is True
-    # an offer whose fields were not kept (Vast `_keep` today) is unknown, not $0
+    # an offer without those fields (a snapshot from before Vast's _keep kept them) is unknown, not $0
     bare = [{"id": 9, "gpu_name": "H100 SXM", "num_gpus": 1, "dph_total": 2.0}]
     raw["vast"]["/api/v0/bundles/"][0].payload = bare
     comps = all_components()[0] + est.vast_components(raw, listings)

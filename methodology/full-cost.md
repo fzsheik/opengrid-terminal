@@ -127,8 +127,9 @@ The extras add 26% to compute. At CoreWeave, egress is free, so the same extras 
 
 ## Known gaps
 
-- Vast's provider reader does not keep `storage_cost` / `inet_*_cost` in stored raw yet (its `_keep` filter). Until
-  it does, Vast's storage and egress read as unknown.
+- Vast's storage and egress come from each offer's own `storage_cost` / `inet_up_cost` / `inet_down_cost`, which
+  the Vast poller stores from 2026-11-02. Until the first poll after that deploy, and for any older snapshot, Vast's
+  storage and egress read as unknown.
 - GCP's networking and storage prices come from the hand table. The Cloud Billing Catalog API has them, but under
   service ids OpenGrid does not read yet.
 - Verda does not publish egress prices, so Verda's egress is always unknown.

@@ -67,6 +67,24 @@ def test_vast_listings_unchanged_by_the_wider_payload():
     assert cheap.ram_gb == round(offer["cpu_ram"] / 1024, 1)
 
 
+def test_full_cost_reads_vast_fields_as_stored():
+    """Cross-branch (data/freshness x data/full-cost): the cost reader's Vast components come out of an offer
+    exactly as the poller now stores it, so a Vast full-cost row is complete, not a lower bound."""
+    from cost import estimate as est
+
+    raw, offer = _vast_raw()
+    snap = SimpleNamespace(endpoint=VAST_ENDPOINT, payload=raw.payload, request=raw.request, fetched_at=NOW)
+    listings = [dict(provider=l.provider, listing_id=l.listing_id, sku=l.sku, provider_tier=l.provider_tier)
+                for l in VastProvider.normalize({VAST_ENDPOINT: [snap]})]
+    comps = {c["component"]: c for c in est.vast_components({"vast": {VAST_ENDPOINT: [snap]}}, listings)}
+    assert set(comps) == {"block_storage", "egress_internet"}, comps
+    cheapest = next(x["listing_id"] for x in listings if x["provider_tier"] == "cheapest")
+    assert all(c["listing_id"] == cheapest for c in comps.values())
+    assert float(comps["block_storage"]["tiers"][0]["price"]) == offer["storage_cost"], comps["block_storage"]
+    assert float(comps["egress_internet"]["tiers"][0]["price"]) == offer["inet_up_cost"], comps["egress_internet"]
+    assert str(offer["inet_down_cost"])[:6] in comps["egress_internet"]["notes"]
+
+
 def _lium_raw():
     body = json.loads((FIX / "lium_executor_8x.json").read_text())
 

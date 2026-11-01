@@ -393,7 +393,10 @@ def test_every_public_route_is_clean():
     assert len(templates) >= 80, f"route enumeration found only {len(templates)} public GET routes"
     for must in ("/v1/gpus", "/v1/markets/{gpu}", "/v1/indices/{index_id}", "/v1/fixings", "/v1/capacity",
                  "/v1/fx/listings", "/v1/reserved", "/v1/history/{gpu}/archived", "/v1/best/{gpu}", "/listings",
-                 "/history", "/market", "/gpu/{slug}", "/v1/trust/listings", "/v1/spreads"):
+                 "/history", "/market", "/gpu/{slug}", "/v1/trust/listings", "/v1/spreads",
+                 # 2026-11-02 release: freshness, full cost (API and page)
+                 "/v1/freshness", "/v1/cost/components", "/v1/cost/billing", "/v1/cost/sources",
+                 "/v1/cost/presets", "/cost"):
         assert must in templates, must
     status, bad = {}, []
     for tmpl, url, echo in reqs:
@@ -408,6 +411,10 @@ def test_every_public_route_is_clean():
           f"{ {k: len(v) for k, v in sorted(status.items())} }")
     assert not bad, "\n".join(bad[:40])
     assert ok >= 0.8 * len(reqs), {k: v[:8] for k, v in status.items() if k != 200}
+    # operator-only reads stay closed with public pages on (live feeds: raw executor records)
+    for url in ("/v1/live/status", "/v1/live/events"):
+        assert c.get(url).status_code in (401, 403), url
+        assert c.get(url, headers=BASIC).status_code == 200, url
     # the internal-only GPU has no public price anywhere
     d = c.get(f"/v1/markets/{gpu_slug(ONLY_GPU)}").json().get("data") or {}
     assert not d.get("low") and not d.get("providers"), d
@@ -424,6 +431,17 @@ def test_public_posts_are_clean():
     d = r.json()["data"]
     assert d["options"] and d["tier"] == "public" and all(o["visibility"] == "public" for o in d["options"])
     assert not body_leaks(r), body_leaks(r)[:5]
+    # the full-cost estimator ranks list prices: public listings only (the internal H100 is the cheapest)
+    for gpu in (H100, ONLY_GPU):
+        r = c.post("/v1/cost/estimate", json={"gpu": gpu, "count": 1, "hours": 10, "egress_tb": 1})
+        assert r.status_code == 200, r.text[:300]
+        rows = r.json()["data"] + (r.json().get("unranked") or [])
+        assert not body_leaks(r), (gpu, body_leaks(r)[:5])
+        assert all(x["provider"] not in (HIDDEN,) for x in rows), rows[:3]
+        if gpu == H100:
+            assert any(x["provider"] == "syn_alpha" for x in rows), "the public syn_alpha listing is estimated"
+        else:
+            assert rows == [], "a GPU sold only internally has no public full-cost estimate"
     for msg in ("cheapest H100 SXM", "compare H100 and RTX 4090", "price of the RTX 4090",
                 "What GPU should I use for LoRA fine-tuning of Mistral 7B?", "market context for H100"):
         r = c.post("/v1/assistant", json={"message": msg})

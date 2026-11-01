@@ -91,6 +91,7 @@ def _r(x):
 @ttl_cache(60)
 def report(now: datetime | None = None) -> list[dict]:
     import normalize
+    import provider_meta
     from providers import PROVIDERS
 
     now = now or datetime.now(timezone.utc)
@@ -99,6 +100,8 @@ def report(now: datetime | None = None) -> list[dict]:
         providers = sorted(set(s.execute(text(
             "SELECT DISTINCT provider FROM compute_listings UNION SELECT DISTINCT provider FROM capacity_current "
             "UNION SELECT DISTINCT provider FROM freshness_log")).scalars()) & set(PROVIDERS))
+        # public report: a wholly internal provider is not named (methodology/data-visibility.md)
+        providers = [p for p in providers if provider_meta.is_public_provider(p)]
         logs: dict[tuple[str, str], list] = {}
         for p, st, at, data in s.execute(text("""
                 SELECT provider, stream, logged_at, data_at FROM freshness_log WHERE logged_at >= :since

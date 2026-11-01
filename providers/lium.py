@@ -120,7 +120,8 @@ class LiumProvider(Provider):
 
         # A live-stream snapshot (live/lium_stream.py) says when each changed executor changed: Lium's frame `ts`.
         # Handed to the freshness pipeline (changed_at.provider_time keeps it only when the price moved).
-        stream_times = ((snapshot.request or {}).get("changed_at") or {}) if isinstance(snapshot.request, dict) else {}
+        request = getattr(snapshot, "request", None)
+        stream_times = (request.get("changed_at") or {}) if isinstance(request, dict) else {}
         listings = []
         for e in snapshot.payload:
             per_gpu = to_decimal(e.get("price_per_gpu"))
