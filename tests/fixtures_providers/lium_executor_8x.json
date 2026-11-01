@@ -1,0 +1,614 @@
+[
+ {
+  "id": "1ae25ea8-a420-4214-bddc-c9e73e16e659",
+  "machine_name": "NVIDIA B300 SXM6 PC",
+  "price_per_gpu": 6.9,
+  "pending_price_per_hour": null,
+  "price_change_effective_date": null,
+  "validator_hotkey": "5FAKEvalidatorHOTKEY",
+  "gpu_count": 8,
+  "available_gpu_count": 8,
+  "specs": {
+   "os": "Debian GNU/Linux 13 (trixie)",
+   "cpu": {
+    "count": 192,
+    "model": "Intel(R) Xeon(R) 6776P"
+   },
+   "gpu": {
+    "count": 8,
+    "driver": "580.173.02",
+    "details": [
+     {
+      "cuda": "10.3",
+      "name": "NVIDIA B300 SXM6 PC",
+      "uuid": "GPU-00000000",
+      "capacity": 275040,
+      "power_limit": 1100,
+      "power_max_limit": 1100,
+      "power_min_limit": 200,
+      "power_default_limit": 1100
+     },
+     {
+      "cuda": "10.3",
+      "name": "NVIDIA B300 SXM6 PC",
+      "uuid": "GPU-00000000",
+      "capacity": 275040,
+      "power_limit": 1100,
+      "power_max_limit": 1100,
+      "power_min_limit": 200,
+      "power_default_limit": 1100
+     },
+     {
+      "cuda": "10.3",
+      "name": "NVIDIA B300 SXM6 PC",
+      "uuid": "GPU-00000000",
+      "capacity": 275040,
+      "power_limit": 1100,
+      "power_max_limit": 1100,
+      "power_min_limit": 200,
+      "power_default_limit": 1100
+     },
+     {
+      "cuda": "10.3",
+      "name": "NVIDIA B300 SXM6 PC",
+      "uuid": "GPU-00000000",
+      "capacity": 275040,
+      "power_limit": 1100,
+      "power_max_limit": 1100,
+      "power_min_limit": 200,
+      "power_default_limit": 1100
+     },
+     {
+      "cuda": "10.3",
+      "name": "NVIDIA B300 SXM6 PC",
+      "uuid": "GPU-00000000",
+      "capacity": 275040,
+      "power_limit": 1100,
+      "power_max_limit": 1100,
+      "power_min_limit": 200,
+      "power_default_limit": 1100
+     },
+     {
+      "cuda": "10.3",
+      "name": "NVIDIA B300 SXM6 PC",
+      "uuid": "GPU-00000000",
+      "capacity": 275040,
+      "power_limit": 1100,
+      "power_max_limit": 1100,
+      "power_min_limit": 200,
+      "power_default_limit": 1100
+     },
+     {
+      "cuda": "10.3",
+      "name": "NVIDIA B300 SXM6 PC",
+      "uuid": "GPU-00000000",
+      "capacity": 275040,
+      "power_limit": 1100,
+      "power_max_limit": 1100,
+      "power_min_limit": 200,
+      "power_default_limit": 1100
+     },
+     {
+      "cuda": "10.3",
+      "name": "NVIDIA B300 SXM6 PC",
+      "uuid": "GPU-00000000",
+      "capacity": 275040,
+      "power_limit": 1100,
+      "power_max_limit": 1100,
+      "power_min_limit": 200,
+      "power_default_limit": 1100
+     }
+    ],
+    "cuda_driver": 13000
+   },
+   "ram": {
+    "total": 2856918864.0,
+    "pod_reserve": 85707565
+   },
+   "kernel": "6.11.0-1016-nvidia",
+   "boot_id": "00000000-0000-0000-0000-000000000000",
+   "is_spot": true,
+   "network": {
+    "upload_speed": null,
+    "download_speed": null,
+    "ema_upload_speed": null,
+    "ema_download_speed": null,
+    "verifyx_upload_speed": null,
+    "verifyx_download_speed": null,
+    "ema_verifyx_upload_speed": 4573.539685311527,
+    "ema_verifyx_download_speed": 3491.498496542135
+   },
+   "hard_disk": {
+    "free": 2410662356,
+    "used": 1670498860,
+    "total": 4081161216,
+    "disk_type": "unknown",
+    "utilization": 40.93194979533982,
+    "engy_cache_used_gb": 1565
+   },
+   "port_range": null,
+   "disk_health": {
+    "read_only_mounts": [],
+    "write_probe": "ok"
+   },
+   "gpu_metrics": {
+    "n": 4096,
+    "cc": "10.3",
+    "device": "NVIDIA B300 SXM6 PC",
+    "vram_gb": 287.4,
+    "sm_count": 148,
+    "clock_mhz": 2032,
+    "fp32_tflops": 9.6,
+    "fp32_cov_pct": 0.002,
+    "fp32_median_tflops": 9.6
+   },
+   "interconnect": {
+    "p2p": true,
+    "matrix": [
+     [
+      "X",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18"
+     ],
+     [
+      "NV18",
+      "X",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18"
+     ],
+     [
+      "NV18",
+      "NV18",
+      "X",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18"
+     ],
+     [
+      "NV18",
+      "NV18",
+      "NV18",
+      "X",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18"
+     ],
+     [
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "X",
+      "NV18",
+      "NV18",
+      "NV18"
+     ],
+     [
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "X",
+      "NV18",
+      "NV18"
+     ],
+     [
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "X",
+      "NV18"
+     ],
+     [
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "X"
+     ]
+    ],
+    "nvlink": true,
+    "gpu_count": 8,
+    "gpu_pairs": 28,
+    "p2p_pairs": 28,
+    "pcie_class": null,
+    "nvlink_links": 18,
+    "nvlink_pairs": 28,
+    "p2p_ok_pairs": 28,
+    "nvlink_active_links": 18
+   },
+   "job_batch_id": "2026-11-01 22:49:48",
+   "md5_checksums": {},
+   "port_mappings": null,
+   "sysbox_runtime": true,
+   "verified_ports": [
+    20124,
+    20222,
+    20000
+   ],
+   "infiniband_ports": [
+    {
+     "lid": "0x49",
+     "gids": [
+      "fe80:0000:0000:0000:0000:0000:0000:0001"
+     ],
+     "pkey": "0xffff",
+     "port": "1",
+     "rate": "100 Gb/sec (2X HDR)",
+     "state": "4: ACTIVE",
+     "device": "mlx5_0",
+     "sm_lid": "0x49",
+     "node_guid": "0000:0000:0000:0001",
+     "link_layer": "InfiniBand",
+     "phys_state": "5: LinkUp",
+     "sys_image_guid": "0000:0000:0000:0001"
+    },
+    {
+     "lid": "0x4a",
+     "gids": [
+      "fe80:0000:0000:0000:0000:0000:0000:0001"
+     ],
+     "pkey": "0x7fff",
+     "port": "1",
+     "rate": "100 Gb/sec (2X HDR)",
+     "state": "4: ACTIVE",
+     "device": "mlx5_1",
+     "sm_lid": "0x49",
+     "node_guid": "0000:0000:0000:0001",
+     "link_layer": "InfiniBand",
+     "phys_state": "5: LinkUp",
+     "sys_image_guid": "0000:0000:0000:0001"
+    },
+    {
+     "lid": "0x2d2d",
+     "gids": [
+      "fe80:0000:0000:0000:0000:0000:0000:0001"
+     ],
+     "pkey": "0x8083",
+     "port": "1",
+     "rate": "800 Gb/sec (4X XDR)",
+     "state": "4: ACTIVE",
+     "device": "mlx5_10",
+     "sm_lid": "0x323",
+     "node_guid": "0000:0000:0000:0001",
+     "link_layer": "InfiniBand",
+     "phys_state": "5: LinkUp",
+     "sys_image_guid": "0000:0000:0000:0001"
+    },
+    {
+     "lid": "0x2d2e",
+     "gids": [
+      "fe80:0000:0000:0000:0000:0000:0000:0001"
+     ],
+     "pkey": "0x8083",
+     "port": "1",
+     "rate": "800 Gb/sec (4X XDR)",
+     "state": "4: ACTIVE",
+     "device": "mlx5_11",
+     "sm_lid": "0x323",
+     "node_guid": "0000:0000:0000:0001",
+     "link_layer": "InfiniBand",
+     "phys_state": "5: LinkUp",
+     "sys_image_guid": "0000:0000:0000:0001"
+    },
+    {
+     "lid": "0x0",
+     "gids": [
+      "fe80:0000:0000:0000:0000:0000:0000:0001"
+     ],
+     "pkey": "0xffff",
+     "port": "1",
+     "rate": "400 Gb/sec (4X NDR)",
+     "state": "4: ACTIVE",
+     "device": "mlx5_12",
+     "sm_lid": "0x0",
+     "node_guid": "0000:0000:0000:0001",
+     "link_layer": "Ethernet",
+     "phys_state": "5: LinkUp",
+     "sys_image_guid": "0000:0000:0000:0001"
+    },
+    {
+     "lid": "0x21",
+     "gids": [
+      "fe80:0000:0000:0000:0000:0000:0000:0001"
+     ],
+     "pkey": "0x7fff",
+     "port": "1",
+     "rate": "100 Gb/sec (2X HDR)",
+     "state": "4: ACTIVE",
+     "device": "mlx5_2",
+     "sm_lid": "0x49",
+     "node_guid": "0000:0000:0000:0001",
+     "link_layer": "InfiniBand",
+     "phys_state": "5: LinkUp",
+     "sys_image_guid": "0000:0000:0000:0001"
+    },
+    {
+     "lid": "0x22",
+     "gids": [
+      "fe80:0000:0000:0000:0000:0000:0000:0001"
+     ],
+     "pkey": "0x7fff",
+     "port": "1",
+     "rate": "100 Gb/sec (2X HDR)",
+     "state": "4: ACTIVE",
+     "device": "mlx5_3",
+     "sm_lid": "0x49",
+     "node_guid": "0000:0000:0000:0001",
+     "link_layer": "InfiniBand",
+     "phys_state": "5: LinkUp",
+     "sys_image_guid": "0000:0000:0000:0001"
+    },
+    {
+     "lid": "0x2d27",
+     "gids": [
+      "fe80:0000:0000:0000:0000:0000:0000:0001"
+     ],
+     "pkey": "0x8083",
+     "port": "1",
+     "rate": "800 Gb/sec (4X XDR)",
+     "state": "4: ACTIVE",
+     "device": "mlx5_4",
+     "sm_lid": "0x323",
+     "node_guid": "0000:0000:0000:0001",
+     "link_layer": "InfiniBand",
+     "phys_state": "5: LinkUp",
+     "sys_image_guid": "0000:0000:0000:0001"
+    },
+    {
+     "lid": "0x2d28",
+     "gids": [
+      "fe80:0000:0000:0000:0000:0000:0000:0001"
+     ],
+     "pkey": "0x8083",
+     "port": "1",
+     "rate": "800 Gb/sec (4X XDR)",
+     "state": "4: ACTIVE",
+     "device": "mlx5_5",
+     "sm_lid": "0x323",
+     "node_guid": "0000:0000:0000:0001",
+     "link_layer": "InfiniBand",
+     "phys_state": "5: LinkUp",
+     "sys_image_guid": "0000:0000:0000:0001"
+    },
+    {
+     "lid": "0x2d29",
+     "gids": [
+      "fe80:0000:0000:0000:0000:0000:0000:0001"
+     ],
+     "pkey": "0x8083",
+     "port": "1",
+     "rate": "800 Gb/sec (4X XDR)",
+     "state": "4: ACTIVE",
+     "device": "mlx5_6",
+     "sm_lid": "0x323",
+     "node_guid": "0000:0000:0000:0001",
+     "link_layer": "InfiniBand",
+     "phys_state": "5: LinkUp",
+     "sys_image_guid": "0000:0000:0000:0001"
+    },
+    {
+     "lid": "0x2d2c",
+     "gids": [
+      "fe80:0000:0000:0000:0000:0000:0000:0001"
+     ],
+     "pkey": "0x8083",
+     "port": "1",
+     "rate": "800 Gb/sec (4X XDR)",
+     "state": "4: ACTIVE",
+     "device": "mlx5_7",
+     "sm_lid": "0x323",
+     "node_guid": "0000:0000:0000:0001",
+     "link_layer": "InfiniBand",
+     "phys_state": "5: LinkUp",
+     "sys_image_guid": "0000:0000:0000:0001"
+    },
+    {
+     "lid": "0x2d2a",
+     "gids": [
+      "fe80:0000:0000:0000:0000:0000:0000:0001"
+     ],
+     "pkey": "0x8083",
+     "port": "1",
+     "rate": "800 Gb/sec (4X XDR)",
+     "state": "4: ACTIVE",
+     "device": "mlx5_8",
+     "sm_lid": "0x323",
+     "node_guid": "0000:0000:0000:0001",
+     "link_layer": "InfiniBand",
+     "phys_state": "5: LinkUp",
+     "sys_image_guid": "0000:0000:0000:0001"
+    },
+    {
+     "lid": "0x2d2b",
+     "gids": [
+      "fe80:0000:0000:0000:0000:0000:0000:0001"
+     ],
+     "pkey": "0x8083",
+     "port": "1",
+     "rate": "800 Gb/sec (4X XDR)",
+     "state": "4: ACTIVE",
+     "device": "mlx5_9",
+     "sm_lid": "0x323",
+     "node_guid": "0000:0000:0000:0001",
+     "link_layer": "InfiniBand",
+     "phys_state": "5: LinkUp",
+     "sys_image_guid": "0000:0000:0000:0001"
+    }
+   ],
+   "kernel_gpu_uuids": [],
+   "container_cap_eff": "000001ffffffffff",
+   "provider_side_load": {
+    "disk_kb": 80197316,
+    "cpu_cores": 0.0
+   },
+   "tdx_host_supported": true,
+   "available_port_maps": null,
+   "kernel_scrape_error": null,
+   "nvidiactl_owner_uid": 0,
+   "available_port_count": 301,
+   "ncu_profiling_access": "unrestricted",
+   "gpu_power_cap_capable": true,
+   "power_cap_probe_error": null,
+   "roce_link_measurements": null,
+   "tdx_attestation_passed": false,
+   "infiniband_scrape_error": null,
+   "storage_limit_supported": true,
+   "interconnect_scrape_error": null,
+   "kernel_gpu_uuids_last_seen": null,
+   "ncu_profiling_scrape_error": null
+  },
+  "active": null,
+  "is_responsive": null,
+  "uptime_in_minutes": 5550,
+  "miner_hotkey": "5FAKEminerHOTKEY",
+  "location": {
+   "country": "United States",
+   "country_code": "US",
+   "region": "MA",
+   "city": "Newburyport"
+  },
+  "is_slow_machine": false,
+  "effective_upload_speed_mbps": 4573.539685311527,
+  "effective_download_speed_mbps": 3491.498496542135,
+  "interconnect": {
+   "gpu_count": 8,
+   "gpu_pairs": 28,
+   "nvlink": true,
+   "nvlink_links": 18,
+   "nvlink_pairs": 28,
+   "nvlink_active_links": 18,
+   "pcie_class": null,
+   "p2p": true,
+   "p2p_pairs": 28,
+   "p2p_ok_pairs": 28,
+   "matrix": [
+    [
+     "X",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18"
+    ],
+    [
+     "NV18",
+     "X",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18"
+    ],
+    [
+     "NV18",
+     "NV18",
+     "X",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18"
+    ],
+    [
+     "NV18",
+     "NV18",
+     "NV18",
+     "X",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18"
+    ],
+    [
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "X",
+     "NV18",
+     "NV18",
+     "NV18"
+    ],
+    [
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "X",
+     "NV18",
+     "NV18"
+    ],
+    [
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "X",
+     "NV18"
+    ],
+    [
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "X"
+    ]
+   ]
+  },
+  "tier": "spot",
+  "offers_bare_metal": false,
+  "last_verified_at": "2026-11-01T23:03:38.501830Z",
+  "reliability_score": 99.8,
+  "frequent_rent_failures": false,
+  "gpu_power_limited": false,
+  "gpu_power_limit_w": 1100,
+  "gpu_power_limit_default_w": 1100,
+  "distance_mile": null,
+  "is_bookmarked": false,
+  "min_gpu_count_for_rental": null,
+  "max_cuda_version": 13.0,
+  "is_whole_host_free": true,
+  "has_no_pending_rental": true,
+  "infiniband_fabric_rentable": true,
+  "roce_fabric_rentable": false,
+  "operated_by_lium": false,
+  "provider_display_name": null,
+  "scheduled_notice": null,
+  "ncu_profiling_enabled": true,
+  "disk_health_ok": true,
+  "on_infiniband_fabric": true,
+  "on_roce_fabric": false,
+  "nvlink": true,
+  "gpu_class": "NVIDIA B300 SXM6 AC",
+  "gpu_class_display": "NVIDIA B300 SXM6"
+ }
+]

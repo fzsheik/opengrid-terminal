@@ -19,7 +19,7 @@ _ERRORS_24H = text(
     """SELECT provider, endpoint, count(*) AS failures, max(fetched_at) AS last_at,
               (array_agg(left(coalesce(error, ''), 300) ORDER BY fetched_at DESC))[1] AS last_error,
               (array_agg(status_code ORDER BY fetched_at DESC))[1] AS last_status
-       FROM raw_snapshots WHERE NOT ok AND fetched_at >= :since
+       FROM raw_snapshots WHERE NOT ok AND throttled IS NOT TRUE AND fetched_at >= :since
        GROUP BY provider, endpoint ORDER BY max(fetched_at) DESC"""
 )
 

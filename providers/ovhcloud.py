@@ -81,7 +81,8 @@ class OvhCloudProvider(Provider):
     name = "ovhcloud"
     # Two anonymous requests per poll (8 MB and 2 MB catalogues); list prices change rarely.
     # Plus two bare-metal availability lists (4-7 MB each, fetched together, 30 s each) after the prices.
-    polling = PollingPolicy(interval_seconds=1800, timeout_seconds=150)
+    # Slow tier: catalogues that change by announcement; every 6 h.
+    polling = PollingPolicy(interval_seconds=21600, timeout_seconds=150, tier="slow")
 
     def __init__(self, client: httpx.AsyncClient | None = None):
         super().__init__(

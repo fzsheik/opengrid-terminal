@@ -43,8 +43,7 @@ OBSERVED_PROVENANCE = ("original_currency", "original_price_per_instance_hour", 
 # Each endpoint's newest successful fetch time. The recursive CTE walks distinct
 # endpoints through ix_raw_provider_endpoint_time (a loose index scan) instead of
 # grouping every row; the lateral LIMIT 1 then reads one index entry per endpoint.
-_NEWEST_PER_ENDPOINT = text(
-    """
+_NEWEST_SQL = """
     WITH RECURSIVE eps AS (
         (SELECT endpoint FROM raw_snapshots WHERE provider = :p ORDER BY endpoint LIMIT 1)
         UNION ALL
@@ -56,16 +55,18 @@ _NEWEST_PER_ENDPOINT = text(
     FROM eps
     CROSS JOIN LATERAL (
         SELECT fetched_at FROM raw_snapshots r
-        WHERE r.provider = :p AND r.endpoint = eps.endpoint AND r.ok
+        WHERE r.provider = :p AND r.endpoint = eps.endpoint AND r.ok {as_of}
         ORDER BY r.fetched_at DESC LIMIT 1
     ) n
     WHERE eps.endpoint IS NOT NULL
     """
-)
+_NEWEST_PER_ENDPOINT = text(_NEWEST_SQL.format(as_of=""))
+# The same, as the pipeline saw it at a past time (changed_at.py's backfill re-reads history this way).
+_NEWEST_AS_OF = text(_NEWEST_SQL.format(as_of="AND r.fetched_at <= :as_of"))
 
 
-def _latest_raw(session, provider: str) -> dict[str, list[RawSnapshot]]:
-    """Most recent successful snapshot per endpoint.
+def _latest_raw(session, provider: str, as_of: datetime | None = None) -> dict[str, list[RawSnapshot]]:
+    """Most recent successful snapshot per endpoint (at or before `as_of`, when given).
 
     Endpoints called many times per fetch (Salad's per-class availability) keep
     every row from that newest fetch, not just one.
@@ -74,7 +75,10 @@ def _latest_raw(session, provider: str) -> dict[str, list[RawSnapshot]]:
     per endpoint finds its newest ok fetch, and only rows within 120s of that are loaded,
     rather than streaming every snapshot (and payload) the provider ever produced.
     """
-    newest = session.execute(_NEWEST_PER_ENDPOINT, {"p": provider}).all()
+    if as_of is None:
+        newest = session.execute(_NEWEST_PER_ENDPOINT, {"p": provider}).all()
+    else:
+        newest = session.execute(_NEWEST_AS_OF, {"p": provider, "as_of": as_of}).all()
     if not newest:
         return defaultdict(list)  # same type as before: a missing endpoint reads as []
     window = timedelta(seconds=120)
@@ -196,32 +200,89 @@ def _moved(listing: ComputeListing, previous: ListingObservation | None) -> bool
     return False
 
 
-def record_observations(listings: list[ComputeListing]) -> int:
+def last_seen(listings: list[ComputeListing]) -> dict[tuple[str, str], datetime]:
+    """When each listing was last seen BEFORE this round (compute_listings.observed_at, read before save()).
+
+    That fetch still showed the old value (no observation was written then), so it is the lower edge of the
+    window a change happened in: record_observations() stores it as prev_observed_at.
+    """
+    providers = {listing.provider for listing in listings}
+    if not providers:
+        return {}
+    t = ComputeListingRow
+    with SessionLocal() as s:
+        rows = s.execute(select(t.provider, t.listing_id, t.observed_at).where(t.provider.in_(providers))).all()
+    return {(p, lid): at for p, lid, at in rows}
+
+
+def _change_time(listing: ComputeListing, previous: ListingObservation | None,
+                 seen: datetime | None) -> dict:
+    """prev_observed_at, provider_changed_at and changed_at_basis for a row about to be written (changed_at.py)."""
+    import changed_at
+
+    bracket = seen if seen is not None and seen < listing.observed_at else None
+    if bracket is None and previous is not None and previous.observed_at < listing.observed_at:
+        bracket = previous.observed_at  # looser, still true: the old value was showing then
+    provider_at, basis = changed_at.provider_time(listing, previous)
+    return {"prev_observed_at": bracket, "provider_changed_at": provider_at, "changed_at_basis": basis}
+
+
+def _superseded(listing: ComputeListing, previous) -> list[ComputeListing]:
+    """The prices a change log says this listing had since the last recorded one, as listings to record first.
+
+    Only changes newer than the last recorded row's own time (its provider time, else its fetch time) count, so
+    re-reading the same log never writes a change twice. A listing seen for the first time records only its current
+    price. OpenGrid learned of every one at this fetch, so each row's observed_at is the fetch time, minus one
+    microsecond per later change (the history key is per listing and time, and the order stays the provider's);
+    provider_changed_at holds the provider's exact time.
+    """
+    if not listing.superseded or previous is None:
+        return []
+    cutoff = getattr(previous, "provider_changed_at", None) or previous.observed_at
+    events = sorted((e for e in listing.superseded if e.provider_changed_at > cutoff),
+                    key=lambda e: e.provider_changed_at)
+    return [listing.model_copy(update={
+        "price_per_gpu_hour": e.price_per_gpu_hour, "price_per_instance_hour": e.price_per_instance_hour,
+        "provider_changed_at": e.provider_changed_at, "changed_at_basis": "exact", "superseded": (),
+        "observed_at": listing.observed_at - timedelta(microseconds=len(events) - i)})
+        for i, e in enumerate(events)]
+
+
+def record_observations(listings: list[ComputeListing],
+                        seen: dict[tuple[str, str], datetime] | None = None) -> int:
     """Write an observation per listing whose price or supply moved.
 
     Nothing is written when a listing is unchanged, so a gap in the series means
     "same as the row before it". compute_listings.observed_at separately records
     when we last looked, so a gap is never confused with a gap in coverage.
+
+    Each row also says when the change happened (changed_at.py): `seen` (from last_seen(), read before save())
+    gives the fetch that still showed the old value, and a provider's own effective time is kept when it has one.
     """
     if not listings:
         return 0
+    seen = seen or {}
     with SessionLocal.begin() as s:
         previous = _last_observations(s, listings)
-        rows = [
-            {
-                "provider": listing.provider,
-                "listing_id": listing.listing_id,
-                "observed_at": listing.observed_at,
-                "price_per_gpu_hour": listing.price_per_gpu_hour,
-                "price_per_instance_hour": listing.price_per_instance_hour,
-                "available": listing.available,
-                "capacity": listing.capacity,
-                "capacity_unit": listing.capacity_unit,
-                **{f: getattr(listing, f) for f in OBSERVED_PROVENANCE},
-            }
-            for listing in listings
-            if _moved(listing, previous.get((listing.provider, listing.listing_id)))
-        ]
+        rows = []
+        for listing in listings:
+            key = (listing.provider, listing.listing_id)
+            prev = previous.get(key)
+            for step in (*_superseded(listing, prev), listing):
+                if _moved(step, prev):
+                    rows.append({
+                        "provider": step.provider,
+                        "listing_id": step.listing_id,
+                        "observed_at": step.observed_at,
+                        "price_per_gpu_hour": step.price_per_gpu_hour,
+                        "price_per_instance_hour": step.price_per_instance_hour,
+                        "available": step.available,
+                        "capacity": step.capacity,
+                        "capacity_unit": step.capacity_unit,
+                        **{f: getattr(step, f) for f in OBSERVED_PROVENANCE},
+                        **_change_time(step, prev, seen.get(key)),
+                    })
+                    prev = step
         if not rows:
             return 0
         s.execute(
@@ -316,8 +377,9 @@ def refresh(only: list[str] | None = None) -> dict:
     # Suspicious values are held back (quarantined) before they reach current state or
     # history. Fails open: on its own error the listings pass through unchanged.
     listings = quality.screen(listings, only)
+    seen = last_seen(listings)  # before save() overwrites it: the lower edge of each change window
     saved = save(listings)
-    observations = record_observations(listings)
+    observations = record_observations(listings, seen)
     references = 0
     if only is None or "hyperstack" in only:
         references = save_reference_prices({(l.provider, l.raw_gpu_name) for l in listings})
@@ -355,6 +417,9 @@ def history(q: str | None = None, limit: int = 200) -> list[dict]:
             o.original_price_per_instance_hour,
             o.fx_rate,
             o.fx_rate_date,
+            o.prev_observed_at,
+            o.provider_changed_at,
+            o.changed_at_basis,
         )
         .join(c, (c.provider == o.provider) & (c.listing_id == o.listing_id))
         .where(c.visibility == provider_meta.PUBLIC)  # legacy /history is public: public tier only

@@ -66,7 +66,8 @@ class SaladProvider(Provider):
     # class) against a 240/min key limit: ~1% of budget at 15 min. A poll takes
     # 25 to 40 seconds and a slow call can add 20 more, so 45 cut polls off and
     # lost them whole; this leaves room.
-    polling = PollingPolicy(interval_seconds=900, timeout_seconds=150)
+    # Medium tier: ~44 requests every 5 min against 240/min per key; the budget spends at most half of that.
+    polling = PollingPolicy(interval_seconds=300, timeout_seconds=150, tier="medium", rate_limit=(120, 60.0))
 
     def __init__(self, api_key: str, org: str, client: httpx.AsyncClient | None = None):
         super().__init__(

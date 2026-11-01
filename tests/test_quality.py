@@ -472,6 +472,11 @@ def _row(s, provider, lid, seen, available=True, gpu="NVIDIA H100 80GB SXM5"):
 
 def test_trust():
     w = fresh_world()
+    # The trust rules below are written for a 15-minute cadence; pin it (the fast tier polls these every 2 min).
+    from providers import PROVIDERS as _P
+    pinned = {p: _P[p].polling for p in ("hyperstack", "runpod", "lambda")}
+    for p in pinned:
+        _P[p].polling = PollingPolicy(interval_seconds=900)
     try:
         ago = lambda m: NOW - timedelta(minutes=m)  # noqa: E731
         with w.Session.begin() as s:
@@ -545,6 +550,8 @@ def test_trust():
         pub = trust.public_health(hs)
         assert "last_failure" not in pub and "502" not in str(pub)
     finally:
+        for p, pol in pinned.items():
+            _P[p].polling = pol
         scratchdb.drop(DB)
 
 

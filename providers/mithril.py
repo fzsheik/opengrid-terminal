@@ -83,7 +83,8 @@ def _slug(s: str) -> str:
 class MithrilProvider(Provider):
     name = "mithril"
     # One page load per poll; the page itself changes weekly.
-    polling = PollingPolicy(interval_seconds=3600, timeout_seconds=45)
+    # Slow tier: the page publishes a weekly 7-day average; every 6 h.
+    polling = PollingPolicy(interval_seconds=21600, timeout_seconds=45, tier="slow")
 
     def __init__(self, client: httpx.AsyncClient | None = None):
         super().__init__(

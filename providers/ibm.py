@@ -116,7 +116,8 @@ def extract(plan_id: str, payload) -> dict:
 class IbmProvider(Provider):
     name = "ibm"
     # Ten anonymous requests per poll; list prices change monthly.
-    polling = PollingPolicy(interval_seconds=3600, timeout_seconds=60)
+    # Slow tier: a catalogue that changes by announcement; every 6 h.
+    polling = PollingPolicy(interval_seconds=21600, timeout_seconds=60, tier="slow")
 
     def __init__(self, client: httpx.AsyncClient | None = None):
         super().__init__(

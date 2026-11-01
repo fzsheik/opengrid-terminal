@@ -48,7 +48,8 @@ def _count(s, sql: str, **p) -> int:
 def _poll_failures(hours: float) -> dict:
     t = _now() - timedelta(hours=hours)
     with normalize.SessionLocal() as s:
-        rows = s.execute(text("SELECT provider, count(*) FILTER (WHERE NOT ok), count(*) FROM raw_snapshots "
+        rows = s.execute(text("SELECT provider, count(*) FILTER (WHERE NOT ok AND throttled IS NOT TRUE), count(*) "
+                              "FROM raw_snapshots "
                               "WHERE fetched_at >= :t GROUP BY provider"), {"t": t}).all()
     return {"by_provider": {p: {"failed": f, "polls": n} for p, f, n in rows if f},
             "failed": sum(r[1] for r in rows), "polls": sum(r[2] for r in rows)}

@@ -186,6 +186,7 @@ def save(responses: list[RawResponse]) -> int:
                     status_code=r.status_code,
                     duration_ms=r.duration_ms,
                     ok=r.ok,
+                    throttled=r.throttled or None,
                     error=r.error,
                     sha256=digest,
                     request=r.request,

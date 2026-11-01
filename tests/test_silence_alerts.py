@@ -100,43 +100,43 @@ def test_thresholds():
 
 def test_start_no_repeat_recover_and_recur():
     setup()
-    poller.ACTIVE.update({"nebius": 900, "lambda": 900})
-    healthy("nebius", T0)
+    poller.ACTIVE.update({"jarvislabs": 900, "lambda": 900})
+    healthy("jarvislabs", T0)
     healthy("lambda", T0)
     assert silence.run(T0 + timedelta(minutes=10))["started"] == [] and not SENT, "fresh data: nothing"
 
-    # nebius breaks: every poll fails. lambda keeps working.
+    # jarvislabs breaks: every poll fails. lambda keeps working.
     for m in range(15, 200, 15):
-        fetch("nebius", T0 + timedelta(minutes=m), ok=False)
+        fetch("jarvislabs", T0 + timedelta(minutes=m), ok=False)
         healthy("lambda", T0 + timedelta(minutes=m))
     r = silence.run(T0 + timedelta(hours=2, minutes=50))
-    assert ("provider_silent", "nebius") not in kinds(), "under 3h: not silent yet"
-    assert ("provider_empty", "nebius") in kinds(), "0 current listings (stale 37.5m + 30m grace) fires first"
+    assert ("provider_silent", "jarvislabs") not in kinds(), "under 3h: not silent yet"
+    assert ("provider_empty", "jarvislabs") in kinds(), "0 current listings (stale 37.5m + 30m grace) fires first"
     SENT.clear()
     r = silence.run(T0 + timedelta(hours=3, minutes=5))
-    assert r["started"] == ["provider_silent:nebius"] and kinds() == [("provider_silent", "nebius")], r
+    assert r["started"] == ["provider_silent:jarvislabs"] and kinds() == [("provider_silent", "jarvislabs")], r
     body = SENT[0]
     assert body["severity"] == "notable" and "no successful price fetch for 3h05m" in body["title"]
     assert body["embeds"][0]["description"] == ops.KINDS["provider_silent"], "Discord embed carries the kind text"
-    assert state("provider_silent", "nebius").status == "open"
+    assert state("provider_silent", "jarvislabs").status == "open"
     poller.ACTIVE.pop("lambda")    # healthy throughout: never alerted; out of the rest of this timeline
 
     SENT.clear()
     for h in (4, 8, 24, 72):
         silence.run(T0 + timedelta(hours=h))
     assert SENT == [], "still silent: never repeated"
-    assert state("provider_silent", "nebius").sent_count == 1
+    assert state("provider_silent", "jarvislabs").sent_count == 1
 
     # it comes back
     now = T0 + timedelta(hours=72, minutes=10)
-    healthy("nebius", now - timedelta(minutes=2))
+    healthy("jarvislabs", now - timedelta(minutes=2))
     r = silence.run(now)
-    assert sorted(r["recovered"]) == ["provider_empty:nebius", "provider_silent:nebius"], r
+    assert sorted(r["recovered"]) == ["provider_empty:jarvislabs", "provider_silent:jarvislabs"], r
     assert {b["kind"] for b in SENT} == {"provider_silent_recovered", "provider_empty_recovered"}
-    assert all(b["severity"] == "info" and b["title"].startswith("Recovered: nebius") for b in SENT)
-    assert state("provider_silent", "nebius").status == "resolved"
+    assert all(b["severity"] == "info" and b["title"].startswith("Recovered: jarvislabs") for b in SENT)
+    assert state("provider_silent", "jarvislabs").status == "resolved"
     with _Session() as s:
-        open_inc = s.execute(text("SELECT count(*) FROM quality_incidents WHERE provider = 'nebius' "
+        open_inc = s.execute(text("SELECT count(*) FROM quality_incidents WHERE provider = 'jarvislabs' "
                                   "AND kind LIKE 'exec_provider_%' AND status = 'open'")).scalar()
     assert open_inc == 0, "recovery closes the /ops incidents too"
     SENT.clear()
@@ -145,8 +145,8 @@ def test_start_no_repeat_recover_and_recur():
 
     # and breaks again later: a new episode, alerted again
     silence.run(now + timedelta(hours=4))
-    assert ("provider_silent", "nebius") in kinds()
-    assert state("provider_silent", "nebius").status == "open"
+    assert ("provider_silent", "jarvislabs") in kinds()
+    assert state("provider_silent", "jarvislabs").status == "open"
 
 
 def test_empty_while_fetching():
@@ -203,37 +203,37 @@ def test_unconfigured_killed_and_muted_never_alert():
 
 def test_never_successful_provider_uses_watch_start():
     setup()
-    poller.ACTIVE.update({"nebius": 900})
+    poller.ACTIVE.update({"jarvislabs": 900})
     for m in range(0, 400, 15):
-        fetch("nebius", T0 + timedelta(minutes=m), ok=False)
+        fetch("jarvislabs", T0 + timedelta(minutes=m), ok=False)
     silence.run(T0)                                   # watch starts here (in memory)
     silence.run(T0 + timedelta(hours=2))
     assert SENT == []
     silence.run(T0 + timedelta(hours=3, minutes=1))
-    assert kinds() == [("provider_silent", "nebius")] and "for 3h01m" in SENT[0]["title"]
+    assert kinds() == [("provider_silent", "jarvislabs")] and "for 3h01m" in SENT[0]["title"]
 
 
 def test_capacity_silence():
     setup()
-    poller.ACTIVE.update({"runpod": 900})
-    healthy("runpod", T0)
+    poller.ACTIVE.update({"koyeb": 900})
+    healthy("koyeb", T0)
     with _Session.begin() as s:
         s.execute(text("""INSERT INTO capacity_current (provider, sku, region_key, raw_gpu_name, gpu_count, raw_value,
                           source, observed_at, first_seen_at, changed_at)
-                          VALUES ('runpod', 'h100', 'us', 'H100', 1, '5', 'api', :t, :t, :t)"""), {"t": T0})
+                          VALUES ('koyeb', 'h100', 'us', 'H100', 1, '5', 'api', :t, :t, :t)"""), {"t": T0})
     for m in range(15, 260, 15):
-        healthy("runpod", T0 + timedelta(minutes=m))   # prices keep arriving, capacity does not
+        healthy("koyeb", T0 + timedelta(minutes=m))   # prices keep arriving, capacity does not
     silence.run(T0 + timedelta(hours=2))
     assert SENT == []
     silence.run(T0 + timedelta(hours=4))
-    assert kinds() == [("capacity_silent", "runpod")], kinds()
+    assert kinds() == [("capacity_silent", "koyeb")], kinds()
     SENT.clear()
     silence.run(T0 + timedelta(hours=5))
     assert SENT == []
     with _Session.begin() as s:
         s.execute(text("UPDATE capacity_current SET observed_at = :t"), {"t": T0 + timedelta(hours=5)})
     silence.run(T0 + timedelta(hours=5, minutes=5))
-    assert kinds() == [("capacity_silent_recovered", "runpod")]
+    assert kinds() == [("capacity_silent_recovered", "koyeb")]
 
 
 def test_slow_capacity_feed_uses_its_own_cadence():
@@ -256,10 +256,10 @@ def test_slow_capacity_feed_uses_its_own_cadence():
 def test_restart_persistence():
     """A new process (empty memory) sees the open condition in Postgres: no re-send; recovery still fires once."""
     setup()
-    poller.ACTIVE.update({"nebius": 900})
-    healthy("nebius", T0)
+    poller.ACTIVE.update({"jarvislabs": 900})
+    healthy("jarvislabs", T0)
     silence.run(T0 + timedelta(hours=4))
-    assert ("provider_silent", "nebius") in kinds()
+    assert ("provider_silent", "jarvislabs") in kinds()
     SENT.clear()
 
     # "restart": a fresh module state and a fresh engine/session factory on the same database
@@ -267,13 +267,13 @@ def test_restart_persistence():
     poller.ACTIVE.clear()
     importlib.reload(silence)
     normalize.SessionLocal = fixtures.session(scratchdb.url(DB))
-    poller.ACTIVE.update({"nebius": 900})
+    poller.ACTIVE.update({"jarvislabs": 900})
     silence.run(T0 + timedelta(hours=5))
     silence.run(T0 + timedelta(hours=6))
     assert SENT == [], "after the restart the open alert is not re-sent"
-    healthy("nebius", T0 + timedelta(hours=6, minutes=5))
+    healthy("jarvislabs", T0 + timedelta(hours=6, minutes=5))
     r = silence.run(T0 + timedelta(hours=6, minutes=10))
-    assert "provider_silent:nebius" in r["recovered"] and ("provider_silent_recovered", "nebius") in kinds()
+    assert "provider_silent:jarvislabs" in r["recovered"] and ("provider_silent_recovered", "jarvislabs") in kinds()
 
 
 def test_job_registered():

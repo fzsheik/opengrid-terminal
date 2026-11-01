@@ -4,7 +4,9 @@ Jarvislabs (Oct 25-30) and Nebius (since Oct 19) both broke silently: the health
 was told. This job (`silence_alerts`, every 10 minutes) watches three conditions per provider:
 
     provider_silent   no successful fetch (raw_snapshots.ok) for more than
-                      max(SILENCE_ALERT_MIN_HOURS, SILENCE_ALERT_POLLS x polling interval)  (15 min poll -> 3h, 1h -> 6h)
+                      max(SILENCE_ALERT_MIN_HOURS, SILENCE_ALERT_POLLS x polling interval)  (15 min poll -> 3h, 1h -> 6h).
+                      A throttled answer (429, or a call held back while the provider asked us to wait) counts as
+                      hearing from the provider: being rate limited is not the source going silent.
     provider_empty    the provider had listings and now has 0 current ones (none seen within market.stale_after),
                       for SILENCE_ALERT_EMPTY_GRACE_MINUTES past the stale window
     capacity_silent   the provider had capacity rows and none was refreshed within the silence threshold, while its
@@ -43,7 +45,7 @@ KINDS = ("provider_silent", "provider_empty", "capacity_silent")
 _WATCH_START: dict[str, datetime] = {}
 
 _STATE = text("""
-    SELECT (SELECT max(fetched_at) FROM raw_snapshots WHERE provider = :p AND ok) AS last_ok,
+    SELECT (SELECT max(fetched_at) FROM raw_snapshots WHERE provider = :p AND (ok OR throttled)) AS last_ok,
            (SELECT count(*) FROM compute_listings WHERE provider = :p) AS listings_total,
            (SELECT count(*) FROM compute_listings WHERE provider = :p AND observed_at >= :live_since) AS listings_now,
            (SELECT max(observed_at) FROM compute_listings WHERE provider = :p) AS listing_last_seen,
@@ -58,12 +60,13 @@ def threshold(interval_seconds: float) -> timedelta:
 
 
 def _interval(provider: str) -> float:
+    """How often the provider is polled (its loop cadence: something is fetched every interval)."""
     from providers import PROVIDERS
 
     if provider in poller.ACTIVE:
         return poller.ACTIVE[provider]
     cls = PROVIDERS.get(provider)
-    return float(cls.polling.interval_seconds) if cls else 900.0
+    return float(cls.polling.loop_seconds) if cls else 900.0
 
 
 def _human(td: timedelta | None) -> str | None:
@@ -184,12 +187,14 @@ def _iso(t):
 
 
 def _capacity_limit(provider: str, limit: timedelta) -> timedelta:
-    """A capacity feed declared slower than prices (capacity_interval_seconds) is silent after two of its gaps."""
+    """A capacity feed with a slower cadence than the poll loop (PollingPolicy.capacity_interval_seconds, e.g. Vast's
+    budgeted census, AWS placement scores) is silent after two of its gaps; a faster one uses the provider's limit."""
     from providers import PROVIDERS
 
     cls = PROVIDERS.get(provider)
-    slow = getattr(cls, "capacity_interval_seconds", None) if cls else None
-    return max(limit, timedelta(seconds=2 * slow)) if slow else limit
+    if cls is None:
+        return limit
+    return max(limit, timedelta(seconds=2 * cls.polling.capacity_seconds))
 
 
 def evaluate(provider: str, now: datetime) -> dict:

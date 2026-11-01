@@ -16,6 +16,10 @@ machine: `gpu_ids` names its GPUs and `gpu_frac` its share of the machine, so
 A non-rentable offer can contain free GPUs (an 8x slice of a machine with 2 GPUs busy), so busy is total - free,
 never a count of non-rentable offers. "Total" means GPUs on verified machines listed on Vast now; a host that has
 delisted its machine is in neither search. Prices are untouched by the census (normalize skips census rows).
+
+Stored offers keep KEPT_FIELDS: what normalize() reads plus, raw-first, each offer's storage / egress / ingress prices,
+measured network speeds, offer window and hardware detail (see COST_FIELDS), so full-cost history accrues before any
+listing field reads it.
 """
 
 import asyncio
@@ -85,16 +89,35 @@ def _query(gpu_name: str) -> str:
     )
 
 
+# The fields normalize() reads.
+LISTING_FIELDS = (
+    "id", "machine_id", "host_id", "gpu_name", "num_gpus", "dph_total",
+    "gpu_ram", "geolocation", "reliability", "cpu_cores_effective",
+    "cpu_ram", "disk_space",
+)  # fmt: skip
+# Kept raw for the full cost of an offer and its hardware, though no listing field reads them yet (raw-first: history
+# that is not stored cannot be backfilled). Units as Vast publishes them (checked against a live offer 2026-11-01):
+#   storage_cost $/GB-month of disk (billed while the instance exists, even stopped); storage_total_cost $/h of the
+#   offer's disk; inet_up_cost / inet_down_cost $/GB of egress / ingress; inet_up / inet_down measured Mbps;
+#   start_date / end_date epoch seconds of the offer's window; dph_base $/h before storage; min_bid $/h interruptible.
+# Left out on purpose: public_ipaddr and hostname (host identity), and fields that change on every request without
+# meaning (score, duration, rn, time_remaining).
+COST_FIELDS = (
+    "dph_base", "storage_cost", "storage_total_cost", "inet_up_cost", "inet_down_cost", "inet_up", "inet_down",
+    "start_date", "end_date", "min_bid", "discount_rate", "credit_discount_max",
+)  # fmt: skip
+HARDWARE_FIELDS = (
+    "reliability2", "verification", "gpu_frac", "gpu_total_ram", "gpu_mem_bw", "bw_nvlink", "pcie_bw", "pci_gen",
+    "gpu_lanes", "compute_cap", "cuda_max_good", "gpu_max_power", "dlperf", "total_flops", "cpu_name", "cpu_cores",
+    "cpu_ghz", "cpu_arch", "disk_name", "disk_bw", "direct_port_count", "static_ip", "hosting_type", "cluster_id",
+    "vms_enabled", "os_version", "driver_version",
+)  # fmt: skip
+KEPT_FIELDS = LISTING_FIELDS + COST_FIELDS + HARDWARE_FIELDS
+
+
 def _keep(offer: dict) -> dict:
-    """The fields normalize() reads, verbatim."""
-    return {
-        k: offer.get(k)
-        for k in (
-            "id", "machine_id", "host_id", "gpu_name", "num_gpus", "dph_total",
-            "gpu_ram", "geolocation", "reliability", "cpu_cores_effective",
-            "cpu_ram", "disk_space",
-        )
-    }  # fmt: skip
+    """The stored offer: every field in KEPT_FIELDS, verbatim (None when the offer lacks it)."""
+    return {k: offer.get(k) for k in KEPT_FIELDS}
 
 
 def _quota_exhausted(raw: RawResponse) -> bool:
@@ -108,9 +131,11 @@ def _retry_after(raw: RawResponse) -> int | None:
 
 class VastProvider(Provider):
     name = "vast"
-    capacity_interval_seconds = int(CENSUS_MAX_GAP.total_seconds())
-    # One request per GPU model (three with a key, for the census), paced to the 1/second limit: 25-70 seconds.
-    polling = PollingPolicy(interval_seconds=900, timeout_seconds=180)
+    # Fast tier: the public search (one request per GPU model, ~18, paced to Vast's documented 1/second: ~25 s) every
+    # 5 minutes. Capacity is the keyed census, on its own daily row budget (1-12 h apart, unchanged): its cadence is
+    # the longest gap, CENSUS_MAX_GAP, for the stale flag and the capacity-silence alert.
+    polling = PollingPolicy(interval_seconds=300, timeout_seconds=180, tier="fast",
+                            capacity_interval_seconds=int(CENSUS_MAX_GAP.total_seconds()), rate_limit=(1, 1.0))
 
     def __init__(self, client: httpx.AsyncClient | None = None, api_key: str | None = None):
         super().__init__(
@@ -126,7 +151,9 @@ class VastProvider(Provider):
 
     async def _census(self, gpu_name: str, rentable: bool) -> RawResponse:
         query = _census_query(gpu_name, rentable)
-        raw = await self.post(ENDPOINT, json=query, headers={"Authorization": f"Bearer {self._api_key}"})
+        # backoff=False: a census quota refusal limits the key, not the public price search.
+        raw = await self.post(ENDPOINT, json=query, headers={"Authorization": f"Bearer {self._api_key}"},
+                              backoff=False)
         offers = (raw.payload or {}).get("offers") if isinstance(raw.payload, dict) else None
         payload = None if offers is None else [{k: o.get(k) for k in CENSUS_FIELDS} for o in offers]
         return reshaped(raw, payload, request={"census": True, "gpu_name": gpu_name, "rentable": rentable})

@@ -39,7 +39,8 @@ ENDPOINT = "/pricing.json"
 class E2EProvider(Provider):
     name = "e2e"
     # One anonymous request per poll; the feed is cached for an hour at the edge.
-    polling = PollingPolicy(interval_seconds=1800, timeout_seconds=30)
+    # Slow tier: one pricing file that changes by announcement; every 6 h.
+    polling = PollingPolicy(interval_seconds=21600, timeout_seconds=30, tier="slow")
 
     def __init__(self, client: httpx.AsyncClient | None = None):
         super().__init__(

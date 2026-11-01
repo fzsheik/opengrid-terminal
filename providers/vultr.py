@@ -35,7 +35,8 @@ _KEYS = {VM_ENDPOINT: "plans", METAL_ENDPOINT: "plans_metal"}
 class VultrProvider(Provider):
     name = "vultr"
     # Two anonymous requests per poll; list prices change rarely.
-    polling = PollingPolicy(interval_seconds=900, timeout_seconds=30)
+    # Slow tier: plans change rarely and GPU availability comes back empty; hourly.
+    polling = PollingPolicy(interval_seconds=3600, timeout_seconds=30, tier="slow")
 
     def __init__(self, client: httpx.AsyncClient | None = None):
         super().__init__(

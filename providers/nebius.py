@@ -29,8 +29,9 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
+import changed_at
 from models import ComputeListing, RawResponse
-from providers.base import PollingPolicy, Provider, find_endpoint, get_page, reshaped
+from providers.base import PRICE, PollingPolicy, Provider, find_endpoint, get_page, reshaped
 
 if TYPE_CHECKING:
     from tables import RawSnapshot
@@ -197,7 +198,8 @@ def spot_rows(payload) -> list[dict]:
         if (platform, region) in seen:
             raise ValueError(f"nebius: two spot prices for {platform} in {region}")
         seen.add((platform, region))
-        out.append({"name": spot_name(it), "platform": platform, "region": region, "price": value})
+        out.append({"name": spot_name(it), "platform": platform, "region": region, "price": value,
+                    "effective": changed_at.parse_time(it.get("effectiveTime"))})
     return out
 
 
@@ -259,6 +261,9 @@ def _spot_listings(snapshot) -> list[ComputeListing]:
         name, platform, region = r["name"], r["platform"], r["region"]
         listings.append(
             ComputeListing(
+                # effectiveTime: when this spot price took effect (exact).
+                provider_changed_at=r["effective"],
+                changed_at_basis="exact" if r["effective"] else None,
                 provider="nebius",
                 sku=f"{name}:{platform}",
                 listing_id=f"{name}:{platform}:{region}:spot",
@@ -290,8 +295,9 @@ def _spot_listings(snapshot) -> list[ComputeListing]:
 
 class NebiusProvider(Provider):
     name = "nebius"
-    # One page load plus one spot-price call (a page per 100 SKUs) per poll.
-    polling = PollingPolicy(interval_seconds=900, timeout_seconds=45)
+    # Spot prices (timestamped, "up to every 15 min") every 5 minutes: one call, a page per 100 SKUs, public and
+    # unauthenticated. The on-demand price page changes by announcement: hourly (the price cadence).
+    polling = PollingPolicy(interval_seconds=3600, timeout_seconds=45, tier="medium", poll_seconds=300)
 
     def __init__(self, client: httpx.AsyncClient | None = None, api_client: httpx.AsyncClient | None = None):
         super().__init__(
@@ -344,7 +350,8 @@ class NebiusProvider(Provider):
         return raw
 
     async def fetch(self) -> list[RawResponse]:
-        return [await get_page(self, ENDPOINT, extract), await self._spot()]
+        page = [await get_page(self, ENDPOINT, extract)] if PRICE in self.due else []
+        return page + [await self._spot()]
 
     @staticmethod
     def normalize(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:

@@ -2,7 +2,7 @@
 
     raw_snapshots        every provider response, untouched
     compute_listings     current normalized state, one row per listing
-    listing_observations price/supply history, written only when something changes
+    listing_observations price/supply history, written only when something changes (with when it changed)
     reference_prices     provider price entries that are not listings (kept, not dropped)
 """
 
@@ -46,6 +46,7 @@ class RawSnapshot(Base):
     __table_args__ = (
         Index("ix_raw_provider_endpoint_time", "provider", "endpoint", "fetched_at"),
         Index("ix_raw_inline_pending", "id", postgresql_where=text("payload IS NOT NULL AND payload_hash IS NULL")),
+        Index("ix_raw_throttled_time", "fetched_at", postgresql_where=text("throttled")),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -56,6 +57,9 @@ class RawSnapshot(Base):
     status_code: Mapped[int | None]
     duration_ms: Mapped[int | None]
     ok: Mapped[bool] = mapped_column(default=True)
+    # Refused for rate (429, or held back while the provider asked us to wait). ok is false (there is no body to
+    # read) but it is not a failure: health, ops errors and silence alerts leave it out. NULL on rows before 0028.
+    throttled: Mapped[bool | None] = mapped_column(Boolean)
     error: Mapped[str | None] = mapped_column(Text)
     sha256: Mapped[str | None] = mapped_column(String(64))
     # The POST body we sent. Salad's availability response carries no class id,
@@ -175,6 +179,16 @@ class ListingObservation(Base):
     original_price_per_instance_hour: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))
     fx_rate: Mapped[Decimal | None] = mapped_column(Numeric(18, 8))
     fx_rate_date: Mapped[date | None]
+
+    # When the change happened, as far as anyone can say (changed_at.py; methodology/freshness.md).
+    #   prev_observed_at     the last fetch that still showed the old value: the change happened in
+    #                        (prev_observed_at, observed_at]. NULL on a listing's first row (nothing before it).
+    #   provider_changed_at  the provider's own effective time for a price change, when it publishes one.
+    #   changed_at_basis     exact | date_only | lower_bound (from provider_changed_at) or poll_window (only the
+    #                        bracket above is known). NULL on rows written before 0028 and not yet backfilled.
+    prev_observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    provider_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    changed_at_basis: Mapped[str | None] = mapped_column(String(16))
 
 
 class ReferencePrice(Base):

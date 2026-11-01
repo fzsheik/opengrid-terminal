@@ -9,7 +9,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RawResponse(BaseModel):
@@ -22,9 +22,22 @@ class RawResponse(BaseModel):
     status_code: int | None = None
     duration_ms: int | None = None
     ok: bool = True
+    # The provider refused for rate (HTTP 429, or a call skipped while it asked us to wait): not a failure of the
+    # source, so it never counts against provider health or opens a silence alert (methodology/freshness.md).
+    throttled: bool = False
     error: str | None = None
     request: dict | list | None = None
     payload: dict | list | None = None
+
+
+class PriceChange(BaseModel):
+    """A price a listing had between two polls and no longer has, from a provider change log (AWS spot)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    provider_changed_at: datetime
+    price_per_gpu_hour: Decimal | None
+    price_per_instance_hour: Decimal | None
 
 
 class ComputeListing(BaseModel):
@@ -79,6 +92,15 @@ class ComputeListing(BaseModel):
     # DATA TIER (provider_meta.INTERNAL_SOURCES; methodology/data-visibility.md). "internal": usable by routing,
     # recommendations and deployment, never republished. normalize.save stores provider_meta.enforce() of it.
     visibility: Literal["public", "internal"] = "public"
+    # PROVIDER CHANGE TIME (changed_at.py; methodology/freshness.md). When the provider itself says from when this
+    # price applies: AWS spot `timestamp`, Nebius spot `effectiveTime` (exact), Azure `effectiveStartDate` (date
+    # only), GCP `effectiveTime` (lower bound). Copied onto the history row that records a price change, never onto
+    # current state, so excluded from model_dump(). None: the provider gives no time (most do not).
+    provider_changed_at: datetime | None = Field(default=None, exclude=True)
+    changed_at_basis: Literal["exact", "date_only", "lower_bound"] | None = Field(default=None, exclude=True)
+    # Earlier prices from a provider change log that came and went since the previous poll (AWS spot), oldest
+    # first, each with its exact time. History only: record_observations() writes one row each.
+    superseded: tuple[PriceChange, ...] = Field(default=(), exclude=True)
 
 
 class CapacityObservation(BaseModel):

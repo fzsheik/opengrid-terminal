@@ -62,7 +62,8 @@ def build_query() -> str:
 class RunPodProvider(Provider):
     name = "runpod"
     # One request per poll. RunPod publishes no rate limit for GraphQL.
-    polling = PollingPolicy(interval_seconds=900, timeout_seconds=45)
+    # Fast tier: one GraphQL query every 2 min (stock moves in minutes; REST v2 documents 60/min per user).
+    polling = PollingPolicy(interval_seconds=120, timeout_seconds=45, tier="fast", rate_limit=(30, 60.0))
 
     def __init__(self, api_key: str, client: httpx.AsyncClient | None = None):
         super().__init__(

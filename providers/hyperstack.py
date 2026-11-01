@@ -27,7 +27,8 @@ BASE_URL = "https://infrahub-api.nexgencloud.com/v1"
 class HyperstackProvider(Provider):
     name = "hyperstack"
     # 5 requests per poll against 500/min per IP.
-    polling = PollingPolicy(interval_seconds=900, timeout_seconds=30)
+    # Fast tier: 5 requests every 2 min against 500/min per IP; the budget spends at most half of that.
+    polling = PollingPolicy(interval_seconds=120, timeout_seconds=30, tier="fast", rate_limit=(250, 60.0))
 
     def __init__(self, api_key: str, client: httpx.AsyncClient | None = None):
         super().__init__(

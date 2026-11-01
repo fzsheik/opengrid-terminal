@@ -26,12 +26,19 @@ With AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (an IAM user allowed only read-on
 launching is denied) the same poll adds three SigV4-signed EC2 Query API calls (providers/aws_sigv4.py, POST
 form bodies to https://ec2.<region>.amazonaws.com/, API version 2016-11-15). Without the key nothing changes.
 
-    DescribeSpotPriceHistory   every GPU_INSTANCES type, Linux/UNIX, StartTime = EndTime = now, in SPOT_REGIONS,
-                               paginated, two regions at a time. AWS returns, per type and AZ, "the last price change
-                               before the start time, which is the effective price as of the start time". Stored per
-                               region: the GPU rows verbatim (XML -> JSON). Zero GPU rows is a failed fetch. Read by
-                               normalize() as spot listings: one per (type, AZ), listing_id "<type>:<az>:spot",
-                               region the AZ, market_type spot, interruptible, per-GPU price = spot price / GPUs.
+    DescribeSpotPriceHistory   every GPU_INSTANCES type, Linux/UNIX, in SPOT_REGIONS, paginated, two regions at a
+                               time, as a CHANGE LOG: StartTime = the previous successful poll of that region (EndTime
+                               then), EndTime = now. AWS returns, per type and AZ, "the last price change before the
+                               start time, which is the effective price as of the start time", plus every change
+                               inside the window, each with its exact `timestamp`. So no change between polls is lost,
+                               at any poll interval. The window is at most SPOT_MAX_WINDOW; a fresh process starts
+                               from the last stored poll (resume()), else SPOT_COLD_WINDOW ago. Stored per region: the
+                               GPU rows verbatim (XML -> JSON; the window is in `request`, so an unchanged market
+                               stores the same body). Zero GPU rows is a failed fetch. Read by normalize() as spot
+                               listings: one per (type, AZ) at its newest price, listing_id "<type>:<az>:spot", region
+                               the AZ, market_type spot, interruptible, per-GPU price = spot price / GPUs; the earlier
+                               prices in the window become history rows of their own (models.PriceChange,
+                               normalize._superseded) with the AWS timestamp as provider_changed_at (changed_at.py).
     GetSpotPlacementScores     PLACEMENT_TYPES, one fixed request configuration each (one instance of that type,
                                regional scores over SPOT_REGIONS), refreshed every PLACEMENT_TTL, not every poll: new
                                accounts get a low target-capacity limit and AWS may throttle new configurations per
@@ -54,16 +61,17 @@ import re
 import time
 import urllib.parse
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 import httpx
 
 import canonical
-from models import CapacityObservation, ComputeListing, RawResponse
+import changed_at
+from models import CapacityObservation, ComputeListing, PriceChange, RawResponse
 from providers import aws_sigv4
-from providers.base import PollingPolicy, Provider, find_endpoint, gather_limited, reshaped, to_decimal
+from providers.base import PRICE, PollingPolicy, Provider, find_endpoint, gather_limited, reshaped, to_decimal
 
 if TYPE_CHECKING:
     from tables import RawSnapshot
@@ -127,6 +135,11 @@ SPOT_REGIONS = {"us-east-1": "US", "us-east-2": "US", "us-west-2": "US", "eu-wes
 SPOT_PRODUCT = "Linux/UNIX"
 SPOT_CONCURRENCY = 2            # regions fetched at once; each region has its own EC2 request bucket anyway
 SPOT_MAX_PAGES = 10
+# The change-log window: never longer than a day (pages stay few; AWS keeps 90 days), and on a cold start with no
+# stored poll, the last hour. A typical window (5 min to 1 h) is one page per region: 6 requests per poll against
+# EC2's Describe* bucket of 100 refilling at 20/s per account and region.
+SPOT_MAX_WINDOW = timedelta(hours=24)
+SPOT_COLD_WINDOW = timedelta(hours=1)
 # Placement scores: one fixed request configuration per type (1 instance, regional), H100 / H200 / B200 / B300 / A100.
 PLACEMENT_TYPES = ("p5.48xlarge", "p5en.48xlarge", "p6-b200.48xlarge", "p6-b300.48xlarge", "p4d.24xlarge")
 PLACEMENT_TARGET = 1
@@ -195,8 +208,11 @@ def _keep(row: dict) -> dict:
 
 class AwsProvider(Provider):
     name = "aws"
-    # List prices change rarely and the file is large, so hourly is plenty.
-    polling = PollingPolicy(interval_seconds=3600, timeout_seconds=60)
+    # The price file and the Spot Advisor change rarely and are large: hourly (the price cadence). With the key the loop
+    # runs every 5 minutes for the spot change log (6 regions, ~1 page each, well inside EC2's Describe* bucket);
+    # placement scores are the capacity cadence (PLACEMENT_TTL). Without the key: hourly, nothing else.
+    polling = PollingPolicy(interval_seconds=3600, timeout_seconds=60, tier="medium", poll_seconds=300,
+                            capacity_interval_seconds=int(PLACEMENT_TTL.total_seconds()))
 
     def __init__(self, client: httpx.AsyncClient | None = None, access_key_id: str | None = None,
                  secret_access_key: str | None = None):
@@ -210,11 +226,23 @@ class AwsProvider(Provider):
         )
         # Both or neither: half a key pair cannot sign anything.
         self._keys = (access_key_id, secret_access_key) if access_key_id and secret_access_key else None
+        if not self._keys:  # no spot feed: nothing to run between hourly price polls
+            self.polling = replace(type(self).polling, poll_seconds=None, capacity_interval_seconds=None, tier="slow")
         # When each slow-moving call last ran in this process (placement scores, Capacity Blocks).
         self._last: dict[str, datetime] = {}
+        # Per spot region, the EndTime of its last successful DescribeSpotPriceHistory: the next window's start.
+        self._spot_since: dict[str, datetime] = {}
+
+    def resume(self, last_ok: dict[str, datetime]) -> None:
+        """Seed each region's spot window from the newest stored successful poll (poller, at startup)."""
+        for region in SPOT_REGIONS:
+            t = last_ok.get(ec2_endpoint(region, "DescribeSpotPriceHistory"))
+            if t is not None:
+                self._spot_since.setdefault(region, t)
 
     async def fetch(self) -> list[RawResponse]:
-        out = [*await self._prices(), await self._spot_advisor()]
+        # The price file and Spot Advisor on the price cadence; spot (a change log) on every loop.
+        out = [*await self._prices(), await self._spot_advisor()] if PRICE in self.due else []
         if self._keys:
             out += await self._ec2_market()
         return out
@@ -247,7 +275,9 @@ class AwsProvider(Provider):
             break
         ms = int((time.perf_counter() - started) * 1000)
         if code or not resp.is_success:
+            # EC2 throttling (RequestLimitExceeded, after the one retry) is the API pacing us, not a broken feed.
             return RawResponse(**base, status_code=resp.status_code, duration_ms=ms, ok=False,
+                               throttled=code == "RequestLimitExceeded" or resp.status_code == 429,
                                error=f"{code or resp.status_code}: {message or ''}"[:500]), code
         return RawResponse(**base, status_code=resp.status_code, duration_ms=ms, ok=True, payload=parsed), None
 
@@ -267,12 +297,19 @@ class AwsProvider(Provider):
         self._last[what] = now
         return True
 
+    def spot_window(self, region: str, now: datetime) -> tuple[datetime, datetime]:
+        """(StartTime, EndTime) of this poll's change-log query for one region."""
+        start = self._spot_since.get(region) or now - SPOT_COLD_WINDOW
+        return max(start, now - SPOT_MAX_WINDOW), now
+
     async def _spot_prices(self, region: str, now: datetime) -> RawResponse:
-        """The effective Linux spot price now, per GPU type and AZ, in one region (all pages). GPU rows verbatim."""
-        ts = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        """Every Linux spot price change since the last poll, plus the price in force at its start, per GPU type and
+        AZ, in one region (all pages). GPU rows verbatim. On success the window moves on to `now`."""
+        start, end = self.spot_window(region, now)
         types = sorted(GPU_INSTANCES)
         params = {**{f"InstanceType.{i}": t for i, t in enumerate(types, 1)}, "ProductDescription.1": SPOT_PRODUCT,
-                  "StartTime": ts, "EndTime": ts, "MaxResults": "1000"}
+                  "StartTime": start.strftime("%Y-%m-%dT%H:%M:%SZ"), "EndTime": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                  "MaxResults": "1000"}
         endpoint = ec2_endpoint(region, "DescribeSpotPriceHistory")
         items: list = []
         first = None
@@ -295,8 +332,11 @@ class AwsProvider(Provider):
         rows = [i for i in items if isinstance(i, dict) and i.get("instanceType") in GPU_INSTANCES]
         if not rows:
             return _failed(first, f"aws spot: no GPU rows in {region}", params)
-        return reshaped(first, {"region": region, "product_description": SPOT_PRODUCT, "as_of": ts,
-                                "spotPriceHistorySet": rows}, request=params)
+        self._spot_since[region] = end
+        # Sorted so the same rows always store as the same body, whatever order the pages came in.
+        rows.sort(key=lambda r: (str(r.get("instanceType")), str(r.get("availabilityZone")), str(r.get("timestamp"))))
+        return reshaped(first, {"region": region, "product_description": SPOT_PRODUCT, "spotPriceHistorySet": rows},
+                        request=params)
 
     async def _placement(self, itype: str) -> RawResponse:
         """One fixed configuration: PLACEMENT_TARGET instance(s) of `itype`, regional scores over SPOT_REGIONS."""
@@ -477,26 +517,36 @@ def _on_demand(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListi
 
 def spot_listings(by_endpoint: "dict[str, list[RawSnapshot]]",
                   specs: dict[str, tuple] | None = None) -> list[ComputeListing]:
-    """The newest effective Linux spot price per (GPU type, AZ), from each region's newest stored snapshot."""
+    """The newest Linux spot price per (GPU type, AZ), from each region's newest stored snapshot; the earlier prices
+    of the same window ride along as `superseded` (history rows, exact AWS times)."""
     out = []
     for snap in find_endpoint(by_endpoint, SPOT_PRICES):
         body = snap.payload if isinstance(snap.payload, dict) else {}
         region = body.get("region")
-        latest: dict[tuple[str, str], dict] = {}
+        history: dict[tuple[str, str], list[dict]] = {}
         for item in body.get("spotPriceHistorySet") or []:
             if not isinstance(item, dict) or item.get("productDescription") != SPOT_PRODUCT:
                 continue
             key = (item.get("instanceType"), item.get("availabilityZone"))
-            if key[0] in GPU_INSTANCES and key[1] and (key not in latest or
-                                                       str(item.get("timestamp")) > str(latest[key].get("timestamp"))):
-                latest[key] = item
-        for (itype, az), item in sorted(latest.items()):
+            if key[0] in GPU_INSTANCES and key[1]:
+                history.setdefault(key, []).append(item)
+        for (itype, az), items in sorted(history.items()):
+            items.sort(key=lambda i: str(i.get("timestamp")))
+            item = items[-1]
             price = to_decimal(item.get("spotPrice"))
             if price is None or price <= 0:
                 continue
             count, raw_name = GPU_INSTANCES[itype]
+            earlier = []
+            for old in items[:-1]:
+                p, t = to_decimal(old.get("spotPrice")), changed_at.parse_time(old.get("timestamp"))
+                if p is not None and p > 0 and t is not None:
+                    earlier.append(PriceChange(provider_changed_at=t, price_per_gpu_hour=p / count,
+                                               price_per_instance_hour=p))
             vcpu, ram = (specs or {}).get(itype, (None, None))
+            since = changed_at.parse_time(item.get("timestamp"))  # when AWS set this price (exact)
             out.append(ComputeListing(
+                provider_changed_at=since, changed_at_basis="exact" if since else None, superseded=tuple(earlier),
                 provider="aws", sku=itype, listing_id=f"{itype}:{az}:spot", raw_gpu_name=raw_name,
                 canonical_gpu_name=canonical.canonical_gpu_name(raw_name), gpu_count=count, region=az,
                 country=SPOT_REGIONS.get(region or az[:-1]), price_per_gpu_hour=price / count,
