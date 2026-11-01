@@ -189,7 +189,7 @@ def setup_world():
 
 # ---------------------------------------------------------------- leak detection
 
-_TEXT_PRICE = re.compile(r"0\.00(43|432)\d*")
+_TEXT_PRICE = re.compile(r"(?<![\d.])0\.00(43|432)\d*")  # not the seconds of a timestamp ("20.0043")
 _TEXT_COUNT = re.compile(r"\b4,?321\b")  # a word of its own: not the inside of a hex hash
 
 
