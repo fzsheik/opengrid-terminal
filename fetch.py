@@ -207,7 +207,10 @@ async def main() -> None:
     init_db()
     responses = await fetch_all()
     save(responses)
+    import fx
     import normalize
+
+    await fx.refresh()  # converted listings (Scaleway's EUR catalogue) need the day's ECB rate
 
     result = normalize.refresh()
     by_provider: dict[str, list[RawResponse]] = {}

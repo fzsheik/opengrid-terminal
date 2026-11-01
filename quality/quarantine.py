@@ -394,7 +394,7 @@ def _apply(s, q: Quarantine) -> bool:
         .order_by(ListingObservation.observed_at.desc()).limit(1)
     ).scalar_one_or_none()
     if normalize._moved(listing, last):
-        vals = {c: row[c] for c in normalize.TRACKED}
+        vals = {c: row[c] for c in (*normalize.TRACKED, *normalize.OBSERVED_PROVENANCE)}
         ins = insert(ListingObservation).values(provider=q.provider, listing_id=q.listing_id,
                                                 observed_at=listing.observed_at, **vals)
         s.execute(ins.on_conflict_do_update(index_elements=["provider", "listing_id", "observed_at"], set_=vals))

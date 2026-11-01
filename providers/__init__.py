@@ -51,8 +51,8 @@ from providers.shadeform import (
     HorizonProvider,
     LatitudeProvider,
     PhyntecProvider,
-    ScalewayProvider,
 )
+from providers.scaleway import ScalewayProvider
 from providers.thundercompute import ThunderComputeProvider
 from providers.together import TogetherProvider
 from providers.vast import VastProvider

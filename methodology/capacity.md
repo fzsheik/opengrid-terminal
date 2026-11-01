@@ -14,7 +14,7 @@ being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute, Verda, Hot Ai
 |---|---|---|---|
 | RunPod | GraphQL `lowestPrice.stockStatus` | tier | `High` / `Medium` / `Low` / `None` per GPU type, cloud (secure / community) and pod size. Pod size matters, so the sku is `<gpu>:<cloud>:<count>` (the listing_id). |
 | Koyeb | `GET /v1/catalog/usage` | tier | `LOW` / `MEDIUM` / `HIGH` per instance type and region; types with no per-region word are stored provider-wide. |
-| Scaleway | Scaleway's own `.../products/servers/availability`, all 9 zones, paged | tier | `available` / `scarce` / `shortage` per server type and zone. Prices still come from Shadeform. |
+| Scaleway | Scaleway's own `.../products/servers/availability`, all 9 zones, paged | tier | `available` / `scarce` / `shortage` per server type and zone. Prices come from Scaleway's own EUR catalogue, converted at the ECB rate (`/methodology/fx`). |
 | Hyperstack | `GET /core/stocks` + `/core/flavors` | count | Deployable VMs per region, model and size (`configurations`); in-stock flag per flavor; model GPU estimate (`available`, a floor such as "10+") kept in raw_value. |
 | Lium | `GET /api/executors` | count | Free GPUs out of all GPUs, summed per machine type and city. |
 | Jarvislabs | `GET /misc/server_meta` (API key) | count | Free GPUs per GPU type, region and workload (vm / container), from `effective_num_free_devices` (what Jarvislabs' own SDK routes launches on). Sku is `<gpu>:1x:<workload>`. |

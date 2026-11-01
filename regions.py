@@ -12,6 +12,7 @@ Deterministic and never guessed. In order:
          "Arizona, US"                    Vast: "<place>, CC"
          "nyc2,tor1,ams3"                 DigitalOcean slugs, by city prefix
          "CANADA-1"                       Hyperstack: country word + index
+         "fr-par-2; pl-waw-2"             Scaleway zones: ISO country prefix
     3. otherwise None.
 
 A listing that spans several groups ("NL, Amsterdam; US, Ashburn, VA") is None
@@ -106,6 +107,9 @@ def _one(provider: str, part: str) -> str | None:
     low = p.lower()
     if provider == "aws":
         return AWS_REGIONS.get(low)
+    if provider == "scaleway" and re.match(r"^[a-z]{2}-[a-z]{3}-\d+$", low):
+        cc = low[:2].upper()  # Scaleway zones lead with the ISO country: fr-par-2, nl-ams-1, pl-waw-3
+        return COUNTRY_GROUP.get(cc)
     m = _CLOUD_CODE.match(low)
     if m:
         if provider == "lambda":

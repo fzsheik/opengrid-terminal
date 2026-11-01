@@ -1,8 +1,9 @@
 """OVHcloud Public Cloud: the public order catalogue, no API key.
 
 GET /1.0/order/catalog/public/cloud?ovhSubsidiary=XX is anonymous. OVHcloud
-prices each subsidiary in its own currency, and this app stores USD only, so
-the two USD catalogues are read (both state currencyCode USD in `locale`):
+prices each subsidiary in its own currency, and the two USD catalogues are read
+(both state currencyCode USD in `locale`). The EU catalogues are not converted
+(fx.py): they price the same flavors as World, a second official price list:
 
     US  api.us.ovhcloud.com  OVHcloud US, whose regions are all in the US
     WS  ca.api.ovh.com       OVHcloud "World", the international USD price list

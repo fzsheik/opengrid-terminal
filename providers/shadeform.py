@@ -3,8 +3,9 @@
 Shadeform resells other clouds' capacity and publishes every instance type, with
 its real cloud named in `cloud`, from one anonymous endpoint. Crusoe, Latitude.sh,
 Denvr, Boost Run, Horizon Compute and Phyntec have no usable public price feed of
-their own, and Scaleway's own catalogue prices in EUR only, so each is read from
-here and labelled "via-shadeform". The prices are Shadeform's listing of them, not the
+their own, so each is read from here and labelled "via-shadeform". Scaleway was
+read here until 2026-11-01; it now has its own feed (providers/scaleway.py, its EUR
+list prices converted at the ECB rate), and NO_LONGER_READ keeps it out of here. The prices are Shadeform's listing of them, not the
 cloud's own page: where we can compare (Hyperstack, DigitalOcean, Voltage Park)
 they match, and where a cloud has just repriced Shadeform can lag.
 
@@ -15,8 +16,7 @@ Each subclass fetches the whole catalogue and keeps only its own cloud's rows. C
 providers/crusoe.py: its prices come from here, its capacity from Crusoe's own API when a key is set.
 
 Capacity: each instance type's `availability` list says, per region, whether Shadeform can launch it now
-(a boolean). One row per (type, region) for the rental type the listing uses. Scaleway overrides this with
-its own per-zone stock levels (available / scarce / shortage), read from Scaleway's public API.
+(a boolean). One row per (type, region) for the rental type the listing uses.
 
 Not read, on purpose: "excesssupply" (Excess Supply is Shadeform's own white-label
 pool of other neoclouds' spare capacity; its types carry Lambda, Nebius and Phyntec
@@ -26,7 +26,6 @@ which is read directly).
 """
 
 import logging
-from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -45,15 +44,8 @@ BASE_URL = "https://api.shadeform.ai"
 ENDPOINT = "/v1/instances/types"
 REGION_MAX = 64  # compute_listings.region is varchar(64)
 
-SCALEWAY = "https://api.scaleway.com/instance/v1/zones/{zone}/products/servers"
-SCALEWAY_ZONES = ("fr-par-1", "fr-par-2", "fr-par-3", "nl-ams-1", "nl-ams-2", "nl-ams-3", "pl-waw-1", "pl-waw-2", "pl-waw-3")
-# Scaleway's stock words -> our tiers. "shortage" means creation fails: out of stock, no tier.
-SCALEWAY_TIER = {"available": "high", "scarce": "low"}
-# Scaleway's own price list: keyless, EUR only, one row per (server type, zone). Stored raw, never a listing (below).
-SCALEWAY_CATALOG = "https://api.scaleway.com/product-catalog/v2alpha1/public-catalog/products"
-SCALEWAY_CATALOG_PARAMS = {"product_types": "instance", "page_size": 1000}
-_NANO = Decimal(1_000_000_000)
-_PER_HOUR = {"minute": 60, "hour": 1}
+# Clouds with their own feed in this app: never read through Shadeform (that would count them twice).
+NO_LONGER_READ = frozenset({"scaleway"})
 
 
 def gpu_label(row: dict) -> str:
@@ -91,13 +83,13 @@ def regions_of(availability: list[dict], rental: str) -> tuple[bool | None, str 
     return bool(up), text or None, country
 
 
-def _failed(raw: RawResponse, why: str) -> RawResponse:
-    """A response that arrived but cannot be read: stored as a failed fetch, never as an empty source."""
-    return raw.model_copy(update={"ok": False, "error": why, "payload": None})
-
-
 class ShadeformCloud(Provider):
     """One cloud, as listed by Shadeform. Subclasses set `name` and `cloud`."""
+
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        if getattr(cls, "cloud", None) in NO_LONGER_READ:
+            raise TypeError(f"{cls.cloud} has its own feed; reading it through Shadeform would count it twice")
 
     cloud: str
     polling = PollingPolicy(interval_seconds=900, timeout_seconds=45)
@@ -136,7 +128,7 @@ class ShadeformCloud(Provider):
         for t in types:
             count = t.get("num_gpus") or 0
             cents = t.get("hourly_price")
-            if t.get("cloud") != cls.cloud or not count or cents is None:
+            if t.get("cloud") != cls.cloud or t.get("cloud") in NO_LONGER_READ or not count or cents is None:
                 continue  # another cloud, a CPU-only type, or no price
             if isinstance(cents, bool) or not isinstance(cents, int) or not isinstance(count, int):
                 raise ValueError(f"{cls.name}: hourly_price is no longer integer cents: {cents!r}")
@@ -359,143 +351,3 @@ class PhyntecProvider(ShadeformCloud):
     # monthly reservations only; the hourly rate is Shadeform's.
     name = "phyntec"
     cloud = "phyntec"
-
-
-def is_scaleway_gpu_product(p: dict) -> bool:
-    """A GPU Instance row in Scaleway's product catalogue (hardware.gpu present with a count)."""
-    gpu = (((p.get("properties") or {}).get("hardware") or {}).get("gpu") or {}) if isinstance(p, dict) else {}
-    return p.get("product_category") == "Instance" and isinstance(gpu.get("count"), int) and gpu["count"] > 0
-
-
-@dataclass(frozen=True)
-class ScalewayEurPrice:
-    """One Scaleway GPU server type's own list price in one zone, in EUR. Never a ComputeListing."""
-
-    offer_id: str          # e.g. "H100-1-80G": the same name as the listing sku (Shadeform's cloud_instance_type)
-    zone: str
-    gpu_type: str          # Scaleway's text, e.g. "H100-PCIe", "B300-SXM"
-    gpu_count: int
-    eur_per_instance_hour: Decimal
-    eur_per_gpu_hour: Decimal
-    unit: str              # the unit Scaleway priced it in ("minute" or "hour")
-    status: str            # general_availability, preview, retired, ...
-
-
-def scaleway_eur_prices(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ScalewayEurPrice]:
-    """Scaleway's own EUR prices from the stored product catalogue. Pure, read-only, for audit and later use.
-
-    Never called by normalize(): this app stores USD and converts no currency (the same rule as OVHcloud's EUR
-    catalogues), so Scaleway listings keep Shadeform's USD price until an FX policy exists. A row whose currency
-    is not EUR or whose unit is not minute / hour is skipped, never guessed.
-    """
-    rows = find_endpoint(by_endpoint, SCALEWAY_CATALOG)
-    body = rows[0].payload if rows else None
-    out = []
-    for p in (body or {}).get("products") or [] if isinstance(body, dict) else []:
-        if not is_scaleway_gpu_product(p):
-            continue
-        retail = (p.get("price") or {}).get("retail_price") or {}
-        unit = (p.get("unit_of_measure") or {})
-        per_hour = _PER_HOUR.get(unit.get("unit"))
-        units, nanos = retail.get("units"), retail.get("nanos")
-        offer = ((p.get("properties") or {}).get("instance") or {}).get("offer_id") or p.get("product")
-        zone = (p.get("locality") or {}).get("zone")
-        if retail.get("currency_code") != "EUR" or per_hour is None or unit.get("size") != 1 \
-                or not isinstance(units, int) or not isinstance(nanos, int) or not offer or not zone:
-            continue
-        hourly = (Decimal(units) + Decimal(nanos) / _NANO) * per_hour
-        gpu = p["properties"]["hardware"]["gpu"]
-        out.append(ScalewayEurPrice(offer_id=offer, zone=zone, gpu_type=str(gpu.get("type") or ""),
-                                    gpu_count=gpu["count"], eur_per_instance_hour=hourly,
-                                    eur_per_gpu_hour=hourly / gpu["count"], unit=unit["unit"],
-                                    status=str(p.get("status") or "")))
-    return out
-
-
-class ScalewayProvider(ShadeformCloud):
-    # Prices: Shadeform's USD listing. Scaleway's own product catalogue is keyless but prices only in EUR (per
-    # minute), and this app stores USD with no FX conversion (as for OVHcloud's EUR catalogues), so it is stored
-    # raw next to the Shadeform response and read only by scaleway_eur_prices(), never into listings or statistics.
-    # Capacity comes from Scaleway itself: its per-zone stock levels beat Shadeform's yes/no.
-    name = "scaleway"
-    cloud = "scaleway"
-
-    async def fetch(self) -> list[RawResponse]:
-        out = await super().fetch()  # prices, from Shadeform
-        out.append(await self._catalog())  # Scaleway's own EUR prices, raw only; fails open
-        for zone in SCALEWAY_ZONES:
-            catalogue = await self._all_pages(zone, "")
-            availability = await self._all_pages(zone, "/availability")
-            if catalogue.ok and availability.ok:
-                gpus = catalogue.payload["servers"]
-                availability = reshaped(availability, {"zone": zone, "servers": {
-                    k: v for k, v in availability.payload["servers"].items() if k in gpus}})
-            out += [catalogue, availability]
-        return out
-
-    async def _catalog(self) -> RawResponse:
-        """Scaleway's own Instance catalogue, GPU rows only, verbatim. A response without a products list, a partial
-        page set, or no GPU row at all is stored as a failure: it never reaches listings, so it cannot break prices."""
-        merged, first, total = [], None, None
-        for page in range(1, 4):
-            resp = await self.get(SCALEWAY_CATALOG, params={**SCALEWAY_CATALOG_PARAMS, "page": page})
-            body = resp.payload
-            if not resp.ok or not isinstance(body, dict) or not isinstance(body.get("products"), list):
-                return resp if not resp.ok else _failed(resp, "scaleway catalogue: no products list - reshaped")
-            first, total = first or resp, body.get("total_count")
-            merged += body["products"]
-            if not body["products"] or not isinstance(total, int) or len(merged) >= total:
-                break
-        if isinstance(total, int) and len(merged) < total:
-            return _failed(first, f"scaleway catalogue: {len(merged)} of {total} products after 3 pages")
-        gpus = [p for p in merged if is_scaleway_gpu_product(p)]
-        if not gpus:
-            return _failed(first, "scaleway catalogue: no GPU Instance rows - reshaped")
-        return reshaped(first, {"total_count": total, "products": gpus})
-
-    async def _all_pages(self, zone: str, suffix: str) -> RawResponse:
-        """Every page of one Scaleway listing (100 per page) as one response; the catalogue keeps GPU types only.
-        A failed page is returned as the failure, so a partial set is never stored as complete."""
-        url, merged, first = SCALEWAY.format(zone=zone) + suffix, {}, None
-        for page in range(1, 6):
-            resp = await self.get(url, params={"per_page": 100, "page": page})
-            if not resp.ok or not isinstance(resp.payload, dict) or not isinstance(resp.payload.get("servers"), dict):
-                return resp
-            first = first or resp
-            merged.update(resp.payload["servers"])
-            if len(resp.payload["servers"]) < 100:
-                break
-        if not suffix:
-            merged = {k: v for k, v in merged.items() if v.get("gpu")}
-        return reshaped(first, {"zone": zone, "servers": merged})
-
-    @classmethod
-    def normalize_capacity(cls, by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
-        """One (GPU server type, zone) stock word becomes one observation."""
-        catalogues = {s.payload.get("zone"): s.payload.get("servers") or {}
-                      for ep, rows in by_endpoint.items() if "/products/servers" in ep and "/availability" not in ep
-                      for s in rows if isinstance(s.payload, dict)}
-        out = []
-        for ep, rows in by_endpoint.items():
-            if "/products/servers/availability" not in ep:
-                continue
-            snap = rows[0]
-            body = snap.payload if isinstance(snap.payload, dict) else {}
-            zone, stock = body.get("zone"), body.get("servers")
-            if not isinstance(stock, dict):
-                raise ValueError(f"scaleway: {ep} has no servers map - response reshaped")
-            for sku, a in stock.items():
-                info = catalogues.get(zone, {}).get(sku) or {}
-                if not info.get("gpu"):
-                    continue  # catalogue missing for this zone, or not a GPU type
-                g = info.get("gpu_info") or {}
-                mem = g.get("gpu_memory")
-                raw_name = (g.get("gpu_name") or sku) + (f" {round(mem / 2**30)}GB" if mem else "")
-                word = str((a or {}).get("availability") or "")
-                tier = SCALEWAY_TIER.get(word)
-                out.append(CapacityObservation(
-                    provider="scaleway", sku=sku, region=zone, country=(zone or "")[:2].upper() or None,
-                    raw_gpu_name=raw_name, canonical_gpu_name=canonical.canonical_gpu_name(raw_name),
-                    gpu_count=info["gpu"], in_stock=True if tier else (False if word == "shortage" else None),
-                    tier=tier, raw_value=word or "(missing)", source=ep, observed_at=snap.fetched_at))
-        return out
