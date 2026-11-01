@@ -83,6 +83,11 @@ can miss short price moves entirely. Stock is never inferred from an archived pa
    stores each provider's current `catalog.zip` verbatim in `catalog_snapshots` (sha256, size, Last-Modified),
    once per (provider, version). Nothing reads these into prices. Licence recorded: gpuhunt's code is MPL-2.0;
    the bucket states no licence for the data.
+6. **SkyPilot catalogue history** (`backfill/datasets/skypilot.py`): **not ingested.** The catalogue repository
+   has no licence file, so the loader refuses to run unless `skypilot_catalog_enabled` is set *and*
+   `skypilot_catalog_licence` names the licence SkyPilot confirm (recorded on every point). When enabled: one
+   revision per cloud per UTC day (that day's last commit), GPU rows only, on-demand per region and spot per
+   zone, `basis = catalog_commit`, each point linked to its commit.
 
 ## Parsing
 

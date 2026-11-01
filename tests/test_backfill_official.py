@@ -301,6 +301,74 @@ def test_gpuhunt_snapshot_stores_each_version_once():
         scratchdb.drop(DB)
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# 5. SkyPilot catalogue: ready, disabled
+# ---------------------------------------------------------------------------------------------------------------
+
+_SKY_AWS = ("InstanceType,AcceleratorName,AcceleratorCount,vCPUs,MemoryGiB,GpuInfo,Price,SpotPrice,Region,AvailabilityZone\n"
+            "p3.2xlarge,V100,1.0,8.0,61.0,V100,3.06,0.9792,us-east-1,use1-az1\n"
+            "p3.2xlarge,V100,1.0,8.0,61.0,V100,3.06,0.9500,us-east-1,use1-az2\n"
+            "c5.large,,,2.0,4.0,,0.085,0.03,us-east-1,use1-az1\n")
+_SKY_LAMBDA = ("InstanceType,AcceleratorName,AcceleratorCount,vCPUs,MemoryGiB,Price,Region,GpuInfo,SpotPrice\n"
+               "gpu_8x_a100,A100,8.0,124.0,1800.0,15.92,us-east-1,,\n"
+               "gpu_1x_a100_sxm4,A100,1.0,30.0,200.0,1.29,us-east-1,,\n"
+               "gpu_1x_h100_pcie,H100,1.0,26.0,200.0,2.49,us-east-1,,\n")
+
+
+def test_skypilot_is_disabled_by_default():
+    from backfill.datasets import skypilot
+    from config import settings
+    assert settings.skypilot_catalog_enabled is False and not skypilot.enabled()
+    try:
+        skypilot.run(repo=Path("/nonexistent"))
+    except skypilot.Disabled:
+        pass
+    else:
+        raise AssertionError("must refuse while no licence is confirmed")
+
+
+def test_skypilot_loader_on_a_sample():
+    import subprocess
+    from backfill.datasets import skypilot
+    at = datetime(2023, 1, 17, tzinfo=timezone.utc)
+    ls = skypilot.listings("aws", _SKY_AWS, at)
+    assert {(l.listing_id, l.market_type) for l in ls} == {("p3.2xlarge:us-east-1", "on_demand"),
+                                                           ("p3.2xlarge:use1-az1:spot", "spot"),
+                                                           ("p3.2xlarge:use1-az2:spot", "spot")}
+    assert all(l.canonical_gpu_name == "NVIDIA Tesla V100 16GB SXM2" for l in ls)
+    lam = {l.sku: l for l in skypilot.listings("lambda", _SKY_LAMBDA, at)}
+    assert lam["gpu_8x_a100"].canonical_gpu_name is None, "A100 without a form factor stays unmapped"
+    assert lam["gpu_1x_a100_sxm4"].canonical_gpu_name == "NVIDIA A100 40GB SXM4"
+    assert lam["gpu_1x_h100_pcie"].canonical_gpu_name == "NVIDIA H100 80GB PCIe"
+    assert lam["gpu_8x_a100"].price_per_gpu_hour == D("1.99")
+    assert skypilot.listings("fluidstack", _SKY_AWS, at) == [], "clouds OpenGrid does not track are skipped"
+    _db()
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            repo = Path(d)
+            git = lambda *a, **env: subprocess.run(["git", "-C", d, *a], check=True, capture_output=True,  # noqa: E731
+                                                   env={"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin",
+                                                        "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                                                        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t", **env})
+            git("init", "-q")
+            path = repo / "catalogs/v7/lambda/vms.csv"
+            path.parent.mkdir(parents=True)
+            for i, (when, body) in enumerate((("2023-01-17T10:00:00Z", _SKY_LAMBDA),
+                                              ("2023-01-17T18:00:00Z", _SKY_LAMBDA.replace("1.29", "1.10")),
+                                              ("2023-02-01T10:00:00Z", _SKY_LAMBDA.replace("1.29", "1.99")))):
+                path.write_text(body)
+                git("add", ".")
+                git("commit", "-q", "-m", f"c{i}", GIT_COMMITTER_DATE=when, GIT_AUTHOR_DATE=when)
+            r = skypilot.run(repo=repo, clouds=["lambda"], log=lambda m: None, force_for_tests=True)
+            assert r["clouds"]["lambda"]["revisions"] == 2, "one revision per UTC day (that day's last)"
+        rows = _q("SELECT * FROM archived_prices WHERE sku = 'gpu_1x_a100_sxm4' ORDER BY observed_at")
+        assert [x.price_per_gpu_hour for x in rows] == [D("1.10"), D("1.99")]
+        assert rows[0].basis == "catalog_commit" and rows[0].source == "skypilot_catalog"
+        assert "/blob/" in rows[0].source_url and rows[0].licence == "test-only"
+    finally:
+        scratchdb.drop(DB)
+
+
 TESTS = [v for k, v in list(globals().items()) if k.startswith("test_") and callable(v)]
 
 if __name__ == "__main__":

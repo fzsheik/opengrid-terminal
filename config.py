@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # Archived price history sources (backfill/; methodology/archived-history.md).
     # Daily raw copy of dstack's public gpuhunt catalogues (their S3 versions expire after ~90 days): catalog_snapshots.
     gpuhunt_snapshot_enabled: bool = True
+    # SkyPilot catalogue git history -> archived points. OFF until SkyPilot confirm a licence for the catalogue repo
+    # (it has none today; backfill/datasets/skypilot.py). Do not switch on before that answer is on file.
+    skypilot_catalog_enabled: bool = False
+    skypilot_catalog_licence: str | None = None   # the licence SkyPilot confirm, recorded on every point; required
     # OpenGrid API keys are stored only as HMAC-SHA256(pepper, key). Required when deployed;
     # changing it invalidates every issued key. Unset in dev: a derived dev pepper, with a warning.
     api_key_pepper: str | None = None
