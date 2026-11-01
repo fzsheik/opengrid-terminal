@@ -995,7 +995,10 @@ OVHCLOUD = ProviderMapping(
 
 SCALEWAY = _shadeform("scaleway", "Scaleway", [
     "Scaleway does publish a keyless catalogue (api.scaleway.com product-catalog), but in EUR per "
-    "minute only; this app stores USD without FX, so Shadeform's USD listing is read instead.",
+    "minute only; this app stores USD without FX, so Shadeform's USD listing is read instead. "
+    "Scaleway's own EUR catalogue (GPU Instance rows, every zone, including the H100-SXM types Shadeform "
+    "lacks) is fetched each poll and stored raw only (providers/shadeform.py scaleway_eur_prices); it never "
+    "becomes a listing or enters statistics until an FX policy exists.",
     "Only Scaleway's PCIe H100 / L4 / L40S VMs and the B300-SXM node are in Shadeform's list; "
     "its H100-SXM and GH200 types are not.",
     "A general-purpose cloud: never part of a neocloud index.",
