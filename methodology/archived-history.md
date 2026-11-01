@@ -29,12 +29,22 @@ can miss short price moves entirely. Stock is never inferred from an archived pa
    original bytes (`/web/<timestamp>id_/<url>`, without the archive's toolbar) are parsed. Every row keeps
    the capture's viewable URL (`source_url`) so any number can be checked against the page it came from,
    and the sha256 of the bytes that were parsed.
-2. **AWS price-list versions** (`source = aws_price_list`). AWS publishes every past version of the EC2
-   price list with its effective period. For each version whose period overlaps the window, the us-east-1
-   CSV is streamed and filtered exactly like the live AWS poller (on-demand, Linux, shared tenancy, no
-   pre-installed software, the same `GPU_INSTANCES` table). `observed_at` is the period start and
-   `valid_to` the period end: the price applied for the whole period. The current version reproduces the
+2. **AWS price-list versions** (`source = aws_price_list`, `basis = price_list_version`). AWS publishes every
+   past version of the EC2 price list with its effective period: 123 versions, from 2015-12 to now
+   (`python -m backfill aws`). For each version the us-east-1 CSV is streamed (never saved; its GPU rows are
+   cached) and filtered exactly like the live AWS poller (on-demand, Linux, shared tenancy, no pre-installed
+   software, the same `GPU_INSTANCES` table, plus older types the poller no longer lists: p2, g2, g3, p3dn, stored
+   unmapped). `observed_at` is the period start and `valid_to` the period end: the price applied for the whole
+   period. Every row's note names the version id and its publication date. The current version reproduces the
    live poller's prices exactly (checked on import).
+   - Files before 2018 lack some columns. A missing `CapacityStatus` reads as "Used" (the only status of a normal
+     instance-hour) and a missing `OfferingClass` as "standard" (convertible RIs began in 2016-09). The 2017-11
+     version gives p3.2xlarge $3.06/h, AWS's launch price.
+   - **Reserved instances** from the same files are stored with `market_type` `reserved_1y` / `reserved_3y`,
+     one row per (instance type, term, offering class, purchase option), at the effective hourly price over the
+     term: hourly + upfront / (8,760 h x years). The note keeps the upfront fee and hourly rate. They are never
+     read as on-demand or spot: the archived reader takes one market at a time and the API offers only
+     `on_demand` and `spot`.
 
 ## Parsing
 

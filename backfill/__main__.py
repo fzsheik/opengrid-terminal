@@ -3,6 +3,8 @@
     python -m backfill survey                          captures per source, nothing downloaded or stored
     python -m backfill import [--since 2025-10-21] [--until 2026-10-21] [--provider coreweave ...]
                               [--no-download] [--dry-run] [--no-aws] [--report report.json]
+    python -m backfill aws [--since 2015-12-01] [--no-download] [--dry-run]
+                              AWS's EC2 price-list archive only (all 123 versions by default; on-demand + reserved)
 
 Downloads go one at a time through backfill/wayback.py (polite, cached under OPENGRID_ARCHIVE_CACHE,
 default ~/.cache/opengrid/wayback), so the first full import takes about an hour and a re-run takes seconds.
@@ -19,6 +21,8 @@ from backfill import load
 from backfill.sources import sources
 from backfill.wayback import Wayback
 
+AWS_FIRST_VERSION = "2015-12-01"   # the first version in AWS's index
+
 
 def main(argv=None) -> int:
     today = datetime.now(timezone.utc).date()
@@ -33,7 +37,18 @@ def main(argv=None) -> int:
     p.add_argument("--dry-run", action="store_true", help="parse and report, store nothing")
     p.add_argument("--no-aws", action="store_true", help="skip AWS's price-list archive")
     p.add_argument("--report", help="write the full JSON report (failures, unmapped GPUs) here")
+    p = sub.add_parser("aws", help="AWS's EC2 price-list archive (on-demand + 1/3-year reserved)")
+    p.add_argument("--since", default=AWS_FIRST_VERSION)
+    p.add_argument("--no-download", action="store_true")
+    p.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
+
+    if a.cmd == "aws":
+        r = load.run_aws(datetime.strptime(a.since, "%Y-%m-%d").replace(tzinfo=timezone.utc), dry_run=a.dry_run,
+                         download=not a.no_download)
+        for x in r["failures"]:
+            print("failed:", x, file=sys.stderr)
+        return 1 if r["failed"] else 0
 
     since, until = a.since.replace("-", ""), a.until.replace("-", "")
     srcs = [s for s in sources() if not a.provider or s.provider in a.provider]
