@@ -1425,6 +1425,45 @@ HYDRAHOST = ProviderMapping(
 )
 
 
+CUDO = ProviderMapping(
+    provider="cudo",
+    display_name="CUDO Compute (VMs and bare metal)",
+    endpoints={
+        "GET rest.compute.cudo.org/v1/vms/machine-types": "VM GPU, vCPU and RAM prices per data centre; free GPUs",
+        "GET rest.compute.cudo.org/v1/machines-types": "bare-metal server prices per commitment term; free servers",
+    },
+    fields=_fields(
+        "cudo",
+        sku=(DERIVED, '"vm:{machineType}" or "baremetal:{id}"'),
+        listing_id=(DERIVED, "{sku}@{dataCenterId}"),
+        raw_gpu_name=(RAW, "gpuModelId", 'e.g. "nvidia-h100"'),
+        gpu_count=(DERIVED, "1 for a VM (priced per GPU); bare metal: gpus"),
+        region=(RAW, "dataCenterId", 'e.g. "no-kristiansand-1"'),
+        country=(DERIVED, "dataCenterId prefix -> ISO code"),
+        price_per_gpu_hour=(DERIVED, "VM: gpuPriceHr + vCPU x vcpuPriceHr + RAM x memoryGibPriceHr; metal: priceHr / gpus",
+                            "USD decimal strings, not cents"),
+        price_per_instance_hour=(DERIVED, "VM: = per GPU; metal: prices[COMMITMENT_TERM_NONE].priceHr"),
+        currency=(CONSTANT, '"USD"', "not stated by the API; the console prices in USD"),
+        provider_tier=(DERIVED, '"vm" | "baremetal"'),
+        available=(DERIVED, "capacity > 0"),
+        capacity=(RAW, "VM totalGpuFree (gpu) | metal machinesFree (instance)"),
+        capacity_unit=(DERIVED, '"gpu" | "instance"'),
+        vcpu=(DERIVED, "VM: max(1, minVcpuPerGpu); metal: cpuCores"),
+        ram_gb=(DERIVED, "VM: ceil(vCPU / maxVcpuPerMemoryGib); metal: memoryGib", "GiB"),
+        storage_gb=(DERIVED, "metal: diskSizeGib; VM: None", "VM boot disk billed extra"),
+    ),
+    quirks=[
+        "VMs are a la carte; the listing is the smallest 1-GPU VM the API allows (e.g. H100: 1 vCPU, 5 GiB). "
+        "Boot disk and IPv4 are extra and not added.",
+        "Only in-stock or recently stocked types are returned (Norway and Sweden on 2026-11-01).",
+        "Bare-metal commitment terms other than COMMITMENT_TERM_NONE are not read.",
+        "CAPABILITIES.md recorded 'public on-demand closed 2026-03-31' in Oct 2026; unconfirmed on 2026-11-01 "
+        "while the API still states no-commitment prices and free capacity.",
+        '"nvidia-a100-pcie" (memory not stated) and "nvidia-l40s-graphics" stay unmapped.',
+    ],
+)
+
+
 MODAL = ProviderMapping(
     provider="modal",
     display_name="Modal (serverless GPU)",
@@ -1814,6 +1853,7 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         CLORE,
         AKASH,
         HYDRAHOST,
+        CUDO,
     )
 }  # fmt: skip
 

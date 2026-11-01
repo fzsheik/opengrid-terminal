@@ -533,6 +533,13 @@ _add("NVIDIA RTX 4090 24GB", "nvidia rtx4090 24Gi PCIe")
 _add("NVIDIA RTX 5090 32GB", "nvidia rtx5090 32Gi PCIe")
 _add("NVIDIA T4 16GB", "nvidia t4 16Gi PCIe")
 _add("NVIDIA Tesla V100 16GB SXM2", "nvidia v100 16Gi SXM2")
+# CUDO Compute (rest.compute.cudo.org): gpuModelId. Its VM catalogue names nvidia-h100 "H100 SXM" (SXM5 80GB).
+# Unmapped: "nvidia-a100-pcie" (40 or 80 GB not stated) and "nvidia-l40s-graphics" (an L40S in graphics
+# mode, priced apart; kept apart rather than merged).
+_add("NVIDIA H100 80GB SXM5", "nvidia-h100")
+_add("NVIDIA H100 94GB NVL", "nvidia-h100-nvl-pcie")
+_add("NVIDIA L40S 48GB", "nvidia-l40s")
+_add(None, "nvidia-a100-pcie", "nvidia-l40s-graphics")
 # Hydra Host inventory: nvidia-smi names, already mapped above, except Quadro RTX 8000 (no canonical yet).
 _add(None, "Quadro RTX 8000")
 _add(None, "nvidia rtx5000 16Gi PCIe", "nvidia v100 32Gi PCIe", "nvidia gtx1050 2Gi PCIe", "nvidia m4000 8Gi PCIe",

@@ -22,6 +22,7 @@ from providers.civo import CivoProvider
 from providers.clore import CloreProvider
 from providers.coreweave import CoreWeaveProvider
 from providers.crusoe import CrusoeProvider
+from providers.cudo import CudoProvider
 from providers.deepinfra import DeepInfraProvider
 from providers.digitalocean import DigitalOceanProvider
 from providers.e2e import E2EProvider
@@ -117,6 +118,7 @@ PROVIDERS: dict[str, type[Provider]] = {
         PaperspaceProvider,
         AkashProvider,
         HydraHostProvider,
+        CudoProvider,
     )
 }
 
@@ -174,6 +176,7 @@ __all__ = [
     "PaperspaceProvider",
     "AkashProvider",
     "HydraHostProvider",
+    "CudoProvider",
     "find_endpoint",
     "gather_limited",
     "to_decimal",

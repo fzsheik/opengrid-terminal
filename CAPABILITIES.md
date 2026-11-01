@@ -1,7 +1,7 @@
 # OpenGrid Terminal: Capabilities & Features
 
 **OpenGrid Terminal is a market-intelligence and execution terminal for GPU compute.**
-It watches 50 GPU clouds, turns their prices into one trustworthy market, explains what is moving
+It watches 51 GPU clouds, turns their prices into one trustworthy market, explains what is moving
 and why, and routes a workload to the best provider through one OpenGrid API key, with every
 decision audited and every dollar reconciled.
 
@@ -44,7 +44,7 @@ important) what it deliberately does not claim.
 
 | | |
 |---|---|
-| GPU clouds monitored | **50** (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb, Civo, Atlantic.Net, E2E Networks, Modal, Replicate, Baseten, Beam, Arkane Cloud, VESSL AI, Mithril, DeepInfra, SimplePod, Nosana, Thunder Compute, Clore.ai, Paperspace, Akash Network, Hydra Host) |
+| GPU clouds monitored | **51** (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb, Civo, Atlantic.Net, E2E Networks, Modal, Replicate, Baseten, Beam, Arkane Cloud, VESSL AI, Mithril, DeepInfra, SimplePod, Nosana, Thunder Compute, Clore.ai, Paperspace, Akash Network, Hydra Host, CUDO Compute) |
 | Canonical GPU models | **91**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL) |
 | OpenGrid indices defined | **251** (per-GPU, family composites, overall compute index, regional, spot, provider-class) |
 | News & signal sources | **44** verified feeds (hyperscalers, neoclouds, NVIDIA/AMD, US Federal Register, trade press) |
@@ -64,7 +64,7 @@ important) what it deliberately does not claim.
 ## 2. Architecture
 
 ```
-                    ┌──────────────────────── 50 GPU clouds ───────────────────────┐
+                    ┌──────────────────────── 51 GPU clouds ───────────────────────┐
                     │ APIs · public price pages · pricing files · aggregator feeds │
                     └──────────────────────────────┬────────────────────────────────┘
                                                    │ independent poll loop per provider
@@ -160,6 +160,7 @@ provider never holds up the others.
 | Scaleway | general cloud | public API (its own EUR catalogue, converted to USD at the ECB reference rate; via Shadeform until 2026-11-01) |
 | Akash Network | decentralized | public API (Akash Console's bid-derived summary: allocatable-weighted average of each provider's chosen bid, up to 31 days old; free/total GPUs) |
 | Hydra Host | marketplace | public API (bare-metal inventory per device, cents per hour; on-demand and interruptible; stock word per device) |
+| CUDO Compute | neocloud | public API (VM and bare-metal machine types; smallest 1-GPU VM config; free GPUs / servers per data centre) |
 | Crusoe · Denvr · Latitude.sh · Boost Run · Horizon Compute · Phyntec · Paperspace | neocloud | aggregator (via Shadeform; Paperspace a few cents above its own list) |
 
 Candidates checked and **not** added (2026-10-13): Paperspace (its own page contradicts the aggregator),
@@ -180,7 +181,7 @@ docs.clore.ai limits use to internal purposes; see providers/clore.py). Also dec
 Paperspace (still contradicts Shadeform), Lightning AI and Saturn Cloud (resell AWS/GCP/Lambda/Nebius),
 CloudRift, Novita, Cerebrium, fal.ai and Northflank (terms forbid automated access), Inferless (shut down),
 Cirrascale (monthly only), GMI Cloud, HPC-AI and Taiga ("from" floors), Runcrate, Spheron, Qubrid, Dataoorts and
-Andromeda (resellers, brokers or no stable source), Fluidstack and Nscale (still no public prices). Paperspace was added on 2026-11-01 through Shadeform's catalogue, with the gap stated: Shadeform's rate is Paperspace's own on-demand list plus $0.04/GPU-h ($0.10 on the A100s), i.e. Shadeform's resale price (providers/shadeform.py). Akash, declined for its bid-derived figures, was added on 2026-11-01 as what it is: one market-summary listing per GPU at the allocatable-weighted average of each provider's chosen bid, with the 31-day window and the cross-variant fallback documented (providers/akash.py); io.net and CloudRift stay declined (their terms forbid automated access to their services; re-checked 2026-11-01). Hydra Host was added on 2026-11-01 from its public Brokkr inventory API (prices in cents, checked against its USD category prices).
+Andromeda (resellers, brokers or no stable source), Fluidstack and Nscale (still no public prices). Paperspace was added on 2026-11-01 through Shadeform's catalogue, with the gap stated: Shadeform's rate is Paperspace's own on-demand list plus $0.04/GPU-h ($0.10 on the A100s), i.e. Shadeform's resale price (providers/shadeform.py). Akash, declined for its bid-derived figures, was added on 2026-11-01 as what it is: one market-summary listing per GPU at the allocatable-weighted average of each provider's chosen bid, with the 31-day window and the cross-variant fallback documented (providers/akash.py); io.net and CloudRift stay declined (their terms forbid automated access to their services; re-checked 2026-11-01). Hydra Host was added on 2026-11-01 from its public Brokkr inventory API (prices in cents, checked against its USD category prices). CUDO Compute was added on 2026-11-01: its keyless machine-type API still states no-commitment USD prices with free capacity, and the earlier 'on-demand closed' note could not be confirmed (providers/cudo.py).
 
 ### 3.2 Normalization
 - Every listing becomes a standard `ComputeListing`: provider, SKU, GPU, count, region, country,

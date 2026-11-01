@@ -44,6 +44,7 @@ from providers import (
     BasetenProvider,
     BeamProvider,
     CrusoeProvider,
+    CudoProvider,
     DenvrProvider,
     DigitalOceanProvider,
     ThunderComputeProvider,
@@ -168,6 +169,7 @@ def build_fetchers() -> list[Provider]:
             NosanaProvider,
             AkashProvider,
             HydraHostProvider,
+            CudoProvider,
         )
     )
     return fetchers
