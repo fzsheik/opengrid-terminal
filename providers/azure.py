@@ -19,16 +19,34 @@ meters are Azure Batch pricing and are never read.
 
 Two regions: eastus (the AWS us-east-1 analogue) and eastus2, which carries the
 ND H200 v5 and ND MI300X v5 sizes eastus does not.
+
+Reservations (raw only, never a listing). A second filtered GET per region asks the
+same API for priceType 'Reservation': the 1, 3 and 5-year reserved-instance prices
+of the same NC / ND / NV sizes (~100 rows a region, one page). They are stored as
+their own endpoint, RESERVATION_PATH#region, so they can be read later without
+refetching, the way GCP's commitments and Jarvislabs' reserved_pricing are kept in
+raw. normalize() never reads them: reserved prices must not enter on-demand
+listings, indices or market statistics until a reserved-price data model exists.
+reservation_price() turns one stored row into an effective $/GPU-hour for that
+later use. A row's retailPrice is the WHOLE-TERM price of the whole VM, even though
+its unitOfMeasure says "1 Hour":
+
+    $/GPU-hour = retailPrice / (8,760 hours x term years) / GPUs per VM
+
+8,760 is 365 x 24 (Azure's own 730-hour month x 12); leap days are ignored.
 """
 
 import logging
+import re
+from dataclasses import dataclass
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import httpx
 
 import canonical
 from models import ComputeListing, RawResponse
-from providers.base import PollingPolicy, Provider, find_endpoint, reshaped, to_decimal
+from providers.base import PollingPolicy, Provider, reshaped, to_decimal
 
 if TYPE_CHECKING:
     from tables import RawSnapshot
@@ -43,18 +61,25 @@ COUNTRY = {"eastus": "US", "eastus2": "US"}
 MAX_PAGES = 3
 
 
-def odata_filter(region: str) -> str:
+CONSUMPTION, RESERVATION = "Consumption", "Reservation"
+# Reservations get their own endpoint label, so normalize() (which reads only
+# endpoint(region), by exact key) can never pick them up, and history keeps them apart.
+RESERVATION_PATH = f"{PATH}/reservation"
+
+
+def odata_filter(region: str, price_type: str = CONSUMPTION) -> str:
+    """Server-side filter: one region, one price type, GPU VM families only, no Windows."""
     return (
-        f"serviceName eq 'Virtual Machines' and armRegionName eq '{region}' and priceType eq 'Consumption' "
+        f"serviceName eq 'Virtual Machines' and armRegionName eq '{region}' and priceType eq '{price_type}' "
         "and (startswith(armSkuName,'Standard_NC') or startswith(armSkuName,'Standard_ND') "
         "or startswith(armSkuName,'Standard_NV')) and contains(productName,'Windows') eq false"
     )
 
 
-def endpoint(region: str) -> str:
+def endpoint(region: str, price_type: str = CONSUMPTION) -> str:
     """The stored endpoint label. The encoded filter outgrows the 256-char endpoint
     column, so it is kept verbatim in the snapshot's `request` instead."""
-    return f"{PATH}#{region}"
+    return f"{PATH if price_type == CONSUMPTION else RESERVATION_PATH}#{region}"
 
 
 # The size pages' accelerator strings, verbatim. canonical.py maps the unambiguous ones.
@@ -112,22 +137,26 @@ GPU_SIZES: dict[str, tuple[int, str]] = {
 _FIELDS = ("armSkuName", "skuName", "productName", "retailPrice", "unitOfMeasure", "type",
            "currencyCode", "armRegionName", "location", "effectiveStartDate")
 _REQUIRED = ("armSkuName", "skuName", "productName", "retailPrice", "unitOfMeasure", "type", "armRegionName")
+# A reservation row also states its term ("1 Year", "3 Years", "5 Years").
+_RES_FIELDS = (*_FIELDS, "reservationTerm")
+_RES_REQUIRED = (*_REQUIRED, "reservationTerm")
 
 
-def extract(body, region: str) -> tuple[list[dict], str | None]:
+def extract(body, region: str, price_type: str = CONSUMPTION) -> tuple[list[dict], str | None]:
     """The rows of one response page, and the next page's link. Raises on a new shape."""
     if not isinstance(body, dict) or not isinstance(body.get("Items"), list):
         raise ValueError("azure: response has no Items list - API reshaped")
     if body.get("BillingCurrency", "USD") != "USD":
         raise ValueError(f"azure: billing currency {body.get('BillingCurrency')!r}, expected USD")
+    fields, required = (_FIELDS, _REQUIRED) if price_type == CONSUMPTION else (_RES_FIELDS, _RES_REQUIRED)
     rows = []
     for item in body["Items"]:
-        missing = [k for k in _REQUIRED if k not in item]
+        missing = [k for k in required if k not in item]
         if missing:
             raise ValueError(f"azure: price row lost {missing} - API reshaped")
-        if item["armRegionName"] != region or item["type"] != "Consumption":
+        if item["armRegionName"] != region or item["type"] != price_type:
             raise ValueError(f"azure: filter not honoured ({item['armRegionName']}, {item['type']})")
-        rows.append({k: item.get(k) for k in _FIELDS})
+        rows.append({k: item.get(k) for k in fields})
     return rows, body.get("NextPageLink") or None
 
 
@@ -144,9 +173,89 @@ def market(row: dict) -> str | None:
     return "spot" if sku.endswith(" Spot") else "on_demand"
 
 
+HOURS_PER_YEAR = Decimal(8760)  # 365 x 24; Azure's 730-hour month x 12
+_TERM = re.compile(r"^(\d+) Years?$")
+
+
+@dataclass(frozen=True)
+class ReservedPrice:
+    """One Azure reserved-instance price, made comparable. Never a ComputeListing."""
+
+    sku: str  # VM size, e.g. Standard_ND96isr_H100_v5
+    region: str
+    term_years: int  # 1, 3 or 5
+    raw_gpu_name: str
+    canonical_gpu_name: str | None
+    gpu_count: int
+    term_price: Decimal  # the whole VM for the whole term, as Azure states it
+    term_hours: Decimal
+    price_per_instance_hour: Decimal
+    price_per_gpu_hour: Decimal
+    currency: str
+    effective_start: str | None
+
+
+def reservation_price(row: dict) -> ReservedPrice | None:
+    """A stored reservation row -> its effective per-GPU-hour price. Pure.
+
+    None for anything that is not a priced reservation of a whole-GPU size in
+    GPU_SIZES (fractional, retired or unlisted sizes, an unknown term, no price).
+    """
+    if row.get("type") != RESERVATION or row.get("armSkuName") not in GPU_SIZES:
+        return None
+    m = _TERM.match(str(row.get("reservationTerm") or "").strip())
+    price = to_decimal(row.get("retailPrice"))
+    if not m or int(m.group(1)) <= 0 or price is None or price <= 0:
+        return None
+    years = int(m.group(1))
+    count, raw_name = GPU_SIZES[row["armSkuName"]]
+    hours = HOURS_PER_YEAR * years
+    per_vm_hour = price / hours
+    return ReservedPrice(
+        sku=row["armSkuName"],
+        region=row.get("armRegionName") or "",
+        term_years=years,
+        raw_gpu_name=raw_name,
+        canonical_gpu_name=canonical.canonical_gpu_name(raw_name),
+        gpu_count=count,
+        term_price=price,
+        term_hours=hours,
+        price_per_instance_hour=per_vm_hour,
+        price_per_gpu_hour=per_vm_hour / count,
+        currency=row.get("currencyCode") or "USD",
+        effective_start=row.get("effectiveStartDate"),
+    )
+
+
+def reserved_prices(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ReservedPrice]:
+    """Every current reserved price in stored snapshots, one per (region, size, term). Pure, read-only.
+
+    Not called by normalize() or anything downstream of it: nothing here becomes a
+    listing, an index vote or a market statistic.
+    """
+    out: dict[tuple[str, str, int], ReservedPrice] = {}
+    for region in REGIONS:
+        for snapshot in by_endpoint.get(endpoint(region, RESERVATION)) or []:
+            payload = snapshot.payload
+            if not isinstance(payload, dict) or payload.get("region") != region:
+                continue
+            if payload.get("price_type") != RESERVATION:
+                continue
+            for row in payload.get("items") or []:
+                rp = reservation_price(row)
+                if rp is None or rp.region != region:
+                    continue
+                key = (region, rp.sku, rp.term_years)
+                # A re-priced meter can appear twice; the later effectiveStartDate is current.
+                if key not in out or (rp.effective_start or "") > (out[key].effective_start or ""):
+                    out[key] = rp
+    return [out[k] for k in sorted(out)]
+
+
 class AzureProvider(Provider):
     name = "azure"
-    # Two requests per poll against ~10/min; list prices change monthly at most.
+    # Four requests per poll (consumption and reservations, two regions) against
+    # ~10/min; list prices change monthly at most.
     polling = PollingPolicy(interval_seconds=3600, timeout_seconds=60)
 
     def __init__(self, client: httpx.AsyncClient | None = None):
@@ -160,18 +269,20 @@ class AzureProvider(Provider):
         )
 
     async def fetch(self) -> list[RawResponse]:
-        return [await self._region(r) for r in REGIONS]
+        # Consumption first; the reservation calls are raw capture only.
+        return [await self._region(r) for r in REGIONS] + [await self._region(r, RESERVATION) for r in REGIONS]
 
-    async def _region(self, region: str) -> RawResponse:
-        params = {"$filter": odata_filter(region)}
-        first = (await self.get(PATH, params=params)).model_copy(update={"endpoint": endpoint(region), "request": params})
+    async def _region(self, region: str, price_type: str = CONSUMPTION) -> RawResponse:
+        params = {"$filter": odata_filter(region, price_type)}
+        first = (await self.get(PATH, params=params)).model_copy(
+            update={"endpoint": endpoint(region, price_type), "request": params})
         if not first.ok:
             return first
         rows: list[dict] = []
         page = first
         try:
             for _ in range(MAX_PAGES):
-                got, link = extract(page.payload, region)
+                got, link = extract(page.payload, region, price_type)
                 rows += got
                 if not link:
                     break
@@ -179,9 +290,9 @@ class AzureProvider(Provider):
                 if not page.ok:
                     return page.model_copy(update={"endpoint": first.endpoint})
             else:
-                raise ValueError(f"azure: more than {MAX_PAGES} pages for {region}")
+                raise ValueError(f"azure: more than {MAX_PAGES} pages for {region} ({price_type})")
             if not any(r["armSkuName"] in GPU_SIZES for r in rows):
-                raise ValueError(f"azure: no known GPU size priced in {region}")
+                raise ValueError(f"azure: no known GPU size priced in {region} ({price_type})")
         except ValueError as exc:
             return first.model_copy(update={"ok": False, "error": f"ValueError: {exc}"[:500], "payload": None})
         # A new size is a table entry to add from its docs page, not a count to guess.
@@ -190,15 +301,24 @@ class AzureProvider(Provider):
             _SEEN_UNLISTED.update(new)
             log.info("azure: %d VM sizes not in GPU_SIZES (fractional, retired or unlisted); skipped: %s",
                      len(new), ", ".join(new))
+        if price_type != CONSUMPTION:
+            # Tagged, so no reader can mistake these rows for consumption prices.
+            return reshaped(first, {"region": region, "price_type": price_type, "items": rows}, request=params)
         return reshaped(first, {"region": region, "items": rows}, request=params)
 
     @staticmethod
     def normalize(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:
-        """One GPU VM size per region and market becomes one listing."""
+        """One GPU VM size per region and market becomes one listing.
+
+        Reads the consumption endpoints only, by exact label: the reservation
+        endpoints share the path prefix and must never become listings.
+        """
         listings = []
-        for snapshot in find_endpoint(by_endpoint, PATH):
+        for snapshot in (s for r in REGIONS for s in by_endpoint.get(endpoint(r)) or []):
             payload = snapshot.payload
             if not isinstance(payload, dict) or payload.get("region") not in REGIONS:
+                continue
+            if payload.get("price_type", CONSUMPTION) != CONSUMPTION:
                 continue
             region = payload["region"]
             chosen: dict[tuple[str, str], dict] = {}

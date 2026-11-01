@@ -5,6 +5,51 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-10-31 — Azure reserved (1 / 3 / 5-year) prices, stored raw
+
+### What shipped
+
+**Azure reservations captured from now on.** The Azure provider makes a second filtered GET per region on the
+same public Retail Prices API, with `priceType eq 'Reservation'`. There is no new auth and no new host.
+- The filter is applied server-side: one region, Virtual Machines, `Standard_NC` / `ND` / `NV` sizes only, no
+  Windows. That is about 100 rows a region (1, 3 and 5-year terms) on one page. `NextPageLink` is followed, up to
+  the same 3-page cap as consumption, and more than that fails the call.
+- A poll is now 4 requests (2 regions x consumption and reservation). Azure allows about 10 a minute. Raw bodies
+  are deduplicated, so an unchanged price list adds no new payload.
+- Stored raw like the GCP commitments and Jarvislabs' `reserved_pricing`: its own endpoint,
+  `/api/retail/prices/reservation#<region>`, with payload `{region, price_type: "Reservation", items}`. The items
+  are the consumption fields plus `reservationTerm`, verbatim.
+- Fails closed like the consumption call: a missing field, a foreign region or type, or no known GPU size fails
+  that snapshot only. Consumption prices are never affected.
+
+**Effective $/GPU-hour, as a pure function.** `providers/azure.py: reservation_price(row)` returns the term,
+region, VM size, GPU model (raw and canonical), GPU count, whole-term price, term hours and $/GPU-hour.
+`retailPrice` is the whole-term price of the whole VM, even though the row says "1 Hour":
+`retailPrice / (8,760 x years) / GPUs`. GPU counts come from the same `GPU_SIZES` table as the listings, so a size
+not in the table (GB200, fractional A10 / RTX PRO, `ND96is_H100_v5`) is stored but never converted.
+`reserved_prices(by_endpoint)` reads the current ones back out of stored snapshots.
+- At ship time, eastus `Standard_ND96isr_H100_v5` (8 x H100) cost $12.29 per GPU-hour on demand. Reserved, it was
+  $7.87 for 1 year ($551,221), $5.40 for 3 years ($1,134,310) and $4.92 for 5 years ($1,722,566).
+
+**Kept out of every statistic.** `normalize()` now reads the consumption endpoints by exact label, and it skips any
+payload tagged with another price type. Tests prove there are still 22 listings, only `on_demand` / `spot`
+segments, and unchanged index votes (H100 SXM still $12.29) with reservation snapshots stored.
+
+**Methodology:** `/methodology/data-kinds` has a new section, "Reserved and committed list prices".
+
+### Planned but not shipped, and why
+
+| Item | Why not |
+|---|---|
+| Reserved prices as listings, or a read-only API / page | There is no safe non-statistical price kind in the listing model: `market_type` feeds index segments. It still needs the reserved-price data model decision. |
+| More Azure regions | Same two regions as the on-demand listings, so the reserved and on-demand prices stay comparable. |
+| Azure savings plans | A different commitment: $/hour spent across VM sizes, not a reservation of one size. Not read. |
+
+### Next
+1. The reserved-price data model, then one read-only reserved view across Azure, GCP, Jarvislabs and Latitude.
+
+---
+
 ## 2026-10-30 — Capacity tab, provider APIs instead of scraping, sign-in page
 
 ### What shipped
