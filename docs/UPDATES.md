@@ -5,6 +5,44 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-01 (fourth release) — AWS spot prices, GCP in 34 regions; Vast and Hot Aisle capacity fixes
+
+### What shipped
+
+**AWS spot prices and placement scores (read-only IAM key).** IAM user `opengrid-market-ro` can only read EC2 market
+data (launch is denied; verified). Requests are signed with a small built-in SigV4 signer (no AWS SDK). Spot prices
+for every GPU instance type in six regions (us-east-1, us-east-2, us-west-2, eu-west-2, eu-north-1, ap-northeast-1)
+become spot listings per Availability Zone (`p5.48xlarge:us-east-1d:spot`), interruptible, per GPU-hour: 669 listings
+on 1 Nov, e.g. H100 spot $2.58-4.67 vs $6.88 on-demand. Spot placement scores (1-10) for H100, H200, B200, B300 and A100
+instances refresh every 2 hours and show as capacity tiers per region (1-3 low, 4-6 medium, 7-10 high;
+methodology/capacity). Capacity Block offerings are fetched daily and stored raw; the new account is not yet allowed
+to describe them, which is recorded quietly. Spot Advisor interruption bands stay off public pages and out of routing.
+
+**Google Cloud beyond Iowa (read-only service account).** Service account `opengrid-market-ro` in project
+`opengrid-market-261101` (Compute Viewer + calendar-mode advice; creating VMs is denied). The poller reads Compute
+Engine's machine and accelerator types per zone every 6 hours and lists a GPU machine type in a region only when a
+zone offers the exact proven shape and Google prices every part on demand there: 28 Iowa listings -> 369 in 34
+regions. Iowa ids and prices are unchanged except the retired P100 (Google no longer offers it). All 436 per-region
+G2/G4 prices on Google's pricing page are reproduced exactly. GCP commitment rows in `/v1/reserved` follow the same
+regions (22 -> 258). Calendar-mode advice is stored raw; this project gets "service not available", so no GCP
+capacity rows yet. Method: `/methodology/gcp-regions`.
+
+**Hotfixes shipped earlier the same day.**
+- Vast (bcb46b8): production capacity went silent at 02:11 UTC because the keyed census (2 searches x every GPU model,
+  every 15-minute poll) exhausted Vast's 20,000-rows-a-day search quota. The census now runs on a 16,000-row daily
+  budget (1h-12h between runs) and waits out Vast's retry_after on refusal. Providers can declare a slower capacity
+  cadence (`capacity_interval_seconds`); the stale flag and capacity-silence alert use it (Vast: 36h / 24h).
+- Hot Aisle (4c3dd00, bcb46b8): the available-VMs endpoint answers null or [] when nothing is free; both now read as
+  every size sold out instead of a failed fetch with no rows.
+
+### Deploy notes
+- New Railway variables: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `GCP_SERVICE_ACCOUNT_JSON`,
+  `GCP_PROJECT_ID`. `deploy/make_env.py` does not copy the GCP ones; they are set by hand.
+- AWS adds about 670 spot listings and a vote in the spot indices.
+- Full suite before push: 98 of 99 test files pass (Python and web); `test_jobs_e2e` fails here and on main.
+
+---
+
 ## 2026-11-01 (third release) — Reserved prices page, ECB currency conversion, Hot Aisle and Crusoe stock
 
 ### What shipped
