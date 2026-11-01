@@ -5,6 +5,8 @@
                      never read), so this drops the preemptible column(s) and hands the rest to the live extract
                      checks and NebiusProvider.normalize unchanged: same per-GPU price, one-GPU listings, raw item
                      name as listing id, dated "(Effective ...)" columns picked by capture time.
+                     Since Nov 2026 the live parser reads this design too (Nebius brought it back in late Oct), so
+                     the live parser wins first and this one is a fallback; tests check that the two agree.
 """
 from __future__ import annotations
 

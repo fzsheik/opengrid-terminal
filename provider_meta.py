@@ -44,7 +44,9 @@ _ALL = [
                  "volunteer consumer nodes; always interruptible"),
     ProviderMeta("hyperstack", "Hyperstack", "neocloud", "authenticated_api", "infrahub-api.nexgencloud.com", "https://www.hyperstack.cloud"),
     ProviderMeta("hyperbolic", "Hyperbolic", "marketplace", "public_api", "api.hyperbolic.ai", "https://hyperbolic.ai"),
-    ProviderMeta("nebius", "Nebius", "neocloud", "public_page", "nebius.com", "https://nebius.com"),
+    ProviderMeta("nebius", "Nebius", "neocloud", "public_page", "nebius.com", "https://nebius.com",
+                 "on-demand from the price page; spot per region from the public spot-price API (api.nebius.cloud, "
+                 "no key)"),
     ProviderMeta("digitalocean", "DigitalOcean", "general_cloud", "authenticated_api", "api.digitalocean.com", "https://www.digitalocean.com"),
     ProviderMeta("lium", "Lium", "decentralized", "public_api", "lium.io", "https://lium.io", "Bittensor subnet marketplace"),
     ProviderMeta("massedcompute", "Massed Compute", "neocloud", "authenticated_api", "vm.massedcompute.com", "https://massedcompute.com",

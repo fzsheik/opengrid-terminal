@@ -92,7 +92,11 @@ def test_nebius_designs():
     assert _prices(listings) == {"NVIDIA HGX B200": D("5.50"), "NVIDIA HGX H200": D("3.50"), "NVIDIA HGX H100": D("2.95"),
                                  "NVIDIA L40S GPU with AMD": D("1.82"), "NVIDIA L40S GPU with Intel": D("1.55")}
     listings, used = src.parse((FIX / "nebius_2026-07.html").read_bytes(), AT)
-    assert used.endswith(".with_preemptible"), used
+    # The live parser reads this design again since Nebius brought it back (Oct 2026); it must agree exactly
+    # with the archive parser written for it.
+    assert used.startswith("providers.nebius"), used
+    archive = NB.with_preemptible((FIX / "nebius_2026-07.html").read_text(), AT)
+    assert [l.model_dump() for l in listings] == [l.model_dump() for l in archive], "live and archive parsers agree"
     p = _prices(listings)
     assert p["NVIDIA HGX H100"] == D("3.85") and p["NVIDIA HGX B300"] == D("7.85") and p["NVIDIA RTX PRO 6000"] == D("1.80")
     assert "NVIDIA GB300 NVL72" not in p, "'Contact us' is not a price"
