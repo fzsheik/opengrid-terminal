@@ -21,6 +21,7 @@ from providers import (
     AzureProvider,
     BoostRunProvider,
     CoreWeaveProvider,
+    GpuAiProvider,
     HotAisleProvider,
     HydraHostProvider,
     JarvislabsProvider,
@@ -170,6 +171,7 @@ def build_fetchers() -> list[Provider]:
             AkashProvider,
             HydraHostProvider,
             CudoProvider,
+            GpuAiProvider,
         )
     )
     return fetchers

@@ -27,6 +27,7 @@ from providers.deepinfra import DeepInfraProvider
 from providers.digitalocean import DigitalOceanProvider
 from providers.e2e import E2EProvider
 from providers.gcp import GcpProvider
+from providers.gpuai import GpuAiProvider
 from providers.hotaisle import HotAisleProvider
 from providers.hydrahost import HydraHostProvider
 from providers.hyperbolic import HyperbolicProvider
@@ -119,6 +120,7 @@ PROVIDERS: dict[str, type[Provider]] = {
         AkashProvider,
         HydraHostProvider,
         CudoProvider,
+        GpuAiProvider,
     )
 }
 
@@ -177,6 +179,7 @@ __all__ = [
     "AkashProvider",
     "HydraHostProvider",
     "CudoProvider",
+    "GpuAiProvider",
     "find_endpoint",
     "gather_limited",
     "to_decimal",

@@ -1464,6 +1464,40 @@ CUDO = ProviderMapping(
 )
 
 
+GPUAI = ProviderMapping(
+    provider="gpuai",
+    display_name="GPU.ai (reseller; never in market statistics)",
+    endpoints={"GET api.gpu.ai/v1/pricing?limit=200[&cursor=]": "every offering: GPU, count, region, price, launchable count"},
+    fields=_fields(
+        "gpuai",
+        sku=(DERIVED, '"{gpu_type}x{gpu_count}:{deployment_type}/{capacity_class}"', 'e.g. "h100_sxmx1:container/secure"'),
+        listing_id=(RAW, "offering_id"),
+        raw_gpu_name=(RAW, "gpu_type", 'a slug, e.g. "h100_sxm"'),
+        gpu_count=(RAW, "gpu_count"),
+        region=(RAW, "region", 'e.g. "us-east", "eu-west"'),
+        country=(DERIVED, 'region prefix "us"/"ca" -> US/CA', "eu-*/asia-pacific: None"),
+        price_per_gpu_hour=(DERIVED, "= price_per_hour / gpu_count"),
+        price_per_instance_hour=(RAW, "price_per_hour", "the whole offering (x2 = 2 x the x1 price)"),
+        currency=(CONSTANT, '"USD"', "not stated by the API; the pricing page prints $"),
+        market_type=(RAW, 'tier (only "on_demand" is read)'),
+        provider_tier=(CONSTANT, '"resold:undisclosed"', "excluded from market math (market.RESOLD_PREFIX)"),
+        available=(DERIVED, "available > 0"),
+        capacity=(RAW, "available", "launchable offerings"),
+        capacity_unit=(CONSTANT, '"instance"'),
+        vcpu=(RAW, "cpu_cores"),
+        ram_gb=(RAW, "ram_gb"),
+        storage_gb=(RAW, "storage_gb", "None for containers (disk billed per GB-hour)"),
+    ),
+    quirks=[
+        'Its terms say "We aggregate GPU inventory from multiple providers" and the API never says whose: '
+        "listings are resold:undisclosed and never vote in the market, indices or routing validation.",
+        "Container offerings bill disk at 0.00014 $/GB-h on top; not added.",
+        '"community" offerings (consumer hosts) and "secure" ones are separate skus.',
+        'Unmapped: "a100_80gb" (form factor), "rtx_pro_6000" / "rtx_pro_4500" (edition).',
+    ],
+)
+
+
 MODAL = ProviderMapping(
     provider="modal",
     display_name="Modal (serverless GPU)",
@@ -1854,6 +1888,7 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         AKASH,
         HYDRAHOST,
         CUDO,
+        GPUAI,
     )
 }  # fmt: skip
 

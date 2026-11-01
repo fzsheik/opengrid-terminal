@@ -129,6 +129,9 @@ _ALL = [
     ProviderMeta("cudo", "CUDO Compute", "neocloud", "public_api", "rest.compute.cudo.org", "https://www.cudocompute.com",
                  "VMs (smallest 1-GPU config: GPU + minimum vCPU and RAM; disk extra) and bare metal (no-commitment "
                  "price per server); free GPUs / servers per data centre"),
+    ProviderMeta("gpuai", "GPU.ai", "marketplace", "public_api", "api.gpu.ai", "https://gpu.ai",
+                 "reseller: aggregates other providers' GPUs (its terms) without naming them; listed as "
+                 "resold:undisclosed and kept out of market statistics"),
     ProviderMeta("simplepod", "SimplePod", "marketplace", "public_api", "api.simplepod.ai", "https://simplepod.ai",
                  "own racks plus community hosts; one listing per open on-demand offer (Docker and VM); disk billed extra"),
     ProviderMeta("clore", "Clore.ai", "marketplace", "authenticated_api", "api.clore.ai", "https://clore.ai",

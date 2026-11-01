@@ -540,6 +540,21 @@ _add("NVIDIA H100 80GB SXM5", "nvidia-h100")
 _add("NVIDIA H100 94GB NVL", "nvidia-h100-nvl-pcie")
 _add("NVIDIA L40S 48GB", "nvidia-l40s")
 _add(None, "nvidia-a100-pcie", "nvidia-l40s-graphics")
+# GPU.ai (api.gpu.ai /v1/pricing): gpu_type slugs ("b200", "l40", "l40s" are already mapped above).
+# Unmapped: "a100_80gb" (SXM or PCIe not stated), "rtx_pro_6000" and "rtx_pro_4500" (edition not stated).
+_add("NVIDIA H100 80GB SXM5", "h100_sxm")
+_add("NVIDIA H100 80GB PCIe", "h100_pcie")
+_add("NVIDIA H200 141GB SXM5", "h200_sxm")
+_add("NVIDIA B300 288GB SXM", "b300")
+_add("NVIDIA L4 24GB", "l4")
+_add("NVIDIA RTX 2000 Ada 16GB", "rtx_2000_ada")
+_add("NVIDIA RTX 4000 Ada 20GB", "rtx_4000_ada")
+_add("NVIDIA RTX 6000 Ada 48GB", "rtx_6000_ada")
+_add("NVIDIA RTX A6000 48GB", "rtx_a6000")
+_add("NVIDIA RTX 3090 24GB", "rtx_3090")
+_add("NVIDIA RTX 4090 24GB", "rtx_4090")
+_add("NVIDIA RTX 5090 32GB", "rtx_5090")
+_add(None, "a100_80gb", "rtx_pro_6000", "rtx_pro_4500")
 # Hydra Host inventory: nvidia-smi names, already mapped above, except Quadro RTX 8000 (no canonical yet).
 _add(None, "Quadro RTX 8000")
 _add(None, "nvidia rtx5000 16Gi PCIe", "nvidia v100 32Gi PCIe", "nvidia gtx1050 2Gi PCIe", "nvidia m4000 8Gi PCIe",
