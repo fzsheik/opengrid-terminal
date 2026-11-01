@@ -370,9 +370,10 @@ def sources_health() -> list[dict]:
         last_item = dict(s.execute(select(NewsItem.source_id, func.max(NewsItem.published_at)).group_by(NewsItem.source_id)).all())
         # How far back the source reaches: the oldest item with a real publish time (flagged dates excluded).
         reach = {r.source_id: r for r in s.execute(
-            select(NewsItem.source_id, func.min(NewsItem.published_at).label("oldest"),
+            select(NewsItem.source_id,
+                   func.min(NewsItem.published_at).filter(NewsItem.published_at_inferred.is_(False)).label("oldest"),
                    func.count().filter(NewsItem.backfilled.is_(True)).label("backfilled"))
-            .where(NewsItem.published_at_inferred.is_(False)).group_by(NewsItem.source_id))}
+            .group_by(NewsItem.source_id))}
     out = []
     for src in registry.SOURCES.values():
         st, fx = state.get(src.id), stats.get(src.id)

@@ -367,8 +367,8 @@ def parse_gdelt(body: bytes | str) -> list[dict]:
     doc = json.loads(text)
     items = []
     for a in doc.get("articles") or []:
-        if not isinstance(a, dict) or not a.get("url"):
-            continue
+        if not isinstance(a, dict) or not safe_url(a.get("url")):
+            continue  # a GDELT item is a link: without a safe one there is nothing to show
         seen = a.get("seendate") or ""
         m = re.match(r"^(\d{8})T(\d{6})Z$", seen)
         iso = f"{m[1][:4]}-{m[1][4:6]}-{m[1][6:]}T{m[2][:2]}:{m[2][2:4]}:{m[2][4:]}+00:00" if m else None

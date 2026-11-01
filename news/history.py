@@ -420,7 +420,7 @@ def parse_index_page(body: bytes, page_url: str, path_hint: str) -> list[dict]:
             link = link if link.startswith("/") else (path_hint.rstrip("/") + "/" + link)
             link = urljoin(page_url, link)
         # Archived pages rewrite links to web.archive.org/web/<ts>/<original>: keep the original.
-        m = re.match(r"^https?://web\.archive\.org/web/\d+[a-z_]*/(.+)$", link)
+        m = re.match(r"^https?://[^/]+/web/\d+[a-z_]*/(https?://.+)$", link)
         link = m.group(1) if m else link
         title = parse.clean_text(title)
         if not title or path_hint not in urlsplit(link).path or link in seen:
