@@ -157,7 +157,7 @@ provider never holds up the others.
 | Modal · Beam | general cloud | public page (serverless GPU-only rate; CPU/RAM extra, kept out of indices) |
 | Arkane Cloud · VESSL AI · DeepInfra (GPU instances) | neocloud | public page (on-demand, per GPU-hour); DeepInfra: a `DEEPINFRA_API_KEY` adds in-stock flags from its container API; prices stay from the page |
 | Mithril (ex-ML Foundry) | neocloud | public page (spot, published 7-day average) |
-| Scaleway | general cloud | aggregator (via Shadeform; its own catalogue is EUR-only) |
+| Scaleway | general cloud | public API (its own EUR catalogue, converted to USD at the ECB reference rate; via Shadeform until 2026-11-01) |
 | Crusoe · Denvr · Latitude.sh · Boost Run · Horizon Compute · Phyntec | neocloud | aggregator (via Shadeform) |
 
 Candidates checked and **not** added (2026-10-13): Paperspace (its own page contradicts the aggregator),
@@ -902,4 +902,4 @@ Every number OpenGrid publishes traces to a document in `methodology/` (also ser
 `families` · `events` · `opportunities` · `news` · `data-quality` · `data-trust` · `routing` ·
 `best-execution` · `execution-safety` · `reconciliation` · `provider-capabilities` ·
 `first-live-route` · `routing-quality` · `reliability` · `economics` · `billing` · `alerts` ·
-`security` · `jobs` · `workloads` · `runner` · `settlement` · `reservations`
+`security` · `jobs` · `workloads` · `runner` · `settlement` · `reservations` · `fx`

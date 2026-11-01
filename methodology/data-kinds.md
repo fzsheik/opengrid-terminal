@@ -5,7 +5,7 @@ OpenGrid labels every number by how it was obtained, and never mixes kinds in on
 | Kind | Meaning |
 |---|---|
 | **observed** | Read directly from a provider (API, public price page, or aggregator) and normalized. |
-| **derived** | Computed from observed data by a stated rule, e.g. `available = capacity > 0`. |
+| **derived** | Computed from observed data by a stated rule, e.g. `available = capacity > 0`, or a list price converted to USD at the ECB reference rate (see below). |
 | **estimated** | A model or assumption fills a gap. Always labelled; never silent. |
 | **transaction** | What an OpenGrid execution actually quoted or paid. |
 | **archived** | Read by OpenGrid's parsers from a public archive (an Internet Archive capture of a provider's price page, or a past version of AWS's price list), not observed live. Sampled only on capture days; never used in indices, percentiles or routing. See [archived history](/methodology/archived-history). |
@@ -18,6 +18,12 @@ OpenGrid labels every number by how it was obtained, and never mixes kinds in on
 | **Observed market price** | OpenGrid's normalized observation of list prices (per GPU-hour, on-demand). |
 | **Quote** | The price returned for one specific route request at one moment. |
 | **Execution price** | What was actually paid or contracted for a deployment. |
+
+**Converted list prices.** Every price OpenGrid publishes is in USD. A provider that prices only in another
+currency (Scaleway, EUR) is converted at the ECB euro reference rate in force when the price was fetched; the
+listing stays an ordinary USD listing for statistics and carries its provenance (`original_currency`, the original
+amounts, `fx_rate`, `fx_rate_date`, `fx_source`). No fresh rate (more than 5 days old), no converted listing. See
+[currency conversion](/methodology/fx).
 
 Market indices, spreads and percentiles are built from **observed market prices** only (never archived ones).
 Quotes and execution prices live in routing and transaction records and are reported separately.
@@ -53,6 +59,9 @@ capacity row or a score, and none enters indices, spreads, percentiles, routing 
 
 | Source | What is stored | Why it is not used yet |
 |---|---|---|
-| Scaleway product catalogue (`/product-catalog/v2alpha1/public-catalog/products`) | Scaleway's own list price per GPU Instance type and zone, in EUR (per minute or hour as Scaleway states it), with its status (`general_availability`, `retired`, ...). Code: `providers/shadeform.py` (`scaleway_eur_prices`). | It is EUR-only and OpenGrid converts no currency, so Scaleway listings keep Shadeform's USD price. |
 | AWS Spot Instance Advisor (`spot-advisor-data.json`) | Per GPU instance type, region and OS: interruption band `r` (0-4, the feed's own labels `<5%` to `>20%` over the trailing month) and average spot saving `s` (%), with the feed's Last-Modified time. Code: `providers/aws.py` (`spot_advice`). | No AWS spot listings exist (spot prices need credentials); provider reliability counts only OpenGrid's own launches; a band is not stock. The feed is coarse and slow-moving: it was last rewritten on 20 Mar 2026. |
 | OVHcloud dedicated-server availabilities (`/v1/dedicated/server/datacenter/availabilities`, World and US APIs) | Per GPU server configuration (Scale-GPU, HGR-AI: L4, L40S, V100S, Radeon) and datacenter, OVHcloud's delivery word verbatim (`1H-high`, `1H-low`, `24H`, `72H`, `unavailable`, `unknown`). Code: `providers/ovhcloud.py` (`baremetal_availability`). | These bare-metal servers are not listings (OVHcloud listings are Public Cloud flavors), so there is no price for a capacity row to join to. |
+
+Scaleway's own product catalogue was in this table until 2026-11-01. Its EUR prices are now Scaleway's listings,
+converted at the ECB rate ([currency conversion](/methodology/fx)); the ECB feed itself is stored raw in
+`fx_snapshots`, and only its EUR->USD rate is parsed.

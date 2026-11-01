@@ -104,7 +104,7 @@ cross-check their own feeds.
 | boostrun | none found | none | via Shadeform | none | via Shadeform |
 | horizon | none found | none | via Shadeform | none | via Shadeform |
 | phyntec | none found | none | via Shadeform | none | via Shadeform |
-| scaleway | none found | none | **`products/servers/availability`: available / scarce / shortage per server type per zone** [live, public] | stock tier | via Shadeform only |
+| scaleway | none found | none | **`products/servers/availability`: available / scarce / shortage per server type per zone** [live, public] | stock tier | own EUR catalogue, converted at the ECB rate (Shadeform until 2026-11-01) |
 | coreweave | Flex Reservations and Reserved Instances via account executive [sales] | none | none | GPU utilization in Grafana, console only [docs] | pricing page |
 | together | **Reserved clusters, 1 to 90 days, H100 from $3.29 vs $4.79 on-demand** [docs]; cluster create API `/v1/compute/clusters` [docs] | reserved clusters | none found ("Notify me" only) | none | pricing page |
 | jarvislabs | none found | none | SDK `gpu_availability()`: free devices and price, containers vs VMs [docs, key] | none | pricing page |
