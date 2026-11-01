@@ -33,6 +33,7 @@ reserved-price data model (term, upfront, per GPU-month vs hour).
 | Azure | 1, 3 and 5-year reserved-instance prices from the public Retail Prices API (`priceType eq 'Reservation'`), eastus and eastus2. |
 | GCP | 1 and 3-year commitment SKUs from the Cloud Billing Catalog. |
 | Jarvislabs | `reserved_pricing`: 1-month, 1-year and 2-year per GPU-hour. |
+| Together AI | GPU Clusters reserved columns from the public price page, per GPU-hour for 3-30, 31-90, 91-180 and 181+ day commitments, cells as printed ("Contact us" kept). Stored under `/pricing#reserved`; code: `providers/together.py` (`reserved_prices`). |
 | Latitude | GPU plans from Latitude's own plans API, stored verbatim (needs `LATITUDE_API_KEY`). |
 
 **Azure conversion (derived).** Azure states a reservation as one price for the whole VM for the whole term,

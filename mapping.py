@@ -703,7 +703,8 @@ TOGETHER = ProviderMapping(
         storage_gb=(ABSENT, "-"),
     ),
     quirks=[
-        "Only the two pay-as-you-go columns are read; the four Reserved terms are commitments.",
+        "Only the two pay-as-you-go columns become listings; the four Reserved terms (3-30, 31-90, 91-180, "
+        "181+ days) are commitments, stored raw under /pricing#reserved and read only by reserved_prices().",
         "The page states no node size, so a listing is one GPU at the printed rate (the Nebius convention).",
         "Inference, fine-tuning and sandbox prices on the same page are not GPU rental and are ignored.",
         "Scraped from page HTML; the extractor requires the 'per GPU per hour' statement and the column layout.",
