@@ -7,11 +7,19 @@ is coherent. Keys are the function's arguments; values expire after `ttl`.
     def overview(hours): ...
 
     overview.cache_clear()   # e.g. after a job writes new aggregates
+    clear_all()              # every ttl_cache in the process (tests that change the database under the app)
 """
 
 import functools
 import threading
 import time
+
+_CLEARS: list = []
+
+
+def clear_all() -> None:
+    for clear in list(_CLEARS):
+        clear()
 
 
 def ttl_cache(ttl_seconds: float, maxsize: int = 256):
@@ -35,6 +43,7 @@ def ttl_cache(ttl_seconds: float, maxsize: int = 256):
             return value
 
         cached.cache_clear = lambda: store.clear()
+        _CLEARS.append(cached.cache_clear)
         return cached
 
     return wrap

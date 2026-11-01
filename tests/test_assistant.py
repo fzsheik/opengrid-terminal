@@ -123,8 +123,8 @@ def fake_estimate(req):
             "questions": qs, "methodology": "/methodology/recommendations"}
 
 
-def fake_recommend(req, who, *, limit=10, now=None):
-    CALLS.append({"req": req.model_dump(), "who": who.kind, "limit": limit})
+def fake_recommend(req, who, *, limit=10, now=None, tier=None):
+    CALLS.append({"req": req.model_dump(), "who": who.kind, "limit": limit, "tier": tier})
     est = fake_estimate(req)
     need = est["memory"]["per_gpu_gb"]
     budget = req.constraints.budget_usd
@@ -834,6 +834,7 @@ def test_operator_principal_passed_to_recommend():
     CALLS.clear()
     ask("fine-tune Llama 3 8B with LoRA", who=OPERATOR)
     assert CALLS[-1]["who"] == "operator" and CALLS[-1]["limit"] == tools.TOP
+    assert CALLS[-1]["tier"] == "public", "an assistant answer is public: public data tier, whoever asks"
 
 
 # ------------------------------------------------------------------ job intents (My Jobs): read + ACTION cards only

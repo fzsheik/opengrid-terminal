@@ -28,6 +28,13 @@ amounts, `fx_rate`, `fx_rate_date`, `fx_source`). No fresh rate (more than 5 day
 Market indices, spreads and percentiles are built from **observed market prices** only (never archived ones).
 Quotes and execution prices live in routing and transaction records and are reported separately.
 
+## Public and internal data
+
+Separately from how a number was obtained, every source is in one of two tiers: **public** (may be republished:
+pages, the API, indices, fixings, exports) or **internal** (OpenGrid may use it to route and place workloads, but
+never republishes it). Every published number, of every kind above, is built from public data only. See
+[data visibility](/methodology/data-visibility) for the list of internal sources and why.
+
 ## Reserved and committed list prices
 
 Some providers publish prices for a commitment, from a few days to 5 years. OpenGrid stores the responses raw and
@@ -62,7 +69,7 @@ capacity row or a score, and none enters indices, spreads, percentiles, routing 
 
 | Source | What is stored | Why it is not used yet |
 |---|---|---|
-| AWS Spot Instance Advisor (`spot-advisor-data.json`) | Per GPU instance type, region and OS: interruption band `r` (0-4, the feed's own labels `<5%` to `>20%` over the trailing month) and average spot saving `s` (%), with the feed's Last-Modified time. Code: `providers/aws.py` (`spot_advice`). | Never shown on public pages or APIs (AWS site terms). Routing has no place for it: best execution ranks on-demand, non-interruptible listings only (AWS spot listings are excluded like every spot listing), and provider reliability counts only OpenGrid's own launches; a band is not stock. The feed is coarse and slow-moving: it was last rewritten on 20 Mar 2026. |
+| AWS Spot Instance Advisor (`spot-advisor-data.json`) | Per GPU instance type, region and OS: interruption band `r` (0-4, the feed's own labels `<5%` to `>20%` over the trailing month) and average spot saving `s` (%), with the feed's Last-Modified time. Code: `providers/aws.py` (`spot_advice`). | **Internal data** ([data visibility](/methodology/data-visibility)): never shown on public pages or APIs (AWS site terms). Routing may read it (`routing/internal_data.py`), but has no use for it yet: best execution ranks on-demand, non-interruptible listings only (AWS spot listings are excluded like every spot listing), and provider reliability counts only OpenGrid's own launches; a band is not stock. The feed is coarse and slow-moving: it was last rewritten on 20 Mar 2026. |
 | AWS Capacity Block offerings (`DescribeCapacityBlockOfferings`, read-only IAM key) | Offerings for 1 instance x 24 hours of `p5.48xlarge`, `p5en.48xlarge` and `p6-b200.48xlarge` in us-east-1, verbatim (start, end, AZ, upfront fee), fetched daily. An account below AWS's Capacity Block limit gets `CapacityBlockDescribeLimitExceeded`; that answer is stored as `status: not_available_for_account` (a successful snapshot: it is the account's state, not a broken feed). Code: `providers/aws.py`. | OpenGrid's account cannot describe offerings yet (the limit answer, seen 2026-11-01); once it can, a Capacity Block is a reservation with a fixed start and an upfront fee, so it belongs with reserved prices, not listings. |
 | OVHcloud dedicated-server availabilities (`/v1/dedicated/server/datacenter/availabilities`, World and US APIs) | Per GPU server configuration (Scale-GPU, HGR-AI: L4, L40S, V100S, Radeon) and datacenter, OVHcloud's delivery word verbatim (`1H-high`, `1H-low`, `24H`, `72H`, `unavailable`, `unknown`). Code: `providers/ovhcloud.py` (`baremetal_availability`). | These bare-metal servers are not listings (OVHcloud listings are Public Cloud flavors), so there is no price for a capacity row to join to. |
 

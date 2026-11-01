@@ -296,7 +296,9 @@ def _factor(value, raw, kind, note, weight=0.0):
 def factors(row: dict, *, median: float, hist: dict, want_group: str | None, now: datetime) -> dict:
     p = float(row["price_per_gpu_hour"])
     pct = (p - median) / median if median else 0.0
-    if abs(pct) < 0.005:
+    if not median:  # no public listing of this GPU to compare with (only internal ones): neutral, and said so
+        price_note = "no public market price to compare with"
+    elif abs(pct) < 0.005:
         price_note = f"at the current market median (${median:.2f})"
     else:
         price_note = f"{abs(pct):.0%} {'below' if pct < 0 else 'above'} current market median (${median:.2f})"
