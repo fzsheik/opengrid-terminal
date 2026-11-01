@@ -185,6 +185,47 @@ def test_change_only_storage_and_fail_open():
         scratchdb.drop(DB)
 
 
+def test_refresh_drops_rows_from_a_source_the_provider_left():
+    Session = _setup_db()
+    try:
+        import capacity
+        from sqlalchemy import select
+        from store.capacity import CapacityCurrent
+
+        def obs(sku, region, source, provider="koyeb"):
+            return _obs(sku=sku, region=region, provider=provider).model_copy(update={"source": source})
+
+        real_latest, real = normalize._latest_raw, {n: c.normalize_capacity for n, c in capacity.PROVIDERS.items()}
+        normalize._latest_raw = lambda s, p: {}
+        try:
+            for n in capacity.PROVIDERS:
+                capacity.PROVIDERS[n].normalize_capacity = staticmethod(lambda by: [])
+            capacity.PROVIDERS["koyeb"].normalize_capacity = staticmethod(
+                lambda by: [obs("old", "r1", "via shadeform"), obs("old", "r2", "via shadeform")])
+            capacity.PROVIDERS["lium"].normalize_capacity = staticmethod(lambda by: [obs("a", None, "lium api", "lium")])
+            assert capacity.refresh()["pruned"] == 0
+            # the provider moves to its own API: the Shadeform rows go, lium is untouched
+            capacity.PROVIDERS["koyeb"].normalize_capacity = staticmethod(lambda by: [obs("new", None, "own api")])
+            assert capacity.refresh()["pruned"] == 2
+            with Session() as s:
+                keys = {(r.provider, r.sku, r.region_key) for r in s.scalars(select(CapacityCurrent))}
+            assert keys == {("koyeb", "new", ""), ("lium", "a", "")}, keys
+            # same source, a SKU missing from this run: kept (it ages into stale), not dropped
+            capacity.PROVIDERS["koyeb"].normalize_capacity = staticmethod(lambda by: [obs("other", None, "own api")])
+            assert capacity.refresh()["pruned"] == 0
+            with Session() as s:
+                assert s.get(CapacityCurrent, ("koyeb", "new", "")) is not None
+            # a normalizer returning nothing keeps everything
+            capacity.PROVIDERS["koyeb"].normalize_capacity = staticmethod(lambda by: [])
+            assert capacity.refresh()["pruned"] == 0
+        finally:
+            normalize._latest_raw = real_latest
+            for n, f in real.items():
+                capacity.PROVIDERS[n].normalize_capacity = staticmethod(f)
+    finally:
+        scratchdb.drop(DB)
+
+
 def test_refresh_never_blocked_by_capacity():
     Session = _setup_db()
     try:
@@ -474,7 +515,7 @@ def test_unmapped_queue_includes_capacity_names():
 
 if __name__ == "__main__":
     for t in (test_koyeb_tier, test_linode_boolean, test_lium_count, test_linode_paging,
-              test_change_only_storage_and_fail_open, test_refresh_never_blocked_by_capacity, test_endpoints,
+              test_change_only_storage_and_fail_open, test_refresh_drops_rows_from_a_source_the_provider_left, test_refresh_never_blocked_by_capacity, test_endpoints,
               test_lambda_where_not_how_much, test_hyperstack_vm_counts, test_digitalocean_regions,
               test_runpod_tiers_per_pod_size, test_scaleway_own_stock_levels, test_shadeform_clouds_booleans,
               test_massedcompute_via_shadeform, test_hyperbolic_missing_total_is_unknown,

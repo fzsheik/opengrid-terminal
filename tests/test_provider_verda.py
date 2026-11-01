@@ -278,7 +278,7 @@ def test_pipeline():
             raws = [r.model_copy(update={"fetched_at": when}) for r in run(prov(FakeVerda()))]
             fetch_mod.save(raws)
             out = normalize.refresh(["verda"])
-        assert out["capacity"] == {"current": 42, "changes": 0}, out["capacity"]
+        assert out["capacity"] == {"current": 42, "changes": 0, "pruned": 0}, out["capacity"]
         with Session() as s:
             listed = s.execute(sql("SELECT count(*) FROM compute_listings WHERE provider = 'verda'")).scalar()
             cap = s.execute(sql("SELECT count(*), count(*) FILTER (WHERE in_stock) FROM capacity_current")).one()

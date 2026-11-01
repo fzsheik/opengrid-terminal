@@ -72,6 +72,10 @@ A row not refreshed within three of its provider's poll intervals is returned wi
 provider stopped listing that SKU in that region). Capacity runs after prices in the same refresh and fails open: a
 capacity error never stops prices from updating.
 
+When a provider changes where its capacity comes from (for example Massed Compute moving from Shadeform's yes/no to
+its own API's counts), current rows from the source it no longer uses are removed at the next refresh, so the two
+sources are never shown side by side. Their history stays in `capacity_changes`.
+
 ## What this does not show
 
 - A provider's own report, not a launch test. "In stock" means the provider says so.

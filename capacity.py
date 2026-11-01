@@ -80,5 +80,30 @@ def save(observations: list[CapacityObservation]) -> dict:
     return {"current": len(rows), "changes": len(changes)}
 
 
+def prune(observations: list[CapacityObservation]) -> int:
+    """Drop current rows that came from a source a provider no longer uses, for every provider in this run.
+
+    A provider that moved to its own API (Massed Compute off Shadeform) would otherwise keep the old source's rows
+    forever beside the new ones. Rows from a source still in use are kept even when this run lacks them: those age
+    into `stale: true` (methodology/capacity.md). A provider whose normalizer failed or returned nothing is absent
+    here and keeps its previous state. History stays in capacity_changes.
+    """
+    sources: dict[str, set[str]] = {}
+    for o in observations:
+        sources.setdefault(o.provider, set()).add(o.source)
+    dropped = 0
+    with normalize.SessionLocal.begin() as s:
+        for provider, used in sources.items():
+            old = [r for r in s.scalars(select(CapacityCurrent).where(CapacityCurrent.provider == provider))
+                   if r.source not in used]
+            for r in old:
+                s.delete(r)
+            dropped += len(old)
+    return dropped
+
+
 def refresh(only: list[str] | None = None) -> dict:
-    return save(normalize_all(only))
+    observations = normalize_all(only)
+    out = save(observations)
+    out["pruned"] = prune(observations)
+    return out
