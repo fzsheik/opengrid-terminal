@@ -29,7 +29,7 @@ from providers.lium import LiumProvider  # noqa: E402
 from providers import PROVIDERS  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_capacity"
-SUPPORTED = ["boostrun", "clore", "crusoe", "deepinfra", "denvr", "digitalocean", "horizon", "hyperbolic", "hyperstack", "jarvislabs",
+SUPPORTED = ["boostrun", "clore", "crusoe", "deepinfra", "denvr", "digitalocean", "horizon", "hotaisle", "hyperbolic", "hyperstack", "jarvislabs",
              "koyeb", "lambda", "latitude", "linode", "lium", "massedcompute", "phyntec", "runpod", "salad", "scaleway",
              "thundercompute", "vast", "verda", "voltagepark"]
 DB = "og_test_capacity"

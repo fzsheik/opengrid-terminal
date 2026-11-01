@@ -102,6 +102,8 @@ class Settings(BaseSettings):
     latitude_api_key: str | None = None        # Latitude.sh plans API (capacity per location; prices stay via Shadeform)
     clore_api_key: str | None = None           # Clore's marketplace API needs an account key (header `auth`)
     deepinfra_api_key: str | None = None       # DeepInfra container API: in-stock flags only (prices stay from its page)
+    hotaisle_api_key: str | None = None        # Hot Aisle API (admin.hotaisle.app/api): VM stock counts only (prices stay from its page)
+    hotaisle_team: str | None = None           # its team handle (or display name; resolved via GET /teams/)
     verda_client_id: str | None = None
     verda_client_secret: str | None = None
     # Per-provider launch defaults (JSON), e.g. {"lambda": {"ssh_key": "opengrid"},
