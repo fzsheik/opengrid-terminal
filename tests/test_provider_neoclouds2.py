@@ -1,7 +1,10 @@
-"""Civo, Atlantic.Net and DeepInfra GPU Instances: public price pages.
+"""Civo, Atlantic.Net and DeepInfra GPU Instances: public price pages, and DeepInfra's container API.
 
 Parsers run on trimmed copies of the REAL pages (tests/fixtures_providers/,
-fetched 2026-10-21 with unauthenticated GETs). The last test pushes all three
+fetched 2026-10-21 with unauthenticated GETs) and on DeepInfra's REAL
+GET /v1/containers/gpu_availability body (deepinfra_gpu_availability.json,
+fetched 2026-11-01 with an account key; read-only, nothing was launched),
+which supplies stock only: prices always come from the page. The last test pushes all three
 through raw storage, normalize + quality screening, the hourly rollup and the
 index vote in a scratch database.
 
@@ -9,6 +12,7 @@ Run:  .venv/bin/python tests/test_provider_neoclouds2.py
 """
 
 import asyncio
+import json
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -186,6 +190,112 @@ def test_deepinfra():
     assert raises(deepinfra.extract, page.replace("$4.89/hour", "$4.89/minute"))
 
 
+def _api_body():
+    return json.loads(text("deepinfra_gpu_availability.json"))
+
+
+def _keyed(api_handler, page_transport=None, key="di-test-key"):
+    """A keyed DeepInfra: the page through one mock, the container API through another."""
+    seen = []
+
+    def api(request):
+        seen.append((request.method, request.url.path, request.headers.get("authorization")))
+        return api_handler(request)
+    p = DeepInfraProvider(
+        httpx.AsyncClient(base_url="https://deepinfra.com",
+                          transport=page_transport or _page(body=text("deepinfra_gpu_instances.html"))),
+        api_key=key,
+        api_client=httpx.AsyncClient(base_url=deepinfra.API_BASE_URL, transport=httpx.MockTransport(api),
+                                     headers={"Authorization": f"Bearer {key}"}))
+    return p, seen
+
+
+def _by(raws):
+    return {r.endpoint: [snap(r.payload, r.fetched_at)] for r in raws if r.ok}
+
+
+def test_deepinfra_api_stock_page_prices():
+    p, seen = _keyed(lambda r: httpx.Response(200, json=_api_body()))
+    raws = _fetch(p)
+    assert seen == [("GET", deepinfra.API_ENDPOINT, "Bearer di-test-key")], "one read-only GET; never POST /v1/containers"
+    assert [r.endpoint for r in raws] == [deepinfra.ENDPOINT, deepinfra.API_ENDPOINT] and all(r.ok for r in raws)
+    assert raws[1].payload == _api_body(), "raw first: the API body is stored as received (usd_per_hour included)"
+    assert all("di-test-key" not in json.dumps(r.model_dump(mode="json")) for r in raws), "the key is never stored"
+
+    # Prices are the page's, key or no key: the API's usd_per_hour never reaches a listing.
+    by = _by(raws)
+    keyed, page = by_id(DeepInfraProvider.normalize(by)), normalized("deepinfra")
+    assert keyed == by_id(DeepInfraProvider.normalize({deepinfra.ENDPOINT: by[deepinfra.ENDPOINT]}))
+    assert set(keyed) == set(page) == {f"nvidia-b200:{n}x" for n in (1, 2, 4, 8)}
+    for lid, l in keyed.items():
+        assert (l.price_per_gpu_hour, l.price_per_instance_hour, l.vcpu, l.ram_gb, l.storage_gb) == \
+               (page[lid].price_per_gpu_hour, page[lid].price_per_instance_hour, page[lid].vcpu,
+                page[lid].ram_gb, page[lid].storage_gb), lid
+        assert l.price_per_gpu_hour == D("4.89") and l.available is None, lid
+    assert keyed["nvidia-b200:8x"].vcpu == 128 and keyed["nvidia-b200:8x"].storage_gb == 15000, "page specs kept"
+    published = {str(v) for l in keyed.values() for v in (l.price_per_gpu_hour, l.price_per_instance_hour)}
+    assert not published & {"3.69", "7.38", "14.76", "29.52"}, published
+    # Only the API stored (no page yet): no listings at all, rather than API prices.
+    assert DeepInfraProvider.normalize({deepinfra.API_ENDPOINT: by[deepinfra.API_ENDPOINT]}) == []
+
+    # API stock joins to page skus.
+    rows = DeepInfraProvider.normalize_capacity(by)
+    page_skus = {l.sku for l in keyed.values()}
+    assert len(rows) == 4 and {r.sku for r in rows} == page_skus == {f"{n}x NVIDIA B200" for n in (1, 2, 4, 8)}
+    for r in rows:
+        l = next(l for l in keyed.values() if l.sku == r.sku)
+        assert (r.gpu_count, r.raw_gpu_name, r.canonical_gpu_name) == (l.gpu_count, l.raw_gpu_name, l.canonical_gpu_name)
+    assert all(r.in_stock is False and r.region is None and r.tier is None and r.available_count is None
+               and r.source == deepinfra.API_ENDPOINT for r in rows), "all four sold out when the fixture was saved"
+    assert rows[0].raw_value == "available=False; gpu_config=1xB200-180GB" and "3.69" not in rows[0].raw_value
+    # No key: page only, no capacity.
+    assert prov("deepinfra")._api is None and [r.endpoint for r in _fetch(prov("deepinfra"))] == [deepinfra.ENDPOINT]
+    assert DeepInfraProvider.normalize_capacity({deepinfra.ENDPOINT: by[deepinfra.ENDPOINT]}) == []
+
+
+def test_deepinfra_api_failures_never_touch_prices():
+    """A stock body with no readable rows is a failed fetch, never "nothing in stock"; prices carry on."""
+    for status, body in ((200, {"gpus": []}), (200, {"detail": "maintenance"}), (200, []),
+                         (200, {"gpus": [{"usd_per_hour": 3.69, "available": True}]}),
+                         (200, {"gpus": [{"gpu_config": "nonsense", "available": True}]}),
+                         (401, {"detail": "User is not authorized to access this resource"}),
+                         (503, {"detail": "unavailable"})):
+        p, _ = _keyed(lambda r, s=status, b=body: httpx.Response(s, json=b))
+        page, api = _fetch(p)
+        assert page.ok and len(DeepInfraProvider.normalize(_by([page, api]))) == 4, (status, body)
+        assert not api.ok and api.error, (status, body)
+        if status == 200:
+            assert api.payload == body, "kept for diagnosis"
+            try:
+                DeepInfraProvider.normalize_capacity({deepinfra.API_ENDPOINT: [snap(body)]})
+                raise AssertionError(f"normalize_capacity must refuse {body!r}")
+            except ValueError:
+                pass
+            assert len(DeepInfraProvider.normalize({deepinfra.ENDPOINT: _by([page])[deepinfra.ENDPOINT],
+                                                    deepinfra.API_ENDPOINT: [snap(body)]})) == 4
+    p, _ = _keyed(lambda r: (_ for _ in ()).throw(httpx.ConnectError("down")))
+    page, api = _fetch(p)
+    assert page.ok and not api.ok and api.payload is None
+    # A broken page fails prices whatever the API says; the API never stands in.
+    p, _ = _keyed(lambda r: httpx.Response(200, json=_api_body()), page_transport=_page(503, "maintenance"))
+    page, api = _fetch(p)
+    assert not page.ok and api.ok and DeepInfraProvider.normalize(_by([page, api])) == []
+    assert DeepInfraProvider.normalize({}) == [] and DeepInfraProvider.normalize_capacity({}) == []
+
+
+def test_deepinfra_capacity_flags():
+    """Boolean shape; a missing or odd flag is unknown, never guessed; unknown codes keep the API's text."""
+    body = _api_body()
+    body["gpus"][0]["available"] = True
+    del body["gpus"][1]["available"]
+    body["gpus"][2]["available"] = "yes"
+    body["gpus"].append({"gpu_config": "1xA100-80GB", "usd_per_hour": 0.89, "available": True})
+    body["gpus"].append({"gpu_config": "8 x B200", "usd_per_hour": 29.52, "available": True})
+    rows = {r.sku: r for r in DeepInfraProvider.normalize_capacity({deepinfra.API_ENDPOINT: [snap(body)]})}
+    assert [rows[f"{n}x NVIDIA B200"].in_stock for n in (1, 2, 4, 8)] == [True, None, None, False]
+    assert rows["1x A100"].raw_gpu_name == "A100 80GB" and len(rows) == 5, "unreadable config skipped"
+
+
 # --------------------------------------------------------------------------
 # Fetch failures, registry, classes
 # --------------------------------------------------------------------------
@@ -207,7 +317,11 @@ def test_registry():
     assert set(NEW) <= set(mapping.PROVIDER_MAPPINGS)
     classes = {p: provider_meta.meta(p).provider_class for p in NEW}
     assert classes == {"civo": "general_cloud", "atlanticnet": "general_cloud", "deepinfra": "neocloud"}, classes
-    assert {provider_meta.meta(p).source_type for p in NEW} == {"public_page"}
+    assert {provider_meta.meta(p).source_type for p in NEW} == {"public_page"}, "DeepInfra prices stay from its page"
+    from config import settings
+    di = next(p for p in fetch_mod.build_fetchers() if p.name == "deepinfra")
+    assert str(di._client.base_url).startswith(deepinfra.BASE_URL), "the price page, key or no key"
+    assert (di._api is not None) == bool(settings.deepinfra_api_key), "a key adds the stock call"
     # Dropped on policy: Novita (terms forbid scraping), HPC-AI and GMI ('from' floors only), Cirrascale (monthly).
     assert not ({"novita", "hpcai", "gmicloud", "gmi", "cirrascale"} & set(PROVIDERS))
     # New aliases never merge variants.
@@ -276,8 +390,38 @@ def test_pipeline():
         scratchdb.drop(db)
 
 
+def test_deepinfra_keyed_pipeline():
+    """A keyed poll through storage: page prices listed, API stock in capacity, joined by sku."""
+    import capacity
+    import fixtures
+    import normalize
+    import scratchdb
+    from sqlalchemy import text as sql
+
+    db = "opengrid_test_deepinfra_keyed"
+    url = scratchdb.create(db)
+    try:
+        Session = fixtures.session(url)
+        fetch_mod.SessionLocal = Session
+        normalize.SessionLocal = Session
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        p, _ = _keyed(lambda r: httpx.Response(200, json=_api_body()))
+        fetch_mod.save([r.model_copy(update={"fetched_at": now - timedelta(minutes=5)}) for r in _fetch(p)])
+        normalize.refresh(["deepinfra"])
+        stored = capacity.save(capacity.normalize_all(["deepinfra"]))
+        with Session() as s:
+            listed = dict(s.execute(sql("SELECT sku, price_per_gpu_hour FROM compute_listings "
+                                        "WHERE provider = 'deepinfra'")).all())
+            cap = dict(s.execute(sql("SELECT sku, in_stock FROM capacity_current WHERE provider = 'deepinfra'")).all())
+        assert listed == {f"{n}x NVIDIA B200": D("4.89") for n in (1, 2, 4, 8)}, listed
+        assert stored["current"] == 4 and set(cap) == set(listed) and not any(cap.values()), cap
+    finally:
+        scratchdb.drop(db)
+
 if __name__ == "__main__":
-    for t in (test_civo, test_atlanticnet, test_deepinfra, test_fetch_failures, test_registry, test_pipeline):
+    for t in (test_civo, test_atlanticnet, test_deepinfra, test_deepinfra_api_stock_page_prices,
+              test_deepinfra_api_failures_never_touch_prices, test_deepinfra_capacity_flags, test_fetch_failures,
+              test_registry, test_pipeline, test_deepinfra_keyed_pipeline):
         t()
         print(t.__name__, "ok")
     print("all passed")

@@ -1517,10 +1517,14 @@ ATLANTICNET = ProviderMapping(
 DEEPINFRA = ProviderMapping(
     provider="deepinfra",
     display_name="DeepInfra (GPU Instances)",
-    endpoints={"GET /gpu-instances": "the public price page; the On-Demand Cloud Pricing table"},
+    endpoints={
+        "GET /gpu-instances": "the public price page; the On-Demand Cloud Pricing table (every listing field)",
+        "GET /v1/containers/gpu_availability": "with DEEPINFRA_API_KEY (api.deepinfra.com): the `available` flag "
+                                               "per GPU configuration, for capacity only",
+    },
     fields=_fields(
         "deepinfra",
-        sku=(RAW, "GPU config cell", 'e.g. "8x NVIDIA B200"'),
+        sku=(RAW, "GPU config cell", 'e.g. "8x NVIDIA B200"; API stock rows rebuild it from "8xB200-180GB"'),
         listing_id=(DERIVED, "{model slug}:{n}x"),
         raw_gpu_name=(DERIVED, "config model + GPU RAM / n", 'e.g. "NVIDIA B200 180GB"'),
         gpu_count=(RAW, 'GPU config "Nx ..."'),
@@ -1529,7 +1533,7 @@ DEEPINFRA = ProviderMapping(
         price_per_gpu_hour=(DERIVED, "= price_per_instance_hour / gpu_count"),
         price_per_instance_hour=(RAW, 'Price cell "$x/hour"', "the whole instance; billed per minute"),
         provider_tier=(CONSTANT, '"container"'),
-        available=(ABSENT, "-", "the page says nothing about stock"),
+        available=(ABSENT, "-", "stock is in capacity (normalize_capacity), from the API with a key"),
         capacity=(ABSENT, "-"),
         capacity_unit=(ABSENT, "-"),
         vcpu=(RAW, "vCPU cell", '"16 cores" -> 16'),
@@ -1539,7 +1543,9 @@ DEEPINFRA = ProviderMapping(
     quirks=[
         "Cells are read by their labels, not position. The hero cards repeat some prices and are not read.",
         "The page's spec block names the card \"NVIDIA B200 SXM6\", so the B200 maps to the SXM part.",
-        "Per-token model API prices are on other pages and never read; the container API needs a key.",
+        "The container API's usd_per_hour ($3.69 per B200 GPU-hour on 2026-11-01, vs $4.89 on the page) is kept "
+        "raw and never published: it may be account-specific, and the terms treat non-public pricing as confidential.",
+        "Per-token model API prices are on other pages and never read.",
     ],
 )
 

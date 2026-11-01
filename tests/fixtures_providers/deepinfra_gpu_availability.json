@@ -1,0 +1,28 @@
+{
+ "gpus": [
+  {
+   "gpu_config": "1xB200-180GB",
+   "usd_per_hour": 3.69,
+   "available": false,
+   "recommended": false
+  },
+  {
+   "gpu_config": "2xB200-180GB",
+   "usd_per_hour": 7.38,
+   "available": false,
+   "recommended": false
+  },
+  {
+   "gpu_config": "4xB200-180GB",
+   "usd_per_hour": 14.76,
+   "available": false,
+   "recommended": false
+  },
+  {
+   "gpu_config": "8xB200-180GB",
+   "usd_per_hour": 29.52,
+   "available": false,
+   "recommended": false
+  }
+ ]
+}
