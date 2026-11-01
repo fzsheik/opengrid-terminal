@@ -27,6 +27,7 @@ Every source is **public unless it is listed below**. The list lives in one plac
 |---|---|---|---|---|
 | DeepInfra | Container API (`/v1/containers/gpu_availability`), its hourly prices | Internal listings, ids ending `:api` | The API's prices are not the prices DeepInfra publishes on its price page and may be specific to OpenGrid's account; DeepInfra's terms treat non-public pricing as confidential information. DeepInfra's public listings stay the `/gpu-instances` price-page prices, and the same response's in-stock flag stays public capacity. | Routing, job placement, keyed recommendations |
 | AWS | Spot Instance Advisor (`spot-advisor-data.json`): interruption bands and average savings | Internal signals | AWS's site terms restrict gathering and republishing data from aws.amazon.com. | Available to routing (spot capacity is not ranked yet, so no route uses it today) |
+| Fireworks AI | Every source: the on-demand deployments table of fireworks.ai/pricing | Internal listings (the whole provider) | Its Terms of Service cover the website as part of the Service and, in clause (e), forbid copying or distributing any part of it. OpenGrid reads the page at a human rate (hourly) and may use the prices; it does not republish them, and the provider is not named on public provider lists. | Routing, recommendations and job placement |
 
 ## What a customer is shown
 
@@ -83,3 +84,11 @@ listings for the same product (DeepInfra does); only the public one is ever show
 
 See also [data kinds](/methodology/data-kinds) (how each number was obtained) and
 [best execution](/methodology/best-execution) (how routing ranks listings).
+
+## Not for AI input
+
+Separate from the two tiers, a provider can ask that its content not be fed to AI systems. Gcore's robots.txt sets
+`Content-Signal: ai-input=no`, so Gcore stays public on the site and API, but its rows are removed from everything
+the OpenGrid Assistant is grounded on (its cards, and so any language-model phrasing of them) and from every answer
+of the MCP tools (local `opengrid mcp` and the hosted `/mcp`). Market aggregates computed over all providers (a
+median, a provider count) are left as they are. The list is `provider_meta.AI_INPUT_EXCLUDED`, mirrored in the CLI.

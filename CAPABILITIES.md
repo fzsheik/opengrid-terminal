@@ -44,7 +44,7 @@ important) what it deliberately does not claim.
 
 | | |
 |---|---|
-| GPU clouds monitored | **58** (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb, Civo, Atlantic.Net, E2E Networks, Modal, Replicate, Baseten, Beam, Arkane Cloud, VESSL AI, Mithril, DeepInfra, SimplePod, Nosana, Thunder Compute, Clore.ai, Paperspace, Akash Network, Hydra Host, CUDO Compute, GPU.ai, Exoscale, Hugging Face Inference Endpoints, Gcore, Fireworks AI, IONOS Cloud, Hetzner) |
+| GPU clouds monitored | **58**, 57 published (Fireworks AI is internal only: used for routing, never republished) (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb, Civo, Atlantic.Net, E2E Networks, Modal, Replicate, Baseten, Beam, Arkane Cloud, VESSL AI, Mithril, DeepInfra, SimplePod, Nosana, Thunder Compute, Clore.ai, Paperspace, Akash Network, Hydra Host, CUDO Compute, GPU.ai, Exoscale, Hugging Face Inference Endpoints, Gcore, Fireworks AI, IONOS Cloud, Hetzner) |
 | Canonical GPU models | **91**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL) |
 | OpenGrid indices defined | **251** (per-GPU, family composites, overall compute index, regional, spot, provider-class) |
 | News & signal sources | **44** verified feeds (hyperscalers, neoclouds, NVIDIA/AMD, US Federal Register, trade press) |
@@ -164,7 +164,7 @@ provider never holds up the others.
 | GPU.ai | marketplace (reseller) | public API (offerings with launchable counts; its terms say it aggregates other providers' inventory, so listings are `resold:undisclosed` and kept out of market statistics) |
 | Exoscale | general cloud | public API (USD map of its price feed; GPU model, count and zones per family from its own pricing page) |
 | Hugging Face Inference Endpoints | general cloud (reseller) | public API (managed endpoints on AWS/GCP/Azure; listings are `resold:<cloud>` and kept out of market statistics) |
-| Gcore | general cloud | public page (GPU Cloud bare metal and Virtual GPU; EUR list prices converted to USD at the ECB reference rate; "Contact sales" servers not read) |
+| Gcore | general cloud | public page (GPU Cloud bare metal and Virtual GPU; EUR list prices converted to USD at the ECB reference rate; "Contact sales" servers not read; public on the site and API but kept out of the AI assistant and MCP answers: its robots.txt sets `Content-Signal: ai-input=no`) |
 | Fireworks AI | general cloud | public page (on-demand dedicated deployments, USD per GPU-hour; **internal only**: its terms forbid republishing) |
 | IONOS Cloud | general cloud | public page (IONOS CLOUD Inc.'s USD price list on docs.ionos.com, Markdown; Cloud GPU VM templates, H200 PCIe) |
 | Hetzner | general cloud | public page (dedicated GEX GPU servers at the printed hourly rate; EUR converted to USD at the ECB reference rate; one-time setup fee not added) |
@@ -840,7 +840,7 @@ automatically at startup. A push to GitHub does not trigger a Railway build on i
 
 ## 16. Testing
 
-55 Python test files and 6 JavaScript test files (plain scripts, scratch Postgres databases, no real
+109 Python test files and 11 JavaScript web test files (plain scripts, scratch Postgres databases, no real
 provider calls):
 - unit and integration tests for every analytics module, API and page;
 - **routing benchmark**: 50 deterministic decision scenarios;

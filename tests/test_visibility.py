@@ -73,9 +73,14 @@ _HIDDEN_ENTRY = provider_meta.InternalSource(HIDDEN, provider_meta.ALL_SOURCES, 
 def test_registry():
     from providers import PROVIDERS, aws, deepinfra
 
-    for name in PROVIDERS:   # every existing source defaults to public
+    wholly_internal = {"fireworks"}   # terms clause (e): no copying or distributing any part of the Service
+    for name in PROVIDERS:   # every other existing source defaults to public
+        if name in wholly_internal:
+            continue
         assert provider_meta.visibility(name) == "public", name
         assert provider_meta.is_public_provider(name), name
+    assert {p for p in PROVIDERS if provider_meta.provider_internal(p)} == wholly_internal
+    assert provider_meta.enforce("fireworks", "public") == "internal" and not provider_meta.is_public_provider("fireworks")
     entries = {(e.provider, e.source): e for e in provider_meta.INTERNAL_SOURCES}
     assert ("deepinfra", deepinfra.API_ENDPOINT) in entries, "the registry names the module's own endpoint"
     assert ("aws", aws.SPOT_ADVISOR) in entries
@@ -575,6 +580,46 @@ def test_deepinfra_internal_listings_route():
         assert ":api" not in r.text and f"{api_price:g}" not in r.text, url
 
 
+def test_fireworks_is_wholly_internal():
+    """Fireworks AI (terms clause (e): no copying or distributing the Service): stored internal end to end, usable
+    by routing, absent from every public read."""
+    from datetime import timedelta as td
+
+    import fetch as fetch_mod
+    from analytics import providers as prov
+    from models import RawResponse
+    from providers.fireworks import ENDPOINT, extract
+    from routing import scoring
+
+    page = (ROOT / "tests" / "fixtures_providers" / "fireworks_pricing.html").read_text(encoding="utf-8")
+    fetch_mod.SessionLocal = W["Session"]
+    fetch_mod.save([RawResponse(provider="fireworks", endpoint=ENDPOINT, fetched_at=W["now"] - td(minutes=2),
+                                status_code=200, payload=extract(page))])
+    normalize.refresh(["fireworks"])
+    with W["Session"]() as s:
+        rows = {r.listing_id: (r.visibility, r.canonical_gpu_name) for r in s.execute(text(
+            "SELECT listing_id, visibility, canonical_gpu_name FROM compute_listings WHERE provider = 'fireworks'"))}
+    assert rows and {v for v, _ in rows.values()} == {"internal"}, rows
+    cache.clear_all()
+    gpu = next(g for _, g in rows.values() if g)
+    allt = scoring.rank_listings(gpu, mode="CHEAPEST", limit=200, tier="all")
+    assert any(c["provider"] == "fireworks" for c in allt["candidates"]), "routing may use it"
+    pub = scoring.rank_listings(gpu, mode="CHEAPEST", limit=200)
+    assert all(c["provider"] != "fireworks" for c in pub["candidates"])
+    assert "fireworks" not in prov.feed_health()
+    c = _client()
+    slug = gpu_slug(gpu)
+    for url in (f"/v1/gpus/{slug}", f"/v1/markets/{slug}", f"/v1/best/{slug}", "/v1/trust/listings?provider=fireworks",
+                "/v1/providers", "/v1/freshness", "/listings?q=fireworks", "/history?q=fireworks", "/market"):
+        r = c.get(url, headers=BASIC if url.startswith(("/listings", "/history", "/market")) else {})
+        assert r.status_code in (200, 404), (url, r.status_code)
+        body = r.text.lower()
+        assert not any(lid in body for lid in rows), (url, "fireworks listing id in a public answer")
+        assert '"provider":"fireworks"' not in body.replace(" ", ""), (url, "fireworks named as a provider")
+    r = c.post("/v1/cost/estimate", json={"gpu": gpu, "count": 1, "hours": 10})
+    assert r.status_code == 200 and "fireworks" not in r.text.lower(), r.text[:300]
+
+
 def test_reserved_and_provider_lists():
     """The reserved view's on-demand comparison reads public listings only; a wholly internal provider is on no
     public provider list (feed health included)."""
@@ -825,7 +870,8 @@ def test_admins_still_see_internal_values():
 
 TESTS = [test_registry, test_derived_tables_have_no_internal_rows, test_every_public_route_is_clean,
          test_public_posts_are_clean, test_routing_and_recommend_see_internal, test_admin_view_labels_internal_rows,
-         test_save_stamps_the_tier, test_deepinfra_internal_listings_route, test_reserved_and_provider_lists,
+         test_save_stamps_the_tier, test_deepinfra_internal_listings_route, test_fireworks_is_wholly_internal,
+         test_reserved_and_provider_lists,
          test_customers_never_see_internal_values, test_workload_market_reference_is_public,
          test_admins_still_see_internal_values]
 

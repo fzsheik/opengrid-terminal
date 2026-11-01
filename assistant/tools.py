@@ -13,6 +13,8 @@ composed ONLY from these payloads (engine.py), and an optional LLM's reply is ch
 There are NO mutation tools: nothing here previews a route, issues a quote, launches, writes a row or
 calls a provider. rank_listings reads compute_listings; engine.preview (which persists quotes) is never used.
 Public data tier only (methodology/data-visibility.md): rank_listings at its default tier, recommend(tier="public").
+AI input: every payload goes through provider_meta.scrub_ai_input, so a provider that refuses AI input (Gcore's
+robots.txt `Content-Signal: ai-input=no`) never reaches the reply or the optional LLM.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from __future__ import annotations
 import importlib
 from datetime import datetime, timedelta, timezone
 
+import provider_meta
 from api.common import gpu_slug
 
 MAX_VARIANTS = 6
@@ -58,8 +61,9 @@ def _market(name: str) -> dict:
 def _one_price(name: str, *, max_price: float | None = None, region_group: str | None = None) -> dict:
     from routing import scoring
 
-    r = scoring.rank_listings(name, mode="CHEAPEST", limit=TOP, max_price=max_price, region_group=region_group)
-    cands = [{k: c.get(k) for k in CAND_KEYS} | {"fresh": True} for c in r["candidates"][:TOP]]
+    r = scoring.rank_listings(name, mode="CHEAPEST", limit=TOP + 20, max_price=max_price, region_group=region_group)
+    cands = [{k: c.get(k) for k in CAND_KEYS} | {"fresh": True}
+             for c in r["candidates"] if provider_meta.ai_input_allowed(c.get("provider"))][:TOP]
     return {"gpu": name, "slug": gpu_slug(name), "market": _market(name), "cheapest": cands,
             "candidates_total": r["candidates_total"], "exclusions_by_code": r["exclusions_by_code"],
             "max_price_per_gpu_hour": max_price, "region_group": region_group,
@@ -171,3 +175,18 @@ def recommend(req: dict, who, *, limit: int = TOP) -> dict:
     if isinstance(rec, dict) and isinstance(rec.get("excluded"), list):
         rec = {**rec, "excluded": rec["excluded"][:10]}
     return rec
+
+
+def _no_ai_input(fn):
+    def wrapped(*a, **k):
+        return provider_meta.scrub_ai_input(fn(*a, **k))
+    wrapped.__name__, wrapped.__doc__, wrapped.__wrapped__ = fn.__name__, fn.__doc__, fn
+    return wrapped
+
+
+gpu_prices = _no_ai_input(gpu_prices)
+compare = _no_ai_input(compare)
+specs = _no_ai_input(specs)
+market_context = _no_ai_input(market_context)
+estimate = _no_ai_input(estimate)
+recommend = _no_ai_input(recommend)

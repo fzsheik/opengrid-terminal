@@ -220,6 +220,12 @@ INTERNAL_SOURCES: tuple[InternalSource, ...] = (
         "AWS Spot Instance Advisor interruption bands and savings: AWS's site terms restrict gathering and "
         "republishing data from aws.amazon.com, so the bands are never shown publicly.",
         "routing (routing/internal_data.spot_interruption_bands); spot is not ranked yet, so no route uses it today"),
+    InternalSource(
+        "fireworks", ALL_SOURCES, ("listings", "capacity", "signals"),
+        "Fireworks AI's Terms of Service (2026-07-10) cover the website as part of the Service and, in clause (e), "
+        "forbid copying or distributing any part of the Service. Its on-demand deployment prices may be read at a "
+        "human request rate (hourly) and used, never republished, so the whole provider is internal.",
+        "routing, recommendations and job placement (internal listings from fireworks.ai/pricing)"),
 )
 
 
@@ -268,3 +274,30 @@ def as_dict(name: str) -> dict:
     m = meta(name)
     return {"name": m.name, "display_name": m.display_name, "provider_class": m.provider_class,
             "source_type": m.source_type, "source": m.source, "website": m.website, "note": m.note}
+
+
+# --------------------------------------------------------------------------
+# AI input: providers whose data must not be fed to a language model (assistant grounding, MCP tool answers)
+# --------------------------------------------------------------------------
+# Separate from the data tiers: these rows stay public on the site and API. Each entry names its source.
+AI_INPUT_EXCLUDED: dict[str, str] = {
+    "gcore": "gcore.com/robots.txt sets `Content-Signal: ai-train=no, ai-input=no` (checked 2026-11-01)",
+}
+_PROVIDER_KEYS = ("provider", "provider_id", "provider_name")
+
+
+def ai_input_allowed(provider: str | None) -> bool:
+    return (provider or "").lower() not in AI_INPUT_EXCLUDED
+
+
+def scrub_ai_input(obj, excluded=None):
+    """`obj` without any row of an AI-input-excluded provider: list items that are dicts naming one under
+    provider / provider_id / provider_name are dropped, and dict entries keyed by one (by_provider maps) too.
+    Aggregates computed over all providers (a market median) are left as they are. Returns a new object."""
+    ex = AI_INPUT_EXCLUDED if excluded is None else excluded
+    if isinstance(obj, list):
+        return [scrub_ai_input(x, ex) for x in obj
+                if not (isinstance(x, dict) and any(str(x.get(k) or "").lower() in ex for k in _PROVIDER_KEYS))]
+    if isinstance(obj, dict):
+        return {k: scrub_ai_input(v, ex) for k, v in obj.items() if not (isinstance(k, str) and k.lower() in ex)}
+    return obj

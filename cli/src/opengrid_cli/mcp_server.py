@@ -52,6 +52,36 @@ PRICE_NOTE = ("Prices are observed per-GPU-hour listings (not quotes; may be sta
               "unless benchmarked, so costs are scenarios with stated assumptions.")
 
 
+# Providers whose data must not be fed to a language model; mirrors the server's provider_meta.AI_INPUT_EXCLUDED
+# (tests/test_assistant.py checks they agree). Gcore: robots.txt `Content-Signal: ai-input=no`.
+AI_INPUT_EXCLUDED = ("gcore",)
+_PROVIDER_KEYS = ("provider", "provider_id", "provider_name")
+
+
+def scrub_ai_input(obj: Any) -> Any:
+    """`obj` without list rows naming an excluded provider, or dict entries keyed by one."""
+    if isinstance(obj, list):
+        return [scrub_ai_input(x) for x in obj if not (isinstance(x, dict) and any(
+            str(x.get(k) or "").lower() in AI_INPUT_EXCLUDED for k in _PROVIDER_KEYS))]
+    if isinstance(obj, dict):
+        return {k: scrub_ai_input(v) for k, v in obj.items()
+                if not (isinstance(k, str) and k.lower() in AI_INPUT_EXCLUDED)}
+    return obj
+
+
+def ai_safe(c: "Client") -> "Client":
+    """Every MCP tool answer feeds an LLM: each API response this client returns is scrub_ai_input()-ed."""
+    request = c._request
+
+    def scrubbed(*a, **k):
+        r = request(*a, **k)
+        r.data = scrub_ai_input(r.data)
+        return r
+
+    c._request = scrubbed
+    return c
+
+
 def instructions(*, remote: bool, site: str) -> str:
     start = ("build a WorkloadRequirements object" if remote else
              "opengrid_analyze_project (local; reads only allowlisted files) or build a WorkloadRequirements object")
@@ -381,7 +411,7 @@ def build_server(client_factory: Callable[[], Client] | None = None, *, remote: 
     desc = descriptions(remote=remote, site=site)
 
     def make_client() -> Client:
-        return client_factory() if client_factory else Client(timeout=TOOL_TIMEOUT, retries=1)
+        return ai_safe(client_factory() if client_factory else Client(timeout=TOOL_TIMEOUT, retries=1))
 
     @contextmanager
     def api(action: str):

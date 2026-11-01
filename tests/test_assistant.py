@@ -373,6 +373,49 @@ def test_cheapest_compare_specs_context_grounded():
     assert ctx["cards"][0]["data"]["note"].startswith("Shown side by side: correlation, not causation")
 
 
+def test_ai_input_excluded_providers_never_reach_the_assistant():
+    """Gcore's robots.txt says `Content-Signal: ai-input=no`: its rows stay public on the site and API but are never
+    in an assistant card (the reply and the optional LLM are built only from cards) or an MCP tool answer."""
+    import provider_meta
+
+    assert "gcore" in provider_meta.AI_INPUT_EXCLUDED and not provider_meta.ai_input_allowed("Gcore")
+    assert provider_meta.visibility("gcore") == "public", "a public provider: only AI input is withheld"
+    d = {"cheapest": [{"provider": "gcore", "p": 1}, {"provider": "lambda", "p": 2}],
+         "by_provider": {"gcore": {"low": 1}, "lambda": {"low": 2}}, "options": [{"provider_id": "GCORE"}], "n": 3}
+    assert provider_meta.scrub_ai_input(d) == {"cheapest": [{"provider": "lambda", "p": 2}],
+                                               "by_provider": {"lambda": {"low": 2}}, "options": [], "n": 3}
+    # the CLI's MCP server (local and hosted /mcp) carries the same list and scrubs every API answer
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "cli" / "src"))
+    from opengrid_cli import mcp_server
+    assert set(mcp_server.AI_INPUT_EXCLUDED) == set(provider_meta.AI_INPUT_EXCLUDED)
+    assert mcp_server.scrub_ai_input(d) == provider_meta.scrub_ai_input(d)
+    from opengrid_cli.client import Client, Response
+
+    class FakeClient(Client):
+        def __init__(self):
+            pass
+
+        def _request(self, method, path, **kw):
+            return Response(status=200, data=json.loads(json.dumps(d)))
+
+    assert mcp_server.ai_safe(FakeClient()).get("/v1/markets/h100").data == provider_meta.scrub_ai_input(d)
+    # end to end: exclude whoever is cheapest now; it disappears from the answer, the next one leads
+    before = ask("cheapest available H100 SXM")["cards"][0]["data"]["cheapest"]
+    top = before[0]["provider"]
+    saved = dict(provider_meta.AI_INPUT_EXCLUDED)
+    provider_meta.AI_INPUT_EXCLUDED[top] = "test"
+    try:
+        for msg in ("cheapest available H100 SXM", "Compare H100 SXM and H200",
+                    "What GPU should I use to fine-tune Llama 3 8B with LoRA?"):
+            r = ask(msg)
+            assert f'"{top}"' not in json.dumps(r["cards"]), (msg, top)
+        after = ask("cheapest available H100 SXM")["cards"][0]["data"]["cheapest"]
+        assert after and all(c["provider"] != top for c in after)
+    finally:
+        provider_meta.AI_INPUT_EXCLUDED.clear()
+        provider_meta.AI_INPUT_EXCLUDED.update(saved)
+
+
 def test_missing_and_ambiguous_gpu_ask():
     r = ask("why did prices go up?")
     assert r["intent"] == "price_change" and r["cards"][0]["type"] == "questions"
