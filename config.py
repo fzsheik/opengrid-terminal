@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -92,6 +92,11 @@ class Settings(BaseSettings):
     lambda_api_key: str | None = None
     jarvis_api_key: str | None = None          # Jarvislabs misc/server_meta (prices, spot, reserved, capacity)
     gcp_api_key: str | None = None             # Google Cloud Billing Catalog API (restricted to that API)
+    # A read-only Google service account (the key file's JSON, one line) and its project: Compute Engine machine and
+    # accelerator types per zone (opens GCP regions beyond Iowa) and calendar-mode advice, never a create call.
+    # SecretStr so the key never shows in a repr or log. providers/gcp.py, providers/gcp_auth.py.
+    gcp_service_account_json: SecretStr | None = None
+    gcp_project_id: str | None = None
     massedcompute_api_key: str | None = None   # Massed Compute gpu-inventory API (read-only token); unset: the price page
     runpod_api_key: str | None = None
     digitalocean_api_key: str | None = None

@@ -58,13 +58,14 @@ class Provider(ABC):
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    async def call(self, method: str, path: str, **kw) -> RawResponse:
-        """One HTTP call, recorded whether or not it worked."""
+    async def call(self, method: str, path: str, *, client: httpx.AsyncClient | None = None, **kw) -> RawResponse:
+        """One HTTP call, recorded whether or not it worked. `client` overrides the provider's own (a second API
+        host, such as GCP's Compute API beside its Billing API)."""
         started_wall = datetime.now(timezone.utc)
         started = time.perf_counter()
         request_body = kw.get("json")
         try:
-            resp = await self._client.request(method, path, **kw)
+            resp = await (client or self._client).request(method, path, **kw)
         except Exception as exc:
             return RawResponse(
                 provider=self.name,
