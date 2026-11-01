@@ -178,9 +178,20 @@ def test_capacity_joins_page_skus():
     assert HotAisleProvider.normalize_capacity({}) == []
 
 
+def test_empty_list_is_sold_out():
+    """[] is a valid answer: the endpoint lists only what can be provisioned now, so every page size is out."""
+    handler, _ = api_server(vm=[])
+    page, vm, bm = run(keyed(handler))
+    assert page.ok and vm.ok and vm.payload == [], "an empty list is a successful fetch"
+    rows = {r.sku: r for r in HotAisleProvider.normalize_capacity(by([page, vm, bm]))}
+    assert set(rows) == {"MI300x:1x:vm", "MI300x:2x:vm", "MI300x:4x:vm"}
+    assert all(r.in_stock is False and r.available_count is None for r in rows.values())
+    assert len(HotAisleProvider.normalize(by([page, vm, bm]))) == 3, "prices untouched"
+
+
 def test_api_failures_never_touch_prices():
     """A VM body with no readable type is a failed fetch, never "nothing in stock"; prices carry on."""
-    for body in ([], {"error": "x"}, [{"Quantity": 1}], [{"Quantity": "1", "Specs": {"gpus": []}}]):
+    for body in ({"error": "x"}, [{"Quantity": 1}], [{"Quantity": "1", "Specs": {"gpus": []}}]):
         handler, _ = api_server(vm=body)
         page, vm, bm = run(keyed(handler))
         assert page.ok and len(HotAisleProvider.normalize(by([page, vm, bm]))) == 3, body
@@ -269,7 +280,7 @@ def test_keyed_pipeline():
 
 if __name__ == "__main__":
     for t in (test_keyed_fetch_is_read_only_and_stores_no_secrets, test_team_resolution, test_prices_stay_the_page,
-              test_capacity_joins_page_skus, test_api_failures_never_touch_prices, test_no_key_is_the_scraper,
+              test_capacity_joins_page_skus, test_empty_list_is_sold_out, test_api_failures_never_touch_prices, test_no_key_is_the_scraper,
               test_keyed_pipeline):
         t()
         print(t.__name__, "ok")
