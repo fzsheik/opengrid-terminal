@@ -1604,6 +1604,39 @@ GCORE = ProviderMapping(
 )
 
 
+FIREWORKS = ProviderMapping(
+    provider="fireworks",
+    display_name="Fireworks AI (on-demand deployments; INTERNAL: terms forbid republishing)",
+    endpoints={"GET fireworks.ai/pricing": "the public price page; the 'On demand deployments' table, USD per GPU"},
+    fields=_fields(
+        "fireworks",
+        sku=(DERIVED, '"on-demand:{GPU Type}"', 'e.g. "on-demand:H100 80 GB GPU"'),
+        listing_id=(DERIVED, "GPU Type slug", 'e.g. "h100-80-gb-gpu"'),
+        raw_gpu_name=(RAW, "GPU Type", 'e.g. "B200 180 GB GPU"'),
+        gpu_count=(CONSTANT, "1", "priced per GPU"),
+        region=(ABSENT, "-", "region-restricted deployments cost 1.5x; not modelled"),
+        country=(ABSENT, "-"),
+        price_per_gpu_hour=(RAW, "Price ($) per hour", "checked against per minute x 60 within 1%"),
+        price_per_instance_hour=(DERIVED, "= price_per_gpu_hour", "one GPU"),
+        currency=(CONSTANT, '"USD"', "the page prints $"),
+        provider_tier=(CONSTANT, '"serverless"', "a dedicated inference deployment, billed per GPU second"),
+        available=(ABSENT, "-", "no stock signal"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(ABSENT, "-", "host included, not stated"),
+        ram_gb=(ABSENT, "-"),
+        storage_gb=(ABSENT, "-"),
+    ),
+    quirks=[
+        "INTERNAL ONLY: its Terms of Service allow automated access at a human request rate but forbid copying or "
+        "distributing any part of the Service, scraping included; register in provider_meta.INTERNAL_SOURCES.",
+        "Per-minute figures are rounded (H100 $0.134 x 60 = $8.04 vs $8.00): the hourly price is read.",
+        '"H100 80 GB GPU" stays unmapped (SXM or PCIe not stated).',
+        "Runs on other clouds' capacity; classed general_cloud like Baseten and Modal.",
+    ],
+)
+
+
 MODAL = ProviderMapping(
     provider="modal",
     display_name="Modal (serverless GPU)",
@@ -1998,6 +2031,7 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         EXOSCALE,
         HUGGINGFACE,
         GCORE,
+        FIREWORKS,
     )
 }  # fmt: skip
 

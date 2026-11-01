@@ -588,6 +588,14 @@ _add("NVIDIA L40S 48GB", "L40S PCIe 48GB")
 _add("NVIDIA H200 141GB SXM5", "H200 SXM 141GB")
 _add(None, "H100 80GB")
 
+# Fireworks AI (providers/fireworks.py): on-demand rows as printed. A bare H200 is the SXM part; B200, B300 and GB300
+# exist only as SXM boards / superchips. "H100 80 GB GPU" stays unmapped (SXM or PCIe not stated).
+_add("NVIDIA H200 141GB SXM5", "H200 141 GB GPU")
+_add("NVIDIA B200 180GB SXM", "B200 180 GB GPU")
+_add("NVIDIA B300 288GB SXM", "B300 288 GB GPU")
+_add("NVIDIA GB300 288GB", "GB300 288 GB GPU")
+_add(None, "H100 80 GB GPU")
+
 # --------------------------------------------------------------------------
 # Seen, deliberately not mapped
 # --------------------------------------------------------------------------

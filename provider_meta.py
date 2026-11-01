@@ -142,6 +142,9 @@ _ALL = [
     ProviderMeta("gcore", "Gcore", "general_cloud", "public_page", "gcore.com", "https://gcore.com/cloud/ai-gpu",
                  "GPU Cloud bare metal (self-serve 8-GPU servers) and Virtual GPU; EUR list prices excl. VAT converted "
                  "to USD at the ECB reference rate"),
+    ProviderMeta("fireworks", "Fireworks AI", "general_cloud", "public_page", "fireworks.ai", "https://fireworks.ai",
+                 "on-demand (dedicated) inference deployments, USD per GPU-hour; INTERNAL: its terms forbid "
+                 "republishing the Service's content"),
     ProviderMeta("simplepod", "SimplePod", "marketplace", "public_api", "api.simplepod.ai", "https://simplepod.ai",
                  "own racks plus community hosts; one listing per open on-demand offer (Docker and VM); disk billed extra"),
     ProviderMeta("clore", "Clore.ai", "marketplace", "authenticated_api", "api.clore.ai", "https://clore.ai",
