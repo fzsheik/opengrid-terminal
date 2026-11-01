@@ -82,6 +82,7 @@ class Settings(BaseSettings):
     login_failure_window_seconds: int = 300
     # Poll providers in the background. Off for read-only dev servers against a shared DB.
     poller_enabled: bool = True
+    lium_stream_enabled: bool = True             # Lium executor WebSocket (live/lium_stream.py); needs poller_enabled
     # Ops alerts (alerts/ops.py): orphans, termination failures, ambiguous launches, kill switches.
     # Any HTTPS webhook (Slack/PagerDuty incoming webhooks work); signed with the secret.
     ops_alert_webhook_url: str | None = None

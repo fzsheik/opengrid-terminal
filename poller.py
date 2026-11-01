@@ -21,6 +21,7 @@ import time
 import freshness
 import normalize
 from fetch import build_fetchers, save
+from live.locks import refresh_provider
 from providers.base import CAPACITY, PRICE, PollingPolicy, Provider
 
 log = logging.getLogger(__name__)
@@ -58,7 +59,8 @@ async def poll_once(provider: Provider) -> dict:
     throttled = sum(1 for r in responses if r.throttled)
     failed = sum(1 for r in responses if not r.ok and not r.throttled)
     await asyncio.to_thread(save, responses)
-    result = await asyncio.to_thread(normalize.refresh, [provider.name])
+    # one normalize per provider at a time: a live stream (live/lium_stream.py) may re-normalize it too
+    result = await asyncio.to_thread(refresh_provider, provider.name)
     await asyncio.to_thread(freshness.record, provider.name)  # fails open
     result["responses"] = len(responses)
     result["failed"] = failed

@@ -26,6 +26,7 @@ Which providers publish a time:
 | Nebius (spot) | `effectiveTime` (billing spot-price API) | exact | When the spot price took effect. |
 | Azure | `effectiveStartDate` (Retail Prices API) | date_only | The date the retail price took effect, stored as midnight UTC. |
 | GCP | `pricingInfo.effectiveTime` (Cloud Billing Catalog) | lower_bound | The price was in force by then. Google reports the time within the queried range, so the real change may be earlier. A VM price is assembled from several SKUs (GPU, cores, memory, local SSD); its time is the newest of theirs. |
+| Lium (live stream) | frame `ts` of the executor WebSocket `upsert` that carried the change (methodology/live-feeds.md) | exact | When Lium published the change, to the second. Only for changes seen live; differences found by re-diffing a snapshot after a reconnect or sequence gap get `poll_window` with the bracket, and rows from the REST poller have no time. |
 | Everyone else | none | poll_window | Only the bracket. |
 
 Rules:

@@ -10,7 +10,7 @@
 Existing rows keep NULLs until `python -m changed_at backfill` re-reads their raw snapshots (idempotent).
 
 Revision ID: 0028_changed_at
-Revises: 0026_fx
+Revises: 0027_visibility
 """
 from typing import Sequence, Union
 
@@ -18,7 +18,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision: str = "0028_changed_at"
-down_revision: Union[str, Sequence[str], None] = "0026_fx"
+down_revision: Union[str, Sequence[str], None] = "0027_visibility"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

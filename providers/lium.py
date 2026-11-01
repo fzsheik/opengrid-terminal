@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
+import changed_at
 from models import CapacityObservation, ComputeListing, RawResponse
 from providers.base import PollingPolicy, Provider, find_endpoint, reshaped, to_decimal
 
@@ -117,6 +118,9 @@ class LiumProvider(Provider):
             log.warning("lium: unexpected payload shape %s", type(snapshot.payload).__name__)
             return []
 
+        # A live-stream snapshot (live/lium_stream.py) says when each changed executor changed: Lium's frame `ts`.
+        # Handed to the freshness pipeline (changed_at.provider_time keeps it only when the price moved).
+        stream_times = ((snapshot.request or {}).get("changed_at") or {}) if isinstance(snapshot.request, dict) else {}
         listings = []
         for e in snapshot.payload:
             per_gpu = to_decimal(e.get("price_per_gpu"))
@@ -149,6 +153,8 @@ class LiumProvider(Provider):
                     ram_gb=None if not ram else round(ram / KIB_PER_GIB, 1),
                     storage_gb=None if not disk else round(disk / KIB_PER_GIB, 1),
                     observed_at=snapshot.fetched_at,
+                    provider_changed_at=changed_at.parse_time(stream_times.get(str(e["id"]))),
+                    changed_at_basis="exact" if stream_times.get(str(e["id"])) else None,
                 )
             )
         return listings

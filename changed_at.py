@@ -10,6 +10,7 @@ OpenGrid knew. When it happened is a separate question, answered as well as the 
                              nebius   spot `effectiveTime`                               exact
                              azure    `effectiveStartDate` (a date, midnight UTC)        date_only
                              gcp      `pricingInfo.effectiveTime`, latest component SKU   lower_bound
+                             lium     live-stream frame `ts` (live/lium_stream.py)         exact
     changed_at_basis     exact | date_only | lower_bound (the provider's time, with that precision) or poll_window
                          (no provider time: only the bracket is known).
 
@@ -48,7 +49,7 @@ from decimal import Decimal
 log = logging.getLogger(__name__)
 
 BASES = ("exact", "date_only", "lower_bound", "poll_window")
-PROVIDER_TIMED = ("aws", "nebius", "azure", "gcp")
+PROVIDER_TIMED = ("aws", "nebius", "azure", "gcp", "lium")  # lium: live-stream snapshots only
 MAX_SKEW = timedelta(minutes=5)
 PRICE_FIELDS = ("price_per_gpu_hour", "price_per_instance_hour")
 _WARNED: set[tuple[str, str]] = set()

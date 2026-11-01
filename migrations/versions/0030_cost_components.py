@@ -5,7 +5,7 @@ Additive only: one new table. Components and estimates are computed on read; not
                      volume types, cut to the products cost/ reads; failures included
 
 Revision ID: 0030_cost_components
-Revises: 0026_fx
+Revises: 0028_changed_at
 """
 from typing import Sequence, Union
 
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0030_cost_components"
-down_revision: Union[str, Sequence[str], None] = "0026_fx"
+down_revision: Union[str, Sequence[str], None] = "0028_changed_at"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

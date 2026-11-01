@@ -15,7 +15,7 @@ Nothing that computes statistics reads any of it.
                                   bytes verbatim, so it survives the publisher's retention
 
 Revision ID: 0031_backfill_sources
-Revises: 0026_fx
+Revises: 0030_cost_components
 """
 from typing import Sequence, Union
 
@@ -24,7 +24,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
 revision: str = "0031_backfill_sources"
-down_revision: Union[str, Sequence[str], None] = "0026_fx"
+down_revision: Union[str, Sequence[str], None] = "0030_cost_components"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
