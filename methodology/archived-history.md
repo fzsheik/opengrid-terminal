@@ -46,6 +46,16 @@ can miss short price moves entirely. Stock is never inferred from an archived pa
      read as on-demand or spot: the archived reader takes one market at a time and the API offers only
      `on_demand` and `spot`.
 
+3. **Azure "effective since" anchors** (`source = azure_retail`, `basis = effective_since`;
+   `python -m backfill azure-since`). The Retail Prices API returns only current prices, but every row states
+   the date that price took effect (`effectiveStartDate`). One point is stored per GPU size, region and market
+   (on-demand, spot), dated at that start date: ND96asr_v4 (8 x A100 40GB) at $27.197/h since 2021-03-01 in
+   eastus and since 2021-06-01 in westus2. It is **one point, not a series**: the price before that date is
+   unknown, and `valid_to` stays empty so the point is never stretched to today. Rows are read with the live
+   poller's rules (`GPU_SIZES`, Windows and Low Priority meters dropped, whole-VM price / GPU count). Every
+   point links to its meter's own query (`$filter=meterId eq '...'`) and its note says when OpenGrid read it.
+   A later run that finds a new price stores a new point with the new start date; the old one stays.
+
 ## Parsing
 
 - Where OpenGrid scrapes a page live, the archived capture goes through **the live parser unchanged**

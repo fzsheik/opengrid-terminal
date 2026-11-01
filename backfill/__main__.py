@@ -5,6 +5,8 @@
                               [--no-download] [--dry-run] [--no-aws] [--report report.json]
     python -m backfill aws [--since 2015-12-01] [--no-download] [--dry-run]
                               AWS's EC2 price-list archive only (all 123 versions by default; on-demand + reserved)
+    python -m backfill azure-since [--dry-run]
+                              Azure Retail Prices API: one "effective since" point per GPU size / region / market
 
 Downloads go one at a time through backfill/wayback.py (polite, cached under OPENGRID_ARCHIVE_CACHE,
 default ~/.cache/opengrid/wayback), so the first full import takes about an hour and a re-run takes seconds.
@@ -41,8 +43,15 @@ def main(argv=None) -> int:
     p.add_argument("--since", default=AWS_FIRST_VERSION)
     p.add_argument("--no-download", action="store_true")
     p.add_argument("--dry-run", action="store_true")
+    p = sub.add_parser("azure-since", help="Azure effectiveStartDate anchors (one point each, not a series)")
+    p.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
 
+    if a.cmd == "azure-since":
+        from backfill import azure_since
+        r = azure_since.run(dry_run=a.dry_run)
+        print("earliest:", r["earliest"], "problems:", r["problems"][:10])
+        return 0
     if a.cmd == "aws":
         r = load.run_aws(datetime.strptime(a.since, "%Y-%m-%d").replace(tzinfo=timezone.utc), dry_run=a.dry_run,
                          download=not a.no_download)

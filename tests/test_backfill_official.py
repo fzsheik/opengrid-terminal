@@ -21,7 +21,7 @@ from sqlalchemy import text  # noqa: E402
 import fixtures  # noqa: E402
 import normalize  # noqa: E402
 from analytics import archived  # noqa: E402
-from backfill import aws_price_list, load  # noqa: E402
+from backfill import aws_price_list, azure_since, load  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_backfill"
 DB = "og_test_backfill_official"
@@ -128,8 +128,45 @@ def test_aws_run_stores_on_demand_and_reserved_apart_with_provenance():
         scratchdb.drop(DB)
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# 2. Azure "effective since"
+# ---------------------------------------------------------------------------------------------------------------
+
+AZ = json.loads((FIX / "azure_retail_nd96asr_v4_2026-11.json").read_text())
+READ = datetime(2026, 11, 1, 12, tzinfo=timezone.utc)
+
+
+def test_azure_effective_since_points():
+    pts, problems = azure_since.points(AZ, READ)
+    assert not problems
+    by = {l.listing_id: (l, row) for l, row in pts}
+    l, row = by["Standard_ND96asr_v4:westus2:since:2021-06-01"]
+    assert l.price_per_instance_hour == D("27.197") and l.price_per_gpu_hour == D("27.197") / 8
+    assert l.observed_at == datetime(2021, 6, 1, tzinfo=timezone.utc) and l.market_type == "on_demand"
+    assert l.canonical_gpu_name == "NVIDIA A100 40GB SXM4"
+    assert "Windows" not in row["productName"] and "Low Priority" not in row["skuName"]
+    assert {l.market_type for l, _ in pts} == {"on_demand", "spot"}
+    assert len(pts) == 4, "one per (size, region, market): Windows and Low Priority meters never read"
+
+
+def test_azure_run_stores_one_labelled_point_each():
+    _db()
+    try:
+        r = azure_since.run(items=AZ, read_at=READ, log=lambda m: None)
+        assert r["inserted"] == 4 and azure_since.run(items=AZ, read_at=READ, log=lambda m: None)["inserted"] == 0
+        rows = _q("SELECT * FROM archived_prices WHERE market_type = 'on_demand' ORDER BY observed_at")
+        assert all(x.basis == "effective_since" and x.valid_to is None and x.source == "azure_retail" for x in rows)
+        assert rows[0].source_url.startswith("https://prices.azure.com/api/retail/prices?%24filter=meterId%20eq%20")
+        assert "effective since 2021-03-01" in rows[0].note and "read 2026-11-01" in rows[0].note
+        a = archived.gpu_archived("NVIDIA A100 40GB SXM4")
+        assert [p["t"][:10] for p in a["points"]] == ["2021-03-01", "2021-06-01"]
+    finally:
+        scratchdb.drop(DB)
+
+
 TESTS = [test_aws_2017_file_without_capacity_status_is_read, test_aws_offering_class_absent_reads_as_standard,
-         test_aws_run_stores_on_demand_and_reserved_apart_with_provenance]
+         test_aws_run_stores_on_demand_and_reserved_apart_with_provenance, test_azure_effective_since_points,
+         test_azure_run_stores_one_labelled_point_each]
 
 if __name__ == "__main__":
     for t in TESTS:
