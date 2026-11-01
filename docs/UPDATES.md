@@ -5,6 +5,61 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-01 — 47 providers merged; Verda, Massed Compute and DeepInfra keys; archived price history
+
+### What shipped
+
+**Merged into main:** the `history/archived-backfill` branch (15 more GPU clouds, 32 -> 47, incl. Thunder Compute and
+Clore.ai; archived price history from public archives, kind `archived`, never in statistics) and the Azure reserved
+prices entry below. Merge notes:
+- Both branches added a `0025` migration off `0024_probes`. `0025_archived_prices` now runs after `0025_capacity`,
+  so there is one head. It runs automatically at startup.
+- The backfill read archived Jarvislabs and GCP pages through the live page scrapers, which main replaced with APIs.
+  The old scrapers are kept unchanged in `backfill/retired/` (never polled live) for archived captures only.
+
+**Verda capacity from its own API** (needs `VERDA_CLIENT_ID` + `VERDA_CLIENT_SECRET`, Cloud API credentials). Yes/no
+per instance type, location (FIN-01/02/03) and market from `GET /v1/instance-availability`, asked separately for
+on-demand and spot; the capacity sku is the listing id, so every row joins to a price. Example at ship time: 8x H100
+on-demand only at FIN-02; 8x B200 spot at FIN-03 but no on-demand anywhere. Prices stay public and work without the
+credentials. The commitment ladder (2/3/4/8/25%), the 56-entry cluster catalogue and cluster availability are stored
+raw; none becomes a listing yet. The OAuth secret and token are never stored. The credentials only enable GETs in the
+poller; launching on Verda still needs every execution gate (validation allowlist, admin-approved validation, per-
+provider flags, per-launch admin approval).
+
+**Massed Compute moved to its official API** (needs `MASSEDCOMPUTE_API_KEY`, a read-only token from
+vm.massedcompute.com/settings/api). Prices and capacity come from `GET https://vm.massedcompute.com/api/v1/gpu-inventory`
+(`Authorization: Bearer`). The earlier 401 came from `api.massedcompute.com`, which the docs say not to use. Capacity
+is now a count (`capacity_available` instances per product, in-stock regions in `raw_value`), replacing Shadeform's
+yes/no; Shadeform is not read for Massed Compute when the key is set. All 74 page listings carry over unchanged and 7
+spot products are added. Without the key, or if the API fails, the public /pricing page is still read.
+
+**DeepInfra stock from its container API** (needs `DEEPINFRA_API_KEY`). Prices still come from the public
+/gpu-instances page. The key adds DeepInfra's in-stock flag per GPU configuration as yes/no capacity, joined by sku.
+The API's own hourly prices are stored raw but never published: on 2026-11-01 it priced a B200 at $3.69/GPU-hr
+against $4.89 on the public page, which may be specific to our account, and DeepInfra's terms (s.17) treat non-public
+pricing as confidential.
+
+### Planned but not shipped, and why
+
+| Item | Why not |
+|---|---|
+| Denvr API | Key not created yet. |
+| Publishing DeepInfra API prices | Possibly account-specific and confidential (see above). Ask DeepInfra first. |
+
+### Known issues at ship time
+- Full suite before push: 76 of 78 test files pass. `test_jobs_e2e` fails here and on main before this merge.
+  chaos, events, limits, mcp_remote and money_invariants failed on main in a parallel run and pass here; several
+  suites are date/timezone dependent, and tests that share the dev database interfere when run concurrently.
+- `test_backfill_lambda_runpod` needs `tests/fixtures_backfill/runpod_2026-10.html`, which was never committed.
+- Verda: `.CC.AMD` / `.CC.INTEL` types are not tagged confidential (check is `endswith(".CC")`), and
+  `RTX PRO 6000 96GB` has no canonical GPU name.
+
+### Deploy notes
+- New Railway variables: `VERDA_CLIENT_ID`, `VERDA_CLIENT_SECRET`, `MASSEDCOMPUTE_API_KEY`, `DEEPINFRA_API_KEY`,
+  `THUNDER_API_KEY`, `CLORE_API_KEY`. Pushed to main before the variables were changed.
+
+---
+
 ## 2026-10-31 — Azure reserved (1 / 3 / 5-year) prices, stored raw
 
 ### What shipped
