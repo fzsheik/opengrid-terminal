@@ -56,6 +56,29 @@ can miss short price moves entirely. Stock is never inferred from an archived pa
    point links to its meter's own query (`$filter=meterId eq '...'`) and its note says when OpenGrid read it.
    A later run that finds a new price stores a new point with the new start date; the old one stays.
 
+4. **Open datasets with a licence** (`backfill/datasets/`; `python -m backfill datasets`). Each point records its
+   licence and attribution (`licence`, `attribution` columns) and the exact revision it came from.
+   - **Full Stack Deep Learning, cloud-gpus.csv** (`source = fsdl_cloud_gpus`, `basis = dataset_snapshot`,
+     MIT, from 2022-08). Every revision of the file on the default branch (git history, first parent). The table
+     is edited by hand, so a commit date is when a row was *published*, not when the price was checked. A row is
+     stored once per version: where it first appears or a price changes; later commits that carry it along add
+     nothing (otherwise a row nobody updated would read as a fresh price for years).
+   - **Huang (2026), GPU Rental Value Curves**, Zenodo doi:10.5281/zenodo.22053861 (`source = huang_vast_monthly`,
+     `basis = monthly_median`, CC BY 4.0, Vast.ai from 2022-10). The value is the month's count-weighted median
+     *transacted* rate of rented, verified machines (renter-side, fees included, on-demand and interruptible
+     pooled), so it is stored as its own market, `transacted`, with `valid_to` the month's end. It is counted in
+     coverage but never enters the on-demand or spot series. The release's third-party Ornn file is never read.
+   - Names: explicit tables (`backfill/datasets/names.py`). Providers OpenGrid does not track are skipped and
+     counted. A GPU label that hides a variant ("A100 (80 GB)") is resolved only from the row's own instance
+     name through the providers' tables (AWS `GPU_INSTANCES`, Azure `GPU_SIZES`, GCP machine families) or a form
+     factor the name spells out; otherwise it stays unmapped. Vast's "A100 SXM4" pools 40 and 80 GB cards and
+     stays unmapped. Listing ids join the live ones where the live id can be derived (Exoscale `gpu3.small`,
+     Paperspace `A6000x2`).
+   - **Never double counted.** A dataset point that repeats a primary source (`aws_price_list`, `azure_retail`,
+     `wayback`) for the same provider, listing (provider, market, GPU count, and GPU or sku) and date (inside an
+     AWS version's period; else the same UTC day) is not stored again: it is appended to the primary row's
+     `corroboration` (source, document, date, its own stated price, licence), once.
+
 ## Parsing
 
 - Where OpenGrid scrapes a page live, the archived capture goes through **the live parser unchanged**

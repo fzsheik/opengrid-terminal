@@ -164,9 +164,109 @@ def test_azure_run_stores_one_labelled_point_each():
         scratchdb.drop(DB)
 
 
-TESTS = [test_aws_2017_file_without_capacity_status_is_read, test_aws_offering_class_absent_reads_as_standard,
-         test_aws_run_stores_on_demand_and_reserved_apart_with_provenance, test_azure_effective_since_points,
-         test_azure_run_stores_one_labelled_point_each]
+# ---------------------------------------------------------------------------------------------------------------
+# 3. Open datasets: FSDL (MIT) and Huang (CC BY)
+# ---------------------------------------------------------------------------------------------------------------
+
+_FSDL_HEAD = "Cloud,GPU Type,GPU Arch,GPUs,GPU RAM,vCPUs,RAM,On-demand,Per-GPU,Spot,Name\n"
+_FSDL_1 = _FSDL_HEAD + (
+    "AWS,V100 (16 GB),Volta,1,16,8,61,$3.06,$3.06,$0.92,p3.2xlarge\n"
+    "Lambda,A100 (40 GB),Ampere,8,320,124,1800,$8.80,$1.10,,\n"
+    "Oblivus Cloud,A100 (80 GB),Ampere,1,80,8,64,$2.55,$2.55,,\n")
+_FSDL_2 = _FSDL_HEAD + (
+    "AWS,V100 (16 GB),Volta,1,16,8,61,3.06,3.06,0.92,p3.2xlarge\n"          # "$" dropped: not a change
+    "Lambda,A100 (40 GB),Ampere,8,320,124,1800,$10.32,$1.29,,\n"            # re-priced: a new version
+    "Exoscale,A40 (48 GB),Ampere,1,48,12,56,,1.88,,GPU3 SMALL\n"
+    "Cudo Compute,A4000 (16 GB),Ampere,1,16,2,4,0.30,0.29,,\n"
+    "Cudo Compute,A4000 (16 GB),Ampere,1,16,4,8,0.32,0.30,,\n"              # same GPU, another machine size
+    "Paperspace,A6000 (48 GB),Ampere,2,96,16,90,3.78,1.89,,\n"
+    "Azure,A100 (80 GB),Ampere,1,80,24,220,3.67,3.67,,NC24ads A100 v4\n")
+REVS = [("a" * 40, datetime(2022, 8, 5, 4, tzinfo=timezone.utc), _FSDL_1),
+        ("b" * 40, datetime(2023, 5, 24, 9, tzinfo=timezone.utc), _FSDL_2)]
+
+
+def test_fsdl_row_versions_names_and_listing_ids():
+    from backfill.datasets import fsdl
+    vs = fsdl.row_versions(REVS)
+    assert [(sha[0], row["Cloud"]) for sha, _, row in vs] == [
+        ("a", "AWS"), ("a", "Lambda"), ("a", "Oblivus Cloud"), ("b", "Lambda"), ("b", "Exoscale"),
+        ("b", "Cudo Compute"), ("b", "Cudo Compute"), ("b", "Paperspace"), ("b", "Azure")], \
+        "a row is stored where it appears or changes, never again for carrying it along"
+    rows, info = fsdl.rows(REVS)
+    by = {(r["provider"], r["listing_id"]): r for r in rows}
+    assert info["skipped_untracked_clouds"] == {"Oblivus Cloud": 1}
+    assert by[("aws", "p3.2xlarge:1:8vcpu:61gb")]["gpu"] == "NVIDIA Tesla V100 16GB SXM2", "AWS via its table"
+    assert by[("aws", "p3.2xlarge:1:8vcpu:61gb:spot")]["market_type"] == "spot"
+    assert by[("exoscale", "gpu3.small")]["gpu"] == "NVIDIA A40 48GB", "joins Exoscale's live listing id"
+    assert by[("exoscale", "gpu3.small")]["price_per_gpu_hour"] == D("1.88"), "Per-GPU x GPUs when no On-demand"
+    assert by[("paperspace", "A6000x2")]["gpu"] == "NVIDIA RTX A6000 48GB", "joins Paperspace's live id"
+    assert len([k for k in by if k[0] == "cudo"]) == 2, "two CUDO machine sizes stay two listings"
+    assert by[("azure", "NC24ads A100 v4:1:24vcpu:220gb")]["gpu"] == "NVIDIA A100 80GB PCIe", "Azure via GPU_SIZES"
+    lam = [r for r in rows if r["provider"] == "lambda"]
+    assert [r["gpu"] for r in lam] == [None, None], "A100 (40 GB) with no form factor stays unmapped"
+    r = by[("aws", "p3.2xlarge:1:8vcpu:61gb")]
+    assert r["licence"] == "MIT" and "Full Stack Deep Learning" in r["attribution"] and r["basis"] == "dataset_snapshot"
+    assert r["source_url"].endswith(f"/blob/{'a' * 40}/docs/cloud-gpus/cloud-gpus.csv")
+
+
+def test_fsdl_never_double_counts_a_primary_point():
+    from backfill.datasets import fsdl
+    _db()
+    old = aws_price_list.POLITE_SECONDS
+    aws_price_list.POLITE_SECONDS = 0
+    try:
+        # A primary AWS price-list row for p3.2xlarge covering 2022-08 (the FSDL commit date)
+        v = aws_price_list.Version("20220801000000", datetime(2022, 8, 1, tzinfo=timezone.utc),
+                                   datetime(2022, 9, 1, tzinfo=timezone.utc))
+        rows = aws_price_list.parse_csv(AWS_2017.read_text().splitlines(keepends=True))
+        ls, _ = aws_price_list.listings(v, rows)
+        got, _ = load._rows(ls, source="aws_price_list", source_url="u-aws", sha256="0" * 64, parser="t",
+                            valid_to=v.end, basis="price_list_version")
+        assert load.store(got) == 1
+        r = fsdl.run(revs=REVS, log=lambda m: None)
+        assert r["matched_primary"] == 1 and r["corroborated"] == 1, r
+        assert fsdl.run(revs=REVS, log=lambda m: None)["corroborated"] == 0, "corroboration is added once"
+        aws = _q("SELECT source, corroboration FROM archived_prices WHERE provider = 'aws' AND market_type = 'on_demand'")
+        assert len(aws) == 1 and aws[0].source == "aws_price_list", "one point per provider / listing / date"
+        (c,) = aws[0].corroboration
+        assert c["source"] == "fsdl_cloud_gpus" and c["price_per_gpu_hour"] == "3.06" and c["licence"] == "MIT"
+        assert _q("SELECT count(*) FROM archived_prices WHERE provider = 'aws' AND market_type = 'spot'")[0][0] == 1, \
+            "FSDL's spot row has no primary twin: stored"
+    finally:
+        aws_price_list.POLITE_SECONDS = old
+        scratchdb.drop(DB)
+
+
+def test_huang_monthly_medians_are_their_own_market():
+    import zipfile
+    from backfill.datasets import huang
+    _db()
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            z = Path(d) / "gpu-rental-value-curves-v1.6.1.zip"
+            with zipfile.ZipFile(z, "w") as f:
+                f.writestr("release/data/value_curves_realized.csv",
+                           (FIX / "huang_value_curves_realized_sample.csv").read_text())
+                f.writestr("release/data/ocpi_daily_2026-05-12_to_2026-08-17.csv", "never,read\n")
+            r = huang.run(zip_path=z, log=lambda m: None)
+            assert r["inserted"] == 5 and huang.run(zip_path=z, log=lambda m: None)["inserted"] == 0
+        rows = _q("SELECT * FROM archived_prices ORDER BY raw_gpu_name, observed_at")
+        assert {x.market_type for x in rows} == {"transacted"} and {x.provider for x in rows} == {"vast"}
+        a100 = [x for x in rows if x.raw_gpu_name == "A100 SXM4"]
+        assert all(x.gpu is None for x in a100), "Vast pools 40/80GB A100 SXM4: unmapped, not guessed"
+        assert a100[0].observed_at == datetime(2022, 10, 1, tzinfo=timezone.utc)
+        assert a100[0].valid_to == datetime(2022, 11, 1, tzinfo=timezone.utc)
+        assert a100[0].price_per_gpu_hour == D("1.434389")
+        h = [x for x in rows if x.raw_gpu_name == "H100 SXM"]
+        assert h[0].gpu == "NVIDIA H100 80GB SXM5" and h[0].licence == "CC-BY-4.0"
+        assert "Huang" in h[0].attribution and "10.5281/zenodo.22053861" in h[0].attribution
+        assert h[0].basis == "monthly_median" and "not a posted price" in h[0].note
+        assert archived.gpu_archived("NVIDIA H100 80GB SXM5")["points"] == [], "never in the on-demand series"
+    finally:
+        scratchdb.drop(DB)
+
+
+TESTS = [v for k, v in list(globals().items()) if k.startswith("test_") and callable(v)]
 
 if __name__ == "__main__":
     for t in TESTS:

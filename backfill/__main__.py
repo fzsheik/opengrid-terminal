@@ -7,6 +7,8 @@
                               AWS's EC2 price-list archive only (all 123 versions by default; on-demand + reserved)
     python -m backfill azure-since [--dry-run]
                               Azure Retail Prices API: one "effective since" point per GPU size / region / market
+    python -m backfill datasets [--only fsdl|huang] [--dry-run]
+                              open datasets with licences: FSDL cloud-gpus.csv history (MIT), Huang Vast (CC BY)
 
 Downloads go one at a time through backfill/wayback.py (polite, cached under OPENGRID_ARCHIVE_CACHE,
 default ~/.cache/opengrid/wayback), so the first full import takes about an hour and a re-run takes seconds.
@@ -45,7 +47,18 @@ def main(argv=None) -> int:
     p.add_argument("--dry-run", action="store_true")
     p = sub.add_parser("azure-since", help="Azure effectiveStartDate anchors (one point each, not a series)")
     p.add_argument("--dry-run", action="store_true")
+    p = sub.add_parser("datasets", help="FSDL (MIT) and Huang/Zenodo (CC BY) as archived points")
+    p.add_argument("--only", choices=("fsdl", "huang"), action="append")
+    p.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
+
+    if a.cmd == "datasets":
+        from backfill.datasets import fsdl, huang
+        for name, mod in (("fsdl", fsdl), ("huang", huang)):
+            if not a.only or name in a.only:
+                r = mod.run(dry_run=a.dry_run)
+                print(json.dumps({k: v for k, v in r.items()}, default=str))
+        return 0
 
     if a.cmd == "azure-since":
         from backfill import azure_since
