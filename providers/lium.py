@@ -2,7 +2,12 @@
 
 Each executor is one host machine with its own price. The raw body carries live
 GPU utilization, driver and port details that change every request, so the
-stored payload keeps only the fields we read.
+stored payload keeps only the fields we read, plus (raw-first, read by no listing
+field yet) the executor's network and interconnect: measured upload / download
+Mbps, NVLink / P2P summary, InfiniBand / RoCE ports (rate, link layer, state) and
+fabric flags, and any announced price change (pending_price_per_hour,
+price_change_effective_date). Host identity (hotkeys, GUIDs, GIDs, port lists) and
+the N x N link matrix are dropped.
 
 Capacity: each executor reports `gpu_count` and `available_gpu_count`. Summed per
 (machine type, city) they are true counts, the only provider here that gives them.
@@ -46,6 +51,37 @@ def _keep(executor: dict) -> dict:
         "cpu_count": (specs.get("cpu") or {}).get("count"),
         "ram_total": (specs.get("ram") or {}).get("total"),
         "disk_total": (specs.get("hard_disk") or {}).get("total"),
+        **_extras(executor, specs),
+    }
+
+
+# Top-level executor fields kept verbatim (raw only). Live counters that change on every request without meaning
+# (uptime_in_minutes, last_verified_at, distance_mile, is_bookmarked) are left out.
+_TOP = ("pending_price_per_hour", "price_change_effective_date", "effective_upload_speed_mbps",
+        "effective_download_speed_mbps", "nvlink", "on_infiniband_fabric", "on_roce_fabric", "infiniband_fabric_rentable",
+        "roce_fabric_rentable", "offers_bare_metal", "is_whole_host_free", "min_gpu_count_for_rental",
+        "frequent_rent_failures", "max_cuda_version", "gpu_class", "operated_by_lium")
+_INTERCONNECT = ("nvlink", "nvlink_links", "nvlink_active_links", "nvlink_pairs", "p2p", "p2p_pairs", "p2p_ok_pairs",
+                 "gpu_pairs", "gpu_count", "pcie_class")
+_NETWORK = ("ema_upload_speed", "ema_download_speed")
+_PORT = ("device", "rate", "link_layer", "state", "phys_state")
+
+
+def _extras(executor: dict, specs: dict) -> dict:
+    """Network, interconnect and announced-price fields, summarised: no identifiers, no link matrix."""
+    link = executor.get("interconnect") if isinstance(executor.get("interconnect"), dict) else specs.get("interconnect")
+    net = specs.get("network") if isinstance(specs.get("network"), dict) else {}
+    ports = specs.get("infiniband_ports") if isinstance(specs.get("infiniband_ports"), list) else None
+    gpus = (specs.get("gpu") or {}).get("details") if isinstance(specs.get("gpu"), dict) else None
+    first_gpu = gpus[0] if isinstance(gpus, list) and gpus and isinstance(gpus[0], dict) else {}
+    return {
+        **{k: executor.get(k) for k in _TOP},
+        "interconnect": {k: link.get(k) for k in _INTERCONNECT} if isinstance(link, dict) else None,
+        "network": {k: net.get(k) for k in _NETWORK} if net else None,
+        "infiniband_ports": None if ports is None else [{k: p.get(k) for k in _PORT} for p in ports if isinstance(p, dict)],
+        "gpu_memory_mib": first_gpu.get("capacity"),
+        "cpu_model": (specs.get("cpu") or {}).get("model") if isinstance(specs.get("cpu"), dict) else None,
+        "disk_type": (specs.get("hard_disk") or {}).get("disk_type") if isinstance(specs.get("hard_disk"), dict) else None,
     }
 
 
