@@ -29,6 +29,7 @@ import fetch as fetch_mod  # noqa: E402
 from config import settings  # noqa: E402
 from providers.verda import (  # noqa: E402
     AVAILABILITY, CLUSTER_AVAILABILITY, CLUSTER_TYPES, ENDPOINT, LADDER, LOCATIONS, TOKEN, VerdaProvider,
+    is_confidential,
 )
 
 FIX = Path(__file__).resolve().parent / "fixtures_providers"
@@ -116,6 +117,28 @@ def to_by_endpoint(raws):
         if r.ok:
             out.setdefault(r.endpoint, []).append(snap(r.payload, r.request, r.fetched_at))
     return out
+
+
+# --------------------------------------------------------------------------- normalize
+
+def test_confidential_tier():
+    # Every ".CC" form Verda uses: bare, and with the CPU vendor after it (the B300 CC type in the availability
+    # fixture is "8B300.240V.CC.AMD"). A CC-less type, or "CC" only inside the GPU token, is not confidential.
+    for code in ("1RTXPRO6000.30V.CC", "8B300.240V.CC.AMD", "8B200.240V.CC.INTEL", "CPU.4V.16G.CC"):
+        assert is_confidential(code), code
+    for code in ("8B300.240V", "8RTXPRO6000.240V", "1H100.80S.30V", "CC8X.240V", "8B200.240V.CCX"):
+        assert not is_confidential(code), code
+    assert "8B300.240V.CC.AMD" in {t for loc in load("instance_availability_spot") for t in loc["availabilities"]}
+    # Through normalize: the fixture's ".CC" type, and a ".CC.AMD" type (the fixture's B300 row, recoded as the
+    # B300 CC type is in the availability response), are both tagged; the plain types are not.
+    types = copy.deepcopy(load("instance_types"))
+    b300 = copy.deepcopy(next(t for t in types if t["instance_type"].startswith("8B200")))
+    b300["instance_type"] = "8B300.240V.CC.AMD"
+    rows = VerdaProvider.normalize({ENDPOINT: [snap(types + [b300])]})
+    tier = {r.listing_id: r.provider_tier for r in rows}
+    assert tier["1RTXPRO6000.30V.CC"] == tier["1RTXPRO6000.30V.CC:spot"] == "confidential"
+    assert tier["8B300.240V.CC.AMD"] == tier["8B300.240V.CC.AMD:spot"] == "confidential"
+    assert {v for k, v in tier.items() if ".CC" not in k} == {None}
 
 
 # --------------------------------------------------------------------------- normalize_capacity
@@ -297,7 +320,7 @@ def test_pipeline():
 
 
 if __name__ == "__main__":
-    for t in (test_capacity_rows, test_capacity_edges, test_fetch_without_credentials, test_fetch_with_credentials,
+    for t in (test_confidential_tier, test_capacity_rows, test_capacity_edges, test_fetch_without_credentials, test_fetch_with_credentials,
               test_token_refreshed_once_on_401, test_capacity_fails_open, test_registry, test_pipeline):
         t()
         print(t.__name__, "ok")

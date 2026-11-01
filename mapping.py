@@ -559,7 +559,7 @@ VERDA = ProviderMapping(
         price_per_gpu_hour=(DERIVED, "= price / gpu.number_of_gpus"),
         price_per_instance_hour=(RAW, "price_per_hour | spot_price", "both are for the whole instance"),
         market_type=(DERIVED, "price_per_hour -> on_demand, spot_price -> spot"),
-        provider_tier=(DERIVED, '"confidential" for ".CC" types'),
+        provider_tier=(DERIVED, '"confidential" for ".CC" types (also ".CC.AMD" / ".CC.INTEL")'),
         interruptible=(DERIVED, "= (market_type == spot)"),
         available=(ABSENT, "-", "listings are provider-wide; per-location stock is in the capacity tables (credentials)"),
         capacity=(ABSENT, "-"),

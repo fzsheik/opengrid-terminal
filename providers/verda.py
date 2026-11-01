@@ -54,6 +54,12 @@ CLUSTER_TYPES = "/v1/cluster-types"
 MARKETS = {False: ("price_per_hour", ""), True: ("spot_price", ":spot")}
 
 
+def is_confidential(instance_type: str) -> bool:
+    """Confidential-computing types carry a ".CC" segment: "1RTXPRO6000.30V.CC", and with the CPU vendor after it,
+    "8B300.240V.CC.AMD" / "...CC.INTEL" (Verda's real codes, tests/fixtures_providers/verda_*.json)."""
+    return "CC" in instance_type.split(".")[1:]
+
+
 def _catalogue(by_endpoint: "dict[str, list[RawSnapshot]]") -> "RawSnapshot | None":
     # Exact match: "/v1/instance-types" is a fragment of nothing else fetched, but be explicit.
     rows = by_endpoint.get(ENDPOINT) or []
@@ -214,8 +220,8 @@ class VerdaProvider(Provider):
                         price_per_instance_hour=price,
                         currency="USD",
                         market_type=market,
-                        # ".CC" types run in confidential-computing mode.
-                        provider_tier="confidential" if itype.endswith(".CC") else None,
+                        # ".CC" types (also ".CC.AMD" / ".CC.INTEL") run in confidential-computing mode.
+                        provider_tier="confidential" if is_confidential(itype) else None,
                         interruptible=market == "spot",
                         # Listings are provider-wide; per-location stock is in the capacity tables
                         # (normalize_capacity), so the price path never depends on the keyed calls.
