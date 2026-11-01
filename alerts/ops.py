@@ -40,6 +40,13 @@ KINDS = {
     "unexpected_ssh_key": "an instance lists SSH keys OpenGrid did not request (provider-forced access?)",
     "relaunch_blocked": "an automatic job relaunch was due (previous GPU confirmed gone) but an internal error "
                         "blocked it; nothing bills, the customer's job is not continuing",
+    # Data-feed silence (alerts/silence.py): one alert when it starts, one when it recovers, never repeated.
+    "provider_silent": "a polled provider has had no successful fetch for longer than its silence threshold",
+    "provider_silent_recovered": "a provider that had gone silent is fetching successfully again",
+    "provider_empty": "a provider that had listings now has 0 current listings",
+    "provider_empty_recovered": "a provider that had dropped to 0 listings has current listings again",
+    "capacity_silent": "a provider's capacity feed stopped refreshing while its prices still arrive",
+    "capacity_silent_recovered": "a provider's capacity feed is refreshing again",
 }
 
 # Kinds whose payload must carry the cost-exposure fields.

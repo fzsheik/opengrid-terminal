@@ -18,6 +18,11 @@ from providers.base import Provider
 
 log = logging.getLogger(__name__)
 
+# The providers this process is actually polling, name -> interval seconds (set when polling starts). The silence
+# watch (alerts/silence.py) reads it: a provider whose fetcher was never built (no API key, POLLER_ENABLED off)
+# is not here, so it is never alerted on.
+ACTIVE: dict[str, float] = {}
+
 
 async def poll_once(provider: Provider) -> dict:
     """One cycle: fetch, store raw, normalize just this provider."""
@@ -75,6 +80,8 @@ class Ingest:
         self._tasks = [
             asyncio.create_task(poll_provider(p), name=f"poll-{p.name}") for p in self.providers
         ]
+        ACTIVE.clear()
+        ACTIVE.update({p.name: float(p.polling.interval_seconds) for p in self.providers})
         log.info(
             "polling started: %s",
             ", ".join(f"{p.name}/{p.polling.interval_seconds:g}s" for p in self.providers) or "none",
@@ -90,5 +97,6 @@ class Ingest:
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
         self._tasks = []
+        ACTIVE.clear()
         for provider in self.providers:
             await provider.aclose()

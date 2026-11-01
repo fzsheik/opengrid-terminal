@@ -402,6 +402,7 @@ accounts_api.install(app)
 
 # Request ids and structured logs (outermost, so every log line of a request carries its id).
 import alerts.channels  # noqa: E402,F401  (registers the channel_feeds job: Discord/Slack feeds)
+import alerts.silence  # noqa: E402,F401  (registers the silence_alerts job: provider feeds gone quiet)
 import observability  # noqa: E402
 
 observability.install(app)
