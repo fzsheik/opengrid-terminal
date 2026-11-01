@@ -53,7 +53,7 @@ const group = g => {
   return navHtml.slice(i, j < 0 ? undefined : j);
 };
 const hrefs = s => [...s.matchAll(/href="([^"]+)"/g)].map(m => m[1]);
-eq(hrefs(group("gpus")), ["/gpus", "/compare", "/explorer", "/heatmaps", "/providers", "/capacity", "/reserved", "/uptime", "/probes"], "GPUs group: Compare, Explorer, Heatmaps, Providers, Capacity, Reserved prices, Provider uptime, Provider probes");
+eq(hrefs(group("gpus")), ["/gpus", "/compare", "/explorer", "/heatmaps", "/providers", "/capacity", "/reserved", "/cost", "/uptime", "/probes"], "GPUs group: Compare, Explorer, Heatmaps, Providers, Capacity, Reserved prices, True cost, Provider uptime, Provider probes");
 eq(hrefs(group("jobs")), ["/jobs", "/deployments", "/reserve", "/route"], "My Jobs group: Deployments, Reserve, Route (Watchlists moved to Markets)");
 eq(hrefs(group("find")), ["/find", "/assistant"], "Find Compute group: the assistant is reachable here (no extra top-level item)");
 eq(hrefs(group("markets")), ["/markets", "/indices", "/opportunities", "/events", "/news", "/watchlists"], "Markets group: Indices, Opportunities, Events, News, Watchlists (market alerts)");

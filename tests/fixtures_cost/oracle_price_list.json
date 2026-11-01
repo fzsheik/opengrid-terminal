@@ -1,0 +1,149 @@
+{
+ "lastUpdated": "2026-10-08T14:38:16.165Z",
+ "items": [
+  {
+   "partNumber": "B88327",
+   "displayName": "Outbound Data Transfer - Originating in North America, Europe, and UK",
+   "metricName": "Gigabyte Outbound Data Transfer Per Month",
+   "serviceCategory": "Networking - Virtual Cloud Networks",
+   "currencyCodeLocalizations": [
+    {
+     "currencyCode": "USD",
+     "prices": [
+      {
+       "model": "PAY_AS_YOU_GO",
+       "value": 0,
+       "rangeMin": 0,
+       "rangeMax": 10240
+      },
+      {
+       "model": "PAY_AS_YOU_GO",
+       "value": 0.0085,
+       "rangeMin": 10240,
+       "rangeMax": 999999999999999
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "partNumber": "B88514",
+   "displayName": "Compute - Virtual Machine Standard - X7",
+   "metricName": "OCPU Per Hour",
+   "serviceCategory": "Compute - Virtual Machine",
+   "currencyCodeLocalizations": [
+    {
+     "currencyCode": "USD",
+     "prices": [
+      {
+       "model": "PAY_AS_YOU_GO",
+       "value": 0.0638
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "partNumber": "B91628",
+   "displayName": "Object Storage - Storage",
+   "metricName": "Gigabyte Storage Capacity Per Month",
+   "serviceCategory": "Storage - Object Storage",
+   "currencyCodeLocalizations": [
+    {
+     "currencyCode": "USD",
+     "prices": [
+      {
+       "model": "PAY_AS_YOU_GO",
+       "value": 0,
+       "rangeMin": 0,
+       "rangeMax": 10
+      },
+      {
+       "model": "PAY_AS_YOU_GO",
+       "value": 0.0255,
+       "rangeMin": 10,
+       "rangeMax": 999999999
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "partNumber": "B91961",
+   "displayName": "Storage - Block Volume - Storage",
+   "metricName": "Gigabyte Storage Capacity Per Month",
+   "serviceCategory": "Storage - Block Volumes",
+   "currencyCodeLocalizations": [
+    {
+     "currencyCode": "USD",
+     "prices": [
+      {
+       "model": "PAY_AS_YOU_GO",
+       "value": 0.0255
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "partNumber": "B91962",
+   "displayName": "Storage - Block Volume - Performance Units",
+   "metricName": "Performance Units Per Gigabyte Per Month",
+   "serviceCategory": "Storage - Block Volumes",
+   "currencyCodeLocalizations": [
+    {
+     "currencyCode": "USD",
+     "prices": [
+      {
+       "model": "PAY_AS_YOU_GO",
+       "value": 0.0017
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "partNumber": "B93000",
+   "displayName": "Infrequent Access Storage - Storage",
+   "metricName": "Gigabyte Storage Capacity Per Month",
+   "serviceCategory": "Storage - Object Storage",
+   "currencyCodeLocalizations": [
+    {
+     "currencyCode": "USD",
+     "prices": [
+      {
+       "model": "PAY_AS_YOU_GO",
+       "value": 0,
+       "rangeMin": 0,
+       "rangeMax": 10
+      },
+      {
+       "model": "PAY_AS_YOU_GO",
+       "value": 0.01,
+       "rangeMin": 10,
+       "rangeMax": 999999999999999
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "partNumber": "B98415",
+   "displayName": "Oracle Cloud Infrastructure - Compute - GPU - H100",
+   "description": "Oracle Cloud Infrastructure (OCI) Compute provides bare metal and virtual machine instances powered by NVIDIA GPUs for a variety of use cases, including mainstream graphics and videos as well as the most demanding AI training and HPC workloads. OCI excels at both training time and cost because of its ultralow latency and near line-rate network performance.",
+   "metricName": "GPU Per Hour",
+   "serviceCategory": "Compute - GPU",
+   "currencyCodeLocalizations": [
+    {
+     "currencyCode": "USD",
+     "prices": [
+      {
+       "model": "PAY_AS_YOU_GO",
+       "value": 10
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
