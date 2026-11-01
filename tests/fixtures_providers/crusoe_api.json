@@ -1,0 +1,497 @@
+{
+ "_note": "GET api.cloud.crusoe.ai/v1 (signed), fetched 2026-11-01. capacities: every GPU (type, location) once (the API repeats each 8x; one key kept 8x) + 2 CPU rows of 720; types: GPU types + 2 CPU types of 35; locations verbatim.",
+ "capacities": {
+  "items": [
+   {
+    "type": "c1a.2x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_2_MEM_8",
+    "num_slices": 1,
+    "location": "us-east1-a",
+    "quantity": 1
+   },
+   {
+    "type": "c1a.2x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_2_MEM_8",
+    "num_slices": 1,
+    "location": "eu-iceland1-a",
+    "quantity": 1
+   },
+   {
+    "type": "h100-80gb-sxm-ib.8x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_88_MEM_480_H100_SXM_80GB_4_IB",
+    "num_slices": 2,
+    "location": "us-southcentral1-a",
+    "quantity": 0
+   },
+   {
+    "type": "h100-80gb-sxm-ib.8x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_88_MEM_480_H100_SXM_80GB_4_IB",
+    "num_slices": 2,
+    "location": "us-east1-a",
+    "quantity": 0
+   },
+   {
+    "type": "h100-80gb-sxm-ib.8x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_88_MEM_480_H100_SXM_80GB_4_IB",
+    "num_slices": 2,
+    "location": "eu-iceland1-a",
+    "quantity": 0
+   },
+   {
+    "type": "mi300x-192gb-ib.8x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_120_MEM_1000_MI300X_192GB_4_IB",
+    "num_slices": 2,
+    "location": "us-east1-a",
+    "quantity": 0
+   },
+   {
+    "type": "mi355x-288gb-roce.8x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_120_MEM_1450_MI355X_288GB_4_NVME_ROCE",
+    "num_slices": 2,
+    "location": "us-east2-a",
+    "quantity": 0
+   },
+   {
+    "type": "l40s-48gb.1x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_8_MEM_147_L40S_PCIE_48GB_1",
+    "num_slices": 1,
+    "location": "us-southcentral1-a",
+    "quantity": 1
+   },
+   {
+    "type": "l40s-48gb.1x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_8_MEM_147_L40S_PCIE_48GB_1",
+    "num_slices": 1,
+    "location": "us-east1-a",
+    "quantity": 1
+   },
+   {
+    "type": "l40s-48gb.1x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_8_MEM_147_L40S_PCIE_48GB_1",
+    "num_slices": 1,
+    "location": "us-east1-a",
+    "quantity": 1
+   },
+   {
+    "type": "l40s-48gb.1x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_8_MEM_147_L40S_PCIE_48GB_1",
+    "num_slices": 1,
+    "location": "us-east1-a",
+    "quantity": 1
+   },
+   {
+    "type": "l40s-48gb.1x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_8_MEM_147_L40S_PCIE_48GB_1",
+    "num_slices": 1,
+    "location": "us-east1-a",
+    "quantity": 1
+   },
+   {
+    "type": "l40s-48gb.1x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_8_MEM_147_L40S_PCIE_48GB_1",
+    "num_slices": 1,
+    "location": "us-east1-a",
+    "quantity": 1
+   },
+   {
+    "type": "l40s-48gb.1x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_8_MEM_147_L40S_PCIE_48GB_1",
+    "num_slices": 1,
+    "location": "us-east1-a",
+    "quantity": 1
+   },
+   {
+    "type": "l40s-48gb.2x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_8_MEM_147_L40S_PCIE_48GB_1",
+    "num_slices": 2,
+    "location": "us-southcentral1-a",
+    "quantity": 1
+   },
+   {
+    "type": "l40s-48gb.2x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_8_MEM_147_L40S_PCIE_48GB_1",
+    "num_slices": 2,
+    "location": "us-east1-a",
+    "quantity": 0
+   },
+   {
+    "type": "l40s-48gb.4x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_8_MEM_147_L40S_PCIE_48GB_1",
+    "num_slices": 4,
+    "location": "us-southcentral1-a",
+    "quantity": 0
+   },
+   {
+    "type": "l40s-48gb.4x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_8_MEM_147_L40S_PCIE_48GB_1",
+    "num_slices": 4,
+    "location": "us-east1-a",
+    "quantity": 0
+   },
+   {
+    "type": "l40s-48gb.8x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_8_MEM_147_L40S_PCIE_48GB_1",
+    "num_slices": 8,
+    "location": "us-southcentral1-a",
+    "quantity": 0
+   },
+   {
+    "type": "l40s-48gb.8x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_8_MEM_147_L40S_PCIE_48GB_1",
+    "num_slices": 8,
+    "location": "us-east1-a",
+    "quantity": 0
+   },
+   {
+    "type": "l40s-48gb.10x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_8_MEM_147_L40S_PCIE_48GB_1",
+    "num_slices": 10,
+    "location": "us-east1-a",
+    "quantity": 0
+   },
+   {
+    "type": "l40s-48gb.10x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_8_MEM_147_L40S_PCIE_48GB_1",
+    "num_slices": 10,
+    "location": "us-southcentral1-a",
+    "quantity": 0
+   },
+   {
+    "type": "a100-80gb.1x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_12_MEM_120_A100_PCIE_80GB_1",
+    "num_slices": 1,
+    "location": "us-east1-a",
+    "quantity": 1
+   },
+   {
+    "type": "a100-80gb.2x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_12_MEM_120_A100_PCIE_80GB_1",
+    "num_slices": 2,
+    "location": "us-east1-a",
+    "quantity": 1
+   },
+   {
+    "type": "a100-80gb.4x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_12_MEM_120_A100_PCIE_80GB_1",
+    "num_slices": 4,
+    "location": "us-east1-a",
+    "quantity": 0
+   },
+   {
+    "type": "a100-80gb.8x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_12_MEM_120_A100_PCIE_80GB_1",
+    "num_slices": 8,
+    "location": "us-east1-a",
+    "quantity": 0
+   },
+   {
+    "type": "a100-80gb-sxm-ib.8x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_48_MEM_480_A100_SXM_80GB_4_IB",
+    "num_slices": 2,
+    "location": "us-east1-a",
+    "quantity": 0
+   },
+   {
+    "type": "l40s-48gb.1x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_8_MEM_147_L40S_PCIE_48GB_1",
+    "num_slices": 1,
+    "location": "us-east1-a",
+    "quantity": 1
+   },
+   {
+    "type": "l40s-48gb.1x",
+    "quota_type": "PROJECT_QUOTA_TYPE_MAXIMUM_VM_SLICES_VCPU_8_MEM_147_L40S_PCIE_48GB_1",
+    "num_slices": 1,
+    "location": "us-east1-a",
+    "quantity": 1
+   }
+  ]
+ },
+ "types": {
+  "items": [
+   {
+    "product_name": "a100.1x",
+    "description": "Nvidia A100 40GB",
+    "cpu_cores": 12,
+    "cpu_type": "x86_64",
+    "memory_gb": 120,
+    "memory_type": "RAM",
+    "disk_gb": 960,
+    "disk_type": "SSD",
+    "num_gpu": 1,
+    "gpu_type": "A100-PCIe-40GB"
+   },
+   {
+    "product_name": "a100.2x",
+    "description": "Nvidia A100 40GB",
+    "cpu_cores": 24,
+    "cpu_type": "x86_64",
+    "memory_gb": 240,
+    "memory_type": "RAM",
+    "disk_gb": 1920,
+    "disk_type": "SSD",
+    "num_gpu": 2,
+    "gpu_type": "A100-PCIe-40GB"
+   },
+   {
+    "product_name": "a100.4x",
+    "description": "Nvidia A100 40GB",
+    "cpu_cores": 48,
+    "cpu_type": "x86_64",
+    "memory_gb": 480,
+    "memory_type": "RAM",
+    "disk_gb": 3840,
+    "disk_type": "SSD",
+    "num_gpu": 4,
+    "gpu_type": "A100-PCIe-40GB"
+   },
+   {
+    "product_name": "a100.8x",
+    "description": "Nvidia A100 40GB",
+    "cpu_cores": 96,
+    "cpu_type": "x86_64",
+    "memory_gb": 960,
+    "memory_type": "RAM",
+    "disk_gb": 7680,
+    "disk_type": "SSD",
+    "num_gpu": 8,
+    "gpu_type": "A100-PCIe-40GB"
+   },
+   {
+    "product_name": "a40.1x",
+    "description": "Nvidia A40 48GB",
+    "cpu_cores": 6,
+    "cpu_type": "x86_64",
+    "memory_gb": 60,
+    "memory_type": "RAM",
+    "disk_gb": 0,
+    "disk_type": "SSD",
+    "num_gpu": 1,
+    "gpu_type": "A40-PCIe-48GB"
+   },
+   {
+    "product_name": "a40.2x",
+    "description": "Nvidia A40 48GB",
+    "cpu_cores": 12,
+    "cpu_type": "x86_64",
+    "memory_gb": 120,
+    "memory_type": "RAM",
+    "disk_gb": 0,
+    "disk_type": "SSD",
+    "num_gpu": 2,
+    "gpu_type": "A40-PCIe-48GB"
+   },
+   {
+    "product_name": "a40.4x",
+    "description": "Nvidia A40 48GB",
+    "cpu_cores": 24,
+    "cpu_type": "x86_64",
+    "memory_gb": 240,
+    "memory_type": "RAM",
+    "disk_gb": 0,
+    "disk_type": "SSD",
+    "num_gpu": 4,
+    "gpu_type": "A40-PCIe-48GB"
+   },
+   {
+    "product_name": "a40.8x",
+    "description": "Nvidia A40 48GB",
+    "cpu_cores": 48,
+    "cpu_type": "x86_64",
+    "memory_gb": 480,
+    "memory_type": "RAM",
+    "disk_gb": 0,
+    "disk_type": "SSD",
+    "num_gpu": 8,
+    "gpu_type": "A40-PCIe-48GB"
+   },
+   {
+    "product_name": "h100-80gb-sxm-ib.8x",
+    "description": "Nvidia H100 80GB SXM IB",
+    "cpu_cores": 176,
+    "cpu_type": "x86_64",
+    "memory_gb": 960,
+    "memory_type": "RAM",
+    "disk_gb": 1920,
+    "disk_type": "SSD",
+    "num_gpu": 8,
+    "gpu_type": "H100-SXM-80GB"
+   },
+   {
+    "product_name": "mi300x-192gb-ib.8x",
+    "description": "AMD MI300X",
+    "cpu_cores": 240,
+    "cpu_type": "x86_64",
+    "memory_gb": 2000,
+    "memory_type": "ram",
+    "disk_gb": 3840,
+    "disk_type": "SSD",
+    "num_gpu": 8,
+    "gpu_type": "MI300X-192GB"
+   },
+   {
+    "product_name": "mi355x-288gb-roce.8x",
+    "description": "AMD MI355",
+    "cpu_cores": 240,
+    "cpu_type": "x86_64",
+    "memory_gb": 2900,
+    "memory_type": "ram",
+    "disk_gb": 7400,
+    "disk_type": "SSD",
+    "num_gpu": 8,
+    "gpu_type": "MI355X_288GB"
+   },
+   {
+    "product_name": "l40s-48gb.1x",
+    "description": "NVIDIA L40S",
+    "cpu_cores": 8,
+    "cpu_type": "x86_64",
+    "memory_gb": 147,
+    "memory_type": "ram",
+    "disk_gb": 0,
+    "disk_type": "SSD",
+    "num_gpu": 1,
+    "gpu_type": "L40S-48GB"
+   },
+   {
+    "product_name": "l40s-48gb.2x",
+    "description": "NVIDIA L40S",
+    "cpu_cores": 16,
+    "cpu_type": "x86_64",
+    "memory_gb": 294,
+    "memory_type": "ram",
+    "disk_gb": 0,
+    "disk_type": "SSD",
+    "num_gpu": 2,
+    "gpu_type": "L40S-48GB"
+   },
+   {
+    "product_name": "l40s-48gb.4x",
+    "description": "NVIDIA L40S",
+    "cpu_cores": 32,
+    "cpu_type": "x86_64",
+    "memory_gb": 588,
+    "memory_type": "ram",
+    "disk_gb": 0,
+    "disk_type": "SSD",
+    "num_gpu": 4,
+    "gpu_type": "L40S-48GB"
+   },
+   {
+    "product_name": "l40s-48gb.8x",
+    "description": "NVIDIA L40S",
+    "cpu_cores": 64,
+    "cpu_type": "x86_64",
+    "memory_gb": 1176,
+    "memory_type": "ram",
+    "disk_gb": 0,
+    "disk_type": "SSD",
+    "num_gpu": 8,
+    "gpu_type": "L40S-48GB"
+   },
+   {
+    "product_name": "l40s-48gb.10x",
+    "description": "NVIDIA L40S",
+    "cpu_cores": 80,
+    "cpu_type": "x86_64",
+    "memory_gb": 1470,
+    "memory_type": "ram",
+    "disk_gb": 0,
+    "disk_type": "SSD",
+    "num_gpu": 10,
+    "gpu_type": "L40S-48GB"
+   },
+   {
+    "product_name": "a100-80gb.1x",
+    "description": "Nvidia A100 80GB",
+    "cpu_cores": 12,
+    "cpu_type": "x86_64",
+    "memory_gb": 120,
+    "memory_type": "RAM",
+    "disk_gb": 960,
+    "disk_type": "SSD",
+    "num_gpu": 1,
+    "gpu_type": "A100-PCIe-80GB"
+   },
+   {
+    "product_name": "a100-80gb.2x",
+    "description": "Nvidia A100 80GB",
+    "cpu_cores": 24,
+    "cpu_type": "x86_64",
+    "memory_gb": 240,
+    "memory_type": "RAM",
+    "disk_gb": 1920,
+    "disk_type": "SSD",
+    "num_gpu": 2,
+    "gpu_type": "A100-PCIe-80GB"
+   },
+   {
+    "product_name": "a100-80gb.4x",
+    "description": "Nvidia A100 80GB",
+    "cpu_cores": 48,
+    "cpu_type": "x86_64",
+    "memory_gb": 480,
+    "memory_type": "RAM",
+    "disk_gb": 3840,
+    "disk_type": "SSD",
+    "num_gpu": 4,
+    "gpu_type": "A100-PCIe-80GB"
+   },
+   {
+    "product_name": "a100-80gb.8x",
+    "description": "Nvidia A100 80GB",
+    "cpu_cores": 96,
+    "cpu_type": "x86_64",
+    "memory_gb": 960,
+    "memory_type": "RAM",
+    "disk_gb": 7680,
+    "disk_type": "SSD",
+    "num_gpu": 8,
+    "gpu_type": "A100-PCIe-80GB"
+   },
+   {
+    "product_name": "a100-80gb-sxm-ib.8x",
+    "description": "Nvidia A100 80GB SXM IB",
+    "cpu_cores": 96,
+    "cpu_type": "x86_64",
+    "memory_gb": 960,
+    "memory_type": "RAM",
+    "disk_gb": 1920,
+    "disk_type": "SSD",
+    "num_gpu": 8,
+    "gpu_type": "A100-SXM-80GB"
+   },
+   {
+    "product_name": "c1a.2x",
+    "description": "General Purpose CPU",
+    "cpu_cores": 2,
+    "cpu_type": "x86_64",
+    "memory_gb": 8,
+    "memory_type": "ram",
+    "disk_gb": 0,
+    "disk_type": "SSD",
+    "num_gpu": 0,
+    "gpu_type": ""
+   },
+   {
+    "product_name": "c1a.4x",
+    "description": "General Purpose CPU",
+    "cpu_cores": 4,
+    "cpu_type": "x86_64",
+    "memory_gb": 16,
+    "memory_type": "ram",
+    "disk_gb": 0,
+    "disk_type": "SSD",
+    "num_gpu": 0,
+    "gpu_type": ""
+   }
+  ]
+ },
+ "locations": {
+  "items": [
+   "eu-iceland1-a",
+   "us-east1-a",
+   "us-southcentral1-a"
+  ]
+ }
+}

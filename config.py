@@ -106,6 +106,10 @@ class Settings(BaseSettings):
     hotaisle_team: str | None = None           # its team handle (or display name; resolved via GET /teams/)
     verda_client_id: str | None = None
     verda_client_secret: str | None = None
+    # Crusoe Cloud API key pair (console access key id + secret): HMAC-signed read-only GETs for capacity per
+    # location; prices stay via Shadeform. Never sent anywhere but api.cloud.crusoe.ai (providers/crusoe.py).
+    crusoe_access_key_id: str | None = None
+    crusoe_secret_key: str | None = None
     # Per-provider launch defaults (JSON), e.g. {"lambda": {"ssh_key": "opengrid"},
     # "hyperstack": {"ssh_key": "k", "image": "Ubuntu Server 22.04 LTS R535 CUDA 12.2",
     # "environments": {"CANADA-1": "default-CANADA-1"}}}. See routing/adapters/*.py.

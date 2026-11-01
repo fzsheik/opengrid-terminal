@@ -53,7 +53,9 @@ _ALL = [
                  "gpu-inventory API (MASSEDCOMPUTE_API_KEY): prices and launchable-instance counts; without the key, the /pricing page"),
     ProviderMeta("verda", "Verda", "neocloud", "public_api", "api.verda.com", "https://verda.com", "formerly DataCrunch"),
     ProviderMeta("voltagepark", "Voltage Park", "neocloud", "public_api", "cloud-api.voltagepark.com", "https://www.voltagepark.com"),
-    ProviderMeta("crusoe", "Crusoe", "neocloud", "aggregator", "api.shadeform.ai", "https://crusoe.ai", "prices as listed by Shadeform"),
+    ProviderMeta("crusoe", "Crusoe", "neocloud", "aggregator", "api.shadeform.ai", "https://crusoe.ai",
+                 "prices as listed by Shadeform; with CRUSOE_ACCESS_KEY_ID + CRUSOE_SECRET_KEY, capacity per location "
+                 "from Crusoe's own Cloud API (api.cloud.crusoe.ai)"),
     ProviderMeta("latitude", "Latitude.sh", "neocloud", "aggregator", "api.shadeform.ai", "https://www.latitude.sh", "prices as listed by Shadeform"),
     ProviderMeta("denvr", "Denvr", "neocloud", "aggregator", "api.shadeform.ai", "https://www.denvr.com", "prices as listed by Shadeform"),
     ProviderMeta("boostrun", "Boost Run", "neocloud", "aggregator", "api.shadeform.ai", "https://boostrun.com",

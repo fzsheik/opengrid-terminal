@@ -20,6 +20,7 @@ from providers.beam import BeamProvider
 from providers.civo import CivoProvider
 from providers.clore import CloreProvider
 from providers.coreweave import CoreWeaveProvider
+from providers.crusoe import CrusoeProvider
 from providers.deepinfra import DeepInfraProvider
 from providers.digitalocean import DigitalOceanProvider
 from providers.e2e import E2EProvider
@@ -46,7 +47,6 @@ from providers.salad import SaladProvider
 from providers.simplepod import SimplePodProvider
 from providers.shadeform import (
     BoostRunProvider,
-    CrusoeProvider,
     DenvrProvider,
     HorizonProvider,
     LatitudeProvider,

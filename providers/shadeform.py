@@ -11,7 +11,8 @@ they match, and where a cloud has just repriced Shadeform can lag.
 A cloud that has its own feed in this app must never also be read through here:
 that would count one cloud's capacity twice.
 
-Each subclass fetches the whole catalogue and keeps only its own cloud's rows.
+Each subclass fetches the whole catalogue and keeps only its own cloud's rows. Crusoe's subclass lives in
+providers/crusoe.py: its prices come from here, its capacity from Crusoe's own API when a key is set.
 
 Capacity: each instance type's `availability` list says, per region, whether Shadeform can launch it now
 (a boolean). One row per (type, region) for the rental type the listing uses. Scaleway overrides this with
@@ -202,11 +203,6 @@ def shadeform_capacity(provider: str, cloud: str, by_endpoint: "dict[str, list[R
                 in_stock=flag if isinstance(flag, bool) else None, raw_value=str(flag).lower(),
                 source=ENDPOINT, observed_at=rows[0].fetched_at))
     return out
-
-
-class CrusoeProvider(ShadeformCloud):
-    name = "crusoe"
-    cloud = "crusoe"
 
 
 LATITUDE_PLANS = "https://api.latitude.sh/plans"
