@@ -143,6 +143,12 @@ class Settings(BaseSettings):
     alert_unknown_minutes: int = 10              # resource state unknown longer than this -> ops alert
     alert_overspend_pct: float = 20.0            # spend above the quote by more than this % -> ops alert
     alert_reescalate_minutes: int = 30           # an unresolved cost-exposure alert is re-sent this often
+    # --- alert on silence (alerts/silence.py): a polled provider stops producing data -> one ops alert ---
+    silence_alerts_enabled: bool = True
+    silence_alert_min_hours: float = 3.0         # silent after max(this, silence_alert_polls x polling interval)
+    silence_alert_polls: int = 6
+    silence_alert_empty_grace_minutes: int = 30  # 0 current listings for this long past the stale window -> alert
+    silence_alert_muted: str = ""                # comma-separated providers never alerted on (e.g. "nebius,aws")
     ssh_key_delete_retry_max: int = 5            # provider key deletes before delete_failed + ops alert
     ssh_key_delete_retry_base_seconds: int = 60  # backoff base between key delete retries (x 2^attempt)
     idempotency_ttl_hours: int = 24

@@ -622,7 +622,7 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
 ### 10.1 Four channels
 | Channel | Variable | Posts |
 |---|---|---|
-| `#opengrid-ops` | `OPS_ALERT_WEBHOOK_URL` | **Urgent, money at risk**: orphans, termination failures, past-deadline deployments, unknown states > 10 min, provider API down with active deployments, overspend > 20%, active resources without billing, unowned provider resources, kill switches |
+| `#opengrid-ops` | `OPS_ALERT_WEBHOOK_URL` | **Urgent, money at risk**: orphans, termination failures, past-deadline deployments, unknown states > 10 min, provider API down with active deployments, overspend > 20%, active resources without billing, unowned provider resources, kill switches; **data feeds gone silent** (below) |
 | `#opengrid-deployments` | `DEPLOYMENTS_WEBHOOK_URL` | Route awaiting approval, approved, launching, running, terminating, terminated, failures |
 | `#opengrid-market` | `MARKET_WEBHOOK_URL` | Notable and major market events |
 | `#opengrid-news` | `NEWS_WEBHOOK_URL` | Stories with relevance ≥ 50, one post per story |
@@ -633,6 +633,11 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
   state and a suggested action; they re-escalate every 30 minutes and resolve only on evidence.
 - Feeds post each item exactly once (even across restarts), never flood history into a new
   channel, and retry failed sends in order.
+- **Alert on silence** (`alerts/silence.py`, job `silence_alerts`, every 10 min): one ops alert when a polled
+  provider has no successful fetch for max(3h, 6 x its polling interval), one when its current listings drop
+  to 0 (it had listings), one when its capacity feed stops while prices still arrive; one "recovered" alert
+  each, never repeated. State is in `ops_alert_state`, so a restart never re-sends. Providers that are not
+  polled (no API key), killed, or in `SILENCE_ALERT_MUTED` never alert.
 - All webhook delivery is SSRF-safe (single DNS resolution, pinned IP, private ranges blocked, no
   redirects) and HMAC-signed.
 
@@ -792,6 +797,7 @@ automatically at startup. A push to GitHub does not trigger a Railway build on i
 | `job_sync` | 30 s | training jobs: deployment state + runner callbacks → job state; terminate on completion, failure, timeout |
 | `reservation_expiry` | 5 min | expire stale price-lock offers and requests |
 | `channel_feeds` | 1 min | Discord deployments / market / news posts |
+| `silence_alerts` | 10 min | ops alert when a provider's prices, listings or capacity go silent; recovery |
 | `alerts` | 3 min | watchlist alert evaluation |
 | `quality_schema_watch` | 2 min | provider response schema changes |
 | `raw_storage` | 1 min | raw payload deduplication and retention |
@@ -811,6 +817,7 @@ automatically at startup. A push to GitHub does not trigger a Railway build on i
 | `ROUTING_LAUNCH_DEFAULTS` | per-provider launch defaults, e.g. the validation SSH key name |
 | `OPS_ALERT_WEBHOOK_URL`, `OPS_ALERT_WEBHOOK_SECRET` | ops alerts (+ signing secret used by all channels) |
 | `DEPLOYMENTS_WEBHOOK_URL`, `MARKET_WEBHOOK_URL`, `NEWS_WEBHOOK_URL` | channel feeds |
+| `SILENCE_ALERT_MIN_HOURS`, `SILENCE_ALERT_POLLS`, `SILENCE_ALERT_EMPTY_GRACE_MINUTES`, `SILENCE_ALERT_MUTED`, `SILENCE_ALERTS_ENABLED` | alert on silence (defaults 3h, 6 polls, 30 min, none, on) |
 | `PUBLIC_PAGES` | open read-only market pages to anonymous visitors |
 | `RAW_PAYLOAD_RETENTION_DAYS`, `RAW_SNAPSHOT_RETENTION_DAYS` | raw storage retention (payloads referenced by settlement fixings are always kept) |
 | `JOB_CALLBACK_BASE_URL` | where GPU runners call back (default `PUBLIC_BASE_URL`; https required) |
