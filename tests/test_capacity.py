@@ -469,6 +469,51 @@ def test_vast_census_only_with_key():
         vast_mod.RATE_PAUSE_SECONDS = pause
 
 
+def test_vast_census_row_budget_and_quota():
+    """The census spends at most CENSUS_DAILY_ROW_BUDGET rows a day and stops at Vast's quota refusal."""
+    from datetime import datetime, timedelta, timezone
+    import providers.vast as vast_mod
+    from providers.vast import GPU_NAMES, VastProvider
+    posts, mode = [], {"quota": False}
+
+    def handler(request):
+        if request.method == "POST":
+            posts.append(1)
+            if mode["quota"]:
+                return httpx.Response(429, json={"error": "search_quota_exceeded", "msg": "Daily search row quota exhausted",
+                                                 "retry_after": 6400, "limit": 20000, "remaining": 0})
+            return httpx.Response(200, json={"offers": [{"machine_id": i, "num_gpus": 1, "gpu_frac": 1, "gpu_ids": [i],
+                                                         "rentable": True} for i in range(100)]})
+        return httpx.Response(200, json={"offers": []})
+    pause = vast_mod.RATE_PAUSE_SECONDS
+    vast_mod.RATE_PAUSE_SECONDS = 0
+    try:
+        prov = VastProvider(httpx.AsyncClient(base_url="https://x", transport=httpx.MockTransport(handler)), api_key="k")
+        before = datetime.now(timezone.utc)
+        asyncio.run(prov.fetch())
+        assert len(posts) == 2 * len(GPU_NAMES), "first poll: a full census"
+        rows = 100 * 2 * len(GPU_NAMES)
+        expect = timedelta(days=1) * rows / vast_mod.CENSUS_DAILY_ROW_BUDGET
+        gap = prov._census_next - before
+        assert min(max(expect, vast_mod.CENSUS_MIN_GAP), vast_mod.CENSUS_MAX_GAP) - timedelta(seconds=5) <= gap
+        posts.clear()
+        asyncio.run(prov.fetch())
+        assert posts == [], "inside the gap: prices only, no census"
+        # Quota refused: one census call, then wait out Vast's retry_after; no hammering every poll.
+        prov._census_next = None
+        mode["quota"] = True
+        posts.clear()
+        raw = asyncio.run(prov.fetch())
+        assert len(posts) == 1, "stops at the first quota refusal (no same-poll retry)"
+        assert timedelta(seconds=6300) < prov._census_next - datetime.now(timezone.utc) <= timedelta(seconds=6400)
+        posts.clear()
+        asyncio.run(prov.fetch())
+        assert posts == []
+        assert VastProvider.capacity_interval_seconds == int(vast_mod.CENSUS_MAX_GAP.total_seconds())
+    finally:
+        vast_mod.RATE_PAUSE_SECONDS = pause
+
+
 def test_latitude_own_stock():
     from providers.shadeform import LATITUDE_PLANS, LatitudeProvider
     plans = json.loads((FIX / "latitude_plans.json").read_text())
@@ -519,6 +564,6 @@ if __name__ == "__main__":
               test_lambda_where_not_how_much, test_hyperstack_vm_counts, test_digitalocean_regions,
               test_runpod_tiers_per_pod_size, test_scaleway_own_stock_levels, test_shadeform_clouds_booleans,
               test_massedcompute_via_shadeform, test_hyperbolic_missing_total_is_unknown,
-              test_voltagepark_counts_and_locations, test_vast_census_free_and_total, test_vast_census_only_with_key,
+              test_voltagepark_counts_and_locations, test_vast_census_free_and_total, test_vast_census_only_with_key, test_vast_census_row_budget_and_quota,
               test_latitude_own_stock, test_unmapped_queue_includes_capacity_names):
         t(); print(t.__name__, "ok")

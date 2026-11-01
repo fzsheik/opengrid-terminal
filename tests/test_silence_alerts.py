@@ -215,25 +215,42 @@ def test_never_successful_provider_uses_watch_start():
 
 def test_capacity_silence():
     setup()
-    poller.ACTIVE.update({"vast": 900})
-    healthy("vast", T0)
+    poller.ACTIVE.update({"runpod": 900})
+    healthy("runpod", T0)
     with _Session.begin() as s:
         s.execute(text("""INSERT INTO capacity_current (provider, sku, region_key, raw_gpu_name, gpu_count, raw_value,
                           source, observed_at, first_seen_at, changed_at)
-                          VALUES ('vast', 'h100', 'us', 'H100', 1, '5', 'api', :t, :t, :t)"""), {"t": T0})
+                          VALUES ('runpod', 'h100', 'us', 'H100', 1, '5', 'api', :t, :t, :t)"""), {"t": T0})
     for m in range(15, 260, 15):
-        healthy("vast", T0 + timedelta(minutes=m))   # prices keep arriving, capacity does not
+        healthy("runpod", T0 + timedelta(minutes=m))   # prices keep arriving, capacity does not
     silence.run(T0 + timedelta(hours=2))
     assert SENT == []
     silence.run(T0 + timedelta(hours=4))
-    assert kinds() == [("capacity_silent", "vast")], kinds()
+    assert kinds() == [("capacity_silent", "runpod")], kinds()
     SENT.clear()
     silence.run(T0 + timedelta(hours=5))
     assert SENT == []
     with _Session.begin() as s:
         s.execute(text("UPDATE capacity_current SET observed_at = :t"), {"t": T0 + timedelta(hours=5)})
     silence.run(T0 + timedelta(hours=5, minutes=5))
-    assert kinds() == [("capacity_silent_recovered", "vast")]
+    assert kinds() == [("capacity_silent_recovered", "runpod")]
+
+
+def test_slow_capacity_feed_uses_its_own_cadence():
+    """Vast's census runs on a daily row budget (capacity_interval_seconds = 12h): silent only after two gaps."""
+    setup()
+    poller.ACTIVE.update({"vast": 900})
+    healthy("vast", T0)
+    with _Session.begin() as s:
+        s.execute(text("""INSERT INTO capacity_current (provider, sku, region_key, raw_gpu_name, gpu_count, raw_value,
+                          source, observed_at, first_seen_at, changed_at)
+                          VALUES ('vast', 'h100', '', 'H100', 1, '5', 'api', :t, :t, :t)"""), {"t": T0})
+    for h in range(1, 26):
+        healthy("vast", T0 + timedelta(hours=h))
+    silence.run(T0 + timedelta(hours=12))
+    assert SENT == [], "12h without a census is normal for a quota-limited feed"
+    silence.run(T0 + timedelta(hours=24, minutes=1))
+    assert kinds() == [("capacity_silent", "vast")], kinds()
 
 
 def test_restart_persistence():
@@ -268,7 +285,7 @@ if __name__ == "__main__":
     try:
         for t in (test_thresholds, test_start_no_repeat_recover_and_recur, test_empty_while_fetching,
                   test_never_had_listings_is_not_empty, test_unconfigured_killed_and_muted_never_alert,
-                  test_never_successful_provider_uses_watch_start, test_capacity_silence, test_restart_persistence,
+                  test_never_successful_provider_uses_watch_start, test_capacity_silence, test_slow_capacity_feed_uses_its_own_cadence, test_restart_persistence,
                   test_job_registered):
             t()
             print(t.__name__, "ok")

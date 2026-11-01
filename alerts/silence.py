@@ -183,6 +183,15 @@ def _iso(t):
     return t.isoformat() if t else None
 
 
+def _capacity_limit(provider: str, limit: timedelta) -> timedelta:
+    """A capacity feed declared slower than prices (capacity_interval_seconds) is silent after two of its gaps."""
+    from providers import PROVIDERS
+
+    cls = PROVIDERS.get(provider)
+    slow = getattr(cls, "capacity_interval_seconds", None) if cls else None
+    return max(limit, timedelta(seconds=2 * slow)) if slow else limit
+
+
 def evaluate(provider: str, now: datetime) -> dict:
     """Pure-ish read: the three conditions for one provider. Each is True (alerting), False (fine) or None
     (cannot tell: e.g. never had listings, so 'empty' does not apply)."""
@@ -202,7 +211,8 @@ def evaluate(provider: str, now: datetime) -> dict:
             grace = timedelta(minutes=int(settings.silence_alert_empty_grace_minutes))
             empty = now - (r.listing_last_seen + stale) >= grace
     cap_age = None if r.capacity_last_seen is None else now - r.capacity_last_seen
-    capacity = None if cap_age is None else cap_age > limit
+    cap_limit = _capacity_limit(provider, limit)
+    capacity = None if cap_age is None else cap_age > cap_limit
     facts = {"polling_interval_seconds": int(interval), "threshold": _human(limit), "last_ok_fetch": _iso(r.last_ok),
              "listings_total": r.listings_total, "listings_now": r.listings_now,
              "listing_last_seen": _iso(r.listing_last_seen), "capacity_last_seen": _iso(r.capacity_last_seen)}

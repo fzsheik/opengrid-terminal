@@ -30,9 +30,9 @@ the raw endpoint keeps the literal "{team}" placeholder.
 Capacity: `Quantity` per VM type (GPU model and count), in the count shape, provider-wide, unit = instances, keyed
 by the page's sku ("MI300x:1x:vm") so stock joins to price. The endpoint lists only types that can be provisioned
 now, so a VM size the page sells but the response does not list is out of stock (in_stock false, count unknown).
-The body is stored raw as received. An empty list means every size is taken (the endpoint lists only what can be
-provisioned now), so every page size reads out of stock; null, a non-list or a list with no readable VM type is a
-failed fetch, never "nothing in stock". Capacity fails open: an API failure never touches prices.
+The body is stored raw as received. An empty list or null (what the live endpoint answers when nothing is free,
+seen 2026-11-01) means every size is taken, since the endpoint lists only what can be provisioned now, so every page
+size reads out of stock; a non-list or a list with no readable VM type is a failed fetch, never "nothing in stock". Capacity fails open: an API failure never touches prices.
 
 Why prices stay the page's even with the key: the endpoint lists only the sizes in stock right now (on 2026-11-01
 only the 1x VM), so API-sourced prices would make the 2x/4x listings vanish whenever they sell out. Each poll the
@@ -137,11 +137,12 @@ def vm_rows(payload) -> list[dict]:
     One row per type with exactly one GPU model: `model` (upper-case, "MI300X"), `count`, `quantity`, `cents`
     (OnDemandPrice, None when absent) and the specs. Raises when the body is not a non-empty list or no type is
     readable, so a reshaped response fails the poll instead of reading as "nothing in stock". An empty list is
-    valid: the endpoint lists only what can be provisioned now, so [] means every size is taken. A type with no GPU,
+    valid, and so is null (what the live endpoint answers when nothing is free, like bare_metal/available): the endpoint
+    lists only what can be provisioned now, so either means every size is taken. A type with no GPU,
     several GPU models, or an unreadable Quantity is skipped with a warning.
     """
-    if payload == []:
-        return []  # sold out: every page size reads out of stock
+    if payload is None or payload == []:
+        return []  # sold out: every page size reads out of stock (live, 2026-11-01: the endpoint answers null)
     if not isinstance(payload, list):
         raise ValueError("hotaisle: virtual_machines/available is not a list - response reshaped")
     rows = []

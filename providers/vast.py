@@ -21,7 +21,9 @@ delisted its machine is in neither search. Prices are untouched by the census (n
 import asyncio
 import json
 import logging
+import re
 import statistics
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -56,6 +58,12 @@ API_CAP = 64
 # A keyed search stops at this many offers (checked 2026-10-30, "truncated": false regardless); a census that hits it
 # is incomplete, so its counts are withheld.
 CENSUS_CAP = 512
+# Vast caps keyed searches at 20,000 result rows a day (429 "search_quota_exceeded", seen 2026-11-01 after a census
+# every poll exhausted it). The census spends at most this many rows a day: after each census the next waits
+# rows_used / budget of a day (at least an hour, at most CENSUS_MAX_GAP). Prices use the public search, not the key.
+CENSUS_DAILY_ROW_BUDGET = 16_000
+CENSUS_MIN_GAP = timedelta(hours=1)
+CENSUS_MAX_GAP = timedelta(hours=12)
 CENSUS_FIELDS = ("machine_id", "num_gpus", "gpu_frac", "gpu_ids", "geolocation", "rentable")
 
 
@@ -89,8 +97,18 @@ def _keep(offer: dict) -> dict:
     }  # fmt: skip
 
 
+def _quota_exhausted(raw: RawResponse) -> bool:
+    return raw.status_code == 429 and "search_quota_exceeded" in str(raw.error or raw.payload or "")
+
+
+def _retry_after(raw: RawResponse) -> int | None:
+    m = re.search(r'"retry_after"\s*:\s*(\d+)', str(raw.error or raw.payload or ""))
+    return int(m.group(1)) if m else None
+
+
 class VastProvider(Provider):
     name = "vast"
+    capacity_interval_seconds = int(CENSUS_MAX_GAP.total_seconds())
     # One request per GPU model (three with a key, for the census), paced to the 1/second limit: 25-70 seconds.
     polling = PollingPolicy(interval_seconds=900, timeout_seconds=180)
 
@@ -104,6 +122,7 @@ class VastProvider(Provider):
             )
         )
         self._api_key = api_key
+        self._census_next: datetime | None = None  # in memory: a restart runs one census, then the budget applies
 
     async def _census(self, gpu_name: str, rentable: bool) -> RawResponse:
         query = _census_query(gpu_name, rentable)
@@ -123,18 +142,39 @@ class VastProvider(Provider):
     async def fetch(self) -> list[RawResponse]:
         # The API allows one request per second and answers 429 beyond it, so
         # go one model at a time, with one retry after the stated wait.
-        calls = [lambda n=n: self._one(n) for n in GPU_NAMES]
-        if self._api_key:
-            calls += [lambda n=n, r=r: self._census(n, r) for n in GPU_NAMES for r in (True, False)]
         responses = []
-        for call in calls:
-            raw = await call()
-            if raw.status_code == 429:
-                await asyncio.sleep(2)
-                raw = await call()
-            responses.append(raw)
-            await asyncio.sleep(RATE_PAUSE_SECONDS)
+        for call in [lambda n=n: self._one(n) for n in GPU_NAMES]:
+            responses.append(await self._paced(call))
+        now = datetime.now(timezone.utc)
+        if self._api_key and (self._census_next is None or now >= self._census_next):
+            responses += await self._census_round(now)
         return responses
+
+    async def _paced(self, call) -> RawResponse:
+        raw = await call()
+        if raw.status_code == 429 and not _quota_exhausted(raw):
+            await asyncio.sleep(2)
+            raw = await call()
+        await asyncio.sleep(RATE_PAUSE_SECONDS)
+        return raw
+
+    async def _census_round(self, now: datetime) -> list[RawResponse]:
+        """Both census halves for every model, within the daily row budget; stops at the first quota refusal."""
+        out, rows = [], 0
+        for n in GPU_NAMES:
+            for r in (True, False):
+                raw = await self._paced(lambda n=n, r=r: self._census(n, r))
+                out.append(raw)
+                if _quota_exhausted(raw):
+                    wait = _retry_after(raw) or 3600
+                    self._census_next = now + min(timedelta(seconds=wait), timedelta(hours=24))
+                    log.warning("vast: keyed search quota exhausted; next census after %s", self._census_next.isoformat())
+                    return out
+                rows += max(1, len(raw.payload) if isinstance(raw.payload, list) else 1)
+        gap = timedelta(days=1) * (rows / CENSUS_DAILY_ROW_BUDGET)
+        self._census_next = now + min(max(gap, CENSUS_MIN_GAP), CENSUS_MAX_GAP)
+        log.info("vast: census used %d rows; next census after %s", rows, self._census_next.isoformat())
+        return out
 
     @staticmethod
     def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:

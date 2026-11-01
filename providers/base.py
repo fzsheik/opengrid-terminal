@@ -47,6 +47,9 @@ class Provider(ABC):
 
     name: str
     polling: PollingPolicy
+    # Longest gap between capacity refreshes when capacity runs slower than prices (a quota-limited feed, e.g.
+    # Vast's keyed census). None: capacity refreshes with every poll. Used for the stale flag and silence alerts.
+    capacity_interval_seconds: int | None = None
 
     def __init__(self, client: httpx.AsyncClient):
         self._client = client

@@ -34,7 +34,8 @@ def _provider(p: str | None) -> str | None:
 
 
 def _row(r: CapacityCurrent, now: datetime) -> dict:
-    interval = PROVIDERS[r.provider].polling.interval_seconds if r.provider in PROVIDERS else 900
+    cls = PROVIDERS.get(r.provider)
+    interval = (cls.capacity_interval_seconds or cls.polling.interval_seconds) if cls else 900
     return {"provider": r.provider, "sku": r.sku, "region": r.region, "country": r.country,
             "region_group": regions.region_group(r.provider, r.region, r.country),
             "gpu": r.canonical_gpu_name, "raw_gpu_name": r.raw_gpu_name, "gpu_count": r.gpu_count,

@@ -41,6 +41,11 @@ need an account. (OVHcloud's anonymous dedicated-server list does give a deliver
 are not listings, so there is no price for a row to join to.) Vultr: its availability endpoint is empty for every GPU plan. CoreWeave, Together, IBM:
 no capacity data found.
 
+**Vast's census cadence.** Vast caps keyed searches at 20,000 result rows a day, so the census does not run every poll:
+after each census the next waits rows used / 16,000 of a day (at least 1 hour, at most 12 hours), and a quota refusal
+waits out Vast's stated `retry_after`. Vast rows are therefore flagged stale only after 3 x 12 hours, and the
+capacity-silence alert for Vast fires after 24 hours rather than 3. Prices use the public search and are unaffected.
+
 ## Tier words today
 
 Each provider's own words, mapped one-to-one where the meaning is the same and never guessed otherwise. This mapping is

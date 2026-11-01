@@ -55,7 +55,10 @@ def page_payload():
     return hotaisle.extract(text("hotaisle_pricing.html"))
 
 
-def api_server(vm=None, bm=None, teams=None, status=None):
+_DEFAULT = object()
+
+
+def api_server(vm=_DEFAULT, bm=None, teams=None, status=None):
     """A mock admin.hotaisle.app/api: routes by path, records (method, path, auth)."""
     seen = []
 
@@ -67,7 +70,7 @@ def api_server(vm=None, bm=None, teams=None, status=None):
         if path == "/teams/":
             return httpx.Response(200, json=TEAMS if teams is None else teams)
         if path == f"/teams/{HANDLE}/virtual_machines/available/":
-            return httpx.Response(200, json=vm_body() if vm is None else vm)
+            return httpx.Response(200, json=vm_body() if vm is _DEFAULT else vm)
         if path == f"/teams/{HANDLE}/bare_metal/available/":
             return httpx.Response(200, content=b"null" if bm is None else json.dumps(bm).encode(),
                                   headers={"content-type": "application/json"})
@@ -179,14 +182,16 @@ def test_capacity_joins_page_skus():
 
 
 def test_empty_list_is_sold_out():
-    """[] is a valid answer: the endpoint lists only what can be provisioned now, so every page size is out."""
-    handler, _ = api_server(vm=[])
-    page, vm, bm = run(keyed(handler))
-    assert page.ok and vm.ok and vm.payload == [], "an empty list is a successful fetch"
-    rows = {r.sku: r for r in HotAisleProvider.normalize_capacity(by([page, vm, bm]))}
-    assert set(rows) == {"MI300x:1x:vm", "MI300x:2x:vm", "MI300x:4x:vm"}
-    assert all(r.in_stock is False and r.available_count is None for r in rows.values())
-    assert len(HotAisleProvider.normalize(by([page, vm, bm]))) == 3, "prices untouched"
+    """[] and null are valid answers (null is what the live endpoint gave on 2026-11-01 with nothing free): the
+    endpoint lists only what can be provisioned now, so every page size is out."""
+    for body in ([], None):
+        handler, _ = api_server(vm=body)
+        page, vm, bm = run(keyed(handler))
+        assert page.ok and vm.ok and vm.payload == body, f"{body!r} is a successful fetch"
+        rows = {r.sku: r for r in HotAisleProvider.normalize_capacity(by([page, vm, bm]))}
+        assert set(rows) == {"MI300x:1x:vm", "MI300x:2x:vm", "MI300x:4x:vm"}, body
+        assert all(r.in_stock is False and r.available_count is None for r in rows.values())
+        assert len(HotAisleProvider.normalize(by([page, vm, bm]))) == 3, "prices untouched"
 
 
 def test_api_failures_never_touch_prices():
@@ -203,14 +208,6 @@ def test_api_failures_never_touch_prices():
             pass
         assert len(HotAisleProvider.normalize({hotaisle.ENDPOINT: [snap(page.payload)],
                                                hotaisle.VM_ENDPOINT: [snap(body)]})) == 3
-    # The live VM endpoint answers `null` when nothing is in stock? Still a failure, never a sell-out.
-    handler, _ = api_server()
-    p = keyed(handler)
-    p._api = httpx.AsyncClient(base_url=hotaisle.API_BASE_URL, transport=httpx.MockTransport(
-        lambda r: httpx.Response(200, json=TEAMS) if r.url.path.endswith("/teams/")
-        else httpx.Response(200, content=b"null", headers={"content-type": "application/json"})))
-    page, vm, bm = run(p)
-    assert not vm.ok and bm.ok, "VM null fails; bare-metal null is a normal answer"
     # Wrong team: the stock call fails, no POST, the page still prices.
     handler, seen = api_server(teams=TEAMS + [{"handle": "b", "name": "B", "roles": [], "effective_roles": []}])
     page, vm = run(keyed(handler, team="nobody"))
