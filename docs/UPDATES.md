@@ -5,6 +5,129 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-02 — Data release: public/internal tiers, freshness, full cost, 7 providers, AWS history to 2015, Lium live feed
+
+### What shipped
+
+**Public and internal data tiers.** Every listing, capacity row and archived price now carries a `visibility`
+(migration `0027_visibility`; `public` by default, CHECK on listings). The one registry of internal sources is
+`provider_meta.INTERNAL_SOURCES`, each with its reason (DeepInfra's container-API prices; the AWS Spot Advisor); every
+other source is public, and `enforce()` fails closed. Every public statistic (market view, rollups, indices, fixings,
+spreads, capacity, archived history, legacy JSON, trust) reads the public tier only. Routing, job placement and keyed
+recommendations may still use internal rows to choose and order candidates, but a non-admin caller never sees an
+internal value: the candidate shows the public list price of the same product or no price (`price_basis: "quote"`,
+"available via OpenGrid"), and derived numbers (quotes, savings, comparisons, cost estimates, the stored audit
+record) are rewritten. The operator and platform-admin keys see everything, labelled. `tests/test_visibility.py`
+seeds unmistakable internal rows and calls every public GET route enumerated from the app (221 requests over 125
+routes) plus the public POSTs; it fails on any internal name, price or count. Method: `/methodology/data-visibility`.
+
+**Freshness: when a change happened, and how old each feed is.** Price history gains `prev_observed_at` (the last
+fetch that still showed the old value), `provider_changed_at` and `changed_at_basis` (`exact` | `date_only` |
+`lower_bound` | `poll_window`; migration `0028_changed_at`). Provider times come from AWS spot `timestamp` and Nebius
+`effectiveTime` (exact), Azure `effectiveStartDate` (date only), GCP `effectiveTime` (lower bound) and, new in this
+release, the Lium stream's frame `ts` (exact). AWS spot is now read as a change log (DescribeSpotPriceHistory from
+the last successful poll), so every change between polls is recorded with its own time. Polling is tiered: a price
+and a capacity cadence per provider, a request budget (token bucket) about half of each documented limit, and
+rate-limit headers and 429s stored as `throttled` (not failures, not silence). Fast: Lambda, Hyperstack, RunPod 2
+min, Vast 5 min; medium: Salad, DigitalOcean, Linode 5 min, AWS and Nebius spot every 5 min, everyone else 15 min;
+slow: Azure, GCP, Oracle, IBM, OVHcloud, E2E, Mithril 6 h, pages, Vultr and Exoscale 1 h. `GET /v1/freshness`
+(public, like `/v1/capacity`) gives per provider and stream the cadence, data age, p95 age over 24 h, detection lag
+over 7 days and throttled answers. Vast and Lium now keep the cost, network and interconnect fields they already
+received (Vast `storage_cost`, `inet_up/down_cost`, `dph_base`, `min_bid`, NVLink/PCIe bandwidth; Lium measured
+Mbps, NVLink/P2P, InfiniBand/RoCE ports). Method: `/methodology/freshness`.
+
+**True cost of a job (`/cost`).** A `cost_components` job (daily) stores the machine-readable cost sources raw in
+`cost_snapshots` (migration `0030_cost_components`): AWS Data Transfer and S3 offer files, Azure Retail Prices
+(bandwidth, storage), Oracle's price list, Verda volume types; Hyperstack, Vultr and each Vast offer are read from
+provider raw already stored, and a hand table with source URL and verification date covers the other top providers.
+`POST /v1/cost/estimate` (public) ranks providers on compute + egress + storage for a job (presets R0-R3 or custom);
+an unknown component is named and makes the total a lower bound ("≥ $X"), never $0, and a lower bound never outranks
+a complete total. `GET /v1/cost/{components,billing,sources,presets}`. The `/cost` page sits in the GPUs group.
+Nothing statistical reads cost data. Method: `/methodology/full-cost`.
+
+**Seven providers without keys (47 -> 54).** Paperspace (via Shadeform's catalogue, Shadeform's resale price, Paperspace
+list + $0.04/GPU-h), Akash Network (one weighted bid summary per GPU, bids up to 31 days old), Hydra Host (bare-metal
+inventory, cents converted), CUDO Compute (VMs and bare metal), GPU.ai, Exoscale (22 listings; GPU table from
+Exoscale's pricing page) and Hugging Face Inference Endpoints (38 listings). GPU.ai and Hugging Face resell other
+clouds, so their listings carry `provider_tier` `resold:<vendor>` and, by a new shared rule, are stored and shown but
+never enter the market view, rollups, indices or routing validation. Six of them add capacity. All are public tier.
+
+**Archived history from official sources, back to 2015.** The AWS price-list archive now reads all 123 versions from
+2015-12 (the pre-2018 files lack columns that used to empty them; 2017-11 gives p3.2xlarge $3.06/h), keeps older
+types unmapped (p2, g2, g3, p3dn) and stores reserved 1y/3y at effective hourly price, never as on-demand. Azure
+"effective since" anchors: one point per GPU size, region and market at the current price's `effectiveStartDate`
+(ND96asr_v4 $27.197/h since 2021-03-01). Open datasets with licences: Full Stack Deep Learning's cloud-gpus.csv
+history (MIT, from 2022-08) and Huang (2026) Vast monthly transacted medians (CC BY 4.0, own market `transacted`);
+a dataset point that repeats a primary source becomes corroboration on the primary row, never a second point.
+Every archived point records `basis`, `licence`, `attribution` and the visibility tier (migration
+`0031_backfill_sources`). A daily `gpuhunt_snapshot` job keeps dstack's expiring catalogues raw in
+`catalog_snapshots`. `python -m backfill coverage` reports how far back each provider and GPU reaches.
+
+**Lium live feed.** `live/lium_stream.py` consumes Lium's public executor WebSocket (no key): change-only
+`stream_events` (migration `0031_stream_events`) with the provider's timestamp and sequence, at most one write a
+minute plus the whole book as one raw snapshot in the poller's shape, then Lium is re-normalized, so Lium listings
+and capacity follow a change within about a minute instead of fifteen. Sequence gaps and reconnects resnapshot and
+diff; a stale book is never written. The REST poller keeps running as the fallback, and the two never normalize Lium
+at the same time (`live.locks`). Live price changes reach price history with `changed_at_basis` `exact`. `GET
+/v1/live/status` and `/v1/live/events` are operator-only. Method: `/methodology/live-feeds`.
+
+**Integration fixes found while merging.** The full-cost estimator read internal listings and returned their
+prices on the public `/v1/cost/estimate` (fixed; now in the leak test, mutation-checked). `/v1/freshness` never names
+a wholly internal provider. Migrations chained linearly. The Vast full-cost reader is tested against an offer
+exactly as the Vast poller now stores it.
+
+### Planned but not shipped, and why
+
+| Item | Why not |
+|---|---|
+| SkyPilot catalogue history | `skypilot-catalog` has no licence file. The loader is ready and refuses to run until `SKYPILOT_CATALOG_ENABLED` and `SKYPILOT_CATALOG_LICENCE` name the licence SkyPilot confirm. |
+| SF Compute order book | Needs an account token; not ingested. Raw + depth series + transaction index design in `/methodology/live-feeds`. |
+| gpuhunt catalogues as prices | Kept raw only: the bucket states no licence for the data. |
+| Hostkey / LeaderGPU | `invapi.hostkey.com/robots.txt` disallows every agent. io.net and CloudRift re-checked and stay declined. |
+| Exact stream times for Lium stock-only changes | As for every provider, a provider time is attached only when the price moved; stock-only changes keep `poll_window`. |
+| GCP networking and storage from the Billing Catalog | Under service ids OpenGrid does not read yet; the hand table is used. |
+
+### Known issues
+- Verda publishes no egress prices: its egress is always unknown (a lower-bound total).
+- Vast's storage and egress read as unknown until the first Vast poll after deploy (older snapshots lack the fields).
+- Paperspace is Shadeform's resale price, not Paperspace's own; Akash is a bid summary, not a list price. Both are
+  documented in their module docstrings and provider notes.
+- AWS reserved archive rows are stored but not served: the archived API offers `on_demand` and `spot` only.
+- `tests/test_developer_docs.py` and `tests/test_pages.py` read the database in `.env`; they fail on a dev database
+  that is not migrated to head (they pass on one that is).
+- `test_jobs_e2e` fails here and on main ("no usage slice metered").
+
+### Deploy notes
+- Migrations run at startup, in order: `0027_visibility` -> `0028_changed_at` -> `0030_cost_components` ->
+  `0031_backfill_sources` -> `0031_stream_events` (one head).
+- **Write pause.** `0028_changed_at` builds the partial index `ix_raw_throttled_time` on `raw_snapshots` with a plain
+  `CREATE INDEX`, which blocks writes to `raw_snapshots` while it scans the table. Pollers' saves wait for it; expect
+  a short gap in fetches during the migration.
+- One-off after deploy: `python -m changed_at backfill` (idempotent; fills provider times for the last 30 days of raw
+  payloads and brackets for 90 days; `--dry-run` first to see counts).
+- Backfills to run in production, in this order (so dataset points corroborate primary rows instead of duplicating
+  them). Counts measured on an empty table on 2026-11-01; rows already stored are skipped (idempotent):
+  1. `python -m backfill aws --since 2015-12-01`: 123 versions, 3,272 on-demand rows and 34,589 reserved rows
+     (17,205 `reserved_1y`, 17,384 `reserved_3y`), 2015-12 to 2026-10. Downloads take about an hour cold.
+  2. `python -m backfill azure-since`: about 1,388 points (704 on-demand, 684 spot), earliest 2020-03-01; one request
+     per size, 6.5 s apart. The count follows Azure's current API.
+  3. `python -m backfill datasets`: FSDL 41 revisions -> 569 row versions, 538 stored and 31 corroborations; Huang
+     185 monthly points (Vast, 2022-10 to 2026-07).
+  Then `python -m backfill coverage` to check.
+- New jobs: `cost_components` (daily), `gpuhunt_snapshot` (daily, `GPUHUNT_SNAPSHOT_ENABLED`, default true),
+  `lium_stream` (long-lived supervisor). `cost_components` and `lium_stream` are off when the poller is off;
+  `gpuhunt_snapshot` runs whenever jobs run.
+- New variables: `LIUM_STREAM_ENABLED` (default true), `GPUHUNT_SNAPSHOT_ENABLED` (default true),
+  `SKYPILOT_CATALOG_ENABLED` (default false) and `SKYPILOT_CATALOG_LICENCE` (unset); leave the SkyPilot ones off.
+- Expected effects: schema-change incidents for Vast and Lium on their first polls (fields added to stored raw; Lium
+  also from the stream's first snapshot); a quarantine `duplicate_explosion` hold for any provider whose listing
+  count jumps against its norm (new listing ids are withheld until released on /ops); the seven new providers have no
+  norm yet, so they are not held. AWS spot polls every 5 minutes with the key.
+- Full suite before push: 116 test files (105 Python, 11 web); all pass except `test_jobs_e2e` (fails here and on
+  main).
+
+---
+
 ## 2026-11-01 (fourth release) — AWS spot prices, GCP in 34 regions; Vast and Hot Aisle capacity fixes
 
 ### What shipped
