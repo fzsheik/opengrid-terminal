@@ -20,6 +20,7 @@ import re
 from datetime import datetime
 
 from backfill.parsers import dec, listing, text
+from backfill.pending_names import canonical_name
 from backfill.sources import own_page
 from models import ComputeListing
 
@@ -31,11 +32,6 @@ TYPE_ID = {"A100-80G": "A100_sxm4_80G", "V100-32G": "V100_32G"}
 LIVE_RAW = {"A4000": "A4000 pcie", "A5000": "A5000 pcie", "A6000": "A6000 pcie", "V100": "V100 pcie",
             "V100-32G": "V100_32G pcie", "A100": "A100 pcie", "A100-80G": "A100_80G sxm4",
             "H100": "H100 (Paperspace: HGX per its page, pcie per Shadeform)"}
-# The canonical GPU the live pipeline gives each raw name (canonical.py on providers/batch-nokey); set here so rows
-# imported before that branch is merged already carry it. Names live leaves unmapped stay unmapped.
-CANONICAL = {"A4000 pcie": "NVIDIA RTX A4000 16GB", "A5000 pcie": "NVIDIA RTX A5000 24GB",
-             "A6000 pcie": "NVIDIA RTX A6000 48GB", "A100 pcie": "NVIDIA A100 40GB PCIe",
-             "A100_80G sxm4": "NVIDIA A100 80GB SXM4"}
 # what each card's own spec must name ("NVIDIA <X> GPU"), when it names one
 SPEC_GPU = {"A100-80G": ("A100",), "H100": ("HGX H100", "H100"), "RTX4000": ("RTX4000",), "RTX5000": ("RTX5000",)}
 
@@ -72,7 +68,7 @@ def paperspace_cards(page: str, at: datetime) -> list[ComputeListing]:
             raw = "A100 pcie nvlink"  # live: Paperspace's A100x8 is NVLink-bridged PCIe (unmapped)
         o = listing("paperspace", sku=name + (f"x{count}" if count > 1 else ""), listing_id=type_id, raw=raw,
                     count=count, instance_price=dec(m["p"]), at=at, tier="paperspace-page")
-        out.append(o.model_copy(update={"canonical_gpu_name": CANONICAL.get(raw)}))
+        out.append(o.model_copy(update={"canonical_gpu_name": canonical_name(raw)}))
     if not out:
         raise ValueError("paperspace(archive): no '<machine> $ x / hour' card")
     return out
