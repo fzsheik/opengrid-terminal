@@ -245,11 +245,12 @@ _add("Intel Gaudi 2 96GB", "GAUDI2 pcie")
 # Paperspace via Shadeform. The RTX A4000/A5000/A6000 exist only as PCIe cards, so the tag cannot mislead.
 # Left unmapped: "V100 pcie" (Paperspace's page says only "V100 16 GB"; Shadeform's interconnect tag is wrong
 # on its H100), "V100_32G pcie" (no canonical 32 GB V100 yet) and the H100, relabelled in providers/shadeform.py
-# because Paperspace's page says HGX (SXM) where Shadeform says pcie.
+# because Paperspace's page says HGX (SXM) where Shadeform says pcie. "A100 pcie nvlink" (Paperspace's A100x8, 40 GB
+# PCIe cards bridged with NVLink) has no canonical NVLink 40 GB variant yet.
 _add("NVIDIA RTX A4000 16GB", "A4000 pcie")
 _add("NVIDIA RTX A5000 24GB", "A5000 pcie")
 _add("NVIDIA RTX A6000 48GB", "A6000 pcie")
-_add(None, "V100 pcie", "V100_32G pcie", "H100 (Paperspace: HGX per its page, pcie per Shadeform)")
+_add(None, "A100 pcie nvlink", "V100 pcie", "V100_32G pcie", "H100 (Paperspace: HGX per its page, pcie per Shadeform)")
 # Crusoe's own type catalogue (GET /projects/{id}/compute/vms/types, `gpu_type`), read for capacity only.
 # Each names model, memory and form factor; H100 SXM is SXM5 only and A100 SXM SXM4 only.
 _add("NVIDIA H100 80GB SXM5", "H100-SXM-80GB")
@@ -551,6 +552,7 @@ _add("NVIDIA RTX 2000 Ada 16GB", "rtx_2000_ada")
 _add("NVIDIA RTX 4000 Ada 20GB", "rtx_4000_ada")
 _add("NVIDIA RTX 6000 Ada 48GB", "rtx_6000_ada")
 _add("NVIDIA RTX A6000 48GB", "rtx_a6000")
+_add("NVIDIA RTX A4000 16GB", "rtx_a4000")
 _add("NVIDIA RTX 3090 24GB", "rtx_3090")
 _add("NVIDIA RTX 4090 24GB", "rtx_4090")
 _add("NVIDIA RTX 5090 32GB", "rtx_5090")
