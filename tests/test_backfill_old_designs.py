@@ -132,6 +132,26 @@ def test_coreweave_a_la_carte_component_table():
     _raises(coreweave.coreweave_component_table, page.replace("GPU Component", "GPU Instance"), AT, contains="header")
 
 
+def test_coreweave_docs_resource_pricing_three_designs():
+    src = _src("docs.coreweave.com/resources/resource-based-pricing")
+    by = {}
+    for name in ("coreweave_docs_2021-03_type_column.html", "coreweave_docs_2022-01_no_table.html",
+                 "coreweave_docs_2023-05_no_type.html"):
+        ls, used = src.parse((FIX / name).read_bytes(), AT)
+        assert used.endswith("coreweave_docs_resource_pricing")
+        by[name[15:22]] = {l.listing_id: l for l in ls}
+    # resource label A100_NVLINK -> the gpu-cloud-pricing page's "A100 40GB NVLINK": one listing id for both pages
+    a = by["2021-03"]["a100-40gb-nvlink:gpu-component"]
+    assert a.price_per_gpu_hour == D("2.06") and a.canonical_gpu_name == "NVIDIA A100 40GB SXM4"
+    assert by["2021-03"]["tesla-v100-pcie:gpu-component"].canonical_gpu_name == "NVIDIA Tesla V100 16GB PCIe"
+    assert not any(l.price_per_gpu_hour in (D("0.010"), D("0.005")) for l in by["2021-03"].values()), "CPU / RAM rows"
+    assert len(by["2022-01"]) == 10 and by["2022-01"]["rtx-a6000:gpu-component"].price_per_gpu_hour == D("1.28")
+    h = by["2023-05"]["nvidia-hgx-h100:gpu-component"]          # label H100_NVLINK_80GB
+    assert h.price_per_gpu_hour == D("4.78") and h.canonical_gpu_name == "NVIDIA H100 80GB SXM5"
+    bad = _fix("coreweave_docs_2023-05_no_type.html").replace("A40</", "A41</", 1).replace(">A40<", ">A41<")
+    _raises(coreweave.coreweave_docs_resource_pricing, bad, AT, contains="unknown GPU resource label")
+
+
 # --------------------------------------------------------------------------------------------------------- Lambda
 
 GC, GCP_ = "lambdalabs.com/service/gpu-cloud", "lambdalabs.com/service/gpu-cloud/pricing"
@@ -283,7 +303,7 @@ def test_denvr_denvrdata_2025_list_before_header():
 TESTS = [test_since_accepts_year_and_month,
          test_azure_vm_page_2018_names_without_s, test_azure_vm_page_2022_spot_column,
          test_azure_vm_page_2020_spot_savings_and_trailing_cell, test_azure_vm_page_old_and_new_designs_fail_loudly,
-         test_coreweave_a_la_carte_component_table,
+         test_coreweave_a_la_carte_component_table, test_coreweave_docs_resource_pricing_three_designs,
          test_lambda_2020_cards, test_lambda_2021_pricing_page_vram_from_its_section,
          test_lambda_2022_pricing_page_vram_in_cell_reserved_ignored,
          test_lambda_2022_reserved_table_with_the_same_header_is_skipped, test_lambda_dec_2023_price_in_force_on_capture_day,

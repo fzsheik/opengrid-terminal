@@ -141,5 +141,79 @@ def coreweave_component_table(page: str, at: datetime) -> list[ComputeListing]:
     return out
 
 
+# docs.coreweave.com resource labels -> (the gpu-cloud-pricing page's model name, VRAM GB), so a product priced on
+# both pages is one listing id. Labels are compared without spaces ("H100_NVLINK _ 80GB").
+LABEL_TO_MODEL = {
+    "H100_NVLINK_80GB": ("NVIDIA HGX H100", 80), "H100_PCIE": ("NVIDIA H100 PCIe", 80),
+    "A100_NVLINK_80GB": ("A100 80GB NVLINK", 80), "A100_NVLINK": ("A100 40GB NVLINK", 40),
+    "A100_PCIE_80GB": ("A100 80GB PCIe", 80), "A100_PCIE_40GB": ("A100 40GB PCIe", 40),
+    "Tesla_V100_NVLINK": ("Tesla V100 NVLINK", 16), "Tesla_V100": ("Tesla V100 PCIe", 16),
+    "Tesla_V100_PCIE": ("Tesla V100 PCIe", 16), "A40": ("A40", 48), "RTX_A6000": ("RTX A6000", 48),
+    "RTX_A5000": ("RTX A5000", 24), "RTX_A4000": ("RTX A4000", 16), "Quadro_RTX_6000": ("Quadro RTX 6000", 24),
+    "Quadro_RTX_5000": ("Quadro RTX 5000", 16), "Quadro_RTX_4000": ("Quadro RTX 4000", 8),
+    "Tesla_P100_NVLINK": ("Tesla P100 NVLINK", 16),
+}
+COMPONENT_CANONICAL[("Tesla V100 PCIe", 16)] = "NVIDIA Tesla V100 16GB PCIe"
+COMPONENT_CANONICAL[("Quadro RTX 6000", 24)] = "NVIDIA Quadro RTX 6000 24GB"
+_DOC_ROW = re.compile(r"GPU (?P<desc>NVIDIA .+?) (?P<label>[A-Za-z0-9]+(?:(?:_| _ )[A-Za-z0-9]+)*) "
+                      r"\$(?P<p>\d+(?:\.\d+)?)(?= )")
+
+
+def _doc_component(label: str, desc: str, price: str, at: datetime):
+    key = label.replace(" ", "")
+    if key not in LABEL_TO_MODEL:
+        raise ValueError(f"coreweave(docs): unknown GPU resource label {label!r} ({desc})")
+    model, vram = LABEL_TO_MODEL[key]
+    return _component(model, str(vram), f"${price}", at)
+
+
+def coreweave_docs_resource_pricing(page: str, at: datetime) -> list[ComputeListing]:
+    """docs.coreweave.com/resources/resource-based-pricing (2021 - 2023): "GPU Instance Resource Pricing", rows
+    Type | Description | (Resource) Label | Cost per Hour | VRAM; GPU rows are the GPU component per GPU-hour (the
+    same a la carte price as www.coreweave.com/gpu-cloud-pricing, stored the same way); from May 2023 the GPU table
+    drops the Type column (Description | Label | Cost per hour | VRAM). 2021 and 2023 print HTML tables; 2022 renders
+    the same rows without one, read from the text in the same order (Type, Description,
+    Label, $ cost). The resource label decides the product (LABEL_TO_MODEL); an unknown label raises."""
+    out, seen = [], False
+    for tm in re.finditer(r"<table[^>]*>(?P<t>.*?)</table>", page, re.S):
+        rows = [[text(c) for c in re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", r, re.S)]
+                for r in re.findall(r"<tr[^>]*>(.*?)</tr>", tm["t"], re.S)]
+        head = [h.lower() for h in rows[0]] if rows else []
+        label_i = next((i for i, h in enumerate(head) if h in ("label", "resource label")), None)
+        cost_i = head.index("cost per hour") if "cost per hour" in head else None
+        if "description" not in head or label_i is None or cost_i is None:
+            continue   # CPU / storage tables are headed "CPU Type" / "Node type", not "Description"
+        type_i, desc_i = (head.index("type") if "type" in head else None), head.index("description")
+        seen = True
+        for cells in rows[1:]:
+            if len(cells) != len(head):
+                raise ValueError(f"coreweave(docs): row {cells!r} under {rows[0]!r}")
+            if type_i is not None and cells[type_i] != "GPU":
+                continue  # CPU / RAM rows of the 2021-22 combined table
+            if not cells[cost_i].startswith("$"):
+                raise ValueError(f"coreweave(docs): GPU row {cells!r}")
+            o = _doc_component(cells[label_i], cells[desc_i], cells[cost_i][1:], at)
+            if o is not None:
+                out.append(o)
+    if not seen:
+        t = text(re.sub(r"<(script|style)\b.*?</\1>", " ", page, flags=re.S))
+        i = t.find("Type Description Resource Label Cost per Hour")
+        if i == -1:
+            i = t.find("Type Description Label Cost per Hour")
+        if i != -1:
+            seen = True
+            section = t[i: t.find("An example", i) if t.find("An example", i) != -1 else i + 4000]
+            for m in _DOC_ROW.finditer(section):
+                o = _doc_component(m["label"], m["desc"], m["p"], at)
+                if o is not None:
+                    out.append(o)
+    if not seen:
+        raise ValueError("coreweave(docs): no 'Type | Description | Label | Cost per Hour' GPU resource table")
+    if not out:
+        raise ValueError("coreweave(docs): no priced GPU resource")
+    return out
+
+
 SOURCES = [live_page("coreweave", "coreweave", "www.coreweave.com/pricing", coreweave_single_table),
+           own_page("coreweave", "docs.coreweave.com/resources/resource-based-pricing", coreweave_docs_resource_pricing),
            own_page("coreweave", "www.coreweave.com/gpu-cloud-pricing", coreweave_component_table)]
