@@ -114,6 +114,11 @@ def build_fetchers() -> list[Provider]:
     if settings.clore_api_key:
         fetchers.append(CloreProvider(settings.clore_api_key))
 
+    # Public price file + Spot Advisor feed; an IAM key pair (read-only EC2 market calls) adds spot listings,
+    # spot placement scores (capacity tiers) and Capacity Block offerings (providers/aws.py).
+    fetchers.append(AwsProvider(access_key_id=settings.aws_access_key_id,
+                                secret_access_key=settings.aws_secret_access_key))
+
     # Public endpoints and pages: no credentials to be missing.
     fetchers.extend(
         cls()
@@ -126,7 +131,6 @@ def build_fetchers() -> list[Provider]:
             VoltageParkProvider,
             LiumProvider,
             NebiusProvider,
-            AwsProvider,
             DenvrProvider,
             BoostRunProvider,
             CoreWeaveProvider,

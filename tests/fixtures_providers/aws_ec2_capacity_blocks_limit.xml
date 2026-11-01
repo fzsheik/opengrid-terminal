@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Response><Errors><Error><Code>CapacityBlockDescribeLimitExceeded</Code><Message>Your existing service limits for this AWS account are not sufficient to use EC2 Capacity Blocks. Contact AWS Support if you have any questions.</Message></Error></Errors><RequestID>bab6c93a-1e65-435a-99d1-36aee2ece8af</RequestID></Response>

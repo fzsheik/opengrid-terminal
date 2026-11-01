@@ -106,7 +106,8 @@ def _one(provider: str, part: str) -> str | None:
         return None
     low = p.lower()
     if provider == "aws":
-        return AWS_REGIONS.get(low)
+        # A region code, or an Availability Zone name (spot listings: "us-east-1a" -> us-east-1).
+        return AWS_REGIONS.get(low) or AWS_REGIONS.get(re.sub(r"(?<=\d)[a-z]$", "", low))
     if provider == "scaleway" and re.match(r"^[a-z]{2}-[a-z]{3}-\d+$", low):
         cc = low[:2].upper()  # Scaleway zones lead with the ISO country: fr-par-2, nl-ams-1, pl-waw-3
         return COUNTRY_GROUP.get(cc)

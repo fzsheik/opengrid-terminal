@@ -29,7 +29,7 @@ from providers.lium import LiumProvider  # noqa: E402
 from providers import PROVIDERS  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_capacity"
-SUPPORTED = ["boostrun", "clore", "crusoe", "deepinfra", "denvr", "digitalocean", "horizon", "hotaisle", "hyperbolic", "hyperstack", "jarvislabs",
+SUPPORTED = ["aws", "boostrun", "clore", "crusoe", "deepinfra", "denvr", "digitalocean", "horizon", "hotaisle", "hyperbolic", "hyperstack", "jarvislabs",
              "koyeb", "lambda", "latitude", "linode", "lium", "massedcompute", "phyntec", "runpod", "salad", "scaleway",
              "thundercompute", "vast", "verda", "voltagepark"]
 DB = "og_test_capacity"
@@ -266,7 +266,7 @@ def test_endpoints():
         assert koy and not any(r["stale"] for r in koy) and all(r["tier"] for r in koy)
         a100 = client.get("/v1/capacity", params={"gpu": "NVIDIA A100 80GB SXM4"}).json()["data"]
         assert a100 and all(r["gpu"] == "NVIDIA A100 80GB SXM4" for r in a100)
-        assert client.get("/v1/capacity", params={"provider": "aws"}).status_code == 404
+        assert client.get("/v1/capacity", params={"provider": "nebius"}).status_code == 404
         assert client.get("/v1/capacity", params={"gpu": "not-a-gpu"}).status_code == 404
         h = client.get("/v1/capacity/history", params={"provider": "koyeb", "days": 90}).json()
         assert h["meta"]["count"] == 25 and h["data"][0]["observed_at"] >= h["data"][-1]["observed_at"]

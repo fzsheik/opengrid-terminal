@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Response><Errors><Error><Code>UnauthorizedOperation</Code><Message>You are not authorized to perform this operation. User: arn:aws:iam::123456789012:user/opengrid-market-ro is not authorized to perform: ec2:DescribeInstances because no identity-based policy allows the ec2:DescribeInstances action</Message></Error></Errors><RequestID>39c4cbad-81f3-421f-a873-8954207fbee2</RequestID></Response>

@@ -545,34 +545,48 @@ AWS = ProviderMapping(
     display_name="AWS EC2 (hyperscaler list price)",
     endpoints={"GET awsstatic price file": "every EC2 type in us-east-1, Linux; no credentials",
                "GET spot-bid-advisor.s3.amazonaws.com/spot-advisor-data.json":
-                   "Spot Advisor interruption band and savings per GPU type, region and OS; stored raw only"},
+                   "Spot Advisor interruption band and savings per GPU type, region and OS; stored raw only",
+               "POST ec2.<region>.amazonaws.com DescribeSpotPriceHistory":
+                   "effective Linux spot price now per GPU type and AZ, six regions (read-only IAM key, SigV4)",
+               "POST ec2.us-east-1.amazonaws.com GetSpotPlacementScores":
+                   "capacity only (capacity tables): 1-10 score per region, five GPU types, every 2 h (key)",
+               "POST ec2.us-east-1.amazonaws.com DescribeCapacityBlockOfferings":
+                   "Capacity Block offerings, 1 instance x 24 h, daily; stored raw only (key)"},
     fields=_fields(
         "aws",
-        sku=(RAW, "Instance Type", 'e.g. "p5.48xlarge"'),
-        listing_id=(DERIVED, "{Instance Type}:us-east-1"),
+        sku=(RAW, "Instance Type / instanceType", 'e.g. "p5.48xlarge"'),
+        listing_id=(DERIVED, "{Instance Type}:us-east-1 | {instanceType}:{availabilityZone}:spot",
+                    "one on-demand listing per type; one spot listing per type and AZ"),
         raw_gpu_name=(LOOKUP, "GPU_INSTANCES in providers/aws.py", "the price file has no GPU model; ours does"),
         gpu_count=(LOOKUP, "GPU_INSTANCES in providers/aws.py", "the price file has no GPU count either"),
-        region=(CONSTANT, '"us-east-1"', "one region per file"),
-        country=(CONSTANT, '"US"'),
+        region=(DERIVED, '"us-east-1" | availabilityZone', "one region per price file; spot is per AZ"),
+        country=(LOOKUP, "SPOT_REGIONS in providers/aws.py", '"US" for the price file'),
         price_per_gpu_hour=(DERIVED, "= price / gpu_count"),
-        price_per_instance_hour=(RAW, "price", "on-demand, Linux, shared tenancy"),
+        price_per_instance_hour=(RAW, "price | spotPrice", "on-demand: Linux, shared tenancy; spot: Linux/UNIX"),
+        market_type=(DERIVED, "price file -> on_demand, DescribeSpotPriceHistory -> spot"),
+        interruptible=(DERIVED, "= (market_type == spot)"),
         provider_tier=(CONSTANT, '"hyperscaler"'),
-        available=(ABSENT, "-", "a price file says nothing about capacity"),
-        capacity=(ABSENT, "-"),
+        available=(ABSENT, "-", "neither a price file nor a spot price says anything about stock"),
+        capacity=(ABSENT, "-", "spot placement scores are capacity rows (/v1/capacity), not listing fields"),
         capacity_unit=(ABSENT, "-"),
-        vcpu=(RAW, "vCPU"),
-        ram_gb=(DERIVED, "Memory, parsed from '2048 GiB'"),
+        vcpu=(RAW, "vCPU", "spot: the price file's value for the same type, else none"),
+        ram_gb=(DERIVED, "Memory, parsed from '2048 GiB'", "spot: the price file's value for the same type"),
         storage_gb=(ABSENT, "-", "EBS-only or local NVMe is not normalized"),
     ),
     quirks=[
         "The GPU model and count are NOT in the price file; they come from a hand-kept table "
-        "(GPU_INSTANCES). A new instance family is logged and skipped, never guessed.",
+        "(GPU_INSTANCES), cross-checked against DescribeInstanceTypes. A new instance family is logged and "
+        "skipped, never guessed.",
         "List prices: big buyers rarely pay them, so AWS sits well above the neoclouds. "
         "p5.48xlarge is 8x H100 at $55.04/hr = $6.88 per GPU-hour.",
-        "Only us-east-1 Linux on-demand. Polled hourly; list prices change rarely.",
+        "On-demand: only us-east-1 Linux. Polled hourly; list prices change rarely.",
+        "Spot (with the read-only key): DescribeSpotPriceHistory with StartTime = EndTime = now returns the price "
+        "in effect now per type and AZ, in us-east-1, us-east-2, us-west-2, eu-west-2, eu-north-1 and "
+        "ap-northeast-1. A region answer with no GPU row is a failed fetch.",
         "The Spot Advisor feed (interruption band r 0-4 = <5% .. >20%, savings s %) is stored raw with its "
-        "Last-Modified header and read only by spot_advice(): there are no AWS spot listings, reliability is "
-        "OpenGrid's own launches only, and a band is not stock. It was last rewritten 20 Mar 2026.",
+        "Last-Modified header and read only by spot_advice(); never shown on public pages or APIs (AWS site "
+        "terms). Routing has no hook for it: best execution ranks on-demand only and reliability is OpenGrid's "
+        "own launches only. It was last rewritten 20 Mar 2026.",
     ],
 )
 
