@@ -5,6 +5,56 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-01 (second release) — Nebius back, silence alerts, 24 capacity providers, four raw sources
+
+### What shipped
+
+**Nebius prices are back.** The page scraper broke because Nebius added a "Preemptible, GPU-hour" column to its
+on-demand GPU table and the scraper rejected any unexpected column. It now stores that column raw and still reads only
+the on-demand price, so the 7 on-demand listings return with the same ids. Spot prices now come from Nebius's public,
+no-account spot-price API: 12 listings, one per GPU and region (e.g. H100 $0.79 in eu-north1). The two sources fail
+independently; a spot response with no prices is a failure, never an empty market. On-demand is still a scraped page.
+
+**Alert on silence** (to-do 1 of 2026-10-30). A `silence_alerts` job (every 10 min) sends one ops alert when a polled
+provider has had no successful fetch for max(3h, 6 polls), one when its current listings drop to 0 after having some,
+and one when its capacity feed stops while prices still arrive; each sends one "recovered" alert and never repeats while
+open. State is in `ops_alert_state`, so restarts don't re-send. Unpolled (no key), killed and `SILENCE_ALERT_MUTED`
+providers never alert. Settings: `SILENCE_ALERT_MIN_HOURS` / `_POLLS` / `_EMPTY_GRACE_MINUTES`, `SILENCE_ALERTS_ENABLED`.
+
+**Capacity now covers 24 providers**, adding Clore.ai (free of total GPUs per model; free = no on-demand rental),
+Thunder Compute (in stock per instance size, `/v2/status`) and Salad (free nodes per GPU class at each of four
+priorities; cumulative estimates, never added up). Salad's `is_high_demand` is kept in raw_value only: Salad does not
+define it. All from data we already fetch with our own keys.
+
+**Capacity hotfix (shipped earlier today, 68ea227).** When a provider changes capacity source, current rows from the
+source it no longer uses are removed (Massed Compute's 166 old Shadeform rows beside its 81 API rows).
+
+**Four sources stored raw** (no listings, capacity or statistics yet; see methodology/data-kinds.md):
+- Scaleway's own EUR catalogue (incl. H100-SXM types Shadeform lacks). Listings stay on Shadeform's USD prices because
+  OpenGrid converts no currencies; needs an FX policy first.
+- AWS Spot Instance Advisor: interruption band and saving per GPU instance type and region (feed last updated by AWS on
+  2026-03-20). AWS's site terms restrict data gathering on aws.amazon.com; decide before showing it publicly.
+- OVHcloud bare-metal GPU stock (World and US APIs); those servers are not listings, so no capacity rows.
+- Together reserved rates (3-30 / 31-90 / 91-180 / 181+ days), kept apart like Azure's reserved prices.
+
+**Fixes.** Verda `.CC.AMD` / `.CC.INTEL` types are tagged confidential. "RTX PRO 6000" maps to the Server Edition for
+Verda and Nebius only (their own pages/docs say so); the generic name stays unmapped for other providers. The missing
+`tests/fixtures_backfill/runpod_2026-10.html` is restored from Internet Archive capture 20261019070258.
+
+### Planned but not shipped, and why
+
+| Item | Why not |
+|---|---|
+| Scaleway prices from its own catalogue | No currency conversion in OpenGrid; EUR listings would mix into USD statistics. Needs an FX rule (e.g. ECB daily rate). |
+| Showing AWS spot advice, OVH stock, reserved prices | Raw only until the data model / terms decisions are made. |
+| Oracle RTX PRO 6000 edition | Oracle's launch blog (says Server Edition) could not be read; left unmapped. |
+
+### Deploy notes
+- Full suite before push: 81 of 82 test files pass (`test_jobs_e2e` fails here and on main).
+- No new variables. Expect one silence alert per provider that is already broken, shortly after startup.
+
+---
+
 ## 2026-11-01 — 47 providers merged; Verda, Massed Compute and DeepInfra keys; archived price history
 
 ### What shipped
