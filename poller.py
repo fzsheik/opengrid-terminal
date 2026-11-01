@@ -18,6 +18,7 @@ import asyncio
 import logging
 import time
 
+import freshness
 import normalize
 from fetch import build_fetchers, save
 from providers.base import CAPACITY, PRICE, PollingPolicy, Provider
@@ -58,6 +59,7 @@ async def poll_once(provider: Provider) -> dict:
     failed = sum(1 for r in responses if not r.ok and not r.throttled)
     await asyncio.to_thread(save, responses)
     result = await asyncio.to_thread(normalize.refresh, [provider.name])
+    await asyncio.to_thread(freshness.record, provider.name)  # fails open
     result["responses"] = len(responses)
     result["failed"] = failed
     result["throttled"] = throttled

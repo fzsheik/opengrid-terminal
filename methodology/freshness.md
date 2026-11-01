@@ -88,3 +88,24 @@ consecutive failures, the ops error list or the poll-failure counts, and it coun
 the silence alert: being paced is not the source going silent. The capacity stale flag (3 capacity cadences) and the
 capacity-silence alert (at least 2 capacity cadences) follow each provider's capacity cadence.
 
+## The published measure: GET /v1/freshness
+
+Public with public pages on, like `/v1/capacity`; keys need `data:read`. One row per provider and stream (`price`,
+`capacity`; a provider with no capacity data has no capacity row). Filters: `provider`, `stream`.
+
+| Field | Meaning |
+|---|---|
+| `tier`, `target_interval_seconds` | The provider's polling tier and this stream's cadence (table above). |
+| `sla_seconds` | 2 x the target interval: the promise is that the p95 age over 24 h stays within it. |
+| `last_successful_fetch_at` (price) | The newest successful raw fetch of any of the provider's endpoints. |
+| `last_refresh_at` (capacity) | The newest capacity observation stored. |
+| `newest_data_at`, `age_seconds` | The newest stored observation of the stream, and its age now. |
+| `age_p50_seconds_24h`, `age_p95_seconds_24h`, `samples_24h` | Data age sampled once a minute over 24 h: at each minute, the minute minus the newest data stored by then (logged after every poll in `freshness_log`). Minutes before the log starts are not sampled, so a new deployment shows fewer than 1,440 samples. |
+| `status` | `meeting` (p95 within the SLA), `breaching`, or `unknown` (no samples yet). |
+| `provider_timestamps` (price) | What the provider's own change times are worth: `exact`, `date_only`, `lower_bound` or `none`. |
+| `detection_lag_p50_seconds_7d`, `..._p95_...`, `detection_lag_changes_7d` (price) | How late OpenGrid learned of a provider-timed change: `observed_at - provider_changed_at` over the last 7 days of `exact` rows whose provider time falls in their bracket. Null where the provider gives no exact time. |
+| `throttled_24h` (price) | Answers in 24 h that were rate-limit refusals (not failures). |
+
+The age is the age of the provider's newest stored observation, so one fast feed (AWS spot) keeps a provider's price
+age low while a slower one (its hourly price file) ages; the per-listing trust block still says how old each
+listing is (`/methodology/data-trust`).

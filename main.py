@@ -376,9 +376,10 @@ from api import probes as probes_api  # noqa: E402  (registers the probe_local +
 from api import capacity as capacity_api  # noqa: E402
 from api import reserved as reserved_api  # noqa: E402  (read-only; never part of listings or statistics)
 from api import fx as fx_api  # noqa: E402  (registers the fx_rates background job)
+from api import freshness as freshness_api  # noqa: E402  (public, read-only, like capacity)
 
 for _module in (execution_api, partners_api, product_api, reconcile_api, uptime_api, probes_api, capacity_api,
-                reserved_api, fx_api):
+                reserved_api, fx_api, freshness_api):
     app.include_router(_module.router)
 
 from api import jobs as jobs_api  # noqa: E402  (OpenGrid Jobs; registers the job_sync background job)

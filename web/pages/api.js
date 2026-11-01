@@ -79,6 +79,7 @@
     ["Capacity, reserved prices, uptime & probes", "pub-health", [
       ["GET", "/v1/capacity", "Provider-reported capacity by SKU and region: in stock, tier, counts", "gpu, provider, in_stock"],
       ["GET", "/v1/capacity/history", "Capacity state changes, newest first", "gpu, provider, sku, region, days, limit"],
+      ["GET", "/v1/freshness", "Data freshness per provider and stream: cadence, age, p95 age (24 h), detection lag", "provider, stream"],
       ["GET", "/v1/reserved", "Reserved and committed prices per GPU-hour by term, with on-demand saving (never in indices)", "gpu, provider, term"],
       ["GET", "/v1/reserved/summary", "Per GPU: the cheapest reserved price in each term", "gpu"],
       ["GET", "/v1/uptime/providers", "Control-plane uptime per tracked provider", ""],
