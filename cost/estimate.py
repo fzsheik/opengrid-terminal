@@ -20,7 +20,9 @@ and it is never counted as $0.
 Which listings: the GPU asked for, exactly `count` GPUs per machine, on demand, not interruptible, not a "from"
 price, in stock or stock unknown, seen within the provider's staleness window. Vast's "median" row is not a machine
 anyone can rent, so Vast is priced from its "cheapest" row (one real offer, with that offer's own storage and
-transfer prices). One row per provider: its cheapest listing by compute. A listing whose node fabric is below
+transfer prices). One row per provider: its cheapest listing by compute. Rows are ranked by total, complete totals
+first, then lower bounds (a lower bound could be dearer than it shows, so it never outranks a complete total). A
+listing whose node fabric is below
 `min_fabric_gbps`, or that is not deployable on demand, is returned in `unranked` with the reason.
 """
 
@@ -284,7 +286,9 @@ def estimate(job: dict, listings: list[dict], components: list[dict], ctx: dict 
             unranked.append(r)
         else:
             rows.append(r)
-    key = lambda r: (r["total"] is None, r["total"] if r["total"] is not None else 0, r["provider"])  # noqa: E731
+    # Complete totals first: a lower bound could be dearer than it shows, so it never outranks a complete total.
+    key = lambda r: (r["total"] is None, r["total_is_lower_bound"], r["total"] if r["total"] is not None else 0,  # noqa: E731
+                     r["provider"])
     rows.sort(key=key)
     unranked.sort(key=key)
     for i, r in enumerate(rows, 1):

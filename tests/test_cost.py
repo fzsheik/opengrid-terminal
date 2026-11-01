@@ -276,7 +276,12 @@ def test_estimate_r1():
     assert hs["components"]["storage"]["class"] == "block_storage" and hs["components"]["storage"]["origin"] == "provider"
     # ranking: known totals ascending; ranks 1..n
     assert [r["rank"] for r in out["rows"]] == list(range(1, len(out["rows"]) + 1))
-    assert [r["total"] for r in out["rows"]] == sorted(r["total"] for r in out["rows"])
+    flags = [r["total_is_lower_bound"] for r in out["rows"]]
+    assert flags == sorted(flags), "complete totals rank before every lower bound"
+    for lb in (False, True):
+        tot = [r["total"] for r in out["rows"] if r["total_is_lower_bound"] is lb]
+        assert tot == sorted(tot)
+    assert by(out["rows"])["lambda"]["rank"] > by(out["rows"])["aws"]["rank"], "a cheap lower bound never outranks a complete total"
     assert out["unranked"] == []
     print("test_estimate_r1 ok")
 

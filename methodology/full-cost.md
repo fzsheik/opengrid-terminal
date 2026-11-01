@@ -91,8 +91,8 @@ Rules:
   hours and says so in `notes`. Every published increment divides an hour, so whole hours are exact anyway.
 - **Unranked listings.** A listing that is not deployable on demand, or whose node fabric is below `min_fabric_gbps`
   or not published when a minimum is asked for, is returned in `unranked` with the reason. It is not ranked.
-- **Ranking.** Ranked rows are sorted by total, with lower bounds compared as given. The response counts how many rows
-  are lower bounds.
+- **Ranking.** Ranked rows are sorted by total, complete totals first and lower bounds after them. A lower bound could
+  be dearer than it shows, so it never outranks a complete total. The response counts how many rows are lower bounds.
 - **Allowances.** Free allowances are assumed fully available to this job, as if nothing else on the account used them
   that month. So the estimate is the best case for the providers that have allowances.
 - **Not a quote.** These are list prices. Nothing in the estimate is a quote or an execution price.

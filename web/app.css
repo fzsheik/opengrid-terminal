@@ -2180,3 +2180,11 @@ details.dep-fold { margin-top: 10px; }
 /* /reserved: a price cell is the effective $/GPU-hr plus a small saving line */
 .rv-cell { white-space: nowrap; }
 .rv-save { font: 600 var(--fs-2xs) var(--mono); }
+
+/* /cost (True cost): web/pages/cost.js */
+.tc-form .bar { flex-wrap: wrap; }
+.tc-err { color: var(--down); font-size: var(--fs-xs); font-style: normal; }
+.tc-err:empty { display: none; }
+.tc-unk { color: var(--warn); font-style: italic; }
+.tc-total { white-space: nowrap; }
+.tc-badges { display: inline-flex; gap: 4px; flex-wrap: wrap; }

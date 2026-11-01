@@ -54,6 +54,7 @@ PAGES: list[tuple[str, str, str, bool]] = [
     ("/opportunities", "Opportunities", "Unusually cheap or newly available GPU capacity.", True),
     ("/events", "Market events", "GPU market events: price moves, new lows and highs, sold-outs, outages.", True),
     ("/reserved", "Reserved prices", "Reserved and committed GPU prices by term (1 month to 5 years), per GPU-hour, with the saving against on-demand. Never mixed into on-demand prices or indices.", True),
+    ("/cost", "True cost", "What a GPU job costs per provider once internet egress, storage and billing increments are added to the hourly price. Unpublished components are named, never counted as $0.", True),
     ("/capacity", "Capacity", "What each GPU cloud provider says it can supply right now, by SKU and region.", True),
     ("/uptime", "Provider uptime", "External control-plane uptime and latency for the GPU cloud providers OpenGrid tracks, measured by UptimeProject (CC BY 4.0).", True),
     ("/probes", "Provider probes", "OpenGrid's own probes of GPU cloud APIs from multiple vantage points: availability, latency, failure reasons, and regional vs global.", True),
