@@ -85,6 +85,21 @@ def test_azure_vm_page_2022_spot_column():
     assert {l.region for l in ls} == {"eastus", "eastus2"}, "only the live poller's regions"
 
 
+def test_azure_vm_page_2020_spot_savings_and_trailing_cell():
+    page = _fix("azure_vm_2020-06_spot_savings.html")
+    by = {l.listing_id: l for l in azure.azure_vm_page(page, AT)}
+    assert by["Standard_NC6s_v3:eastus"].price_per_instance_hour == D("3.06")      # "Spot (% Savings) *" header
+    assert by["Standard_NC6s_v3:eastus:spot"].price_per_instance_hour == D("0.601596")
+    assert len(by) == 16
+    # the unlabelled trailing cell is dropped only while it carries no price
+    end = page.find("</tr>", page.find("NC6s v3 <"))
+    i = page.find(">", page.rfind("<td", 0, end)) + 1
+    priced = page[:i] + '<span data-amount=\'{"regional":{"us-east":1}}\'></span>' + page[i:]
+    _raises(azure.azure_vm_page, priced, AT, contains="cells under")
+    trunc = "<html><body>" + page[: page.find("NC6s v3") - 200]
+    _raises(azure.azure_vm_page, trunc, AT, contains="truncated")
+
+
 def test_azure_vm_page_old_and_new_designs_fail_loudly():
     _raises(azure.azure_vm_page, _fix("azure_vm_2017-01_k80_only.html"), AT, contains="no GPU_SIZES size")
     _raises(azure.azure_vm_page, _fix("azure_vm_2026-10_script_only.html"), AT, contains="loads prices by script")
@@ -118,7 +133,7 @@ def test_coreweave_a_la_carte_component_table():
 
 TESTS = [test_since_accepts_year_and_month,
          test_azure_vm_page_2018_names_without_s, test_azure_vm_page_2022_spot_column,
-         test_azure_vm_page_old_and_new_designs_fail_loudly,
+         test_azure_vm_page_2020_spot_savings_and_trailing_cell, test_azure_vm_page_old_and_new_designs_fail_loudly,
          test_coreweave_a_la_carte_component_table]
 
 if __name__ == "__main__":

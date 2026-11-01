@@ -76,6 +76,15 @@ def _text(fragment: str) -> str:
     return re.sub(r"\s+", " ", htmllib.unescape(re.sub(r"<[^>]+>", " ", fragment))).strip()
 
 
+def _header(h: str) -> str:
+    """"Spot (% Savings) *" -> "Spot", "Pay as you go *" -> "Pay as you go"; other headers as printed."""
+    h = h.rstrip(" *")
+    for name in ("Pay as you go", "Spot"):
+        if h.startswith(name):
+            return name
+    return h
+
+
 def _arm(display: str) -> str:
     return DISPLAY_TO_ARM.get(display, "Standard_" + display.replace(" ", "_"))
 
@@ -100,7 +109,7 @@ def azure_vm_page(page: str, at: datetime) -> list[ComputeListing]:
 
     out, priced_tables = [], 0
     for tm in _TABLE.finditer(page):
-        head = [_text(c).rstrip(" *") for c in _TH.findall(tm["t"])]
+        head = [_header(_text(c)) for c in _TH.findall(tm["t"])]
         od = next((c for c in ON_DEMAND if c in head), None)
         if "Instance" not in head or od is None:
             continue
@@ -111,6 +120,8 @@ def azure_vm_page(page: str, at: datetime) -> list[ComputeListing]:
             cells = _TD.findall(rm["r"])
             if not cells:
                 continue
+            if len(cells) == len(head) + 1 and "data-amount" not in cells[-1]:
+                cells = cells[:-1]  # 2019-21: one unlabelled trailing cell ("N/A"), never a price
             if len(cells) != len(head):
                 if len(cells) > cols["Instance"] and _arm(_text(cells[cols["Instance"]])) in GPU_SIZES:
                     raise ValueError(f"azure(page): GPU row has {len(cells)} cells under {len(head)} headers")
@@ -143,6 +154,9 @@ def azure_vm_page(page: str, at: datetime) -> list[ComputeListing]:
                         price_per_instance_hour=price, currency="USD", market_type=market, provider_tier="hyperscaler",
                         interruptible=market == "spot", available=None, capacity=None, capacity_unit=None, vcpu=None,
                         ram_gb=None, storage_gb=None, observed_at=at))
+    whole_document = page.lstrip()[:5].lower() in ("<!doc", "<html")
+    if not out and whole_document and "</html>" not in page[-4096:].lower():
+        raise ValueError(f"azure(page): capture truncated at {len(page.encode())} bytes before any GPU table")
     if not priced_tables:
         if page.count("data-amount") <= 1:
             raise ValueError("azure(page): no price tables in the HTML (the 2025+ page loads prices by script)")
