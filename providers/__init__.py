@@ -30,6 +30,7 @@ from providers.exoscale import ExoscaleProvider
 from providers.gcp import GcpProvider
 from providers.gpuai import GpuAiProvider
 from providers.hotaisle import HotAisleProvider
+from providers.huggingface import HuggingFaceProvider
 from providers.hydrahost import HydraHostProvider
 from providers.hyperbolic import HyperbolicProvider
 from providers.hyperstack import HyperstackProvider
@@ -123,6 +124,7 @@ PROVIDERS: dict[str, type[Provider]] = {
         CudoProvider,
         GpuAiProvider,
         ExoscaleProvider,
+        HuggingFaceProvider,
     )
 }
 
@@ -183,6 +185,7 @@ __all__ = [
     "CudoProvider",
     "GpuAiProvider",
     "ExoscaleProvider",
+    "HuggingFaceProvider",
     "find_endpoint",
     "gather_limited",
     "to_decimal",

@@ -562,6 +562,17 @@ _add("NVIDIA A40 48GB", "Exoscale GPU3 (NVIDIA A40 48GB)")
 _add("NVIDIA RTX A5000 24GB", "Exoscale GPUA5000 (NVIDIA RTX A5000 24GB)")
 _add("NVIDIA RTX 3080 Ti 12GB", "Exoscale GPU3080ti (NVIDIA RTX 3080 Ti 12GB)")
 _add(None, "Exoscale GPUA30 (NVIDIA A30 24GB)", "Exoscale GPURTX6000PRO (NVIDIA RTX PRO 6000 Blackwell 96GB)")
+# Hugging Face Inference Endpoints: "<cloud> <architecture> <GB per GPU>". The form factor follows from the cloud's
+# instance family: AWS's only 80 GB A100 is p4de (SXM4); GCP's A100 80GB is a2-ultragpu (SXM4), its H100 a3 (SXM5);
+# both clouds' H200 are SXM; the cloud RTX PRO 6000 is the Server Edition. Resold rows never vote (market.py).
+_add("NVIDIA T4 16GB", "aws Nvidia T4 16GB", "gcp Nvidia T4 16GB")
+_add("NVIDIA A10G 24GB", "aws Nvidia A10G 24GB")
+_add("NVIDIA L4 24GB", "aws Nvidia L4 24GB", "gcp Nvidia L4 24GB")
+_add("NVIDIA L40S 48GB", "aws Nvidia L40S 48GB")
+_add("NVIDIA A100 80GB SXM4", "aws Nvidia A100 80GB", "gcp Nvidia A100 80GB")
+_add("NVIDIA H100 80GB SXM5", "gcp Nvidia H100 80GB")
+_add("NVIDIA H200 141GB SXM5", "aws Nvidia H200 141GB", "gcp Nvidia H200 141GB")
+_add("NVIDIA RTX PRO 6000 96GB SE", "aws Nvidia RTX PRO 6000 Blackwell 96GB")
 # Hydra Host inventory: nvidia-smi names, already mapped above, except Quadro RTX 8000 (no canonical yet).
 _add(None, "Quadro RTX 8000")
 _add(None, "nvidia rtx5000 16Gi PCIe", "nvidia v100 32Gi PCIe", "nvidia gtx1050 2Gi PCIe", "nvidia m4000 8Gi PCIe",

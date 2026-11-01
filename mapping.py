@@ -1531,6 +1531,38 @@ EXOSCALE = ProviderMapping(
 )
 
 
+HUGGINGFACE = ProviderMapping(
+    provider="huggingface",
+    display_name="Hugging Face Inference Endpoints (resold AWS/GCP/Azure; never in market statistics)",
+    endpoints={"GET api.endpoints.huggingface.cloud/v2/provider": "vendors -> regions -> computes with pricePerHour"},
+    fields=_fields(
+        "huggingface",
+        sku=(RAW, "computes[].id", 'e.g. "aws-us-east-1-nvidia-a100-x2"; names the cloud'),
+        listing_id=(RAW, "computes[].id"),
+        raw_gpu_name=(DERIVED, '"{vendor} {architecture} {gpuMemoryGb / numAccelerators}GB"', 'e.g. "aws Nvidia A100 80GB"'),
+        gpu_count=(RAW, "numAccelerators"),
+        region=(RAW, "regions[].name", 'the cloud\'s region code, e.g. "us-east-1", "us-east4"'),
+        country=(DERIVED, "us-* -> US; a small table for others", "None when not in the table"),
+        price_per_gpu_hour=(DERIVED, "= pricePerHour / numAccelerators"),
+        price_per_instance_hour=(RAW, "pricePerHour", "the whole instance: A100 x2 = 2 x x1"),
+        currency=(CONSTANT, '"USD"', "the pricing page prints $/hour"),
+        provider_tier=(DERIVED, '"resold:{vendor}"', "the underlying cloud; excluded from market math"),
+        available=(DERIVED, 'compute, region and vendor status all "available"'),
+        capacity=(ABSENT, "-", "status words are capacity rows (boolean shape)"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, "numCpus"),
+        ram_gb=(RAW, "memoryGb"),
+        storage_gb=(ABSENT, "-"),
+    ),
+    quirks=[
+        "Resells AWS, GCP and Azure capacity, which OpenGrid reads directly: provider_tier resold:<cloud>, so "
+        "a listing is stored and shown but never votes in the market view, rollups, indices or routing validation.",
+        "Deprecated computes, CPU computes and AWS Inferentia (neuron) are skipped.",
+        "The GPU name carries the cloud, since the form factor follows from its instance family.",
+    ],
+)
+
+
 MODAL = ProviderMapping(
     provider="modal",
     display_name="Modal (serverless GPU)",
@@ -1923,6 +1955,7 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         CUDO,
         GPUAI,
         EXOSCALE,
+        HUGGINGFACE,
     )
 }  # fmt: skip
 

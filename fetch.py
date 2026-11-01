@@ -23,6 +23,7 @@ from providers import (
     CoreWeaveProvider,
     GpuAiProvider,
     HotAisleProvider,
+    HuggingFaceProvider,
     HydraHostProvider,
     JarvislabsProvider,
     TogetherProvider,
@@ -174,6 +175,7 @@ def build_fetchers() -> list[Provider]:
             CudoProvider,
             GpuAiProvider,
             ExoscaleProvider,
+            HuggingFaceProvider,
         )
     )
     return fetchers
