@@ -26,6 +26,7 @@ which is read directly).
 """
 
 import logging
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
