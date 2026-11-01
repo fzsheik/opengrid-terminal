@@ -19,9 +19,23 @@ Only flavors OVHcloud tags "active" and not "coming_soon" are read; untagged
 and "legacy" ones (GTX 10xx) are older flavors not offered for new instances.
 
 OVHcloud is a general-purpose cloud, so it never counts toward neocloud indices.
+
+Bare-metal stock (raw only). The same poll stores the anonymous dedicated-server
+availability list, GET /v1/dedicated/server/datacenter/availabilities, from the
+World (ca.api.ovh.com) and US (api.us.ovhcloud.com) APIs, GPU configurations only
+(rows with a `gpu` option, about 169 of 9,017 World rows). Per configuration
+(planCode + memory + storage + gpu) and datacenter it gives OVHcloud's delivery
+word: "1H-high", "1H-low", "24H", "72H", "unavailable", "unknown". These are
+dedicated servers (Scale-GPU, HGR-AI), not the Public Cloud flavors listed
+above, so they join to no listing: no capacity row is made from them until the
+servers are priced as listings. baremetal_availability() reads them.
+A failed or GPU-less response is stored as a failed fetch; prices never depend on it.
 """
 
+import asyncio
 import logging
+import re
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -42,7 +56,16 @@ CATALOGUES = {
     "US": ("https://api.us.ovhcloud.com" + _PATH + "US", "US"),
     "WS": ("https://ca.api.ovh.com" + _PATH + "WS", None),
 }
-_MICRO = Decimal(100_000_000)  # catalogue prices are integers in 1e-8 of the currency
+_MICRO = Decimal(100_000_000)
+AVAILABILITY_PATH = "/v1/dedicated/server/datacenter/availabilities"
+# subsidiary -> bare-metal availability URL (the EU API is not used: it did not answer from here, and the World
+# list carries the same EU datacenters).
+AVAILABILITIES = {
+    "WS": "https://ca.api.ovh.com" + AVAILABILITY_PATH,
+    "US": "https://api.us.ovhcloud.com" + AVAILABILITY_PATH,
+}
+_AVAILABILITY_TIMEOUT = 30  # each list is 4-7 MB; a slow one fails alone, after the prices are already fetched
+_GPU_OPTION = re.compile(r"^gpu-(\d+)x(.+)$")  # catalogue prices are integers in 1e-8 of the currency
 
 
 def is_gpu_flavor(addon: dict) -> bool:
@@ -56,7 +79,8 @@ def is_gpu_flavor(addon: dict) -> bool:
 class OvhCloudProvider(Provider):
     name = "ovhcloud"
     # Two anonymous requests per poll (8 MB and 2 MB catalogues); list prices change rarely.
-    polling = PollingPolicy(interval_seconds=1800, timeout_seconds=60)
+    # Plus two bare-metal availability lists (4-7 MB each, fetched together, 30 s each) after the prices.
+    polling = PollingPolicy(interval_seconds=1800, timeout_seconds=150)
 
     def __init__(self, client: httpx.AsyncClient | None = None):
         super().__init__(
@@ -78,7 +102,22 @@ class OvhCloudProvider(Provider):
             # Keep the GPU flavors only, verbatim: the rest is storage, databases, CPU flavors...
             out.append(reshaped(raw, {"locale": body.get("locale"),
                                       "addons": [a for a in body["addons"] if is_gpu_flavor(a)]}))
+        out += await asyncio.gather(*(self._availability(sub, url) for sub, url in AVAILABILITIES.items()))
         return out
+
+    async def _availability(self, sub: str, url: str) -> RawResponse:
+        """One bare-metal availability list, GPU configurations only, verbatim. Fails open."""
+        raw = await self.get(url, timeout=_AVAILABILITY_TIMEOUT)
+        if not raw.ok:
+            return raw
+        if not isinstance(raw.payload, list):
+            return raw.model_copy(update={"ok": False, "payload": None,
+                                          "error": f"ovhcloud {sub}: availabilities is not a list - reshaped"})
+        gpus = [r for r in raw.payload if isinstance(r, dict) and r.get("gpu")]
+        if not gpus:
+            return raw.model_copy(update={"ok": False, "payload": None,
+                                          "error": f"ovhcloud {sub}: no GPU row in {len(raw.payload)} availabilities"})
+        return reshaped(raw, {"subsidiary": sub, "total_rows": len(raw.payload), "rows": gpus})
 
     @staticmethod
     def normalize(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:
@@ -149,3 +188,38 @@ class OvhCloudProvider(Provider):
                     )
                 )
         return listings
+
+
+@dataclass(frozen=True)
+class BareMetalAvailability:
+    """One OVHcloud dedicated GPU server configuration in one datacenter. Never a listing or capacity row."""
+
+    subsidiary: str     # the API it came from: WS (World) or US
+    plan_code: str      # e.g. "24hgrai02-v2", "23scalegpu01-v2-eu"
+    server: str         # e.g. "24hgrai02"
+    fqn: str            # the full configuration name
+    gpu_option: str     # OVHcloud's own text, e.g. "gpu-4xnvidia-l40s-48g"
+    gpu_count: int | None
+    gpu_model: str | None   # the option text after the count, e.g. "nvidia-l40s-48g"; not mapped to a canonical GPU
+    datacenter: str
+    availability: str   # OVHcloud's word, verbatim: 1H-high, 1H-low, 24H, 72H, unavailable, unknown
+
+
+def baremetal_availability(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[BareMetalAvailability]:
+    """Stored bare-metal GPU availability rows, one per (configuration, datacenter). Pure, read-only."""
+    out = []
+    for sub, url in AVAILABILITIES.items():
+        rows = find_endpoint(by_endpoint, url)
+        body = rows[0].payload if rows and isinstance(rows[0].payload, dict) else {}
+        for r in body.get("rows") or []:
+            if not isinstance(r, dict) or not r.get("gpu") or not r.get("planCode"):
+                continue
+            m = _GPU_OPTION.match(str(r["gpu"]))
+            for dc in r.get("datacenters") or []:
+                if not isinstance(dc, dict) or not dc.get("datacenter") or not isinstance(dc.get("availability"), str):
+                    continue
+                out.append(BareMetalAvailability(
+                    subsidiary=sub, plan_code=r["planCode"], server=str(r.get("server") or ""), fqn=str(r.get("fqn") or ""),
+                    gpu_option=str(r["gpu"]), gpu_count=int(m.group(1)) if m else None, gpu_model=m.group(2) if m else None,
+                    datacenter=dc["datacenter"], availability=dc["availability"]))
+    return out

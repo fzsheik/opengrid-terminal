@@ -528,7 +528,9 @@ DIGITALOCEAN = ProviderMapping(
 AWS = ProviderMapping(
     provider="aws",
     display_name="AWS EC2 (hyperscaler list price)",
-    endpoints={"GET awsstatic price file": "every EC2 type in us-east-1, Linux; no credentials"},
+    endpoints={"GET awsstatic price file": "every EC2 type in us-east-1, Linux; no credentials",
+               "GET spot-bid-advisor.s3.amazonaws.com/spot-advisor-data.json":
+                   "Spot Advisor interruption band and savings per GPU type, region and OS; stored raw only"},
     fields=_fields(
         "aws",
         sku=(RAW, "Instance Type", 'e.g. "p5.48xlarge"'),
@@ -553,6 +555,9 @@ AWS = ProviderMapping(
         "List prices: big buyers rarely pay them, so AWS sits well above the neoclouds. "
         "p5.48xlarge is 8x H100 at $55.04/hr = $6.88 per GPU-hour.",
         "Only us-east-1 Linux on-demand. Polled hourly; list prices change rarely.",
+        "The Spot Advisor feed (interruption band r 0-4 = <5% .. >20%, savings s %) is stored raw with its "
+        "Last-Modified header and read only by spot_advice(): there are no AWS spot listings, reliability is "
+        "OpenGrid's own launches only, and a band is not stock. It was last rewritten 20 Mar 2026.",
     ],
 )
 
@@ -714,7 +719,8 @@ TOGETHER = ProviderMapping(
         storage_gb=(ABSENT, "-"),
     ),
     quirks=[
-        "Only the two pay-as-you-go columns are read; the four Reserved terms are commitments.",
+        "Only the two pay-as-you-go columns become listings; the four Reserved terms (3-30, 31-90, 91-180, "
+        "181+ days) are commitments, stored raw under /pricing#reserved and read only by reserved_prices().",
         "The page states no node size, so a listing is one GPU at the printed rate (the Nebius convention).",
         "Inference, fine-tuning and sandbox prices on the same page are not GPU rental and are ignored.",
         "Scraped from page HTML; the extractor requires the 'per GPU per hour' statement and the column layout.",
@@ -973,6 +979,8 @@ OVHCLOUD = ProviderMapping(
     endpoints={
         "GET api.us.ovhcloud.com/1.0/order/catalog/public/cloud?ovhSubsidiary=US": "OVHcloud US catalogue, USD",
         "GET ca.api.ovh.com/1.0/order/catalog/public/cloud?ovhSubsidiary=WS": "OVHcloud World catalogue, USD",
+        "GET {ca.api.ovh.com,api.us.ovhcloud.com}/v1/dedicated/server/datacenter/availabilities":
+            "dedicated GPU server delivery words per datacenter; stored raw only",
     },
     fields=_fields(
         "ovhcloud",
@@ -1005,13 +1013,18 @@ OVHCLOUD = ProviderMapping(
         '"H100 80GB" and "A100 80GB" do not say SXM or PCIe, "H200 141GB" not SXM or NVL: all unmapped. '
         "No canonical V100S yet.",
         "A general-purpose cloud: never part of a neocloud index.",
+        "Dedicated (bare-metal) GPU server stock from the anonymous availabilities list is stored raw only "
+        "(baremetal_availability): those servers are not Public Cloud flavors, so no listing to join to.",
     ],
 )
 
 
 SCALEWAY = _shadeform("scaleway", "Scaleway", [
     "Scaleway does publish a keyless catalogue (api.scaleway.com product-catalog), but in EUR per "
-    "minute only; this app stores USD without FX, so Shadeform's USD listing is read instead.",
+    "minute only; this app stores USD without FX, so Shadeform's USD listing is read instead. "
+    "Scaleway's own EUR catalogue (GPU Instance rows, every zone, including the H100-SXM types Shadeform "
+    "lacks) is fetched each poll and stored raw only (providers/shadeform.py scaleway_eur_prices); it never "
+    "becomes a listing or enters statistics until an FX policy exists.",
     "Only Scaleway's PCIe H100 / L4 / L40S VMs and the B300-SXM node are in Shadeform's list; "
     "its H100-SXM and GH200 types are not.",
     "A general-purpose cloud: never part of a neocloud index.",

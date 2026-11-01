@@ -139,6 +139,36 @@ def test_together():
     assert raises(together.extract, text("together_pricing.html").replace(">Preemptible Compute<", ">Spot<"))
 
 
+def test_together_reserved_raw_only():
+    """The reserved columns are stored raw under their own label and read by a pure helper; never a listing."""
+    raws = asyncio.run(TogetherProvider(_client("https://www.together.ai", _serve(
+        {"/pricing": text("together_pricing.html")}, "text/html"))).fetch())
+    assert [r.endpoint for r in raws] == ["/pricing", together.RESERVED_ENDPOINT] and all(r.ok for r in raws)
+    res = raws[1].payload
+    assert res["terms"] == ["3-30 days", "31-90 days", "91-180 days", "181+ days"] and len(res["rows"]) == 6
+    assert res["rows"][0]["reserved"] == {"3-30 days": "$3.69", "31-90 days": "$3.45", "91-180 days": "$3.19",
+                                          "181+ days": "Contact us"}, "cells verbatim"
+    assert set(res["rows"][3]["reserved"].values()) == {"Contact us"}, "a colspan cell covers every term"
+    prices = {(p.hardware, p.term): p for p in together.reserved_prices({together.RESERVED_ENDPOINT: [snap(res)]})}
+    assert len(prices) == 9, sorted(prices)  # H100 / H200 / B200 x three priced terms
+    h100 = prices[("NVIDIA HGX H100", "31-90 days")]
+    assert (h100.price_per_gpu_hour, h100.min_days, h100.max_days) == (D("3.45"), 31, 90)
+    assert h100.canonical_gpu_name == "NVIDIA H100 80GB SXM5"
+    assert prices[("NVIDIA HGX B200", "91-180 days")].price_per_gpu_hour == D("6.79")
+    # Listings are the same with or without the reserved snapshot, and carry no reserved rate.
+    both = {"/pricing": [snap(raws[0].payload)], together.RESERVED_ENDPOINT: [snap(res)]}
+    assert TogetherProvider.normalize(both) == TogetherProvider.normalize({"/pricing": [snap(raws[0].payload)]})
+    assert {l.price_per_gpu_hour for l in TogetherProvider.normalize(both)}.isdisjoint({D("3.69"), D("3.45"), D("3.19")})
+    assert TogetherProvider.normalize({together.RESERVED_ENDPOINT: [snap(res)]}) == [], "never read as prices"
+    # A reshaped reserved block fails that label alone; the on-demand prices are still stored.
+    for broken in (text("together_pricing.html").replace(">31-90 days<", ">1-3 months<"),
+                   text("together_pricing.html").replace(
+                       '<td><div class="opacity-70"><p data-batch="" class="body-m text-weight-medium">$3.19</p></div></td>', "", 1)):
+        page, reserved = asyncio.run(TogetherProvider(_client("https://x", _serve({"/pricing": broken}, "text/html"))).fetch())
+        assert page.ok and page.payload == together.extract(text("together_pricing.html"))
+        assert not reserved.ok and reserved.payload is None and "ValueError" in reserved.error, reserved.error
+
+
 # --------------------------------------------------------------------------
 # Jarvislabs
 # --------------------------------------------------------------------------
@@ -415,8 +445,9 @@ def test_pipeline():
             bodies = s.execute(sql("SELECT count(*) FROM raw_payloads")).scalar()
             listed = dict(s.execute(sql("SELECT provider, count(*) FROM compute_listings GROUP BY 1")).all())
             held = s.execute(sql("SELECT provider, listing_id, rule FROM quality_quarantine WHERE status = 'pending'")).all()
-        assert stored == {"coreweave": 2, "together": 2, "jarvislabs": 2, "hotaisle": 2, "vultr": 4, "boostrun": 2}
-        assert bodies == 7, "identical bodies from the second poll are stored once"
+        # Together stores its reserved columns under their own label next to the price table (2 per poll).
+        assert stored == {"coreweave": 2, "together": 4, "jarvislabs": 2, "hotaisle": 2, "vultr": 4, "boostrun": 2}
+        assert bodies == 8, "identical bodies from the second poll are stored once"
         # Jarvislabs (API): 13 on-demand rows by region and workload + 11 with a spot price.
         assert listed == {"coreweave": 34, "together": 8, "jarvislabs": 24, "hotaisle": 3, "vultr": 4, "boostrun": 6}, listed
         assert not held, f"nothing held on clean data: {held}"
@@ -451,7 +482,7 @@ def test_pipeline():
 
 
 if __name__ == "__main__":
-    for t in (test_coreweave, test_together, test_jarvislabs, test_hotaisle, test_vultr, test_boostrun,
+    for t in (test_coreweave, test_together, test_together_reserved_raw_only, test_jarvislabs, test_hotaisle, test_vultr, test_boostrun,
               test_nebius, test_fetch_pages, test_registry, test_pipeline):
         t()
         print(t.__name__, "ok")

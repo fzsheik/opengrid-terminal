@@ -33,6 +33,7 @@ reserved-price data model (term, upfront, per GPU-month vs hour).
 | Azure | 1, 3 and 5-year reserved-instance prices from the public Retail Prices API (`priceType eq 'Reservation'`), eastus and eastus2. |
 | GCP | 1 and 3-year commitment SKUs from the Cloud Billing Catalog. |
 | Jarvislabs | `reserved_pricing`: 1-month, 1-year and 2-year per GPU-hour. |
+| Together AI | GPU Clusters reserved columns from the public price page, per GPU-hour for 3-30, 31-90, 91-180 and 181+ day commitments, cells as printed ("Contact us" kept). Stored under `/pricing#reserved`; code: `providers/together.py` (`reserved_prices`). |
 | Latitude | GPU plans from Latitude's own plans API, stored verbatim (needs `LATITUDE_API_KEY`). |
 
 **Azure conversion (derived).** Azure states a reservation as one price for the whole VM for the whole term,
@@ -44,3 +45,14 @@ even though the row says "1 Hour". The comparable figure is:
 table as Azure's on-demand listings. A size missing from that table is stored but never converted. Example
 (eastus, Standard_ND96isr_H100_v5, 8 x H100, Oct 2026): 1 year $551,221 = $7.87 per GPU-hour, 3 years
 $1,134,310 = $5.40, against $12.29 on demand. Code: `providers/azure.py` (`reservation_price`).
+
+## Stored raw, not yet used
+
+Public feeds OpenGrid fetches and keeps raw because a later data model needs them. None of them is a listing, a
+capacity row or a score, and none enters indices, spreads, percentiles, routing or reliability.
+
+| Source | What is stored | Why it is not used yet |
+|---|---|---|
+| Scaleway product catalogue (`/product-catalog/v2alpha1/public-catalog/products`) | Scaleway's own list price per GPU Instance type and zone, in EUR (per minute or hour as Scaleway states it), with its status (`general_availability`, `retired`, ...). Code: `providers/shadeform.py` (`scaleway_eur_prices`). | It is EUR-only and OpenGrid converts no currency, so Scaleway listings keep Shadeform's USD price. |
+| AWS Spot Instance Advisor (`spot-advisor-data.json`) | Per GPU instance type, region and OS: interruption band `r` (0-4, the feed's own labels `<5%` to `>20%` over the trailing month) and average spot saving `s` (%), with the feed's Last-Modified time. Code: `providers/aws.py` (`spot_advice`). | No AWS spot listings exist (spot prices need credentials); provider reliability counts only OpenGrid's own launches; a band is not stock. The feed is coarse and slow-moving: it was last rewritten on 20 Mar 2026. |
+| OVHcloud dedicated-server availabilities (`/v1/dedicated/server/datacenter/availabilities`, World and US APIs) | Per GPU server configuration (Scale-GPU, HGR-AI: L4, L40S, V100S, Radeon) and datacenter, OVHcloud's delivery word verbatim (`1H-high`, `1H-low`, `24H`, `72H`, `unavailable`, `unknown`). Code: `providers/ovhcloud.py` (`baremetal_availability`). | These bare-metal servers are not listings (OVHcloud listings are Public Cloud flavors), so there is no price for a capacity row to join to. |

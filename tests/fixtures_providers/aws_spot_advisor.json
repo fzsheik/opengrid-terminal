@@ -1,0 +1,149 @@
+{
+ "instance_types": {
+  "p5.48xlarge": {
+   "emr": true,
+   "cores": 192,
+   "ram_gb": 2048.0
+  },
+  "p4d.24xlarge": {
+   "emr": true,
+   "cores": 96,
+   "ram_gb": 1152.0
+  },
+  "g5.xlarge": {
+   "emr": true,
+   "cores": 4,
+   "ram_gb": 16.0
+  },
+  "g6e.12xlarge": {
+   "emr": true,
+   "cores": 48,
+   "ram_gb": 384.0
+  },
+  "p3.2xlarge": {
+   "emr": true,
+   "cores": 8,
+   "ram_gb": 61.0
+  },
+  "m5.large": {
+   "emr": false,
+   "cores": 2,
+   "ram_gb": 8.0
+  }
+ },
+ "ranges": [
+  {
+   "index": 0,
+   "label": "<5%",
+   "dots": 0,
+   "max": 5
+  },
+  {
+   "index": 1,
+   "label": "5-10%",
+   "dots": 1,
+   "max": 11
+  },
+  {
+   "index": 2,
+   "label": "10-15%",
+   "dots": 2,
+   "max": 16
+  },
+  {
+   "index": 3,
+   "label": "15-20%",
+   "dots": 3,
+   "max": 22
+  },
+  {
+   "index": 4,
+   "label": ">20%",
+   "dots": 4,
+   "max": 100
+  }
+ ],
+ "global_rate": "<10%",
+ "spot_advisor": {
+  "us-east-1": {
+   "Linux": {
+    "p4d.24xlarge": {
+     "s": 56,
+     "r": 3
+    },
+    "p3.2xlarge": {
+     "s": 86,
+     "r": 4
+    },
+    "g6e.12xlarge": {
+     "s": 51,
+     "r": 4
+    },
+    "p5.48xlarge": {
+     "s": 57,
+     "r": 0
+    },
+    "m5.large": {
+     "s": 59,
+     "r": 4
+    },
+    "g5.xlarge": {
+     "s": 56,
+     "r": 4
+    }
+   },
+   "Windows": {
+    "p3.2xlarge": {
+     "s": 80,
+     "r": 4
+    },
+    "g5.xlarge": {
+     "s": 75,
+     "r": 4
+    },
+    "m5.large": {
+     "s": 44,
+     "r": 4
+    },
+    "g6e.12xlarge": {
+     "s": 68,
+     "r": 1
+    }
+   }
+  },
+  "eu-west-1": {
+   "Linux": {
+    "g5.xlarge": {
+     "s": 50,
+     "r": 2
+    },
+    "p3.2xlarge": {
+     "s": 75,
+     "r": 4
+    },
+    "p4d.24xlarge": {
+     "s": 59,
+     "r": 4
+    },
+    "m5.large": {
+     "s": 40,
+     "r": 4
+    }
+   },
+   "Windows": {
+    "g5.xlarge": {
+     "s": 56,
+     "r": 4
+    },
+    "p3.2xlarge": {
+     "s": 76,
+     "r": 4
+    },
+    "m5.large": {
+     "s": 40,
+     "r": 4
+    }
+   }
+  }
+ }
+}

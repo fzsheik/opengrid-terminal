@@ -30,13 +30,14 @@ import provider_meta  # noqa: E402
 from providers import PROVIDERS  # noqa: E402
 from providers.koyeb import ENDPOINT as KOYEB_EP, KoyebProvider  # noqa: E402
 from providers.linode import ENDPOINT as LINODE_EP, LinodeProvider  # noqa: E402
-from providers.ovhcloud import CATALOGUES, OvhCloudProvider  # noqa: E402
-from providers.shadeform import ScalewayProvider, ShadeformCloud  # noqa: E402
+from providers.ovhcloud import AVAILABILITIES, AVAILABILITY_PATH as OVH_AVAIL_PATH, CATALOGUES, OvhCloudProvider, baremetal_availability  # noqa: E402
+from providers.shadeform import SCALEWAY_CATALOG, ScalewayProvider, ShadeformCloud, scaleway_eur_prices  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_providers"
 NOW = datetime(2026, 10, 13, 12, tzinfo=timezone.utc)
 NEW = ["linode", "ovhcloud", "scaleway", "koyeb"]
 OVH_US, OVH_WS = CATALOGUES["US"][0], CATALOGUES["WS"][0]
+SCW_CATALOG_PATH = SCALEWAY_CATALOG.replace("https://api.scaleway.com", "")
 
 
 def text(name):
@@ -92,11 +93,20 @@ def linode_prov():
         "/v4/linode/types": text("linode_types.json"), "/v4/regions/availability": json.dumps(availability)})))
 
 
-def ovh_prov():
-    # Both catalogues share a path; the mock tells them apart by subsidiary.
-    return OvhCloudProvider(_client("https://x", _serve({
+def ovh_prov(availability=None):
+    # Both catalogues share a path; the mock tells them apart by subsidiary. The two bare-metal availability lists
+    # share a path too, and are told apart by host. `availability` overrides them: (status, body).
+    catalogues = _serve({
         "/1.0/order/catalog/public/cloud?ovhSubsidiary=US": text("ovhcloud_catalog_us.json"),
-        "/1.0/order/catalog/public/cloud?ovhSubsidiary=WS": text("ovhcloud_catalog_ws.json")})))
+        "/1.0/order/catalog/public/cloud?ovhSubsidiary=WS": text("ovhcloud_catalog_ws.json")})
+
+    def handler(request):
+        if request.url.path == OVH_AVAIL_PATH:
+            status, body = availability or (200, text("ovhcloud_baremetal_availabilities_"
+                                                      f"{'us' if request.url.host == 'api.us.ovhcloud.com' else 'ws'}.json"))
+            return httpx.Response(status, text=body, headers={"content-type": "application/json"})
+        return catalogues.handler(request)
+    return OvhCloudProvider(_client("https://x", httpx.MockTransport(handler)))
 
 
 def koyeb_prov():
@@ -112,7 +122,8 @@ def scaleway_prov():
     routes = {k.replace("https://api.scaleway.com", ""): json.dumps({"servers": v["servers"]})
               for k, v in sorted(zones.items(), key=lambda kv: not kv[0].endswith("/availability"))}
     return ScalewayProvider(_client("https://api.shadeform.ai",
-                                    _serve({"/v1/instances/types": text("shadeform_scaleway.json"), **routes})))
+                                    _serve({"/v1/instances/types": text("shadeform_scaleway.json"),
+                                            SCW_CATALOG_PATH: text("scaleway_catalog_instance.json"), **routes})))
 
 
 # --------------------------------------------------------------------------
@@ -165,7 +176,8 @@ def test_linode():
 
 def test_ovhcloud():
     raws = _fetch(ovh_prov())
-    assert [r.endpoint for r in raws] == [OVH_US, OVH_WS] and all(r.ok for r in raws)
+    assert [r.endpoint for r in raws] == [OVH_US, OVH_WS, *AVAILABILITIES.values()] and all(r.ok for r in raws)
+    raws = raws[:2]
     for r in raws:
         codes = [a["planCode"] for a in r.payload["addons"]]
         assert all(c.endswith(".consumption") and not c.startswith(("win-", "ai-")) for c in codes), codes
@@ -270,9 +282,84 @@ def test_scaleway():
     assert out["H100"].available is True and out["H100"].provider_tier == "vm/via-shadeform"
 
 
+def test_scaleway_own_catalogue_raw_only():
+    """Scaleway's own EUR catalogue is stored raw (GPU rows only) and read by a pure helper; never a listing."""
+    raws = _fetch(scaleway_prov())
+    cat = [r for r in raws if r.endpoint == SCALEWAY_CATALOG]
+    assert len(cat) == 1 and cat[0].ok, [r.error for r in cat]
+    products = cat[0].payload["products"]
+    assert len(products) == 6 and all(p["properties"]["hardware"]["gpu"]["count"] for p in products), "GPU rows only (the retired GPU-3070 rows carry no hardware block)"
+    by_ep = {SCALEWAY_CATALOG: [snap(cat[0].payload)]}
+    prices = {(p.offer_id, p.zone): p for p in scaleway_eur_prices(by_ep)}
+    assert len(prices) == 6
+    h100 = prices[("H100-1-80G", "fr-par-2")]  # 0.047775 EUR per minute
+    assert h100.eur_per_instance_hour == D("2.8665") and h100.gpu_count == 1 and h100.gpu_type == "H100-PCIe"
+    sxm = prices[("H100-SXM-8-80G", "fr-par-2")]  # a type Shadeform does not list
+    assert sxm.eur_per_instance_hour == D("25.3308") and sxm.eur_per_gpu_hour == D("3.16635") and sxm.gpu_count == 8
+    assert prices[("RENDER-S", "fr-par-1")].eur_per_instance_hour == D("1.221"), "per-hour rows are not x60"
+    assert prices[("RENDER-S", "fr-par-1")].unit == "hour" and h100.status == "general_availability"
+    # Listings still come from Shadeform only, in USD: the catalogue never changes them and never adds one.
+    shade = {"/v1/instances/types": [snap(raws[0].payload)]}
+    assert ScalewayProvider.normalize({**shade, **by_ep}) == ScalewayProvider.normalize(shade)
+    assert {l.currency for l in ScalewayProvider.normalize({**shade, **by_ep})} == {"USD"}
+    # A non-EUR or oddly-measured row is skipped, never guessed.
+    odd = json.loads(json.dumps(cat[0].payload))
+    odd["products"][0]["price"]["retail_price"]["currency_code"] = "USD"
+    odd["products"][1]["unit_of_measure"]["unit"] = "month"
+    assert len(scaleway_eur_prices({SCALEWAY_CATALOG: [snap(odd)]})) == 4
+
+
+def test_scaleway_catalogue_fails_open():
+    """A broken or GPU-less catalogue is stored as a failed fetch; the Shadeform prices are untouched."""
+    for body, status in (("maintenance", 503), (json.dumps({"products": "?"}), 200),
+                         (json.dumps({"products": [], "total_count": 0}), 200),
+                         (json.dumps({"products": [{"product_category": "Instance"}], "total_count": 5}), 200)):
+        prov = ScalewayProvider(_client("https://api.shadeform.ai", httpx.MockTransport(
+            lambda r, body=body, status=status: httpx.Response(status, text=body, headers={"content-type": "application/json"})
+            if r.url.path.startswith(SCW_CATALOG_PATH) else
+            httpx.Response(200, text=text("shadeform_scaleway.json"), headers={"content-type": "application/json"})
+            if r.url.path == "/v1/instances/types" else httpx.Response(404, text="nf"))))
+        raws = _fetch(prov)
+        cat = [r for r in raws if r.endpoint == SCALEWAY_CATALOG]
+        assert len(cat) == 1 and not cat[0].ok and cat[0].payload is None, (body, cat)
+        assert raws[0].ok and len(ScalewayProvider.normalize({"/v1/instances/types": [snap(raws[0].payload)]})) == 11
+
+
 # --------------------------------------------------------------------------
 # Fetch failures, registry, classes
 # --------------------------------------------------------------------------
+
+
+def test_ovhcloud_baremetal_raw_only():
+    """Dedicated-server GPU stock is stored raw (GPU rows only) and read by a pure helper; never a listing."""
+    raws = _fetch(ovh_prov())
+    avail = {r.payload["subsidiary"]: r for r in raws[2:]}
+    assert set(avail) == {"WS", "US"} and all(r.ok for r in avail.values())
+    assert avail["US"].payload["total_rows"] == 7 and len(avail["US"].payload["rows"]) == 5, "non-GPU rows dropped"
+    assert len(avail["WS"].payload["rows"]) == 3
+    by_ep = {r.endpoint: [snap(r.payload)] for r in raws}
+    rows = baremetal_availability(by_ep)
+    assert len(rows) == 10 + 10, len(rows)  # (configuration, datacenter) pairs: US 5 configs x 2, World 6 + 2 + 2
+    v100 = [r for r in rows if r.plan_code == "21hgrai012-us" and r.datacenter == "vin"]
+    assert {r.availability for r in v100} == {"1H-low", "72H"} and all(r.gpu_count == 4 for r in v100)
+    assert v100[0].gpu_model == "nvidia-tesla-v100s" and v100[0].subsidiary == "US"
+    l40s = next(r for r in rows if r.subsidiary == "WS" and r.gpu_option == "gpu-4xnvidia-l40s-48g")
+    assert l40s.server == "24hgrai02" and l40s.availability == "unavailable"
+    assert {r.availability for r in rows} == {"1H-low", "72H", "unavailable", "unknown"}, "words kept verbatim"
+    # Listings are the Public Cloud catalogues' only: the same with or without the bare-metal lists.
+    prices = {r.endpoint: [snap(r.payload)] for r in raws[:2]}
+    assert OvhCloudProvider.normalize(by_ep) == OvhCloudProvider.normalize(prices)
+    assert OvhCloudProvider.normalize_capacity(by_ep) == [], "no capacity rows: bare metal joins to no listing"
+
+
+def test_ovhcloud_baremetal_fails_open():
+    """A down, reshaped or GPU-less availability list is a failed fetch; the price catalogues are untouched."""
+    for status, body in ((503, "maintenance"), (200, json.dumps({"rows": []})),
+                         (200, json.dumps([{"planCode": "x", "datacenters": []}]))):
+        raws = _fetch(ovh_prov((status, body)))
+        assert all(not r.ok and r.payload is None and r.error for r in raws[2:]), (status, body)
+        assert all(r.ok for r in raws[:2])
+        assert len(OvhCloudProvider.normalize({r.endpoint: [snap(r.payload)] for r in raws[:2]})) == 31
 
 
 def test_fetch_failures():
@@ -343,11 +430,14 @@ def test_pipeline():
         assert cap == {"linode": 429, "koyeb": 25, "scaleway": 29}, f"the poll fills capacity through the same refresh: {cap}"
         assert cap_changes == 429 + 25 + 29, "the second identical poll adds no capacity history"
         # Linode and Koyeb store a capacity response next to the price response each poll (capacity.py).
-        # Scaleway adds a catalogue + availability response for each of its 9 zones (19 per poll).
-        assert stored == {"linode": 4, "ovhcloud": 4, "scaleway": 38, "koyeb": 4}, stored
+        # Scaleway adds a catalogue + availability response for each of its 9 zones and its own EUR product
+        # catalogue (20 per poll).
+        # OVHcloud adds its two bare-metal availability lists (4 per poll).
+        assert stored == {"linode": 4, "ovhcloud": 8, "scaleway": 40, "koyeb": 4}, stored
         # 7 as before + Scaleway capacity: 3 GPU zones x 2 bodies, plus 6 GPU-less zones whose filtered catalogue and
-        # availability are the same empty body (stored once each) = 19. The second, identical poll adds none.
-        assert bodies == 19, f"identical bodies are stored once: {bodies}"
+        # availability are the same empty body (stored once each) = 19, plus the EUR catalogue = 20. The second,
+        # identical poll adds none.
+        assert bodies == 22, f"identical bodies (plus OVHcloud's 2 bare-metal lists) are stored once: {bodies}"
         assert listed == {"linode": 13, "ovhcloud": 31, "scaleway": 11, "koyeb": 15}, listed
         assert not held, f"nothing held on clean data: {held}"
 
@@ -378,7 +468,9 @@ def test_pipeline():
 
 
 if __name__ == "__main__":
-    for t in (test_linode, test_ovhcloud, test_koyeb, test_scaleway, test_fetch_failures, test_registry,
+    for t in (test_linode, test_ovhcloud, test_koyeb, test_scaleway, test_scaleway_own_catalogue_raw_only,
+              test_scaleway_catalogue_fails_open, test_ovhcloud_baremetal_raw_only, test_ovhcloud_baremetal_fails_open,
+              test_fetch_failures, test_registry,
               test_pipeline):
         t()
         print(t.__name__, "ok")
