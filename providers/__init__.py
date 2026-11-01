@@ -37,6 +37,7 @@ from providers.hydrahost import HydraHostProvider
 from providers.hyperbolic import HyperbolicProvider
 from providers.hyperstack import HyperstackProvider
 from providers.ibm import IbmProvider
+from providers.ionos import IonosProvider
 from providers.jarvislabs import JarvislabsProvider
 from providers.koyeb import KoyebProvider
 from providers.lambda_labs import LambdaProvider
@@ -129,6 +130,7 @@ PROVIDERS: dict[str, type[Provider]] = {
         HuggingFaceProvider,
         GcoreProvider,
         FireworksProvider,
+        IonosProvider,
     )
 }
 
@@ -192,6 +194,7 @@ __all__ = [
     "HuggingFaceProvider",
     "GcoreProvider",
     "FireworksProvider",
+    "IonosProvider",
     "find_endpoint",
     "gather_limited",
     "to_decimal",

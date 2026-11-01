@@ -596,6 +596,10 @@ _add("NVIDIA B300 288GB SXM", "B300 288 GB GPU")
 _add("NVIDIA GB300 288GB", "GB300 288 GB GPU")
 _add(None, "H100 80 GB GPU")
 
+# IONOS Cloud (providers/ionos.py): GPU Model's vendor + GPU Type. NVIDIA's only PCIe H200 is the H200 NVL card
+# (see the Oracle note above); IONOS's docs describe PCIe passthrough of it.
+_add("NVIDIA H200 143GB NVL", "NVIDIA H200 PCIe")
+
 # --------------------------------------------------------------------------
 # Seen, deliberately not mapped
 # --------------------------------------------------------------------------

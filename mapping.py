@@ -1637,6 +1637,39 @@ FIREWORKS = ProviderMapping(
 )
 
 
+IONOS = ProviderMapping(
+    provider="ionos",
+    display_name="IONOS Cloud (Cloud GPU VM)",
+    endpoints={"GET docs.ionos.com/support/general-information/price-list/ionos-cloud-inc.md":
+               "IONOS CLOUD Inc.'s USD price list (Markdown); its Cloud GPU VM table"},
+    fields=_fields(
+        "ionos",
+        sku=(RAW, "Template", 'e.g. "H200-S"'),
+        listing_id=(RAW, "Template"),
+        raw_gpu_name=(DERIVED, "GPU Model's vendor + GPU Type", '"NVIDIA H200 PCIe"'),
+        gpu_count=(RAW, "Number of GPUs", "1/2/4/8"),
+        region=(CONSTANT, '"de/fra/2; gb/bhx"', "IONOS GPU VM docs: the only data centres with Cloud GPU VMs"),
+        country=(ABSENT, "-", "Germany and the UK"),
+        price_per_gpu_hour=(DERIVED, "= Price per hour / Number of GPUs"),
+        price_per_instance_hour=(RAW, "Price per hour", '"$3.261", the whole VM, net of tax'),
+        currency=(RAW, "the Inc. list prints $", "IONOS's own USD list; EUR / GBP lists not read"),
+        provider_tier=(CONSTANT, '"vm"'),
+        available=(ABSENT, "-", "no stock signal"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, "Dedicated CPUs", "dedicated AMD EPYC cores"),
+        ram_gb=(RAW, "RAM (GiB)"),
+        storage_gb=(RAW, "NVMe Storage (GB)"),
+    ),
+    quirks=[
+        "Read from the Markdown copy of the price list page (docs.ionos.com serves every page as .md).",
+        "The same templates are priced in EUR (3,00 €) and GBP (£2.554) for other IONOS entities; only USD is read.",
+        '"H200 PCIe" maps to the H200 NVL, NVIDIA\'s only PCIe H200.',
+        "A general-purpose cloud: never part of a neocloud index.",
+    ],
+)
+
+
 MODAL = ProviderMapping(
     provider="modal",
     display_name="Modal (serverless GPU)",
@@ -2032,6 +2065,7 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         HUGGINGFACE,
         GCORE,
         FIREWORKS,
+        IONOS,
     )
 }  # fmt: skip
 
