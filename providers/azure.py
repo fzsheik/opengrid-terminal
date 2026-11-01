@@ -45,6 +45,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
+import changed_at
 from models import ComputeListing, RawResponse
 from providers.base import PollingPolicy, Provider, reshaped, to_decimal
 
@@ -335,8 +336,12 @@ class AzureProvider(Provider):
                 if price is None or price <= 0:
                     continue
                 count, raw_name = GPU_SIZES[size]
+                # effectiveStartDate is a date (always midnight UTC): when this retail price took effect.
+                since = changed_at.parse_time(row.get("effectiveStartDate"))
                 listings.append(
                     ComputeListing(
+                        provider_changed_at=since and since.replace(hour=0, minute=0, second=0, microsecond=0),
+                        changed_at_basis="date_only" if since else None,
                         provider="azure",
                         sku=size,
                         listing_id=f"{size}:{region}" + (":spot" if mkt == "spot" else ""),

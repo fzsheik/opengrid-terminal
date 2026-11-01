@@ -285,16 +285,37 @@ def unit_price(sku: dict) -> Decimal | None:
     return Decimal(str(p.get("units") or 0)) + Decimal(p.get("nanos") or 0) / Decimal(10**9)
 
 
-def by_region(skus: list[dict], pattern: str) -> dict[str, Decimal]:
-    """On-demand price per region for one component. A region priced twice with different values is dropped."""
-    rx, out, conflict = re.compile(pattern), {}, set()
+def _on_demand_skus(skus: list[dict], pattern: str):
+    """The priced on-demand SKUs of one component: (sku, unit price)."""
+    rx = re.compile(pattern)
     for s in skus:
         d = s.get("description") or ""
         if (s.get("category") or {}).get("usageType") != "OnDemand" or not rx.search(d) or _ONDEMAND_ONLY.search(d):
             continue
         price = unit_price(s)
-        if price is None:
+        if price is not None:
+            yield s, price
+
+
+def effective_by_region(skus: list[dict], pattern: str) -> dict[str, datetime]:
+    """Per region, the newest `pricingInfo.effectiveTime` among one component's on-demand SKUs (changed_at.py).
+    Google reports it within the queried range, so it is a lower bound: the price was in force by then."""
+    import changed_at
+
+    out: dict[str, datetime] = {}
+    for s, _price in _on_demand_skus(skus, pattern):
+        t = changed_at.parse_time(((s.get("pricingInfo") or [{}])[0] or {}).get("effectiveTime"))
+        if t is None:
             continue
+        for region in s.get("serviceRegions") or []:
+            out[region] = max(out.get(region, t), t)
+    return out
+
+
+def by_region(skus: list[dict], pattern: str) -> dict[str, Decimal]:
+    """On-demand price per region for one component. A region priced twice with different values is dropped."""
+    out, conflict = {}, set()
+    for s, price in _on_demand_skus(skus, pattern):
         for region in s.get("serviceRegions") or []:
             if region in out and out[region] != price:
                 conflict.add(region)
@@ -305,8 +326,9 @@ def by_region(skus: list[dict], pattern: str) -> dict[str, Decimal]:
     return out
 
 
-def _listing(sku, accel, count, price, region, observed_at, tier, vcpu=None, ram=None) -> ComputeListing:
+def _listing(sku, accel, count, price, region, observed_at, tier, vcpu=None, ram=None, **changed) -> ComputeListing:
     return ComputeListing(
+        **changed,
         provider="gcp",
         sku=sku,
         listing_id=f"{sku}:{region}",
@@ -486,6 +508,15 @@ class GcpProvider(Provider):
             raise ValueError("gcp: no H100 or A3 core SKU found - catalogue reshaped")
 
         where = offered(by_endpoint)
+        # When each component's price took effect (a lower bound); an assembled VM price is in force once all are.
+        eff = {p: effective_by_region(skus, p) for p in {*GPU.values(), *(x for cr in FAMILY.values() for x in cr), SSD}}
+
+        def since(region: str, *patterns: str) -> dict:
+            times = [eff[p].get(region) for p in patterns]
+            if not times or any(t is None for t in times):
+                return {}
+            return {"provider_changed_at": max(times), "changed_at_basis": "lower_bound"}
+
         listings = []
         for mtype, (count, key, accel, family, vcpu, ram, lssd) in MACHINES.items():
             cores, mem = fam[family]
@@ -494,13 +525,15 @@ class GcpProvider(Provider):
                 if region not in sold or region not in cores or region not in mem or (lssd and region not in ssd):
                     continue  # not offered there, or a component is not priced there
                 price = count * g + vcpu * cores[region] + ram * mem[region] + (lssd * ssd[region] if lssd else 0)
+                parts = (GPU[key], *FAMILY[family]) + ((SSD,) if lssd else ())
                 listings.append(_listing(mtype, accel, count, price, region, snapshot.fetched_at, "hyperscaler",
-                                         vcpu=vcpu, ram=float(ram)))
+                                         vcpu=vcpu, ram=float(ram), **since(region, *parts)))
         for key, accel in ATTACHABLE.items():
             sold = where.accelerators.get(accel, set()) if where else set(FALLBACK_REGIONS)
             for region, g in sorted(gpu[key].items()):
                 if region in sold:
-                    listings.append(_listing(accel, accel, 1, g, region, snapshot.fetched_at, "gpu-attachment"))
+                    listings.append(_listing(accel, accel, 1, g, region, snapshot.fetched_at, "gpu-attachment",
+                                             **since(region, GPU[key])))
         return listings
 
 

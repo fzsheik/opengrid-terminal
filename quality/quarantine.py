@@ -374,7 +374,8 @@ def _apply(s, q: Quarantine) -> bool:
     if cur is None:
         listing = ComputeListing(**snap)
     else:
-        base = {f: getattr(cur, f) for f in ComputeListing.model_fields}
+        # Fields excluded from model_dump() (provider change times) belong to history, not current state.
+        base = {f: getattr(cur, f) for f, info in ComputeListing.model_fields.items() if not info.exclude}
         reported = ComputeListing(**snap).model_dump()
         for col in FIELDS_OF.get(q.field, ()):
             if col in reported:

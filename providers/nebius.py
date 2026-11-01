@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
+import changed_at
 from models import ComputeListing, RawResponse
 from providers.base import PollingPolicy, Provider, find_endpoint, get_page, reshaped
 
@@ -197,7 +198,8 @@ def spot_rows(payload) -> list[dict]:
         if (platform, region) in seen:
             raise ValueError(f"nebius: two spot prices for {platform} in {region}")
         seen.add((platform, region))
-        out.append({"name": spot_name(it), "platform": platform, "region": region, "price": value})
+        out.append({"name": spot_name(it), "platform": platform, "region": region, "price": value,
+                    "effective": changed_at.parse_time(it.get("effectiveTime"))})
     return out
 
 
@@ -259,6 +261,9 @@ def _spot_listings(snapshot) -> list[ComputeListing]:
         name, platform, region = r["name"], r["platform"], r["region"]
         listings.append(
             ComputeListing(
+                # effectiveTime: when this spot price took effect (exact).
+                provider_changed_at=r["effective"],
+                changed_at_basis="exact" if r["effective"] else None,
                 provider="nebius",
                 sku=f"{name}:{platform}",
                 listing_id=f"{name}:{platform}:{region}:spot",

@@ -2,7 +2,7 @@
 
     raw_snapshots        every provider response, untouched
     compute_listings     current normalized state, one row per listing
-    listing_observations price/supply history, written only when something changes
+    listing_observations price/supply history, written only when something changes (with when it changed)
     reference_prices     provider price entries that are not listings (kept, not dropped)
 """
 
@@ -168,6 +168,16 @@ class ListingObservation(Base):
     original_price_per_instance_hour: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))
     fx_rate: Mapped[Decimal | None] = mapped_column(Numeric(18, 8))
     fx_rate_date: Mapped[date | None]
+
+    # When the change happened, as far as anyone can say (changed_at.py; methodology/freshness.md).
+    #   prev_observed_at     the last fetch that still showed the old value: the change happened in
+    #                        (prev_observed_at, observed_at]. NULL on a listing's first row (nothing before it).
+    #   provider_changed_at  the provider's own effective time for a price change, when it publishes one.
+    #   changed_at_basis     exact | date_only | lower_bound (from provider_changed_at) or poll_window (only the
+    #                        bracket above is known). NULL on rows written before 0028 and not yet backfilled.
+    prev_observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    provider_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    changed_at_basis: Mapped[str | None] = mapped_column(String(16))
 
 
 class ReferencePrice(Base):

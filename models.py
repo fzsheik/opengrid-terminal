@@ -9,7 +9,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RawResponse(BaseModel):
@@ -75,6 +75,13 @@ class ComputeListing(BaseModel):
     fx_rate: Decimal | None = None          # USD per one unit of original_currency
     fx_rate_date: date | None = None        # the reference date of that rate (ECB publication day)
     fx_source: str | None = None            # "ecb"
+
+    # PROVIDER CHANGE TIME (changed_at.py; methodology/freshness.md). When the provider itself says from when this
+    # price applies: AWS spot `timestamp`, Nebius spot `effectiveTime` (exact), Azure `effectiveStartDate` (date
+    # only), GCP `effectiveTime` (lower bound). Copied onto the history row that records a price change, never onto
+    # current state, so excluded from model_dump(). None: the provider gives no time (most do not).
+    provider_changed_at: datetime | None = Field(default=None, exclude=True)
+    changed_at_basis: Literal["exact", "date_only", "lower_bound"] | None = Field(default=None, exclude=True)
 
 
 class CapacityObservation(BaseModel):

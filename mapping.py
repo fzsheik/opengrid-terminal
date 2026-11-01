@@ -286,7 +286,9 @@ def _fields(provider: str, **given: FieldMap | tuple) -> list[FieldMap]:
     return [FieldMap(f, *merged[f]) for f in MODEL_FIELDS if f in merged]
 
 
-MODEL_FIELDS = list(ComputeListing.model_fields)
+# Current-state fields. Excluded ones (provider change times, changed_at.py) are history provenance, documented in
+# methodology/freshness.md rather than per provider.
+MODEL_FIELDS = [f for f, info in ComputeListing.model_fields.items() if not info.exclude]
 
 
 HYPERBOLIC = ProviderMapping(
@@ -1730,7 +1732,9 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
     )
 }  # fmt: skip
 
-MODEL_FIELDS = list(ComputeListing.model_fields)
+# Current-state fields. Excluded ones (provider change times, changed_at.py) are history provenance, documented in
+# methodology/freshness.md rather than per provider.
+MODEL_FIELDS = [f for f, info in ComputeListing.model_fields.items() if not info.exclude]
 
 
 def check_mapping_coverage() -> dict[str, list[str]]:

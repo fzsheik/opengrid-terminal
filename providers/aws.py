@@ -61,6 +61,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
+import changed_at
 from models import CapacityObservation, ComputeListing, RawResponse
 from providers import aws_sigv4
 from providers.base import PollingPolicy, Provider, find_endpoint, gather_limited, reshaped, to_decimal
@@ -496,7 +497,9 @@ def spot_listings(by_endpoint: "dict[str, list[RawSnapshot]]",
                 continue
             count, raw_name = GPU_INSTANCES[itype]
             vcpu, ram = (specs or {}).get(itype, (None, None))
+            since = changed_at.parse_time(item.get("timestamp"))  # when AWS set this price (exact)
             out.append(ComputeListing(
+                provider_changed_at=since, changed_at_basis="exact" if since else None,
                 provider="aws", sku=itype, listing_id=f"{itype}:{az}:spot", raw_gpu_name=raw_name,
                 canonical_gpu_name=canonical.canonical_gpu_name(raw_name), gpu_count=count, region=az,
                 country=SPOT_REGIONS.get(region or az[:-1]), price_per_gpu_hour=price / count,
