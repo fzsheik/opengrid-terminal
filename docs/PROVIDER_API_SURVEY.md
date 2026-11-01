@@ -82,7 +82,7 @@ cross-check their own feeds.
 | Provider | Reserved / committed pricing | Capacity blocks / scheduled capacity | Capacity / availability signal | Utilization / demand signal | What we already use |
 |---|---|---|---|---|---|
 | aws | RI / Savings Plans prices in the AWS Price List [docs, not called] | EC2 Capacity Blocks for ML: `DescribeCapacityBlockOfferings`, price set by supply and demand at purchase [docs, acct] | none public | none | on-demand price file |
-| gcp | Cloud Billing Catalog API has `Commit1Yr` and Spot SKUs, needs a free API key [docs] | Future reservations in **calendar mode**, up to 90 days, availability check 60 days ahead [docs, acct] | none public | none | public pricing HTML page |
+| gcp | Cloud Billing Catalog API has `Commit1Yr` and Spot SKUs, needs a free API key [docs] | Future reservations in **calendar mode**, up to 90 days, availability check 60 days ahead [docs, acct]; tried 2026-11-01 with a read-only service account: HTTP 400 "The service is not available for this project." (also `advice/capacity`), stored raw (methodology/gcp-regions.md) | none public | none | public pricing HTML page |
 | azure | **1 / 3 / 5-year reservation prices for GPU VMs in the public Retail Prices API** [live] | Capacity reservations [acct] | none public | none | consumption prices only |
 | oracle | none found | Capacity reservations and `compute-capacity-report` (host capacity per AD) [docs, acct] | via capacity report only [acct] | none | public price list |
 | ibm | none found | none found | none found | none | catalog pricing |
