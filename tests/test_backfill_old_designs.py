@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import scratchdb  # noqa: E402,F401  (first: isolates the process from real networks)
 
 from backfill.__main__ import _day  # noqa: E402
-from backfill.parsers import azure, coreweave, denvr, lambda_, runpod, verda  # noqa: E402
+from backfill.parsers import azure, coreweave, denvr, lambda_, paperspace, runpod, verda  # noqa: E402
 from backfill.sources import sources  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_backfill"
@@ -300,6 +300,36 @@ def test_denvr_denvrdata_2025_list_before_header():
     _raises(denvr.denvr_table, page.replace("$2.10 / GPU", "$2.10 / GPU / mo"), AT, contains="unreadable")
 
 
+# ----------------------------------------------------------------------------------------------------- Paperspace
+
+def _ps(name):
+    ls, used = _src("www.paperspace.com/pricing").parse((FIX / name).read_bytes(), AT)
+    assert used.endswith("paperspace_cards")
+    return {l.listing_id: l for l in ls}
+
+
+def test_paperspace_2018_and_2020_cards():
+    by = _ps("paperspace_2018-07_monthly_beside.html")
+    v = by["V100"]                                   # Shadeform's shade_instance_type: the live listing id
+    assert v.provider == "paperspace" and v.raw_gpu_name == "V100 pcie" and v.canonical_gpu_name is None
+    assert v.price_per_instance_hour == D("2.30") and v.provider_tier == "paperspace-page"
+    assert by["P5000"].price_per_instance_hour == D("0.78") and set(by) == {"P5000", "P6000", "V100"}
+    by = _ps("paperspace_2020-08_descriptions.html")    # "V100 The most powerful GPU ... $ 2.30 / hour"
+    assert by["V100"].price_per_instance_hour == D("2.30")
+
+
+def test_paperspace_2023_copy_paste_and_2024_commitments_skipped():
+    by = _ps("paperspace_2023-05_h100_copy_paste.html")
+    a = by["A100"]
+    assert a.raw_gpu_name == "A100 pcie" and a.canonical_gpu_name == "NVIDIA A100 40GB PCIe" and a.price_per_gpu_hour == D("3.09")
+    assert by["A6000"].canonical_gpu_name == "NVIDIA RTX A6000 48GB" and by["P5000x2"].gpu_count == 2
+    assert "H100" not in by, "the H100 card prints the A100's price and spec"
+    by = _ps("paperspace_2024-06_commitment_stars.html")
+    assert "A100_sxm4_80G" not in by and "H100" not in by, "'$1.15** / hour' and '$2.24* / hour' are commitments"
+    assert by["A4000"].price_per_instance_hour == D("0.76") and by["A4000"].canonical_gpu_name == "NVIDIA RTX A4000 16GB"
+    _raises(paperspace.paperspace_cards, "<p>Contact us</p>", AT, contains="no '<machine>")
+
+
 TESTS = [test_since_accepts_year_and_month,
          test_azure_vm_page_2018_names_without_s, test_azure_vm_page_2022_spot_column,
          test_azure_vm_page_2020_spot_savings_and_trailing_cell, test_azure_vm_page_old_and_new_designs_fail_loudly,
@@ -310,7 +340,8 @@ TESTS = [test_since_accepts_year_and_month,
          test_lambda_2024_per_gpu_prices_and_reserved_rows,
          test_runpod_next_data_list_reads_only_offered_clouds, test_runpod_next_data_map_and_lowest_price_designs,
          test_datacrunch_2020_type_codes, test_datacrunch_2021_and_2024_tables,
-         test_denvr_denvrdata_2025_list_before_header]
+         test_denvr_denvrdata_2025_list_before_header,
+         test_paperspace_2018_and_2020_cards, test_paperspace_2023_copy_paste_and_2024_commitments_skipped]
 
 if __name__ == "__main__":
     for t in TESTS:

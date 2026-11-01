@@ -21,7 +21,7 @@ import normalize  # noqa: E402
 from analytics import archived  # noqa: E402
 from backfill import aws_price_list, load, wayback
 from backfill.parsers import coreweave as cw_archive  # noqa: E402
-from backfill.sources import Source, live_page, sources  # noqa: E402
+from backfill.sources import PENDING, Source, live_page, sources  # noqa: E402
 from models import ComputeListing  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_backfill"
@@ -224,7 +224,7 @@ def test_every_source_names_a_known_provider_and_parser():
     srcs = sources()
     assert len({(s.provider, s.url) for s in srcs}) == len(srcs), "no duplicate sources"
     for s in srcs:
-        assert s.provider in PROVIDERS, s.provider
+        assert s.provider in PROVIDERS or s.provider in PENDING, s.provider
         assert s.parsers and all(name for name, _ in s.parsers)
     assert isinstance(live_page("coreweave", "coreweave", "u"), Source)
 
