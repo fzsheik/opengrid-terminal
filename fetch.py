@@ -101,6 +101,8 @@ def build_fetchers() -> list[Provider]:
     fetchers.append(VastProvider(api_key=settings.vast_api_key))
     fetchers.append(LatitudeProvider(api_key=settings.latitude_api_key))
     fetchers.append(VerdaProvider(client_id=settings.verda_client_id, client_secret=settings.verda_client_secret))
+    # Prices via Shadeform; a key pair adds Crusoe's own per-location capacity (signed GETs only, providers/crusoe.py).
+    fetchers.append(CrusoeProvider(access_key_id=settings.crusoe_access_key_id, secret_key=settings.crusoe_secret_key))
     # Public prices (its page); a key adds stock from its container API.
     fetchers.append(DeepInfraProvider(api_key=settings.deepinfra_api_key))
 
@@ -123,7 +125,6 @@ def build_fetchers() -> list[Provider]:
             LiumProvider,
             NebiusProvider,
             AwsProvider,
-            CrusoeProvider,
             DenvrProvider,
             BoostRunProvider,
             CoreWeaveProvider,

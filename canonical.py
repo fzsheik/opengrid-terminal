@@ -242,6 +242,16 @@ _add("NVIDIA H100 80GB PCIe", "H100 pcie")
 _add("NVIDIA H100 80GB PCIe NVLink", "H100 pcie nvlink")
 _add("NVIDIA GH200 96GB", "GH200 pcie")
 _add("Intel Gaudi 2 96GB", "GAUDI2 pcie")
+# Crusoe's own type catalogue (GET /projects/{id}/compute/vms/types, `gpu_type`), read for capacity only.
+# Each names model, memory and form factor; H100 SXM is SXM5 only and A100 SXM SXM4 only.
+_add("NVIDIA H100 80GB SXM5", "H100-SXM-80GB")
+_add("NVIDIA A100 80GB SXM4", "A100-SXM-80GB")
+_add("NVIDIA A100 80GB PCIe", "A100-PCIe-80GB")
+_add("NVIDIA A100 40GB PCIe", "A100-PCIe-40GB")
+_add("NVIDIA A40 48GB", "A40-PCIe-48GB")
+_add("NVIDIA L40S 48GB", "L40S-48GB")
+_add("AMD Instinct MI300X 192GB", "MI300X-192GB")
+_add("AMD Instinct MI355X 288GB", "MI355X_288GB")
 # Boost Run as listed by Shadeform: its H200/B200 types are named "..._sxm5x8"/"..._sxm6x8".
 _add("NVIDIA H200 141GB SXM5", "H200 sxm")
 _add("NVIDIA B200 180GB SXM", "B200 sxm")

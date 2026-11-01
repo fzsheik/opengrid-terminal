@@ -638,7 +638,10 @@ def _shadeform(provider: str, display: str, extra_quirks: list[str]) -> Provider
     )
 
 
-CRUSOE = _shadeform("crusoe", "Crusoe", ["Several sizes of one GPU share a name; prices differ by size and fabric."])
+CRUSOE = _shadeform("crusoe", "Crusoe", [
+    "Several sizes of one GPU share a name; prices differ by size and fabric.",
+    "Crusoe's own Cloud API (signed, with an API key pair) is read for capacity only: it publishes no prices, "
+    "so prices stay Shadeform's (providers/crusoe.py)."])
 LATITUDE = _shadeform("latitude", "Latitude.sh", ['"RTXPro6000" hides a server/workstation variant and stays unmapped.'])
 DENVR = _shadeform("denvr", "Denvr", ["Includes Intel Gaudi 2, which has no NVIDIA equivalent to compare against."])
 BOOSTRUN = _shadeform("boostrun", "Boost Run", [

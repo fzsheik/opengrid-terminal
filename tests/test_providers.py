@@ -13,7 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import mapping
 from providers import PROVIDERS
-from providers.shadeform import CrusoeProvider, DenvrProvider, LatitudeProvider, gpu_label, regions_of
+from providers.crusoe import CrusoeProvider
+from providers.shadeform import DenvrProvider, LatitudeProvider, gpu_label, regions_of
 from providers.verda import VerdaProvider
 
 NOW = datetime(2026, 10, 4, tzinfo=timezone.utc)
