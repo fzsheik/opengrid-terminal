@@ -22,6 +22,7 @@ from providers import (
     BoostRunProvider,
     CoreWeaveProvider,
     HotAisleProvider,
+    HydraHostProvider,
     JarvislabsProvider,
     TogetherProvider,
     VultrProvider,
@@ -166,6 +167,7 @@ def build_fetchers() -> list[Provider]:
             BeamProvider,
             NosanaProvider,
             AkashProvider,
+            HydraHostProvider,
         )
     )
     return fetchers

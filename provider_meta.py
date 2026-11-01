@@ -123,6 +123,9 @@ _ALL = [
                  "https://akash.network",
                  "open GPU marketplace; Akash Console's bid-derived summary: the allocatable-weighted average of each "
                  "provider's chosen bid (up to 31 days old), per GPU; free/total GPU counts"),
+    ProviderMeta("hydrahost", "Hydra Host", "marketplace", "public_api", "brokkr.hydrahost.com", "https://hydrahost.com",
+                 "bare-metal servers from independent suppliers; one listing per device, on-demand and interruptible "
+                 "(cents per hour in the API); deployable now only when stockStatus is \"on demand\""),
     ProviderMeta("simplepod", "SimplePod", "marketplace", "public_api", "api.simplepod.ai", "https://simplepod.ai",
                  "own racks plus community hosts; one listing per open on-demand offer (Docker and VM); disk billed extra"),
     ProviderMeta("clore", "Clore.ai", "marketplace", "authenticated_api", "api.clore.ai", "https://clore.ai",

@@ -533,6 +533,8 @@ _add("NVIDIA RTX 4090 24GB", "nvidia rtx4090 24Gi PCIe")
 _add("NVIDIA RTX 5090 32GB", "nvidia rtx5090 32Gi PCIe")
 _add("NVIDIA T4 16GB", "nvidia t4 16Gi PCIe")
 _add("NVIDIA Tesla V100 16GB SXM2", "nvidia v100 16Gi SXM2")
+# Hydra Host inventory: nvidia-smi names, already mapped above, except Quadro RTX 8000 (no canonical yet).
+_add(None, "Quadro RTX 8000")
 _add(None, "nvidia rtx5000 16Gi PCIe", "nvidia v100 32Gi PCIe", "nvidia gtx1050 2Gi PCIe", "nvidia m4000 8Gi PCIe",
      "nvidia p4 8Gi PCIe", "nvidia p40 24Gi PCIe")
 

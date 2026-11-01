@@ -1388,6 +1388,43 @@ AKASH = ProviderMapping(
 )
 
 
+HYDRAHOST = ProviderMapping(
+    provider="hydrahost",
+    display_name="Hydra Host (bare-metal marketplace)",
+    endpoints={"GET brokkr.hydrahost.com/api/v1/inventory?page=N&pageSize=100":
+               "every listed device: location, stockStatus, specs, on-demand and interruptible prices in cents"},
+    fields=_fields(
+        "hydrahost",
+        sku=(RAW, "data[].id", "a device uuid; also the capacity row's sku"),
+        listing_id=(DERIVED, 'id, or id + ":interruptible"', "one per device and price kind"),
+        raw_gpu_name=(RAW, "specs.gpu.model", 'nvidia-smi names, e.g. "NVIDIA H100 80GB HBM3"'),
+        gpu_count=(RAW, "specs.gpu.count"),
+        region=(RAW, "location", 'a state or country word, e.g. "Texas", "Singapore"'),
+        country=(DERIVED, "location -> ISO code (US states -> US)", "None for a word not in the table"),
+        price_per_gpu_hour=(DERIVED, "listing.{onDemand,interruptible}Price.perHour.perGpu / 100", "cents"),
+        price_per_instance_hour=(DERIVED, "perHour.total / 100", "must equal perGpu x GPUs within 1% or skipped"),
+        currency=(CONSTANT, '"USD"', "category-prices states USD; the inventory's figures are its cents"),
+        market_type=(DERIVED, '"on_demand", or "spot" for the interruptible price'),
+        provider_tier=(CONSTANT, '"baremetal"'),
+        interruptible=(DERIVED, "= (market_type == spot)"),
+        available=(DERIVED, 'stockStatus == "on demand"', '"reserve" / "preorder" -> False; another word -> None'),
+        capacity=(ABSENT, "-", "stock words are capacity rows (boolean shape)"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, "specs.cpu.totalThreads"),
+        ram_gb=(RAW, "specs.memory.total"),
+        storage_gb=(RAW, "specs.storage.total"),
+    ),
+    quirks=[
+        "Prices are cents: 8x L40S perHour.perGpu 59.375 = $0.59; its interruptible 42.5 equals the 0.425 USD "
+        "category start price (checked 2026-11-01).",
+        "A marketplace of independent suppliers: one listing per device, including suppliers outside the US.",
+        "isInterruptibleOnly devices give only the interruptible listing.",
+        '"reserve" and "preorder" devices are listed with available False: a real price, not rentable now.',
+        "CPU-only servers (no GPU model) are skipped. IPs, disk serials and OS lists are not stored.",
+    ],
+)
+
+
 MODAL = ProviderMapping(
     provider="modal",
     display_name="Modal (serverless GPU)",
@@ -1776,6 +1813,7 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         E2E, SIMPLEPOD,
         CLORE,
         AKASH,
+        HYDRAHOST,
     )
 }  # fmt: skip
 

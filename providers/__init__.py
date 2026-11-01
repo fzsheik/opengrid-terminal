@@ -27,6 +27,7 @@ from providers.digitalocean import DigitalOceanProvider
 from providers.e2e import E2EProvider
 from providers.gcp import GcpProvider
 from providers.hotaisle import HotAisleProvider
+from providers.hydrahost import HydraHostProvider
 from providers.hyperbolic import HyperbolicProvider
 from providers.hyperstack import HyperstackProvider
 from providers.ibm import IbmProvider
@@ -115,6 +116,7 @@ PROVIDERS: dict[str, type[Provider]] = {
         CloreProvider,
         PaperspaceProvider,
         AkashProvider,
+        HydraHostProvider,
     )
 }
 
@@ -171,6 +173,7 @@ __all__ = [
     "CloreProvider",
     "PaperspaceProvider",
     "AkashProvider",
+    "HydraHostProvider",
     "find_endpoint",
     "gather_limited",
     "to_decimal",
