@@ -11,7 +11,8 @@ below: Akash (the USD figure is a summary of per-provider bids up to 31 days old
 with a fallback across RAM/interface variants), TensorDock (keyless endpoints
 answer 404 or an empty list), io.net (pricing endpoints answer 401) and SF Compute
 (orderbook needs a Bearer token). Clore.ai, declined then for its key, was added on
-2026-10-21 with an account key (tests/test_provider_clore.py).
+2026-10-21 with an account key (tests/test_provider_clore.py). Akash was added on
+2026-11-01 as a market summary, with those limits documented (tests/test_provider_akash.py).
 
 Run:  .venv/bin/python tests/test_provider_decentralized.py
 """
@@ -171,7 +172,8 @@ def test_registry():
     m = provider_meta.meta("nosana")
     assert m.provider_class == "decentralized" and m.source_type == "public_api" and m.source == "api.nosana.com"
     # Re-checked and still declined.
-    assert not ({"akash", "tensordock", "ionet", "io.net", "sfcompute"} & set(PROVIDERS))
+    # Akash was added on 2026-11-01 with its bid-derived limits documented (tests/test_provider_akash.py).
+    assert not ({"tensordock", "ionet", "io.net", "sfcompute"} & set(PROVIDERS))
 
 
 def test_aliases():

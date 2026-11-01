@@ -203,8 +203,8 @@ def test_registry():
     direct = {n for n, c in PROVIDERS.items() if not issubclass(c, ShadeformCloud)}
     assert not (via & direct), via & direct
     # Declined candidates stay out: resellers, unidentified clouds, and sources that failed policy.
-    # Paperspace was added on 2026-11-01 (tests/test_provider_paperspace.py).
-    declined = {"excesssupply", "imwt", "tensordock", "cudo", "sfcompute", "akash",
+    # Paperspace and Akash were added on 2026-11-01 (tests/test_provider_paperspace.py, test_provider_akash.py).
+    declined = {"excesssupply", "imwt", "tensordock", "cudo", "sfcompute",
                 "ionet", "io.net", "primeintellect", "oblivus",
                 # declined 2026-10-21: terms forbid automated access, or resellers of clouds read directly
                 "cloudrift", "novita", "cerebrium", "fal", "northflank", "lightning", "saturn",

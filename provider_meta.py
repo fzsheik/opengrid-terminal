@@ -119,6 +119,10 @@ _ALL = [
     ProviderMeta("e2e", "E2E Networks", "general_cloud", "public_pricing_file", "www.e2enetworks.com",
                  "https://www.e2enetworks.com/pricing",
                  "Indian cloud; USD on-demand list from its pricing.json feed, per GPU-hour; INR-only spot and committed rates not read"),
+    ProviderMeta("akash", "Akash Network", "decentralized", "public_api", "console-api.akash.network",
+                 "https://akash.network",
+                 "open GPU marketplace; Akash Console's bid-derived summary: the allocatable-weighted average of each "
+                 "provider's chosen bid (up to 31 days old), per GPU; free/total GPU counts"),
     ProviderMeta("simplepod", "SimplePod", "marketplace", "public_api", "api.simplepod.ai", "https://simplepod.ai",
                  "own racks plus community hosts; one listing per open on-demand offer (Docker and VM); disk billed extra"),
     ProviderMeta("clore", "Clore.ai", "marketplace", "authenticated_api", "api.clore.ai", "https://clore.ai",

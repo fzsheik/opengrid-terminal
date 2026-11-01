@@ -512,6 +512,30 @@ _add("NVIDIA A100 80GB PCIe", "A100 80GB PCIe 80GB")
 _add("NVIDIA Tesla V100 16GB SXM2", "Tesla V100SXM216GB 16GB")
 _add("NVIDIA H100 94GB NVL", "H100 NVL 94GB")
 
+# Akash Network (console-api /v1/gpu-prices): "<vendor> <model> <ram> <interface>", ram in GiB as Akash writes
+# it. Mapped where model, memory and interface fix one product. Left unmapped: "rtx5000 16Gi" (Quadro RTX 5000,
+# no canonical yet), "v100 32Gi" (no 32 GB V100 canonical), "gtx1050 2Gi", "m4000", "p4", "p40" (no canonical).
+_add("NVIDIA A100 80GB SXM4", "nvidia a100 80Gi SXM4")
+_add("NVIDIA A10G 24GB", "nvidia a10g 24Gi PCIe")
+_add("NVIDIA B300 288GB SXM", "nvidia b300 288Gi SXM6")
+_add("NVIDIA H100 80GB SXM5", "nvidia h100 80Gi SXM5")
+_add("NVIDIA RTX PRO 6000 96GB SE", "nvidia pro6000se 96Gi PCIe")
+_add("NVIDIA RTX PRO 6000 Blackwell 96GB Workstation", "nvidia pro6000we 96Gi PCIe")
+_add("NVIDIA GTX 1050 Ti 4GB", "nvidia gtx1050ti 4Gi PCIe")
+_add("NVIDIA RTX 3060 12GB", "nvidia rtx3060 12Gi PCIe")
+_add("NVIDIA RTX 3060 Ti 8GB", "nvidia rtx3060ti 8Gi PCIe")
+_add("NVIDIA RTX 3090 24GB", "nvidia rtx3090 24Gi PCIe")
+_add("NVIDIA RTX 3090 Ti 24GB", "nvidia rtx3090ti 24Gi PCIe")
+_add("NVIDIA RTX 4000 Ada 20GB", "nvidia rtx4000ada 20Gi PCIe")
+_add("NVIDIA RTX 4000 SFF Ada 20GB", "nvidia rtx4000sada 20Gi PCIe")
+_add("NVIDIA RTX 4080 16GB", "nvidia rtx4080 16Gi PCIe")
+_add("NVIDIA RTX 4090 24GB", "nvidia rtx4090 24Gi PCIe")
+_add("NVIDIA RTX 5090 32GB", "nvidia rtx5090 32Gi PCIe")
+_add("NVIDIA T4 16GB", "nvidia t4 16Gi PCIe")
+_add("NVIDIA Tesla V100 16GB SXM2", "nvidia v100 16Gi SXM2")
+_add(None, "nvidia rtx5000 16Gi PCIe", "nvidia v100 32Gi PCIe", "nvidia gtx1050 2Gi PCIe", "nvidia m4000 8Gi PCIe",
+     "nvidia p4 8Gi PCIe", "nvidia p40 24Gi PCIe")
+
 # --------------------------------------------------------------------------
 # Seen, deliberately not mapped
 # --------------------------------------------------------------------------

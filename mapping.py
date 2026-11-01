@@ -1350,6 +1350,44 @@ CLORE = ProviderMapping(
 )
 
 
+AKASH = ProviderMapping(
+    provider="akash",
+    display_name="Akash Network (bid-derived market summary)",
+    endpoints={"GET console-api.akash.network/v1/gpu-prices":
+               "per GPU (vendor, model, ram, interface): free/total GPUs and a USD summary of providers' bids"},
+    fields=_fields(
+        "akash",
+        sku=(DERIVED, "vendor-model-ram-interface", 'e.g. "nvidia-h100-80Gi-SXM5"'),
+        listing_id=(DERIVED, "= sku", "one summary listing per GPU row"),
+        raw_gpu_name=(DERIVED, '"{vendor} {model} {ram} {interface}"', 'e.g. "nvidia h100 80Gi SXM5"'),
+        gpu_count=(CONSTANT, "1", "bids are on single-GPU orders"),
+        region=(ABSENT, "-", "a network-wide summary"),
+        country=(ABSENT, "-"),
+        price_per_gpu_hour=(RAW, "models[].price.weightedAverage",
+                            "each provider's chosen bid, weighted by its allocatable GPUs; min/max/avg/med kept raw"),
+        price_per_instance_hour=(DERIVED, "= price_per_gpu_hour", "single GPU"),
+        currency=(RAW, 'price.currency (must be "USD")', "uakt bids converted by Akash at that day's AKT price"),
+        provider_tier=(CONSTANT, '"weighted"', "a market summary, not one host's ask"),
+        available=(DERIVED, "availability.available > 0"),
+        capacity=(RAW, "availability.available", "GPUs not allocated; also a capacity row (count shape)"),
+        capacity_unit=(CONSTANT, '"gpu"'),
+        vcpu=(ABSENT, "-"),
+        ram_gb=(ABSENT, "-"),
+        storage_gb=(ABSENT, "-"),
+    ),
+    quirks=[
+        "Akash has no price list: the Console derives prices from bids (its own words: 'a temporary solution'). "
+        "Per provider it takes the pricing bot's newest bid, else that provider's cheapest single-GPU bid on the "
+        "same RAM+interface, else same RAM, else any variant of the model, over 14 then 31 days.",
+        "So a row's price can be up to 31 days old and, when a provider never bid on the exact variant, can come "
+        "from another RAM/interface of the same model. Stated, not corrected: the summary hides which bids were used.",
+        "One listing per row at weightedAverage; min/max/avg/med stay in the stored raw response, never listings.",
+        "A row with price null (no bid in 31 days) gets a capacity row and no listing.",
+        "Odd bids show through (B300 at $0.23 on 2026-11-01); the quality floor holds such values (quality/checks.py).",
+    ],
+)
+
+
 MODAL = ProviderMapping(
     provider="modal",
     display_name="Modal (serverless GPU)",
@@ -1737,6 +1775,7 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         CIVO, ATLANTICNET, DEEPINFRA,
         E2E, SIMPLEPOD,
         CLORE,
+        AKASH,
     )
 }  # fmt: skip
 

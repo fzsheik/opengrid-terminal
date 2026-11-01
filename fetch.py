@@ -10,6 +10,7 @@ from db import SessionLocal, init_db
 from models import RawResponse
 from providers import gcp_auth
 from providers import (
+    AkashProvider,
     CivoProvider,
     CloreProvider,
     AtlanticNetProvider,
@@ -164,6 +165,7 @@ def build_fetchers() -> list[Provider]:
             BasetenProvider,
             BeamProvider,
             NosanaProvider,
+            AkashProvider,
         )
     )
     return fetchers

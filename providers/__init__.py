@@ -11,6 +11,7 @@ from providers.base import (
     gather_limited,
     to_decimal,
 )
+from providers.akash import AkashProvider
 from providers.arkane import ArkaneProvider
 from providers.atlanticnet import AtlanticNetProvider
 from providers.aws import AwsProvider
@@ -113,6 +114,7 @@ PROVIDERS: dict[str, type[Provider]] = {
         BeamProvider,
         CloreProvider,
         PaperspaceProvider,
+        AkashProvider,
     )
 }
 
@@ -168,6 +170,7 @@ __all__ = [
     "BeamProvider",
     "CloreProvider",
     "PaperspaceProvider",
+    "AkashProvider",
     "find_endpoint",
     "gather_limited",
     "to_decimal",
