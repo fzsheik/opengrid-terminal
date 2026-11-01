@@ -26,7 +26,9 @@ MAX_PER_GPU_HOUR = Decimal(200)
 
 
 def _rows(listings: list[ComputeListing], *, source: str, source_url: str, sha256: str, parser: str,
-          valid_to: datetime | None = None) -> tuple[list[dict], list[str]]:
+          valid_to: datetime | None = None, basis: str | None = None, licence: str | None = None,
+          attribution: str | None = None, note=None) -> tuple[list[dict], list[str]]:
+    """`note` is a string for every row, or a function listing -> str | None."""
     now = datetime.now(timezone.utc)
     rows, rejected = [], []
     for l in listings:
@@ -41,7 +43,8 @@ def _rows(listings: list[ComputeListing], *, source: str, source_url: str, sha25
             "region": (l.region or None) and l.region[:64], "country": l.country, "price_per_gpu_hour": p,
             "price_per_instance_hour": l.price_per_instance_hour, "currency": l.currency,
             "market_type": l.market_type, "interruptible": l.interruptible, "observed_at": l.observed_at,
-            "valid_to": valid_to, "imported_at": now,
+            "valid_to": valid_to, "imported_at": now, "basis": basis, "licence": licence,
+            "attribution": attribution, "note": note(l) if callable(note) else note,
             # archives are public pages; a wholly internal provider's archived rows stay internal all the same
             "visibility": provider_meta.enforce(l.provider, l.visibility),
         })
@@ -97,7 +100,7 @@ def run_wayback(sources, since: str, until: str, wayback, *, download: bool = Tr
                 r["failed"] += 1
                 r["failures"].append({"capture": c.archive_url, "reason": str(exc)[:600]})
                 continue
-            rows, rejected = _rows(listings, source="wayback", source_url=c.archive_url,
+            rows, rejected = _rows(listings, source="wayback", source_url=c.archive_url, basis="capture",
                                    sha256=hashlib.sha256(body).hexdigest(), parser=parser)
             r["rejected"] += [f"{c.timestamp} {x}" for x in rejected]
             r["read"] += 1
@@ -114,32 +117,54 @@ def run_wayback(sources, since: str, until: str, wayback, *, download: bool = Tr
     return report
 
 
-def run_aws(since: datetime, *, dry_run: bool = False, log=print) -> dict:
+def run_aws(since: datetime, *, dry_run: bool = False, log=print, cache_dir=None, client=None,
+            download: bool = True) -> dict:
+    """Every AWS price-list version whose period overlaps `since`..now: on-demand rows (market on_demand, read like
+    the live poller) and 1 / 3-year reserved rows (reserved_1y / reserved_3y), each with the version id and its
+    publication date. Versions are downloaded one at a time and their GPU rows cached; download=False reads only
+    cached versions."""
     from backfill import aws_price_list as A
 
     r = {"provider": "aws", "url": A.BASE + A.VERSION_INDEX, "captures": 0, "read": 0, "failed": 0, "rows": 0,
-         "inserted": 0, "failures": [], "rejected": [], "first": None, "last": None,
-         "parsers": Counter(), "unmapped_gpus": Counter()}
-    for v in A.versions(since):
+         "inserted": 0, "reserved_rows": 0, "reserved_inserted": 0, "not_downloaded": 0, "failures": [],
+         "rejected": [], "first": None, "last": None, "parsers": Counter(), "unmapped_gpus": Counter()}
+    c = client or A._client()
+    for v in A.versions(since, client=c):
         r["captures"] += 1
+        if not download and A.cached(v, cache_dir) is None:
+            r["not_downloaded"] += 1
+            continue
         try:
-            raw = A.gpu_rows(v)
+            doc = A.gpu_document(v, cache_dir, client=c)
+            raw = doc["rows"]
             listings, problems = A.listings(v, raw)
+            reserved, rproblems = A.reserved_listings(v, raw)
         except Exception as exc:
             r["failed"] += 1
             r["failures"].append({"capture": v.csv_url, "reason": f"{type(exc).__name__}: {exc}"})
+            log(f"aws: version {v.version} failed: {type(exc).__name__}: {exc}")
             continue
         sha = hashlib.sha256(repr(sorted(map(sorted, (x.items() for x in raw)))).encode()).hexdigest()
-        rows, rejected = _rows(listings, source="aws_price_list", source_url=v.csv_url, sha256=sha,
-                               parser=A.PARSER, valid_to=v.end)
-        r["rejected"] += problems + rejected
+        period = f"{v.begin:%Y-%m-%d}..{v.end:%Y-%m-%d}" if v.end else f"{v.begin:%Y-%m-%d}.."
+        doc_note = f"AWS EC2 price list version {v.version}, published {doc.get('publication_date') or '?'}, " \
+                   f"effective {period}"
+        common = dict(source="aws_price_list", source_url=v.csv_url, sha256=sha, valid_to=v.end,
+                      basis="price_list_version", licence=A.LICENCE)
+        rows, rejected = _rows(listings, parser=A.PARSER, note=doc_note, **common)
+        rrows, rrejected = _rows(reserved, parser=A.RESERVED_PARSER,
+                                 note=lambda l: f"{doc_note}; {A.reserved_note(l, raw)}", **common)
+        r["rejected"] += problems + rejected + rproblems + rrejected
         r["read"] += 1
         r["parsers"][A.PARSER] += 1
         r["rows"] += len(rows)
+        r["reserved_rows"] += len(rrows)
         r["unmapped_gpus"].update(x["raw_gpu_name"] for x in rows if x["gpu"] is None)
         r["first"] = r["first"] or v.begin.isoformat()
         r["last"] = v.begin.isoformat()
         if not dry_run:
             r["inserted"] += store(rows)
-    log(f"aws: {r['captures']} price-list versions, {r['read']} read, {r['rows']} rows ({r['inserted']} new)")
+            r["reserved_inserted"] += store(rrows)
+        log(f"aws: {v.version} ({v.begin:%Y-%m}): {len(rows)} on-demand, {len(rrows)} reserved rows")
+    log(f"aws: {r['captures']} price-list versions, {r['read']} read, {r['rows']} on-demand rows "
+        f"({r['inserted']} new), {r['reserved_rows']} reserved rows ({r['reserved_inserted']} new)")
     return r
