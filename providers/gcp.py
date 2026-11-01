@@ -15,9 +15,28 @@ every one against a saved copy of the page). A machine type whose shape cannot b
 a4-highgpu-8g (the page prints no on-demand price) and the fractional G4 shapes (1/8, 1/4, 1/2 of a card).
 
 SKU names vary by region (the H100 Mega GPU is "Mega" in most regions and "Plus" in Americas), so each component is
-matched by a pattern. Regions: only REGIONS (Iowa today, see the shortcut note there); within them, a region where two SKUs of one
-component disagree on the price is skipped, never guessed. Attachable GPUs (T4, P4, V100, P100) are the GPU
-alone, per GPU; the N1 host is billed on top.
+matched by a pattern. A region where two SKUs of one component disagree on the price is skipped, never guessed.
+Attachable GPUs (T4, P4, V100, P100) are the GPU alone, per GPU; the N1 host is billed on top.
+
+Regions. Many SKUs are priced for a whole region group ("running in Americas"), so "priced in a region" is not "sold
+there" (Google's own page prices G2 in 41 regions; Compute Engine offers it in 18). So a machine type is listed in a
+region only when Compute Engine itself offers it there AND every component is priced there:
+
+    with GCP_SERVICE_ACCOUNT_JSON (+ GCP_PROJECT_ID): read-only Compute Engine lists, every 6 hours,
+        GET compute/v1/projects/{p}/aggregated/machineTypes      which machine types each zone offers, with shape
+        GET compute/v1/projects/{p}/aggregated/acceleratorTypes  which attachable GPUs each zone offers
+      A zone counts for a machine type only when its shape (vCPUs, memory, GPU type and count, bundled Local SSD
+      partitions x 375 GiB) is exactly the proven one in MACHINES; a region is offered when one of its zones is.
+    without it: Iowa (us-central1) only, as before (FALLBACK_REGIONS).
+
+Listing ids are `<machine type>:<region>` in every region, so Iowa's ids are unchanged.
+
+Proof outside Iowa: Google's accelerator-optimized page embeds per-region on-demand tables for G2 (41 regions) and
+G4 (24 regions); the assembled prices reproduce all of them exactly (tests/test_provider_gcp.py). A2 and A3 are
+embedded for Iowa only, so outside Iowa they are the same proven shape assembled from that region's own component
+SKUs, not checked against a page (methodology/gcp-regions.md).
+
+Calendar-mode advice (capacity): see `calendar_advice` below. Raw only for now; no capacity rows.
 
 Raw: only the SKUs that matter (GPU resource group, the machine families' core and RAM, Local SSD) are stored, with
 every usage type, so Spot, 1- and 3-year commitments and Calendar Mode can be read later without refetching.
@@ -28,7 +47,9 @@ These are list prices, which is why the provider class is "hyperscaler". Replace
 
 import logging
 import re
+import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -36,6 +57,7 @@ import httpx
 
 import canonical
 from models import ComputeListing, RawResponse
+from providers import gcp_auth
 from providers.base import PollingPolicy, Provider, find_endpoint, reshaped
 
 if TYPE_CHECKING:
@@ -48,10 +70,36 @@ ENDPOINT = "/v1/services/6F81-5844-456A/skus"  # Compute Engine
 PAGE_SIZE = 5000
 MAX_PAGES = 20
 HOURS_PER_MONTH = Decimal(730)  # Google's own month for converting GiB-month storage prices
-# shortcut: Iowa only. Many SKUs are priced for a whole region group ("running in Americas"), so "priced in a region"
-# is not "sold in that region"; listing every priced region would invent availability. Opening more regions needs
-# Compute Engine's accelerator-types-per-zone list, which needs a service account (OAuth), not an API key.
-REGIONS = ("us-central1",)
+# Without the service account's Compute Engine lists there is no way to tell "priced in a region" from "sold there",
+# so only Iowa (where every shape is proven against Google's page) is listed.
+FALLBACK_REGIONS = ("us-central1",)
+
+# Compute Engine (read-only, OAuth from the service account). Stored endpoints are these templates: the project id
+# stays out of the endpoint (it is in the request record).
+COMPUTE_URL = "https://compute.googleapis.com"
+MACHINE_TYPES = "/compute/v1/projects/{project}/aggregated/machineTypes"
+ACCELERATOR_TYPES = "/compute/v1/projects/{project}/aggregated/acceleratorTypes"
+CALENDAR_ADVICE = "/compute/v1/projects/{project}/regions/{region}/advice/calendarMode"
+COMPUTE_EVERY = 6 * 3600   # machine and accelerator types per zone change rarely
+COMPUTE_FRESH = timedelta(days=2)  # zone lists older than this (vs the catalogue) are not used
+LOCAL_SSD_PARTITION_GIB = 375
+
+# Region -> ISO country, for the regions Compute Engine offers GPUs in (cloud.google.com/compute/docs/regions-zones).
+COUNTRY = {
+    "asia-east1": "TW", "asia-east2": "HK", "asia-northeast1": "JP", "asia-northeast2": "JP", "asia-northeast3": "KR",
+    "asia-south1": "IN", "asia-south2": "IN", "asia-southeast1": "SG", "asia-southeast2": "ID",
+    "australia-southeast1": "AU", "australia-southeast2": "AU", "africa-south1": "ZA",
+    "europe-central2": "PL", "europe-north1": "FI", "europe-north2": "SE", "europe-southwest1": "ES",
+    "europe-west1": "BE", "europe-west2": "GB", "europe-west3": "DE", "europe-west4": "NL", "europe-west6": "CH",
+    "europe-west8": "IT", "europe-west9": "FR", "europe-west10": "DE", "europe-west12": "IT",
+    "me-central1": "QA", "me-central2": "SA", "me-west1": "IL",
+    "northamerica-northeast1": "CA", "northamerica-northeast2": "CA", "northamerica-south1": "MX",
+    "southamerica-east1": "BR", "southamerica-west1": "CL",
+}
+
+
+def country(region: str) -> str | None:
+    return "US" if region.startswith("us-") else COUNTRY.get(region)
 
 # Component SKU patterns (on-demand descriptions). Region words come after "running in".
 GPU = {
@@ -91,6 +139,140 @@ MACHINES: dict[str, tuple[int, str, str, str, int, int, int]] = {
 }
 # attachable GPU key -> accelerator type (the GPU alone, per GPU)
 ATTACHABLE = {"t4": "nvidia-tesla-t4", "p4": "nvidia-tesla-p4", "v100": "nvidia-tesla-v100", "p100": "nvidia-tesla-p100"}
+
+# What is kept of each zone's machine / accelerator type (the rest is links, ids and timestamps).
+_MACHINE_FIELDS = ("name", "zone", "guestCpus", "memoryMb", "accelerators", "bundledLocalSsds")
+_ACCEL_FIELDS = ("name", "zone", "maximumCardsPerInstance")
+
+# Calendar-mode advice (compute.advice.calendarMode, POST .../regions/{r}/advice/calendarMode). It answers "where and
+# when would a future reservation of N VMs of this shape, in this time window, be recommended", per zone: a
+# recommended zone and start/end, and for the other zones RECOMMENDED / NO_CAPACITY / CONDITIONS_NOT_MET /
+# NOT_SUPPORTED. That is calendar-mode reservation availability, not on-demand stock. Nothing is reserved: the
+# answer is advice only; creating a future reservation is a different call this account is not allowed to make.
+# A handful of key shapes x regions, every ADVICE_EVERY; the window is fixed so answers compare over time:
+# one VM, starting 1 to 14 days from now, for 1 to 7 days.
+ADVICE_TARGETS = (
+    ("a3-highgpu-8g", "us-central1"),
+    ("a3-megagpu-8g", "us-central1"),
+    ("a3-ultragpu-8g", "europe-west4"),
+    ("a3-highgpu-8g", "europe-west4"),
+)
+ADVICE_EVERY = 6 * 3600
+ADVICE_UNAVAILABLE_EVERY = 24 * 3600   # the project cannot use advice yet (see advice_unavailable): once a day
+ADVICE_WINDOW = {"start_after": timedelta(days=1), "start_before": timedelta(days=14),
+                 "min_duration": timedelta(days=1), "max_duration": timedelta(days=7)}
+_UNAVAILABLE = "The service is not available for this project."
+
+
+def _iso(t: datetime) -> str:
+    return t.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def advice_request(machine_type: str, now: datetime, instances: int = 1) -> dict:
+    w = ADVICE_WINDOW
+    return {"futureResourcesSpecs": {"spec": {
+        "targetResources": {"specificSkuResources": {"machineType": machine_type, "instanceCount": str(instances)}},
+        "timeRangeSpec": {"startTimeNotEarlierThan": _iso(now + w["start_after"]),
+                          "startTimeNotLaterThan": _iso(now + w["start_before"]),
+                          "minDuration": f"{int(w['min_duration'].total_seconds())}s",
+                          "maxDuration": f"{int(w['max_duration'].total_seconds())}s"},
+        "deploymentType": "DENSE"}}}
+
+
+def advice_unavailable(raw) -> bool:
+    """Google's answer for a project that cannot use the advice service (seen 2026-11-01 for this new project, for
+    calendar mode on GPUs and TPUs and for the capacity advisor alike): HTTP 400 "The service is not available for
+    this project." It is an account state, not a capacity answer."""
+    if raw.status_code != 400 or not isinstance(raw.payload, dict):
+        return False
+    return ((raw.payload.get("error") or {}).get("message") or "").strip() == _UNAVAILABLE
+
+
+def calendar_advice(snapshots) -> list[dict]:
+    """Stored advice answers read back, one per target: the recommended zone and window, and every other zone's
+    status. Pure. Raw only for now: not mapped to capacity rows until a real answer has been seen and documented."""
+    out = []
+    for r in snapshots:
+        req = r.request if isinstance(r.request, dict) else {}
+        recs = (r.payload or {}).get("recommendations") if isinstance(r.payload, dict) else None
+        if not isinstance(recs, list):
+            continue
+        for rec in recs:
+            spec = ((rec or {}).get("recommendationsPerSpec") or {}).get("spec") or {}
+            out.append({"machine_type": req.get("machine_type"), "region": req.get("region"),
+                        "recommended_zone": (spec.get("location") or "").removeprefix("zones/") or None,
+                        "start": spec.get("startTime"), "end": spec.get("endTime"),
+                        "other_zones": {z.removeprefix("zones/"): (v or {}).get("status")
+                                        for z, v in (spec.get("otherLocations") or {}).items()},
+                        "observed_at": r.fetched_at})
+    return out
+
+
+def _region(zone: str) -> str:
+    return zone.rsplit("/", 1)[-1].rsplit("-", 1)[0]
+
+
+def _shape_ok(mtype: str, m: dict) -> bool:
+    """The zone's machine type is exactly the proven shape (so the proven price assembly applies there)."""
+    count, _, accel, _, vcpu, ram, lssd = MACHINES[mtype]
+    accels = [(a.get("guestAcceleratorType"), a.get("guestAcceleratorCount")) for a in m.get("accelerators") or []]
+    partitions = (m.get("bundledLocalSsds") or {}).get("partitionCount") or 0
+    return (m.get("guestCpus") == vcpu and m.get("memoryMb") == ram * 1024 and accels == [(accel, count)]
+            and partitions * LOCAL_SSD_PARTITION_GIB == lssd)
+
+
+@dataclass(frozen=True)
+class Offered:
+    """Where Compute Engine offers each machine type and attachable GPU, from the service account's zone lists."""
+
+    machines: dict[str, set[str]]      # machine type -> regions
+    accelerators: dict[str, set[str]]  # accelerator type -> regions
+    observed_at: object = None
+
+    def gpu_regions(self, key: str) -> set[str]:
+        """Regions where the GPU behind a GPU key is offered: in a proven machine type, or attachable."""
+        out = set(self.accelerators.get(ATTACHABLE[key], set())) if key in ATTACHABLE else set()
+        for mtype, (_, k, *_rest) in MACHINES.items():
+            if k == key:
+                out |= self.machines.get(mtype, set())
+        return out
+
+
+def offered(by_endpoint: "dict[str, list[RawSnapshot]]") -> Offered | None:
+    """Offered regions from the newest stored Compute Engine lists. None (so: Iowa only) without both lists, when
+    they are more than COMPUTE_FRESH older than the newest catalogue (the service account was removed or has been
+    failing), or when they are reshaped (logged: prices must not stop because the region lists broke).
+    A zone whose shape differs from the proven one is not counted, and is logged."""
+    mt, at = find_endpoint(by_endpoint, MACHINE_TYPES), find_endpoint(by_endpoint, ACCELERATOR_TYPES)
+    if not mt or not at:
+        return None
+    cat = find_endpoint(by_endpoint, ENDPOINT)
+    oldest = min(mt[0].fetched_at, at[0].fetched_at)
+    if cat and cat[0].fetched_at and oldest and cat[0].fetched_at - oldest > COMPUTE_FRESH:
+        log.warning("gcp: Compute Engine zone lists are older than %s; Iowa only", COMPUTE_FRESH)
+        return None
+    machines_raw = mt[0].payload.get("machineTypes") if isinstance(mt[0].payload, dict) else None
+    accels_raw = at[0].payload.get("acceleratorTypes") if isinstance(at[0].payload, dict) else None
+    if not isinstance(machines_raw, list) or not isinstance(accels_raw, list):
+        log.error("gcp: Compute Engine machine or accelerator types reshaped; Iowa only")
+        return None
+    machines: dict[str, set[str]] = {}
+    for m in machines_raw:
+        name, zone = m.get("name"), m.get("zone")
+        if name not in MACHINES or not zone:
+            continue
+        if _shape_ok(name, m):
+            machines.setdefault(name, set()).add(_region(zone))
+        else:
+            log.warning("gcp: %s in %s is not the proven shape; zone not counted", name, zone)
+    accelerators: dict[str, set[str]] = {}
+    for a in accels_raw:
+        if a.get("name") and a.get("zone"):
+            accelerators.setdefault(a["name"], set()).add(_region(a["zone"]))
+    if not machines.get("a3-highgpu-8g"):
+        log.error("gcp: Compute Engine lists no proven a3-highgpu-8g anywhere (reshaped?); Iowa only")
+        return None
+    return Offered(machines, accelerators, mt[0].fetched_at)
 
 
 def unit_price(sku: dict) -> Decimal | None:
@@ -132,7 +314,7 @@ def _listing(sku, accel, count, price, region, observed_at, tier, vcpu=None, ram
         canonical_gpu_name=canonical.canonical_gpu_name(accel),
         gpu_count=count,
         region=region,
-        country="US" if region.startswith("us-") else None,
+        country=country(region),
         price_per_gpu_hour=price / count,
         price_per_instance_hour=price,
         currency="USD",
@@ -151,10 +333,12 @@ def _listing(sku, accel, count, price, region, observed_at, tier, vcpu=None, ram
 
 class GcpProvider(Provider):
     name = "gcp"
-    # List prices change rarely; the catalogue is ~7 pages.
-    polling = PollingPolicy(interval_seconds=3600, timeout_seconds=90)
+    # List prices change rarely; the catalogue is ~7 pages, the Compute Engine zone lists ~5 more every 6 hours.
+    polling = PollingPolicy(interval_seconds=3600, timeout_seconds=180)
 
-    def __init__(self, api_key: str, client: httpx.AsyncClient | None = None):
+    def __init__(self, api_key: str, client: httpx.AsyncClient | None = None,
+                 service_account: "gcp_auth.ServiceAccount | None" = None, project_id: str | None = None,
+                 compute_client: httpx.AsyncClient | None = None):
         super().__init__(
             client
             or httpx.AsyncClient(
@@ -163,8 +347,35 @@ class GcpProvider(Provider):
                 timeout=90,
             )
         )
+        # Compute Engine: a separate client (the Billing API key never goes to it), bearer token per request.
+        self._project = project_id or (service_account.project_id if service_account else None)
+        self._sa = service_account if self._project else None
+        self._compute = None
+        if self._sa:
+            self._compute = compute_client or httpx.AsyncClient(base_url=COMPUTE_URL, timeout=60,
+                                                                headers={"accept": "application/json"})
+            self._tokens = gcp_auth.TokenSource(self._sa, self._compute)
+            # calendar-mode advice is a POST, which compute.readonly does not cover; IAM keeps the account read-only
+            self._advice_tokens = gcp_auth.TokenSource(self._sa, self._compute, scope=gcp_auth.ADVICE_SCOPE)
+        self._next_compute = 0.0
+        self._next_advice = 0.0
+
+    async def aclose(self) -> None:
+        await super().aclose()
+        if self._compute is not None:
+            await self._compute.aclose()
 
     async def fetch(self) -> list[RawResponse]:
+        out = await self._catalogue()
+        if self._sa:
+            try:
+                out += await self._compute_lists()
+                out += await self._advice()
+            except Exception as exc:  # fail open: prices above are already in hand
+                log.warning("gcp: Compute Engine fetch failed (%s); prices unaffected", type(exc).__name__)
+        return out
+
+    async def _catalogue(self) -> list[RawResponse]:
         """Every page as one response, filtered to the SKUs that matter. A failed page is returned as the failure,
         so a partial catalogue is never stored as a complete one."""
         kept, first, token = [], None, None
@@ -179,6 +390,84 @@ class GcpProvider(Provider):
             if not token:
                 return [reshaped(first, {"skus": kept})]
         return [first.model_copy(update={"ok": False, "error": f"more than {MAX_PAGES} pages; catalogue not stored"})]
+
+    # -- Compute Engine (service account, read-only) --
+
+    async def _auth(self, tokens: "gcp_auth.TokenSource") -> dict | RawResponse:
+        """The bearer header, or a failed response to store (status only: no key, assertion or token in it)."""
+        started = datetime.now(timezone.utc)
+        try:
+            return {"Authorization": f"Bearer {await tokens.token()}"}
+        except gcp_auth.GcpAuthError as exc:
+            return RawResponse(provider=self.name, endpoint=gcp_auth.TOKEN_URI, method="POST", fetched_at=started,
+                               ok=False, error=str(exc))
+
+    async def _compute_lists(self) -> list[RawResponse]:
+        """Machine types (GPU families) and accelerator types per zone, each stored as one compact response."""
+        if time.monotonic() < self._next_compute:
+            return []
+        auth = await self._auth(self._tokens)
+        if isinstance(auth, RawResponse):
+            return [auth]
+        out = [
+            await self._aggregated(MACHINE_TYPES, "machineTypes", auth, _MACHINE_FIELDS,
+                                   keep=lambda m: bool(m.get("accelerators")),
+                                   params={"filter": 'name = "a*" OR name = "g*"'}),
+            await self._aggregated(ACCELERATOR_TYPES, "acceleratorTypes", auth, _ACCEL_FIELDS,
+                                   keep=lambda a: str(a.get("name", "")).startswith("nvidia-")),
+        ]
+        if all(r.ok for r in out):
+            self._next_compute = time.monotonic() + COMPUTE_EVERY
+        return out
+
+    async def _aggregated(self, template: str, key: str, auth: dict, fields: tuple[str, ...], keep, params=None
+                          ) -> RawResponse:
+        path = template.format(project=self._project)
+        kept, first, token, unreachable = [], None, None, []
+        for _ in range(MAX_PAGES):
+            resp = await self.get(path, client=self._compute, headers=auth, follow_redirects=False,
+                                  params={**(params or {}), "maxResults": 500, **({"pageToken": token} if token else {})})
+            resp = resp.model_copy(update={"endpoint": template})
+            items = resp.payload.get("items") if resp.ok and isinstance(resp.payload, dict) else None
+            if not resp.ok or not isinstance(items, dict):
+                return resp if not resp.ok else resp.model_copy(
+                    update={"ok": False, "payload": None, "error": f"gcp: {key} has no items map - response reshaped"})
+            first = first or resp
+            for scope in items.values():
+                for x in (scope or {}).get(key) or []:
+                    if isinstance(x, dict) and keep(x):
+                        y = {f: x[f] for f in fields if f in x}
+                        if isinstance(y.get("zone"), str):  # accelerator types give a URL naming the project
+                            y["zone"] = y["zone"].rsplit("/", 1)[-1]
+                        kept.append(y)
+            unreachable += resp.payload.get("unreachables") or []
+            token = resp.payload.get("nextPageToken")
+            if not token:
+                kept.sort(key=lambda x: (str(x.get("name")), str(x.get("zone"))))
+                return reshaped(first, {key: kept, **({"unreachables": sorted(unreachable)} if unreachable else {})})
+        return first.model_copy(update={"ok": False, "payload": None, "error": f"more than {MAX_PAGES} pages"})
+
+    async def _advice(self) -> list[RawResponse]:
+        """Calendar-mode advice for ADVICE_TARGETS (see calendar_advice). Never creates a reservation."""
+        if time.monotonic() < self._next_advice:
+            return []
+        auth = await self._auth(self._advice_tokens)
+        if isinstance(auth, RawResponse):
+            return [auth]
+        now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        out = []
+        for mtype, region in ADVICE_TARGETS:
+            body = advice_request(mtype, now)
+            raw = await self.post(CALENDAR_ADVICE.format(project=self._project, region=region), client=self._compute,
+                                  headers=auth, json=body, follow_redirects=False)
+            raw = raw.model_copy(update={"endpoint": CALENDAR_ADVICE,
+                                         "request": {"region": region, "machine_type": mtype, "body": body}})
+            out.append(raw)
+            if advice_unavailable(raw):
+                break  # the project cannot use advice at all: one call is enough to record that
+        unavailable = any(advice_unavailable(r) for r in out)
+        self._next_advice = time.monotonic() + (ADVICE_UNAVAILABLE_EVERY if unavailable else ADVICE_EVERY)
+        return out
 
     @staticmethod
     def normalize(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:
@@ -196,20 +485,22 @@ class GcpProvider(Provider):
         if not gpu["h100"] or not fam["A3"][0]:
             raise ValueError("gcp: no H100 or A3 core SKU found - catalogue reshaped")
 
+        where = offered(by_endpoint)
         listings = []
         for mtype, (count, key, accel, family, vcpu, ram, lssd) in MACHINES.items():
             cores, mem = fam[family]
-            for region, g in gpu[key].items():
-                if region not in REGIONS or region not in cores or region not in mem or (lssd and region not in ssd):
-                    continue  # a component is not priced there: the machine is not sold there
+            sold = where.machines.get(mtype, set()) if where else set(FALLBACK_REGIONS)
+            for region, g in sorted(gpu[key].items()):
+                if region not in sold or region not in cores or region not in mem or (lssd and region not in ssd):
+                    continue  # not offered there, or a component is not priced there
                 price = count * g + vcpu * cores[region] + ram * mem[region] + (lssd * ssd[region] if lssd else 0)
                 listings.append(_listing(mtype, accel, count, price, region, snapshot.fetched_at, "hyperscaler",
                                          vcpu=vcpu, ram=float(ram)))
         for key, accel in ATTACHABLE.items():
-            for region, g in gpu[key].items():
-                if region not in REGIONS:
-                    continue
-                listings.append(_listing(accel, accel, 1, g, region, snapshot.fetched_at, "gpu-attachment"))
+            sold = where.accelerators.get(accel, set()) if where else set(FALLBACK_REGIONS)
+            for region, g in sorted(gpu[key].items()):
+                if region in sold:
+                    listings.append(_listing(accel, accel, 1, g, region, snapshot.fetched_at, "gpu-attachment"))
         return listings
 
 
@@ -239,7 +530,8 @@ class GcpCommitPrice:
 
 
 def commitment_prices(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[GcpCommitPrice]:
-    """Every GPU commitment SKU priced in REGIONS, one per (GPU, region, term). Pure, read-only.
+    """Every GPU commitment SKU priced where Compute Engine offers that GPU (Iowa only without the service account's
+    zone lists, as for listings), one per (GPU, region, term). Pure, read-only.
 
     A region priced twice with different values for one GPU and term is skipped, never guessed (as by_region does).
     Not called by normalize(): nothing here becomes a listing, an index vote or a market statistic.
@@ -248,6 +540,8 @@ def commitment_prices(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[GcpCo
     skus = rows[0].payload.get("skus") if rows and isinstance(rows[0].payload, dict) else None
     if not isinstance(skus, list):
         return []
+    where = offered(by_endpoint)
+    sold = {k: (where.gpu_regions(k) if where else set(FALLBACK_REGIONS)) for k in ACCELERATOR}
     patterns = {k: re.compile(p) for k, p in GPU.items() if k in ACCELERATOR}
     found: dict[tuple[str, str, int], tuple[dict, Decimal, str]] = {}
     conflict: set[tuple[str, str, int]] = set()
@@ -266,7 +560,7 @@ def commitment_prices(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[GcpCo
         tiers = rates.get("tieredRates") or [{}]
         currency = (tiers[-1].get("unitPrice") or {}).get("currencyCode") or "USD"
         for region in s.get("serviceRegions") or []:
-            if region not in REGIONS:
+            if region not in sold[key]:
                 continue
             k = (key, region, years)
             if k in found and found[k][1] != price:

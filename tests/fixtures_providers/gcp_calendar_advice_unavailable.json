@@ -1,0 +1,42 @@
+{
+ "endpoint": "/compute/v1/projects/{project}/regions/{region}/advice/calendarMode",
+ "method": "POST",
+ "status_code": 400,
+ "ok": false,
+ "request": {
+  "region": "us-central1",
+  "machine_type": "a3-highgpu-8g",
+  "body": {
+   "futureResourcesSpecs": {
+    "spec": {
+     "targetResources": {
+      "specificSkuResources": {
+       "machineType": "a3-highgpu-8g",
+       "instanceCount": "1"
+      }
+     },
+     "timeRangeSpec": {
+      "startTimeNotEarlierThan": "2026-11-02T22:00:00Z",
+      "startTimeNotLaterThan": "2026-11-15T22:00:00Z",
+      "minDuration": "86400s",
+      "maxDuration": "604800s"
+     },
+     "deploymentType": "DENSE"
+    }
+   }
+  }
+ },
+ "payload": {
+  "error": {
+   "code": 400,
+   "message": "The service is not available for this project.",
+   "errors": [
+    {
+     "message": "The service is not available for this project.",
+     "domain": "global",
+     "reason": "badRequest"
+    }
+   ]
+  }
+ }
+}

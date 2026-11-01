@@ -36,8 +36,11 @@ being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute, Verda, Hot Ai
 | Denvr, Boost Run, Horizon, Phyntec | Shadeform `availability` | boolean | Whether Shadeform can launch the type in that region now. |
 | Massed Compute | Its own `GET /api/v1/gpu-inventory` (API key) | count | `capacity_available`: instances of that product (GPU, count, spot or not) that can be launched now, provider-wide; the in-stock regions (`regions_with_capacity_available`) are kept in raw_value. Count unit is instances. Sku is the listing sku. Counts for different sizes of one GPU draw on the same pool, so never add them up. Without the key, Shadeform's boolean (skus are Shadeform's type names, joined to listings by GPU and count); never both. |
 
-**Not covered, and why.** Nebius, OVHcloud and the other hyperscalers (GCP, Azure, Oracle):
-need an account. AWS on-demand has no capacity signal (spot placement scores are for spot only). (OVHcloud's anonymous dedicated-server list does give a delivery word, such as `1H-low`, `72H` or
+**Not covered, and why.** Nebius, OVHcloud and the other hyperscalers (Azure, Oracle):
+need an account. AWS on-demand has no capacity signal (spot placement scores are for spot only). (Google Cloud: with
+the read-only service account the poller asks calendar-mode advice, which is future-reservation availability, not
+on-demand stock; this project gets "The service is not available for this project." so the answers are stored raw
+and no rows are produced, `/methodology/gcp-regions`.) (OVHcloud's anonymous dedicated-server list does give a delivery word, such as `1H-low`, `72H` or
 `unavailable`, per GPU server configuration and datacenter; it is stored raw only, because those bare-metal servers
 are not listings, so there is no price for a row to join to.) Vultr: its availability endpoint is empty for every GPU plan. CoreWeave, Together, IBM:
 no capacity data found.
