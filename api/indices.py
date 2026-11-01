@@ -4,11 +4,15 @@
     GET /v1/indices/{index_id}                          definition, level, constituents, stats
     GET /v1/indices/{index_id}/history                  stored levels over a window
     GET /v1/history/{gpu}                               lowest / median / highest / providers over time + index
+    GET /v1/history/{gpu}/extended                      daily, archived before recording + observed after (kind per day)
+    GET /v1/history/{gpu}/archived                      ARCHIVED prices before (and alongside) recording: captures of
+                                                        provider price pages / AWS price-list versions
     GET /v1/markets/{gpu}/context                       percentiles vs 30d / 90d (stats.gpu_context)
     GET /v1/providers/{provider}/gpus/{gpu}/context     one provider's price vs its own history
     GET /v1/providers/{provider}/listings/context       one listing's price vs its own history
 
-All are observed market prices (list prices as normalized), never quotes or execution prices.
+All are observed market prices (list prices as normalized), never quotes or execution prices, except
+/archived: kind 'archived' (methodology/archived-history.md), never mixed into the observed series or statistics.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -21,8 +25,8 @@ import analytics.rollups  # noqa: F401  (registers the market_hourly job)
 import normalize
 import provider_meta
 from accounts.auth import Principal, require_scope
-from analytics import indices, stats
-from api.common import OBSERVED, OBSERVED_MARKET_PRICE, envelope, resolve_gpu, resolve_gpu_or_family
+from analytics import archived, indices, stats
+from api.common import ARCHIVED, OBSERVED, OBSERVED_MARKET_PRICE, envelope, resolve_gpu, resolve_gpu_or_family
 from cache import ttl_cache
 
 router = APIRouter()
@@ -116,6 +120,38 @@ def gpu_history(gpu: str, window: Window = "30d", resolution: Resolution | None 
     return envelope({**data, "window": window}, **_meta(),
                     note="lowest/median/highest are the plain cross-section of provider prices (one vote per "
                          "provider) and can move when a provider starts being recorded; the index is chain-linked.")
+
+
+@ttl_cache(300, maxsize=256)
+def _gpu_archived(gpu: str, segment: str):
+    return archived.gpu_archived(gpu, segment)
+
+
+@router.get("/v1/history/{gpu}/archived",
+            summary="One GPU's ARCHIVED price history: public archive captures of provider price pages")
+def gpu_history_archived(gpu: str, segment: Segment = "on_demand", _: Principal = Depends(READ)):
+    name = resolve_gpu(gpu)
+    return envelope(_gpu_archived(name, segment), kind=ARCHIVED, methodology="archived-history",
+                    price_concept=OBSERVED_MARKET_PRICE,
+                    note="recovered from Internet Archive captures and AWS's price-list archive by OpenGrid's own "
+                         "parsers; sampled only on capture days; never used in percentiles, indices or routing")
+
+
+@ttl_cache(300, maxsize=256)
+def _gpu_extended(gpu: str, segment: str, days: int):
+    return archived.extended(gpu, segment, days or None)
+
+
+@router.get("/v1/history/{gpu}/extended",
+            summary="One GPU, daily, as far back as archives reach: archived before recording, observed after")
+def gpu_history_extended(gpu: str, days: int = Query(365, ge=0, le=3660, description="0 = everything archived"),
+                         segment: Segment = "on_demand", _: Principal = Depends(READ)):
+    name = resolve_gpu(gpu)
+    return envelope(_gpu_extended(name, segment, days), kind="mixed", methodology="archived-history",
+                    price_concept=OBSERVED_MARKET_PRICE,
+                    note="kind[i] says which: 'archived' days (before archived_until) hold each provider's archived "
+                         "price until its next capture; 'observed' days are OpenGrid's own recording. Statistics, "
+                         "indices and routing use observed data only.")
 
 
 @router.get("/v1/markets/{gpu}/context", summary="Where the GPU's price sits in its 30d / 90d history")

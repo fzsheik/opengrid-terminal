@@ -9,6 +9,12 @@ from config import settings
 from db import SessionLocal, init_db
 from models import RawResponse
 from providers import (
+    CivoProvider,
+    CloreProvider,
+    AtlanticNetProvider,
+    DeepInfraProvider,
+    E2EProvider,
+    SimplePodProvider,
     AwsProvider,
     AzureProvider,
     BoostRunProvider,
@@ -26,9 +32,17 @@ from providers import (
     KoyebProvider,
     OracleProvider,
     IbmProvider,
+    ArkaneProvider,
+    VesslProvider,
+    MithrilProvider,
+    ModalProvider,
+    ReplicateProvider,
+    BasetenProvider,
+    BeamProvider,
     CrusoeProvider,
     DenvrProvider,
     DigitalOceanProvider,
+    ThunderComputeProvider,
     LatitudeProvider,
     VerdaProvider,
     HyperbolicProvider,
@@ -37,6 +51,7 @@ from providers import (
     LiumProvider,
     MassedComputeProvider,
     NebiusProvider,
+    NosanaProvider,
     Provider,
     RunPodProvider,
     SaladProvider,
@@ -81,10 +96,21 @@ def build_fetchers() -> list[Provider]:
     fetchers.append(VastProvider(api_key=settings.vast_api_key))
     fetchers.append(LatitudeProvider(api_key=settings.latitude_api_key))
 
+    if settings.thunder_api_key:
+        fetchers.append(ThunderComputeProvider(settings.thunder_api_key))
+
+    if settings.clore_api_key:
+        fetchers.append(CloreProvider(settings.clore_api_key))
+
     # Public endpoints and pages: no credentials to be missing.
     fetchers.extend(
         cls()
         for cls in (
+            CivoProvider,
+            AtlanticNetProvider,
+            DeepInfraProvider,
+            E2EProvider,
+            SimplePodProvider,
             HyperbolicProvider,
             VoltageParkProvider,
             LiumProvider,
@@ -108,6 +134,14 @@ def build_fetchers() -> list[Provider]:
             KoyebProvider,
             OracleProvider,
             IbmProvider,
+            ArkaneProvider,
+            VesslProvider,
+            MithrilProvider,
+            ModalProvider,
+            ReplicateProvider,
+            BasetenProvider,
+            BeamProvider,
+            NosanaProvider,
         )
     )
     return fetchers

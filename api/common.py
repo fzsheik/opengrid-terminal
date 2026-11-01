@@ -29,6 +29,8 @@ from fastapi import HTTPException
 import canonical
 
 OBSERVED, INFERRED, ESTIMATED, TRANSACTION = "observed", "inferred", "estimated", "transaction"
+# Recovered from a public archive by OpenGrid's parsers, not observed live (methodology/archived-history.md).
+ARCHIVED = "archived"
 LIST_PRICE, OBSERVED_MARKET_PRICE, QUOTE, EXECUTION_PRICE = (
     "list_price", "observed_market_price", "quote", "execution_price",
 )

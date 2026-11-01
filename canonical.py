@@ -360,6 +360,131 @@ _add("NVIDIA Tesla V100 16GB", "NVIDIA Tesla V100 16GB")
 _add("NVIDIA H100 80GB SXM5", "NVIDIA H100 SXM5 80GB")
 _add("NVIDIA H200 141GB SXM5", "NVIDIA H200 SXM5 141GB")
 
+# Archived price pages (backfill/parsers, methodology/archived-history.md): names older designs of provider pages
+# printed. Only names whose card is unambiguous: "HGX" boards are SXM; A5000 / A6000 / RTX 6000 Ada exist only as
+# those RTX workstation cards; "SXM" / "PCIe" stated. Still unmapped on purpose: bare "A100 80GB" / "H100 80GB"
+# (form factor not stated), "NVIDIA HGX H100 Inference" (Together, one capture: what it is is not stated).
+_add("NVIDIA H100 80GB SXM5", "NVIDIA HGX H100 SXM")                          # Together, Oct 2025 - Mar 2026
+_add("NVIDIA L40S 48GB", "NVIDIA L40S GPU with AMD", "NVIDIA L40S GPU with Intel")  # Nebius, Nov 2025 - Mar 2026
+_add("NVIDIA RTX A5000 24GB", "NVIDIA A5000 24GB")                            # Jarvislabs, Dec 2025 - Apr 2026
+_add("NVIDIA RTX A6000 48GB", "NVIDIA A6000 48GB")                            # Jarvislabs, Hyperstack
+_add("NVIDIA RTX 6000 Ada 48GB", "NVIDIA RTX6000 Ada 48GB", "NVIDIA RTX 6000 Ada Generation 48GB")
+_add("NVIDIA RTX 4000 Ada 20GB", "NVIDIA RTX 4000 Ada Generation 20GB")       # DigitalOcean
+_add("NVIDIA A100 80GB SXM4", "NVIDIA A100 SXM 80GB", "NVIDIA A100 80GB SXM", "NVIDIA HGX A100 80GB")
+_add("NVIDIA A100 40GB SXM4", "NVIDIA A100 SXM 40GB")                         # Denvr
+_add("NVIDIA A100 80GB PCIe", "NVIDIA PCIe A100 80GB")                        # Vultr
+_add("NVIDIA A100 40GB PCIe", "NVIDIA A100 40GB PCIe")                        # Crusoe
+_add("NVIDIA A40 48GB", "NVIDIA A40 48GB")                                    # Crusoe
+_add("NVIDIA RTX PRO 6000 96GB SE", "NVIDIA RTX Pro 6000 SE 96GB")            # Hyperstack
+_add("AMD Instinct MI300X 192GB", "AMD Instinct MI300X 192GB")                # DigitalOcean
+
+# Nosana (providers/nosana.py) market names. Only names with a single product
+# behind them are mapped. Unmapped: "NVIDIA H100", "NVIDIA A100 80GB/40GB" (no
+# SXM or PCIe), "NVIDIA 3060" (8 or 12GB; the market's own vram says 8GB),
+# "NVIDIA 4060" / "4070" / "4080" / "3090" (a Ti or SUPER host could sit in the
+# same market), "4000/A4000" and "5000/A5000" (two cards), "Pro 6000 (SOC2)" and
+# "Pro 6000 Server Edition (CC)" (a compliance / confidential-compute product).
+_add("NVIDIA RTX 4090 24GB", "NVIDIA 4090")
+_add("NVIDIA RTX 5090 32GB", "NVIDIA 5090")
+_add("NVIDIA RTX A6000 48GB", "NVIDIA A6000")
+_add("NVIDIA RTX 6000 Ada 48GB", "NVIDIA 6000 Ada")
+
+# E2E Networks (providers/e2e.py): "<model> <vramGB>GB". The A40 and T4 come in
+# one board each. "NVIDIA B200 180GB", "NVIDIA H200 141GB", "NVIDIA L40S 48GB"
+# and "NVIDIA L4 24GB" are mapped above; the H100, A100, RTX PRO 6000, V100 32GB
+# and A30 rows stay unmapped (variant not stated / no canonical name yet).
+_add("NVIDIA A40 48GB", "NVIDIA A40 48GB")
+_add("NVIDIA T4 16GB", "NVIDIA T4 16GB")
+# SimplePod (providers/simplepod.py): "<gpuModel> (<VRAM> GB)". Its V100 name
+# states the PCIe board; "Tesla V100-SXM2-32GB (32 GB)" has no canonical name yet.
+_add("NVIDIA Tesla V100 16GB PCIe", "Tesla V100-PCIE-16GB (16 GB)")
+
+# --------------------------------------------------------------------------
+# Serverless: Modal (page names), Baseten ("NVIDIA <name> <VRAM>GB" from its
+# specs), Beam ("<name> <interface> <VRAM>GB"), Replicate (page names; all its
+# mappable names resolve above). Modal's GPU guide (modal.com/docs/guide/gpu)
+# states every H100 and H200 on Modal is SXM and the H200 has 141 GB; the B300
+# exists only as the SXM part. A10G is a single 24GB board.
+# Left unmapped on purpose: Modal "Nvidia A100, 80 GB" / "Nvidia A100, 40 GB",
+# Baseten "NVIDIA A100 80GB" / "NVIDIA H100 80GB", Replicate "Nvidia H100" /
+# "Nvidia A100 (80GB)" (SXM or PCIe not stated); Modal "Nvidia RTX PRO 6000"
+# (edition not stated); Modal "Nvidia A10" (A10 or AWS's A10G not stated).
+# --------------------------------------------------------------------------
+_add("NVIDIA B300 288GB SXM", "Nvidia B300")
+_add("NVIDIA H200 141GB SXM5", "Nvidia H200 SXM")
+_add("NVIDIA H100 80GB SXM5", "Nvidia H100 SXM5")
+_add("NVIDIA A10G 24GB", "NVIDIA A10G 24GB")
+_add("NVIDIA RTX 4090 24GB", "RTX 4090 PCIE 24GB")
+
+# Arkane Cloud, VESSL AI and Mithril (public price pages). Arkane and VESSL names
+# carry the printed per-GPU VRAM. B300 exists only as an SXM board (see Oracle
+# above); the A100 SXM board is SXM4. Mithril's "H100 SXM5" / "H200 SXM5" are
+# mapped above. Left unmapped on purpose: Arkane's "NVIDIA H100 80GB" and "NVIDIA
+# A100 80GB" (SXM or PCIe not stated) and "RTX PRO 6000 96GB" (edition not stated).
+_add("NVIDIA B300 288GB SXM", "NVIDIA B300 288GB")
+_add("NVIDIA A100 80GB SXM4", "NVIDIA A100 SXM 80GB")
+
+# Civo, Atlantic.Net, DeepInfra (public price pages). Civo's and DeepInfra's names
+# ("NVIDIA H100 SXM 80GB", "NVIDIA L40S 48GB", "NVIDIA B200 180GB", "NVIDIA B300")
+# are already mapped above. Atlantic.Net prints "H100NVL" for the card its page
+# calls "NVIDIA H100 NVL", which exists only as the 94GB NVL board.
+# Left unmapped on purpose: Civo "NVIDIA A100 40GB" / "NVIDIA A100 80GB" (SXM or
+# PCIe not stated).
+_add("NVIDIA H100 94GB NVL", "H100NVL")
+
+# Clore.ai (keyed marketplace API). Names are the gpu_array model plus specs.gpuram,
+# the per-GPU VRAM. Mapped only where the name and VRAM fix one product: GeForce
+# cards at their standard memory, and boards whose name states the form factor or
+# edition. Left unmapped on purpose: "H100 80GB" (SXM or PCIe not stated), "Tesla T4
+# 15GB", "L4 23GB", "L40S 45GB", "A30 24GB", "A2 14GB" (no form factor in the name),
+# "RTX 5060 Ti 8GB", "RTX 3080 12GB", "RTX 4070 SUPER 12GB" (no canonical variant
+# yet), odd figures ("RTX 4090 23GB", "RTX 4060 Ti 7GB", "RTX 3090 20GB",
+# "RTX 4090 D 48GB"), laptop parts other than the 5090, and CMP mining cards.
+_add("NVIDIA RTX 5090 32GB", "RTX 5090 32GB")
+_add("NVIDIA RTX 5090 Laptop 24GB", "RTX 5090 Laptop GPU 24GB")
+_add("NVIDIA RTX 5080 16GB", "RTX 5080 16GB")
+_add("NVIDIA RTX 5070 Ti 16GB", "RTX 5070 Ti 16GB")
+_add("NVIDIA RTX 5070 12GB", "RTX 5070 12GB")
+_add("NVIDIA RTX 5060 Ti 16GB", "RTX 5060 Ti 16GB")
+_add("NVIDIA RTX 5060 8GB", "RTX 5060 8GB")
+_add("NVIDIA RTX 4090 24GB", "RTX 4090 24GB")
+_add("NVIDIA RTX 4080 SUPER 16GB", "RTX 4080 SUPER 16GB")
+_add("NVIDIA RTX 4080 16GB", "RTX 4080 16GB")
+_add("NVIDIA RTX 4070 Ti SUPER 16GB", "RTX 4070 Ti SUPER 16GB")
+_add("NVIDIA RTX 4070 Ti 12GB", "RTX 4070 Ti 12GB")
+_add("NVIDIA RTX 4070 12GB", "RTX 4070 12GB")
+_add("NVIDIA RTX 3090 Ti 24GB", "RTX 3090 Ti 24GB")
+_add("NVIDIA RTX 3090 24GB", "RTX 3090 24GB")
+_add("NVIDIA RTX 3080 Ti 12GB", "RTX 3080 Ti 12GB")
+_add("NVIDIA RTX 3080 10GB", "RTX 3080 10GB")
+_add("NVIDIA RTX 3070 Ti 8GB", "RTX 3070 Ti 8GB")
+_add("NVIDIA RTX 3070 8GB", "RTX 3070 8GB")
+_add("NVIDIA RTX 3060 Ti 8GB", "RTX 3060 Ti 8GB")
+_add("NVIDIA RTX 3060 12GB", "RTX 3060 12GB")
+_add("NVIDIA RTX 3060 8GB", "RTX 3060 8GB")
+_add("NVIDIA RTX 3050 8GB", "RTX 3050 8GB")
+_add("NVIDIA RTX 2080 Ti 11GB", "RTX 2080 Ti 11GB")
+_add("NVIDIA RTX 2080 8GB", "RTX 2080 8GB")
+_add("NVIDIA RTX 2070 8GB", "RTX 2070 8GB")
+_add("NVIDIA RTX 2060 6GB", "RTX 2060 6GB")
+_add("NVIDIA GTX 1660 SUPER 6GB", "GTX 1660 SUPER 6GB")
+_add("NVIDIA GTX 1650 4GB", "GTX 1650 4GB")
+_add("NVIDIA GTX 1060 6GB", "GTX 1060 6GB 6GB")
+_add("NVIDIA GTX 1050 Ti 4GB", "GTX 1050 Ti 4GB")
+_add("NVIDIA RTX PRO 6000 Blackwell 96GB Workstation", "RTX PRO 6000 Blackwell Workstation Edition 96GB")
+_add("NVIDIA RTX PRO 6000 Blackwell 96GB Max-Q", "RTX PRO 6000 Blackwell MaxQ Workstation Edition 96GB")
+_add("NVIDIA RTX PRO 6000 96GB SE", "RTX PRO 6000 Blackwell Server Edition 96GB")
+_add("NVIDIA RTX PRO 5000 Blackwell 48GB", "RTX PRO 5000 Blackwell 48GB")
+_add("NVIDIA RTX PRO 4500 Blackwell 32GB", "RTX PRO 4500 Blackwell 32GB")
+_add("NVIDIA RTX PRO 4000 Blackwell 24GB", "RTX PRO 4000 Blackwell 24GB")
+_add("NVIDIA RTX A4000 16GB", "RTX A4000 16GB")
+_add("NVIDIA RTX A2000 6GB", "RTX A2000 6GB")
+_add("NVIDIA Quadro RTX 6000 24GB", "Quadro RTX 6000 24GB")
+_add("NVIDIA A100 40GB SXM4", "A100SXM440GB 40GB")
+_add("NVIDIA A100 80GB PCIe", "A100 80GB PCIe 80GB")
+_add("NVIDIA Tesla V100 16GB SXM2", "Tesla V100SXM216GB 16GB")
+_add("NVIDIA H100 94GB NVL", "H100 NVL 94GB")
+
 # --------------------------------------------------------------------------
 # Seen, deliberately not mapped
 # --------------------------------------------------------------------------

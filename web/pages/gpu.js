@@ -8,12 +8,15 @@ Data (all in parallel, each section renders as soon as its own request lands):
   /market/detail?gpu=&hours=   per-provider step lines (chart, providers view; fine grid for thin history)
   /v1/timeline?gpu=&window=    availability history, inferred price moves, events + news markers
   /v1/timeline/around          "related, not necessarily causal" panel when a move is clicked
+  /v1/history/{slug}/archived  ARCHIVED monthly prices per provider (Internet Archive captures, AWS price lists)
   /v1/events?gpu=  /v1/news?gpu=  /v1/best/{slug}  /v1/trust/listings?gpu=  /v1/heatmaps/gpu-region-*
 Nothing is computed here that the API does not state, except display arithmetic (spread, $ deltas).
 */
 (() => {
   const { h, fmt, Lib: L } = OG;
-  const WINDOWS = [["24h", "24H", 24], ["7d", "7D", 168], ["30d", "30D", 720], ["90d", "90D", 2160], ["all", "ALL", 0]];
+  const WINDOWS = [["24h", "24H", 24], ["7d", "7D", 168], ["30d", "30D", 720], ["90d", "90D", 2160], ["1y", "1Y", 8760], ["all", "ALL", 0]];
+  // these windows read /v1/history/{slug}/extended: daily, archived prices before recording joined to observed ones
+  const LONG = { "1y": 365, all: 0 };
   const SEV_RANK = { info: 0, notable: 1, major: 2 };
   const DIM_LABEL = { similar_vram: "similar VRAM", same_architecture: "same architecture", same_generation: "same generation",
     training_oriented: "training", inference_oriented: "inference", similar_price_performance: "similar $/TFLOP" };
@@ -85,6 +88,8 @@ Nothing is computed here that the API does not state, except display arithmetic 
       const newsBox = slot();
       const eventsBox = slot();
       const altBox = slot();
+      const archBox = slot("Loading sources…");
+      let archLoaded = false;
       const bestBox = slot("Ranking listings…");
       const dispBox = slot();
       const hwBox = slot();
@@ -457,13 +462,17 @@ Nothing is computed here that the API does not state, except display arithmetic 
         if (!chart) chartEl.replaceChildren(OG.loading("Loading history…"));
         let data = null;
         try {
-          if (view === "market") {
+          if (LONG[win] != null) {
+            const x = await ctx.api("/v1/history/" + slug + "/extended", { params: { days: LONG[win] }, slot: "gp-chart" }).catch(e => { if (e.stale) throw e; return null; });
+            if (x && x.days && x.days.length && x.market.lowest.some(v => v != null)) data = { kind: "long", x };
+          }
+          if (!data && view === "market") {
             const hist = await ctx.api("/v1/history/" + slug, { params: { window: w[0] }, slot: "gp-chart" }).catch(e => { if (e.stale) throw e; return null; });
             const pts = hist && hist.series ? hist.series.filter(p => p.lowest != null) : [];
             if (pts.length >= 6) data = { kind: "hourly", hist };
           }
           if (!data) {
-            const d = await ctx.api("/market/detail", { params: { gpu: name, hours: w[2] }, slot: "gp-chart" });
+            const d = await ctx.api("/market/detail", { params: { gpu: name, hours: LONG[win] != null ? 0 : w[2] }, slot: "gp-chart" });
             data = { kind: "detail", d, thin: view === "market" };
           }
         } catch (e) { if (!e.stale) { chartEl.replaceChildren(OG.error(e, loadChart)); chart = null; } return; }
@@ -492,7 +501,29 @@ Nothing is computed here that the API does not state, except display arithmetic 
         if (!data) return;
         let opts;
         const events = overlayEvents();
-        if (data.kind === "hourly") {
+        if (data.kind === "long") {
+          const x = data.x, m = x.market, times = x.days, seam = x.archived_until;
+          const firstObs = x.kind.indexOf("observed"), anyArch = x.kind.includes("archived") && m.lowest.slice(0, firstObs < 0 ? undefined : firstObs).some(v => v != null);
+          const fin = L.finite(m.median), dir = fin.length >= 2 ? L.direction((fin[fin.length - 1] - fin[0]) / fin[0]) : "none";
+          const byProv = new Map(x.providers.map(p => [p.provider, p]));
+          opts = st.view === "providers"
+            ? { series: [{ key: "__low", label: "Best price", values: m.lowest, color: "var(--chart-halo)", halo: true },
+                ...x.providers.map(p => ({ key: p.provider, label: OG.providerName(p.provider), values: p.values, color: L.providerColor(p.provider) }))] }
+            : { series: [{ key: "median", label: "Median", values: m.median, color: "var(--chart-strong)", width: 1.75, strong: true },
+                { key: "lowest", label: "Lowest", values: m.lowest, color: dir === "down" ? "#ef5350" : "#2fbf71", width: 1.5 }],
+                band: { lo: m.lowest, hi: m.highest, label: "low-high" } };
+          Object.assign(opts, { times, fadeBefore: anyArch ? seam : null,
+            tipNote: i => {
+              if (x.kind[i] !== "archived") return m.providers[i] ? `${m.providers[i]} provider${m.providers[i] === 1 ? "" : "s"}` : null;
+              const caps = x.providers.filter(p => p.capture[i] != null).map(p => { const c = p.captures[p.capture[i]]; return OG.providerName(p.provider) + " " + c.t.slice(0, 10); });
+              return caps.length ? "archived · price as captured: " + caps.slice(0, 4).join(", ") + (caps.length > 4 ? ` +${caps.length - 4}` : "") : null;
+            } });
+          chartNote.replaceChildren(OG.kindBadge("observed"), " Daily, one price per provider. ",
+            anyArch ? [OG.kindBadge("archived"), ` Before ${seam.slice(0, 10)} (lighter): prices read from archived copies of provider price pages and AWS price lists, each held until the provider's next capture. `,
+              h("details", { class: "gp-src" }, h("summary", { class: "lnk" }, "Sources"), archBox)] : "",
+            h("a", { class: "lnk", href: "/methodology/archived-history" }, "Method"));
+          if (anyArch && !archLoaded) { archLoaded = true; loadArchived(); }
+        } else if (data.kind === "hourly") {
           const hst = data.hist, s = hst.series;
           const idxPts = hst.index && hst.index.points ? new Map(hst.index.points.filter(p => p.published && p.level != null).map(p => [p.t, p.level])) : new Map();
           const times = s.map(p => p.t);
@@ -539,7 +570,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
       /* ---------- timeline: availability, moves, overlay ---------- */
       let availChart = null;
       async function loadTimeline() {
-        const win = st.win, w = win === "all" ? "180d" : win;
+        const win = st.win, w = LONG[win] != null ? "180d" : win;
         let t;
         try { t = await ctx.api("/v1/timeline", { params: { gpu: slug, window: w }, slot: "gp-tl" }); }
         catch (e) {
@@ -601,6 +632,31 @@ Nothing is computed here that the API does not state, except display arithmetic 
             r.type === "news" ? OG.badge("news") : OG.badge((r.event && r.event.severity) || "event", r.event && r.event.severity === "major" ? "bad" : r.event && r.event.severity === "notable" ? "warn" : ""),
             r.item && r.item.url ? ext(r.item.url, r.title) : h("span", {}, r.title))))
             : OG.empty(a.market_events_available === false ? "Market events are not recorded on this server; no related news in the window." : "Nothing recorded within the window."));
+      }
+
+      /* ---------- archived sources (the "Sources" disclosure under a 1Y / ALL chart) ---------- */
+      const utcDay = iso => (iso ? iso.slice(0, 10) : "-");
+      async function loadArchived() {
+        let a;
+        try { a = await ctx.api("/v1/history/" + slug + "/archived", { slot: "gp-arch" }); }
+        catch (e) { if (!e.stale) archBox.replaceChildren(OG.error(e, loadArchived)); return; }
+        const provs = a.providers || [];
+        archBox.replaceChildren(
+          h("p", { class: "note" }, "Captures are days or weeks apart, so a price change between two captures is not visible. ",
+            "Archived prices are never used in percentiles, indices or routing."),
+          OG.table({
+            columns: [
+              { key: "provider", label: "Provider", fmt: v => h("span", { class: "lnk prov" }, h("i", { class: "sw", style: `background:${L.providerColor(v)}` }), OG.providerLink(v)), value: r => OG.providerName(r.provider) },
+              { key: "samples", label: "Captures", num: true, title: "archived documents that list this GPU" },
+              { key: "first", label: "From", num: true, fmt: v => utcDay(v), title: "first archived capture (UTC date)" },
+              { key: "last", label: "To", num: true, fmt: v => utcDay(v), title: "last archived capture (UTC date)" },
+              { key: "lowest", label: "Low $/GPU·h", num: true, fmt: v => fmt.price(v) },
+              { key: "highest", label: "High $/GPU·h", num: true, fmt: v => fmt.price(v) },
+              { key: "source", label: "Latest source", cls: "dim", fmt: (v, r) => { const pt = (a.points || []).filter(p => p.provider === r.provider).pop();
+                return pt ? ext(pt.source_url, v === "aws_price_list" ? "AWS price list" : "Internet Archive") : v; } },
+            ],
+            rows: provs, compact: true, sort: { key: "lowest", dir: "asc" }, csv: `opengrid-${slug}-archived.csv`, empty: "No archived captures list this GPU.",
+          }));
       }
 
       /* ---------- events, news, listings ---------- */

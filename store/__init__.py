@@ -12,3 +12,4 @@ from store import reservations  # noqa: F401  (0019_reservations: reserved-compu
 from store import intelligence  # noqa: F401  (0020_intelligence: performance observations for future learning)
 from store import uptime  # noqa: F401  (0022_uptime: external UptimeProject control-plane probe data)
 from store import capacity  # noqa: F401  (0025_capacity: provider-reported capacity)
+from store import archive  # noqa: F401  (0025_archived_prices: archived price history, kind "archived")

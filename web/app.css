@@ -371,6 +371,7 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .badge.kind.k-inferred { color: var(--purple-t); border-color: var(--purple-b); }
 .badge.kind.k-estimated { color: var(--amber-t); border-color: var(--amber-b); }
 .badge.kind.k-transaction { color: var(--green-t); border-color: var(--green-b); }
+.badge.kind.k-archived { color: var(--muted); border-color: var(--line-2); border-style: dashed; }
 .badge.fresh { text-transform: none; }
 .badge.fresh i { width: 5px; height: 5px; border-radius: 50%; background: var(--dim); }
 .badge.f-fresh i { background: var(--up); } .badge.f-aging i { background: var(--warn); } .badge.f-stale i { background: var(--down); }
@@ -458,6 +459,7 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .chart .c-tick { stroke: var(--line-2); }
 .chart .c-hatch { stroke: var(--n-hatch); stroke-width: 1; }
 .chart .c-hatchrect { opacity: .55; }
+.chart .c-fade { fill: var(--line); opacity: .22; }
 .chart .c-hatchedge { stroke: var(--line-2); stroke-dasharray: 2 3; }
 .chart .c-hatchl { fill: var(--dim); font-size: var(--fs-2xs); letter-spacing: .04em; }
 .chart .c-clip { stroke: var(--n-clip); stroke-width: 1; opacity: .7; }
@@ -2168,3 +2170,9 @@ details.dep-fold { margin-top: 10px; }
 .pg-keys .ky-asst { border-left: 3px solid var(--accent); padding-left: 8px; }
 @media (max-width: 640px) { .pg-dev .dv-step { grid-template-columns: minmax(0, 1fr); } .pg-dev .dv-step-n { display: none; } }
 /* ---- end /developers ---- */
+
+/* gpu page: the archived-sources disclosure inside the chart note */
+.gp-src { display: inline; }
+.gp-src[open] { display: block; margin-top: 8px; }
+.gp-src > summary { display: inline; cursor: pointer; list-style: none; margin-right: 6px; }
+.gp-src > summary::-webkit-details-marker { display: none; }

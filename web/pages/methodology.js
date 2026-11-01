@@ -9,7 +9,7 @@
 (() => {
   const { h } = OG;
   const GROUPS = [
-    ["Prices & data", ["data-kinds", "data-trust", "data-quality", "historical-context", "dispersion", "families", "hardware"]],
+    ["Prices & data", ["data-kinds", "data-trust", "data-quality", "historical-context", "archived-history", "dispersion", "families", "hardware"]],
     ["Indices & settlement", ["indices", "settlement"]],
     ["Market signals", ["events", "opportunities", "news", "provider-value", "capacity", "reliability", "uptime", "probes"]],
     ["Recommendations", ["recommendations", "workloads", "best-execution"]],

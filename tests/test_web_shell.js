@@ -102,7 +102,7 @@ ok(home.includes('"Compare GPU prices. Find the right compute. Run supported wor
 ok(["Explore GPU prices", "Find compute for my project", "Try the free training demo"].every(t => home.includes(`"${t}"`)), "the three primary actions (sentence case)");
 ok(/demoAct = action\(demoBtn/.test(home) && /OG\.me\(\)\.then\(me => \{\s*if \(!me/.test(home), "a visitor's demo action explains invite-only access in place; only a signed-in user gets the /jobs/new link");
 ok(home.includes('"Invite only"') && home.includes('"Simulation · free"') && (home.match(/"Free · no account"/g) || []).length === 2, "every action is tagged: free / simulation / invite only");
-ok(home.includes('"Running your own code", "not yet"'), "what works today: says plainly what does not work yet");
+ok(home.includes('"Running your own code", "coming soon"'), "what works today: says plainly what does not work yet");
 ok(home.includes('"GPU prices right now"') && !/hm-how|hm-stats|\/v1\/indices|hm-more-row/.test(home), "homepage: headline, what works today, three actions and the price board; nothing else");
 ok(!/[\u2013\u2014]/.test(home + ov), "no en or em dashes in the homepage or /markets copy");
 ok(!/arbitrary|any workload|run anything/i.test(home), "no claim that arbitrary workloads run today");

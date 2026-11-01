@@ -86,7 +86,7 @@
                 today("yes", "GPU recommendations for your project", "free"),
                 today("part", "Training demo (a simulation, no charge)", "invite only"),
                 today("part", "Real GPU runs, each approved by OpenGrid", "early access"),
-                today("no", "Running your own code", "not yet")))),
+                today("no", "Running your own code", "coming soon")))),
           h("div", { class: "hm-acts" },
             action(h("a", { href: "/gpus" }), "Explore GPU prices", "Every GPU, cheapest provider first, with price history.", [tag("free", "Free · no account")], true),
             action(h("a", { href: "/find" }), "Find compute for my project", "Describe your model and job; get the GPUs that fit, ranked by price.", [tag("free", "Free · no account")]),

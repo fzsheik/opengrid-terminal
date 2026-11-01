@@ -16,6 +16,12 @@ Each subclass fetches the whole catalogue and keeps only its own cloud's rows.
 Capacity: each instance type's `availability` list says, per region, whether Shadeform can launch it now
 (a boolean). One row per (type, region) for the rental type the listing uses. Scaleway overrides this with
 its own per-zone stock levels (available / scarce / shortage), read from Scaleway's public API.
+
+Not read, on purpose: "excesssupply" (Excess Supply is Shadeform's own white-label
+pool of other neoclouds' spare capacity; its types carry Lambda, Nebius and Phyntec
+names and regions, so reading it would count those clouds twice) and "imwt" (no
+public identity; its type names, vCPU/RAM shapes and regions are Massed Compute's,
+which is read directly).
 """
 
 import logging

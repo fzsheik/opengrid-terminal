@@ -94,10 +94,12 @@ class Settings(BaseSettings):
     gcp_api_key: str | None = None             # Google Cloud Billing Catalog API (restricted to that API)
     runpod_api_key: str | None = None
     digitalocean_api_key: str | None = None
+    thunder_api_key: str | None = None         # Thunder's terms allow automated access only with an account key
     # Routing (execution) credentials, OpenGrid-managed. Each enables one adapter's live calls.
     shadeform_api_key: str | None = None      # one key launches Crusoe / Denvr / Latitude via Shadeform
     vast_api_key: str | None = None
     latitude_api_key: str | None = None        # Latitude.sh plans API (capacity per location; prices stay via Shadeform)
+    clore_api_key: str | None = None           # Clore's marketplace API needs an account key (header `auth`)
     verda_client_id: str | None = None
     verda_client_secret: str | None = None
     # Per-provider launch defaults (JSON), e.g. {"lambda": {"ssh_key": "opengrid"},
