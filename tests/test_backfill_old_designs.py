@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import scratchdb  # noqa: E402,F401  (first: isolates the process from real networks)
 
 from backfill.__main__ import _day  # noqa: E402
-from backfill.parsers import azure, coreweave, lambda_  # noqa: E402
+from backfill.parsers import azure, coreweave, lambda_, runpod  # noqa: E402
 from backfill.sources import sources  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_backfill"
@@ -204,6 +204,39 @@ def test_lambda_2024_per_gpu_prices_and_reserved_rows():
     _raises(lambda_.gpu_cloud_tables, page.replace("$4.29 / GPU / hr", "$4.29 / hr", 1), AT, contains="under header")
 
 
+# --------------------------------------------------------------------------------------------------------- RunPod
+
+RP = "www.runpod.io/gpu-instance/pricing"
+
+
+def test_runpod_next_data_list_reads_only_offered_clouds():
+    ls, used = _src(RP).parse((FIX / "runpod_gpu-instance_2023-07_list.html").read_bytes(), AT)
+    assert used.endswith("next_data_gpu_types")
+    by = {l.listing_id: l for l in ls}
+    sec = by["NVIDIA A100 80GB PCIe:secure:1"]      # the live normalizer's listing id
+    assert sec.price_per_gpu_hour == D("1.79") and sec.provider_tier == "secure" and not sec.interruptible
+    com = by["NVIDIA A100 80GB PCIe:community:1"]
+    assert com.price_per_gpu_hour == D("1.69") and com.interruptible
+    assert sec.canonical_gpu_name == "NVIDIA A100 80GB PCIe"
+    # A100 SXM: communityCloud false, so its (filled-in) communityPrice is not a listing
+    assert "NVIDIA A100-SXM4-80GB:secure:1" in by and "NVIDIA A100-SXM4-80GB:community:1" not in by
+    assert not any(l.price_per_gpu_hour == D("0.89") for l in ls), "spot / bid prices are not read"
+
+
+def test_runpod_next_data_map_and_lowest_price_designs():
+    ls = runpod.next_data_gpu_types(_fix("runpod_gpu-instance_2024-06_map.html"), AT)
+    by = {l.listing_id: l for l in ls}
+    assert by["AMD Instinct MI300X OAM:secure:1"].price_per_gpu_hour == D("4.89")
+    assert "AMD Instinct MI300X OAM:community:1" not in by
+    ls = runpod.next_data_gpu_types(_fix("runpod_gpu-instance_2022-07_lowest_price.html"), AT)
+    # 2022: only the cheaper cloud's price; read for types offered in exactly one cloud
+    assert all(l.listing_id.endswith((":secure:1", ":community:1")) for l in ls) and len(ls) == 14
+    page = _fix("runpod_gpu-instance_2023-07_list.html")
+    _raises(runpod.next_data_gpu_types, page.replace('"securePrice":1.79', '"securePrice":"1.79"', 1), AT,
+            contains="price")
+    _raises(runpod.next_data_gpu_types, page.replace("__NEXT_DATA__", "x"), AT, contains="no __NEXT_DATA__")
+
+
 TESTS = [test_since_accepts_year_and_month,
          test_azure_vm_page_2018_names_without_s, test_azure_vm_page_2022_spot_column,
          test_azure_vm_page_2020_spot_savings_and_trailing_cell, test_azure_vm_page_old_and_new_designs_fail_loudly,
@@ -211,7 +244,8 @@ TESTS = [test_since_accepts_year_and_month,
          test_lambda_2020_cards, test_lambda_2021_pricing_page_vram_from_its_section,
          test_lambda_2022_pricing_page_vram_in_cell_reserved_ignored,
          test_lambda_2022_reserved_table_with_the_same_header_is_skipped, test_lambda_dec_2023_price_in_force_on_capture_day,
-         test_lambda_2024_per_gpu_prices_and_reserved_rows]
+         test_lambda_2024_per_gpu_prices_and_reserved_rows,
+         test_runpod_next_data_list_reads_only_offered_clouds, test_runpod_next_data_map_and_lowest_price_designs]
 
 if __name__ == "__main__":
     for t in TESTS:
