@@ -51,6 +51,13 @@ excluded from market statistics by its provider_tier). A server whose "Nx" in
 specs.gpu disagrees with gpu_array's length, or whose gpu_array mixes models, is
 skipped, never guessed. The GPU name is the gpu_array model plus specs.gpuram, the
 per-GPU VRAM in GB: "RTX 4090 24GB".
+
+Capacity (normalize_capacity, count shape, provider-wide): per GPU name, free GPUs = GPUs
+on servers with `rented: false` and total = GPUs on every server, both counted over the
+servers the price book could hold (USD-priced, one model, count agreeing with gpu_array),
+so the free count equals the listings' `capacity`. Sku is the listing sku, so stock joins
+to price. A model whose servers are all rented gets `in_stock: false` and no price.
+"Free" is free of an on-demand rental: a spot renter on a free server can be displaced.
 """
 
 import asyncio
@@ -64,7 +71,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
-from models import ComputeListing, RawResponse
+from models import CapacityObservation, ComputeListing, RawResponse
 from providers.base import PollingPolicy, Provider, find_endpoint, reshaped, to_decimal
 
 if TYPE_CHECKING:
@@ -126,6 +133,36 @@ def _disk_gb(disk) -> float | None:
     return round(float(m.group(1)), 1) if m else None
 
 
+def _servers(snapshot) -> list[dict]:
+    body = snapshot.payload
+    if not isinstance(body, dict) or not isinstance(body.get("servers"), list) or body.get("code") != 0:
+        raise ValueError("clore: marketplace has no `servers` list or a non-zero code - response reshaped")
+    for s in body["servers"]:
+        if not isinstance(s, dict) or "rented" not in s or not isinstance(s.get("specs"), dict):
+            raise ValueError(f"clore: server lost its rented flag or specs: {s!r}"[:200])
+    return body["servers"]
+
+
+def _book_entry(s: dict, warn: bool = True) -> tuple[str, Decimal] | None:
+    """(GPU name, listed USD per server-day) for a server the book can hold; None when it cannot."""
+    arr = s.get("gpu_array") or []
+    m = _COUNT.match(s["specs"].get("gpu") or "")
+    if not arr or not m or int(m.group(1)) != len(arr):
+        if warn:  # once per poll, from normalize(); capacity skips the same servers quietly
+            log.warning("clore: server %s says %r but gpu_array has %d; skipped",
+                        s.get("id"), s["specs"].get("gpu"), len(arr))
+        return None
+    if len(set(arr)) != 1:
+        return None  # mixed models: no single GPU to price
+    listed = to_decimal(((s.get("price") or {}).get("on_demand") or {}).get(COIN))
+    if listed is None or listed <= 0:
+        return None  # not rentable in USD
+    vram = s["specs"].get("gpuram")
+    if not isinstance(vram, int) or isinstance(vram, bool) or vram <= 0:
+        return None
+    return f"{arr[0]} {vram}GB", listed
+
+
 class CloreProvider(Provider):
     name = "clore"
     # Two keyed requests per poll, paced to 1/second; the marketplace body is ~4 MB.
@@ -159,41 +196,53 @@ class CloreProvider(Provider):
         return [market, fees]
 
     @staticmethod
+    def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
+        """One provider-wide row per GPU name: free GPUs (not rented) out of all GPUs listed."""
+        markets = find_endpoint(by_endpoint, MARKET)
+        if not markets:
+            return []
+        free: dict[str, list[int]] = defaultdict(lambda: [0, 0])   # gpus, servers
+        total: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+        for s in _servers(markets[0]):
+            entry = _book_entry(s, warn=False)
+            if entry is None or not isinstance(s["rented"], bool):
+                continue
+            n = len(s["gpu_array"])
+            for tally in ((total,) if s["rented"] else (total, free)):
+                tally[entry[0]][0] += n
+                tally[entry[0]][1] += 1
+        out = []
+        for gpu_name, (gpus, servers) in sorted(total.items()):
+            free_gpus, free_servers = free.get(gpu_name, [0, 0])
+            out.append(CapacityObservation(
+                provider="clore", sku=gpu_name, region=None, raw_gpu_name=gpu_name,
+                canonical_gpu_name=canonical.canonical_gpu_name(gpu_name), gpu_count=1,
+                in_stock=free_gpus > 0, available_count=free_gpus, total_count=gpus, count_unit="gpu",
+                raw_value=f"free_gpus={free_gpus}; total_gpus={gpus}; free_servers={free_servers}; servers={servers}",
+                source=MARKET, observed_at=markets[0].fetched_at))
+        return out
+
+    @staticmethod
     def normalize(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:
         markets = find_endpoint(by_endpoint, MARKET)
         if not markets:
             return []
         snapshot = markets[0]
-        body = snapshot.payload
-        if not isinstance(body, dict) or not isinstance(body.get("servers"), list) or body.get("code") != 0:
-            raise ValueError("clore: marketplace has no `servers` list or a non-zero code - response reshaped")
+        servers = _servers(snapshot)
         fee_rows = find_endpoint(by_endpoint, FEES)
         if not fee_rows:
             raise ValueError("clore: no renter_fees snapshot - the renter's price cannot be stated")
         multiplier = _fee_multiplier(fee_rows[0].payload)
 
         books: dict[str, list[tuple[Decimal, dict]]] = defaultdict(list)
-        for s in body["servers"]:
-            if not isinstance(s, dict) or "rented" not in s or not isinstance(s.get("specs"), dict):
-                raise ValueError(f"clore: server lost its rented flag or specs: {s!r}"[:200])
+        for s in servers:
             if s["rented"] is not False:
                 continue  # rented on demand: not an ask anyone can take
-            arr = s.get("gpu_array") or []
-            m = _COUNT.match(s["specs"].get("gpu") or "")
-            if not arr or not m or int(m.group(1)) != len(arr):
-                log.warning("clore: server %s says %r but gpu_array has %d; skipped",
-                            s.get("id"), s["specs"].get("gpu"), len(arr))
+            entry = _book_entry(s)
+            if entry is None:
                 continue
-            if len(set(arr)) != 1:
-                continue  # mixed models: no single GPU to price
-            listed = to_decimal(((s.get("price") or {}).get("on_demand") or {}).get(COIN))
-            if listed is None or listed <= 0:
-                continue  # not rentable in USD
-            vram = s["specs"].get("gpuram")
-            if not isinstance(vram, int) or isinstance(vram, bool) or vram <= 0:
-                continue
-            per_gpu = listed * multiplier / 24 / len(arr)
-            books[f"{arr[0]} {vram}GB"].append((per_gpu, s))
+            gpu_name, listed = entry
+            books[gpu_name].append((listed * multiplier / 24 / len(s["gpu_array"]), s))
 
         listings = []
         for gpu_name, book in books.items():

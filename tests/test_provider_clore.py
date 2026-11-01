@@ -196,6 +196,38 @@ def test_fee_is_read():
 
 
 # --------------------------------------------------------------------------
+# Capacity: free (not rented) GPUs out of all GPUs, per GPU name
+# --------------------------------------------------------------------------
+
+
+def test_capacity():
+    market = load("clore_marketplace.json")
+    rows = {r.sku: r for r in CloreProvider.normalize_capacity({MARKET: [snap(market)]})}
+    listings = by_id(_normalize(market))
+    # Every priced GPU name has a row, plus the H100 whose only server is rented (no price, out of stock).
+    assert set(rows) == {l.sku for l in listings.values()} | {"H100 80GB"}, sorted(rows)
+    r = rows["RTX 4090 24GB"]
+    assert (r.available_count, r.total_count, r.count_unit, r.in_stock) == (9, 14, "gpu", True), \
+        "free: 1 + 1 + 2 + 4 + 1; rented: 4 + 1"
+    assert r.raw_value == "free_gpus=9; total_gpus=14; free_servers=5; servers=7"
+    assert r.region is None and r.gpu_count == 1 and r.canonical_gpu_name == "NVIDIA RTX 4090 24GB"
+    assert r.provider == "clore" and r.source == MARKET and r.observed_at == NOW and r.tier is None
+    h = rows["H100 80GB"]
+    assert (h.in_stock, h.available_count, h.total_count) == (False, 0, 1)
+    # Free counts are exactly the listings' book; never a row for skipped servers (mixed rig, non-USD).
+    for sku, row in rows.items():
+        if sku != "H100 80GB":
+            assert row.available_count == listings[f"{sku}:median"].capacity, sku
+    assert not any(s.startswith("RTX 3080") for s in rows)
+    # Fail closed / open like the listings.
+    assert raises(CloreProvider.normalize_capacity, {MARKET: [snap({"data": []})]})
+    assert CloreProvider.normalize_capacity({}) == []
+    assert CloreProvider.normalize_capacity({MARKET: [snap({"servers": [], "code": 0})]}) == []
+    # The fee call does not matter to stock.
+    assert len(CloreProvider.normalize_capacity({MARKET: [snap(market)], FEES: [snap({"code": 3})]})) == len(rows)
+
+
+# --------------------------------------------------------------------------
 # Fail closed
 # --------------------------------------------------------------------------
 
@@ -318,7 +350,7 @@ def test_pipeline():
 
 if __name__ == "__main__":
     for t in (test_fetch_and_reshape, test_listings, test_disagreeing_count_skipped, test_fee_is_read,
-              test_fail_closed, test_fetch_failures, test_registry, test_aliases, test_pipeline):
+              test_capacity, test_fail_closed, test_fetch_failures, test_registry, test_aliases, test_pipeline):
         t()
         print(t.__name__, "ok")
     print("all passed")

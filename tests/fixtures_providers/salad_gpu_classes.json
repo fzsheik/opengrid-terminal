@@ -1,0 +1,100 @@
+{
+ "items": [
+  {
+   "id": "ffc51032-64d2-4df3-855a-f3a649895c0f",
+   "name": "RTX 2080 (8 GB)",
+   "prices": [
+    {
+     "price": "0.08",
+     "priority": "high"
+    },
+    {
+     "price": "0.07",
+     "priority": "medium"
+    },
+    {
+     "price": "0.06",
+     "priority": "low"
+    },
+    {
+     "price": "0.05",
+     "priority": "batch"
+    }
+   ],
+   "gpu_class_type": "community",
+   "is_high_demand": false
+  },
+  {
+   "id": "ed563892-aacd-40f5-80b7-90c9be6c759b",
+   "name": "RTX 4090 (24 GB)",
+   "prices": [
+    {
+     "price": "0.440",
+     "priority": "high"
+    },
+    {
+     "price": "0.347",
+     "priority": "medium"
+    },
+    {
+     "price": "0.253",
+     "priority": "low"
+    },
+    {
+     "price": "0.16",
+     "priority": "batch"
+    }
+   ],
+   "gpu_class_type": "community",
+   "is_high_demand": false
+  },
+  {
+   "id": "f51baccc-dc95-40fb-a5d1-6d0ee0db31d2",
+   "name": "RTX 3060 (12 GB)",
+   "prices": [
+    {
+     "price": "0.08",
+     "priority": "high"
+    },
+    {
+     "price": "0.067",
+     "priority": "medium"
+    },
+    {
+     "price": "0.053",
+     "priority": "low"
+    },
+    {
+     "price": "0.04",
+     "priority": "batch"
+    }
+   ],
+   "gpu_class_type": "community",
+   "is_high_demand": false
+  },
+  {
+   "id": "851399fb-7329-4195-a042-d6514b28cf33",
+   "name": "RTX 5090 (32 GB)",
+   "prices": [
+    {
+     "price": "0.600",
+     "priority": "high"
+    },
+    {
+     "price": "0.483",
+     "priority": "medium"
+    },
+    {
+     "price": "0.367",
+     "priority": "low"
+    },
+    {
+     "price": "0.25",
+     "priority": "batch"
+    }
+   ],
+   "gpu_class_type": "community",
+   "is_high_demand": false
+  }
+ ]
+}
