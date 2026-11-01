@@ -87,6 +87,8 @@
       ["GET", "/v1/cost/billing", "Billing increment and minimum per provider", ""],
       ["GET", "/v1/cost/sources", "Machine-readable cost sources: last fetch, last success, error", ""],
       ["GET", "/v1/cost/presets", "The published reference jobs R0-R3", ""],
+      ["GET", "/v1/context/series", "Market-context series (EIA electricity prices, SEC EDGAR revenue and capex): catalogue, or points with id=", "id, source, entity, geo, since"],
+      ["GET", "/v1/context/power", "US states with current listings, beside the state's latest electricity price (context, not cause)", ""],
       ["GET", "/v1/uptime/providers", "Control-plane uptime per tracked provider", ""],
       ["GET", "/v1/uptime/services", "Every measured service", "provider, category"],
       ["GET", "/v1/uptime/services/{service_id}", "One service: history and per-probe latency", "service_id*, hours"],

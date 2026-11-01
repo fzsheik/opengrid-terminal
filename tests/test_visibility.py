@@ -401,7 +401,7 @@ def test_every_public_route_is_clean():
                  "/history", "/market", "/gpu/{slug}", "/v1/trust/listings", "/v1/spreads",
                  # 2026-11-02 release: freshness, full cost (API and page)
                  "/v1/freshness", "/v1/cost/components", "/v1/cost/billing", "/v1/cost/sources",
-                 "/v1/cost/presets", "/cost"):
+                 "/v1/cost/presets", "/cost", "/v1/context/power", "/v1/context/series"):
         assert must in templates, must
     status, bad = {}, []
     for tmpl, url, echo in reqs:
@@ -618,6 +618,34 @@ def test_fireworks_is_wholly_internal():
         assert '"provider":"fireworks"' not in body.replace(" ", ""), (url, "fireworks named as a provider")
     r = c.post("/v1/cost/estimate", json={"gpu": gpu, "count": 1, "hours": 10})
     assert r.status_code == 200 and "fireworks" not in r.text.lower(), r.text[:300]
+
+
+def test_context_power_counts_public_listings_only():
+    """/v1/context/power (US listings per state beside the state's electricity price) is public: an internal
+    listing in a mapped US region changes neither its counts nor its provider and region lists."""
+    c = _client()
+
+    def va(lid, price, vis):
+        row = _listing("aws", f"aws:{TOKEN}:{lid}", H100, price, W["now"], W["start"], vis=vis)
+        row.region = "us-east-1"            # a documented AWS region: mapped to Virginia
+        return row
+
+    with W["Session"].begin() as s:
+        s.add(va("pub-va", Decimal("3.5"), "public"))
+    cache.clear_all()
+    before = {r["state"]: r for r in c.get("/v1/context/power").json()["data"]}
+    assert before.get("VA", {}).get("listings", 0) >= 1, before
+    with W["Session"].begin() as s:
+        s.add(va("int-va", SECRET, "internal"))
+    cache.clear_all()
+    r = c.get("/v1/context/power")
+    after = {x["state"]: x for x in r.json()["data"]}
+    assert after["VA"]["listings"] == before["VA"]["listings"], (before["VA"], after["VA"])
+    assert not body_leaks(r), body_leaks(r)[:5]
+    with W["Session"].begin() as s:
+        s.execute(text("DELETE FROM compute_listings WHERE listing_id IN (:a, :b)"),
+                  {"a": f"aws:{TOKEN}:pub-va", "b": f"aws:{TOKEN}:int-va"})
+    cache.clear_all()
 
 
 def test_reserved_and_provider_lists():
@@ -871,7 +899,7 @@ def test_admins_still_see_internal_values():
 TESTS = [test_registry, test_derived_tables_have_no_internal_rows, test_every_public_route_is_clean,
          test_public_posts_are_clean, test_routing_and_recommend_see_internal, test_admin_view_labels_internal_rows,
          test_save_stamps_the_tier, test_deepinfra_internal_listings_route, test_fireworks_is_wholly_internal,
-         test_reserved_and_provider_lists,
+         test_context_power_counts_public_listings_only, test_reserved_and_provider_lists,
          test_customers_never_see_internal_values, test_workload_market_reference_is_public,
          test_admins_still_see_internal_values]
 
