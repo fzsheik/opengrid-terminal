@@ -18,8 +18,8 @@ instances refresh every 2 hours and show as capacity tiers per region (1-3 low, 
 methodology/capacity). Capacity Block offerings are fetched daily and stored raw; the new account is not yet allowed
 to describe them, which is recorded quietly. Spot Advisor interruption bands stay off public pages and out of routing.
 
-**Google Cloud beyond Iowa (read-only service account).** Service account `opengrid-market-ro` in project
-`opengrid-market-261101` (Compute Viewer + calendar-mode advice; creating VMs is denied). The poller reads Compute
+**Google Cloud beyond Iowa (read-only service account).** Service account `opengrid-market-ro` in a dedicated
+OpenGrid project (Compute Viewer + calendar-mode advice; creating VMs is denied). The poller reads Compute
 Engine's machine and accelerator types per zone every 6 hours and lists a GPU machine type in a region only when a
 zone offers the exact proven shape and Google prices every part on demand there: 28 Iowa listings -> 369 in 34
 regions. Iowa ids and prices are unchanged except the retired P100 (Google no longer offers it). All 436 per-region
