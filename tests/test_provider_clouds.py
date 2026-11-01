@@ -1,4 +1,4 @@
-"""Akamai/Linode, OVHcloud, Koyeb and Scaleway (via Shadeform): general-purpose clouds.
+"""Akamai/Linode, OVHcloud, Koyeb and Scaleway (its own EUR catalogue, converted at the ECB rate): general clouds.
 
 Parsers run on trimmed copies of the REAL responses (tests/fixtures_providers/,
 fetched 2026-10-13 with unauthenticated GETs). The last test pushes all four
@@ -31,7 +31,11 @@ from providers import PROVIDERS  # noqa: E402
 from providers.koyeb import ENDPOINT as KOYEB_EP, KoyebProvider  # noqa: E402
 from providers.linode import ENDPOINT as LINODE_EP, LinodeProvider  # noqa: E402
 from providers.ovhcloud import AVAILABILITIES, AVAILABILITY_PATH as OVH_AVAIL_PATH, CATALOGUES, OvhCloudProvider, baremetal_availability  # noqa: E402
-from providers.shadeform import SCALEWAY_CATALOG, ScalewayProvider, ShadeformCloud, scaleway_eur_prices  # noqa: E402
+from contextlib import contextmanager  # noqa: E402
+
+import fx  # noqa: E402
+from providers.scaleway import LEGACY_LISTING_IDS, SCALEWAY_CATALOG, ScalewayProvider, scaleway_eur_prices  # noqa: E402
+from providers.shadeform import ShadeformCloud, gpu_label  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_providers"
 NOW = datetime(2026, 10, 13, 12, tzinfo=timezone.utc)
@@ -114,16 +118,27 @@ def koyeb_prov():
         "/v1/catalog/instances": text("koyeb_instances.json"), "/v1/catalog/usage": json.dumps(_cap("koyeb", "/v1/catalog/usage"))})))
 
 
-def scaleway_prov():
-    # Prices from Shadeform; capacity from Scaleway's own per-zone API (saved in tests/fixtures_capacity).
-    # Availability paths come first: the catalogue path is a prefix of them.
+def scaleway_prov(catalog: str | None = None):
+    # Prices from Scaleway's own EUR catalogue; capacity (and `available`) from its per-zone API (saved in
+    # tests/fixtures_capacity). Availability paths come first: the catalogue path is a prefix of them.
     saved = json.loads((CAP / "scaleway.json").read_text())
     zones = {k: v[0] for k, v in saved.items() if "api.scaleway.com" in k}
     routes = {k.replace("https://api.scaleway.com", ""): json.dumps({"servers": v["servers"]})
               for k, v in sorted(zones.items(), key=lambda kv: not kv[0].endswith("/availability"))}
-    return ScalewayProvider(_client("https://api.shadeform.ai",
-                                    _serve({"/v1/instances/types": text("shadeform_scaleway.json"),
-                                            SCW_CATALOG_PATH: text("scaleway_catalog_instance.json"), **routes})))
+    return ScalewayProvider(_client("https://api.scaleway.com",
+                                    _serve({SCW_CATALOG_PATH: catalog or text("scaleway_catalog_instance.json"), **routes})))
+
+
+@contextmanager
+def ecb_rate(rate="1.1172", day=None):
+    """fx.rate_at answers with one ECB EUR->USD rate (None: no rate stored), so pure tests need no database."""
+    real = fx.rate_at
+    fixed = None if rate is None else fx.Rate("EUR", "USD", D(rate), day or (NOW - timedelta(days=1)).date())
+    fx.rate_at = lambda at, base="EUR", quote="USD": fx.pick([fixed] if fixed else [], at)
+    try:
+        yield fixed
+    finally:
+        fx.rate_at = real
 
 
 # --------------------------------------------------------------------------
@@ -262,67 +277,150 @@ def test_koyeb():
 
 
 # --------------------------------------------------------------------------
-# Scaleway, as listed by Shadeform
+# Scaleway: its own EUR catalogue, converted at the ECB rate
 # --------------------------------------------------------------------------
 
 
-def test_scaleway():
-    raw = _fetch(scaleway_prov())[0]
-    assert {t["cloud"] for t in raw.payload["instance_types"]} == {"scaleway"}, "other clouds dropped"
-    out = by_id(ScalewayProvider.normalize({"/v1/instances/types": [snap(raw.payload)]}))
-    assert len(out) == 11
-    h100 = out["H100x2"]
-    assert h100.sku == "H100-2-80G" and h100.canonical_gpu_name == "NVIDIA H100 80GB PCIe"
-    assert h100.price_per_instance_hour == D("6.60") and h100.price_per_gpu_hour == D("3.30"), "cents -> $ / 2"
-    b300 = out["B300x8"]
-    assert b300.raw_gpu_name == "B300 sxm" and b300.canonical_gpu_name == "NVIDIA B300 288GB SXM"
-    assert b300.price_per_gpu_hour == D("72.06") / 8 and b300.available is False
-    assert out["L4"].canonical_gpu_name == "NVIDIA L4 24GB" and out["L4"].price_per_gpu_hour == D("0.95")
-    assert out["L40Sx8"].canonical_gpu_name == "NVIDIA L40S 48GB" and out["L40Sx8"].price_per_gpu_hour == D("1.70")
-    assert out["H100"].available is True and out["H100"].provider_tier == "vm/via-shadeform"
+def _scw_by_endpoint(raws):
+    return {r.endpoint: [snap(r.payload)] for r in raws if r.ok}
 
 
-def test_scaleway_own_catalogue_raw_only():
-    """Scaleway's own EUR catalogue is stored raw (GPU rows only) and read by a pure helper; never a listing."""
+def test_scaleway_own_prices_converted():
     raws = _fetch(scaleway_prov())
-    cat = [r for r in raws if r.endpoint == SCALEWAY_CATALOG]
-    assert len(cat) == 1 and cat[0].ok, [r.error for r in cat]
-    products = cat[0].payload["products"]
+    assert raws[0].endpoint == SCALEWAY_CATALOG and raws[0].ok and len(raws) == 1 + 2 * 9, "catalogue + 9 zones x 2"
+    assert not any("shadeform" in r.endpoint or r.endpoint == "/v1/instances/types" for r in raws), "no Shadeform call"
+    with ecb_rate("1.1172") as rate:
+        out = by_id(ScalewayProvider.normalize(_scw_by_endpoint(raws)))
+    # 6 GPU rows in the trimmed catalogue: 4 products Shadeform listed (their old ids) + 2 it never listed.
+    assert set(out) == {"H100", "B300x8", "L40Sx8", "L4", "H100-SXM-8-80G", "RENDER-S"}, set(out)
+    h100 = out["H100"]
+    assert h100.sku == "H100-1-80G" and h100.raw_gpu_name == "H100-PCIe 80GB"
+    assert h100.canonical_gpu_name == "NVIDIA H100 80GB PCIe"
+    # 0.047775 EUR per minute = 2.8665 EUR per hour; x 1.1172 = 3.2024538 -> 3.202454 USD (6 decimals, the column)
+    assert h100.original_currency == "EUR" and h100.original_price_per_instance_hour == D("2.866500")
+    assert h100.price_per_instance_hour == D("3.202454") and h100.price_per_gpu_hour == D("3.202454")
+    assert h100.currency == "USD" and h100.fx_rate == D("1.1172") and h100.fx_rate_date == rate.rate_date
+    assert h100.fx_source == "ecb" and h100.provider_tier == "vm" and h100.market_type == "on_demand"
+    assert h100.region == "fr-par-2" and h100.country == "FR" and h100.available is True, "scarce in fr-par-2: in stock"
+    assert h100.vcpu == 24 and h100.ram_gb == 240.0
+    sxm = out["H100-SXM-8-80G"]  # a type Shadeform never listed
+    assert sxm.canonical_gpu_name == "NVIDIA H100 80GB SXM5" and sxm.gpu_count == 8
+    assert sxm.original_price_per_gpu_hour == D("3.166350") and sxm.price_per_instance_hour == D("28.299570")
+    assert out["B300x8"].canonical_gpu_name == "NVIDIA B300 288GB SXM" and out["B300x8"].available is False, "shortage"
+    assert out["B300x8"].price_per_instance_hour == D("67.032000"), "1 EUR per minute x 60 x 1.1172"
+    assert out["RENDER-S"].canonical_gpu_name is None and out["RENDER-S"].original_price_per_instance_hour == D("1.221"), \
+        "per-hour rows are not x60; P100 stays unmapped"
+    assert out["L4"].region == "pl-waw-2" and out["L4"].canonical_gpu_name == "NVIDIA L4 24GB"
+    for l in out.values():
+        assert l.price_per_gpu_hour == l.price_per_gpu_hour.quantize(D("0.000001")), "stored scale: re-reads compare equal"
+    with ecb_rate("1.1172"):
+        assert ScalewayProvider.normalize(_scw_by_endpoint(raws)) == list(out.values()), "deterministic"
+
+
+def test_scaleway_continuity_with_shadeform_history():
+    """Every product Shadeform listed keeps its listing id, sku, GPU count and canonical GPU name."""
+    shade = json.loads(text("shadeform_scaleway.json"))["instance_types"]
+    old = {t["cloud_instance_type"]: t for t in shade if t["cloud"] == "scaleway"}
+    assert set(LEGACY_LISTING_IDS) == set(old), "every Shadeform Scaleway type is mapped, nothing invented"
+    catalog = json.loads(text("scaleway_catalog_instance.json"))
+    # Put every legacy offer in the catalogue (the trimmed fixture has 4 of the 11), at its Shadeform hardware.
+    have = {p["properties"]["instance"]["offer_id"] for p in catalog["products"] if "hardware" in p.get("properties", {})}
+    template = next(p for p in catalog["products"] if p["product"] == "L40S-8-48G")
+    for offer, t in old.items():
+        if offer not in have:
+            p = json.loads(json.dumps(template))
+            p["product"] = p["properties"]["instance"]["offer_id"] = offer
+            gtype = {"H100": "H100-PCIe", "L4": "L4", "L40S": "L40S"}[t["gpu_type"]]
+            p["properties"]["hardware"]["gpu"] = {"count": t["num_gpus"], "type": gtype}
+            catalog["products"].append(p)
+    with ecb_rate():
+        out = {l.sku: l for l in ScalewayProvider.normalize({SCALEWAY_CATALOG: [snap(catalog)]})}
+    for offer, t in old.items():
+        new = out[offer]
+        assert new.listing_id == t["shade_instance_type"] == LEGACY_LISTING_IDS[offer], offer
+        assert new.gpu_count == t["num_gpus"], offer
+        assert new.canonical_gpu_name == canonical.canonical_gpu_name(gpu_label(t)) is not None, \
+            (offer, new.canonical_gpu_name, gpu_label(t))
+    assert {"H100-SXM-8-80G", "RENDER-S"} <= set(out) and not ({"H100-SXM-8-80G", "RENDER-S"} & set(old))
+
+
+def test_scaleway_counted_once():
+    """Shadeform never produces a Scaleway price row; Shadeform rows next to the catalogue change nothing."""
+    raws = _fetch(scaleway_prov())
+    by_ep = _scw_by_endpoint(raws)
+    shade = json.loads(text("shadeform_scaleway.json"))
+    with ecb_rate():
+        assert ScalewayProvider.normalize({**by_ep, "/v1/instances/types": [snap(shade)]}) == ScalewayProvider.normalize(by_ep)
+        assert ScalewayProvider.normalize({"/v1/instances/types": [snap(shade)]}) == [], "a Shadeform body alone: nothing"
+    for cls in PROVIDERS.values():
+        if issubclass(cls, ShadeformCloud):
+            assert cls.cloud != "scaleway" and cls.normalize({"/v1/instances/types": [snap(shade)]}) == [], cls.name
+    try:
+        type("ScalewayAgain", (ShadeformCloud,), {"name": "scw2", "cloud": "scaleway"})
+        raise AssertionError("a Shadeform reader for Scaleway must be refused")
+    except TypeError:
+        pass
+    assert not issubclass(PROVIDERS["scaleway"], ShadeformCloud)
+
+
+def test_scaleway_fails_closed_without_a_fresh_rate():
+    by_ep = _scw_by_endpoint(_fetch(scaleway_prov()))
+    with ecb_rate(None):
+        assert ScalewayProvider.normalize(by_ep) == [], "no ECB rate stored: nothing converted"
+    with ecb_rate("1.1172", (NOW - timedelta(days=fx.MAX_AGE_DAYS + 1)).date()):
+        assert ScalewayProvider.normalize(by_ep) == [], "a rate older than MAX_AGE_DAYS: nothing converted"
+    with ecb_rate("1.1172", (NOW - timedelta(days=fx.MAX_AGE_DAYS)).date()):
+        assert len(ScalewayProvider.normalize(by_ep)) == 6, "exactly MAX_AGE_DAYS old is still in force"
+    real = fx.rate_at
+    fx.rate_at = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db down"))
+    try:
+        assert ScalewayProvider.normalize(by_ep) == [], "a failing lookup converts nothing and never raises"
+    finally:
+        fx.rate_at = real
+
+
+def test_scaleway_zone_prices_that_differ_split():
+    catalog = json.loads(text("scaleway_catalog_instance.json"))
+    h100 = next(p for p in catalog["products"] if p["product"] == "H100-1-80G")
+    other = json.loads(json.dumps(h100))
+    other["locality"]["zone"] = "pl-waw-2"
+    catalog["products"].append(json.loads(json.dumps(h100)) | {"locality": {"zone": "fr-par-1"}})  # same price
+    other["price"]["retail_price"]["nanos"] = 50000000
+    catalog["products"].append(other)
+    with ecb_rate():
+        out = by_id(ScalewayProvider.normalize({SCALEWAY_CATALOG: [snap(catalog)]}))
+    assert "H100" not in out and out["H100@fr-par-1"].region == "fr-par-1; fr-par-2" and out["H100@fr-par-1"].country == "FR"
+    assert out["H100@pl-waw-2"].original_price_per_instance_hour == D("3.000000"), "0.05 EUR/min, its own listing"
+
+
+def test_scaleway_catalogue_rows_and_failures():
+    """Odd rows are skipped, never guessed; a broken or GPU-less catalogue is a failed fetch and lists nothing."""
+    raws = _fetch(scaleway_prov())
+    cat = raws[0]
+    products = cat.payload["products"]
     assert len(products) == 6 and all(p["properties"]["hardware"]["gpu"]["count"] for p in products), "GPU rows only (the retired GPU-3070 rows carry no hardware block)"
-    by_ep = {SCALEWAY_CATALOG: [snap(cat[0].payload)]}
-    prices = {(p.offer_id, p.zone): p for p in scaleway_eur_prices(by_ep)}
-    assert len(prices) == 6
-    h100 = prices[("H100-1-80G", "fr-par-2")]  # 0.047775 EUR per minute
-    assert h100.eur_per_instance_hour == D("2.8665") and h100.gpu_count == 1 and h100.gpu_type == "H100-PCIe"
-    sxm = prices[("H100-SXM-8-80G", "fr-par-2")]  # a type Shadeform does not list
-    assert sxm.eur_per_instance_hour == D("25.3308") and sxm.eur_per_gpu_hour == D("3.16635") and sxm.gpu_count == 8
-    assert prices[("RENDER-S", "fr-par-1")].eur_per_instance_hour == D("1.221"), "per-hour rows are not x60"
-    assert prices[("RENDER-S", "fr-par-1")].unit == "hour" and h100.status == "general_availability"
-    # Listings still come from Shadeform only, in USD: the catalogue never changes them and never adds one.
-    shade = {"/v1/instances/types": [snap(raws[0].payload)]}
-    assert ScalewayProvider.normalize({**shade, **by_ep}) == ScalewayProvider.normalize(shade)
-    assert {l.currency for l in ScalewayProvider.normalize({**shade, **by_ep})} == {"USD"}
-    # A non-EUR or oddly-measured row is skipped, never guessed.
-    odd = json.loads(json.dumps(cat[0].payload))
+    prices = {(p.offer_id, p.zone): p for p in scaleway_eur_prices({SCALEWAY_CATALOG: [snap(cat.payload)]})}
+    assert prices[("H100-SXM-8-80G", "fr-par-2")].eur_per_gpu_hour == D("3.16635")
+    assert prices[("RENDER-S", "fr-par-1")].unit == "hour"
+    odd = json.loads(json.dumps(cat.payload))
     odd["products"][0]["price"]["retail_price"]["currency_code"] = "USD"
     odd["products"][1]["unit_of_measure"]["unit"] = "month"
+    odd["products"][2]["status"] = "preview"
     assert len(scaleway_eur_prices({SCALEWAY_CATALOG: [snap(odd)]})) == 4
-
-
-def test_scaleway_catalogue_fails_open():
-    """A broken or GPU-less catalogue is stored as a failed fetch; the Shadeform prices are untouched."""
+    with ecb_rate():
+        assert len(ScalewayProvider.normalize({SCALEWAY_CATALOG: [snap(odd)]})) == 3, "only general_availability is listed"
+        assert raises(ScalewayProvider.normalize, {SCALEWAY_CATALOG: [snap({"products": "?"})]})
     for body, status in (("maintenance", 503), (json.dumps({"products": "?"}), 200),
                          (json.dumps({"products": [], "total_count": 0}), 200),
                          (json.dumps({"products": [{"product_category": "Instance"}], "total_count": 5}), 200)):
-        prov = ScalewayProvider(_client("https://api.shadeform.ai", httpx.MockTransport(
+        prov = ScalewayProvider(_client("https://api.scaleway.com", httpx.MockTransport(
             lambda r, body=body, status=status: httpx.Response(status, text=body, headers={"content-type": "application/json"})
-            if r.url.path.startswith(SCW_CATALOG_PATH) else
-            httpx.Response(200, text=text("shadeform_scaleway.json"), headers={"content-type": "application/json"})
-            if r.url.path == "/v1/instances/types" else httpx.Response(404, text="nf"))))
+            if r.url.path.startswith(SCW_CATALOG_PATH) else httpx.Response(404, text="nf"))))
         raws = _fetch(prov)
         cat = [r for r in raws if r.endpoint == SCALEWAY_CATALOG]
         assert len(cat) == 1 and not cat[0].ok and cat[0].payload is None, (body, cat)
-        assert raws[0].ok and len(ScalewayProvider.normalize({"/v1/instances/types": [snap(raws[0].payload)]})) == 11
+        with ecb_rate():
+            assert ScalewayProvider.normalize(_scw_by_endpoint(raws)) == [], "no catalogue, no prices"
 
 
 # --------------------------------------------------------------------------
@@ -380,13 +478,12 @@ def test_registry():
     assert set(NEW) <= set(mapping.PROVIDER_MAPPINGS)
     assert set(PROVIDERS) <= set(provider_meta.PROVIDER_META), "every provider is classified"
     assert {p: provider_meta.meta(p).provider_class for p in NEW} == dict.fromkeys(NEW, "general_cloud")
-    assert provider_meta.meta("scaleway").source_type == "aggregator"
-    assert {provider_meta.meta(p).source_type for p in ("linode", "ovhcloud", "koyeb")} == {"public_api"}
-    # Scaleway is read through Shadeform only; Linode / OVH / Koyeb only directly.
+    assert {provider_meta.meta(p).source_type for p in ("linode", "ovhcloud", "koyeb", "scaleway")} == {"public_api"}
+    # All four are read directly; none through Shadeform (Scaleway was, until its own prices were converted).
     via = {c.cloud for c in PROVIDERS.values() if isinstance(c, type) and issubclass(c, ShadeformCloud)}
     direct = {n for n, c in PROVIDERS.items() if not issubclass(c, ShadeformCloud)}
     assert not (via & direct), via & direct
-    assert "scaleway" in via and not ({"linode", "ovhcloud", "koyeb"} & via)
+    assert not (set(NEW) & via) and set(NEW) <= direct
     # New aliases never merge variants.
     assert canonical.canonical_gpu_name("H100 pcie") == "NVIDIA H100 80GB PCIe"
     assert canonical.canonical_gpu_name("H100 80GB") is None and canonical.canonical_gpu_name("RTX6000") is None
@@ -412,6 +509,11 @@ def test_pipeline():
         normalize.SessionLocal = Session
 
         now = datetime.now(timezone.utc).replace(microsecond=0)
+        from store.fx import FxRate
+        with Session.begin() as s:  # yesterday's ECB rate (published at 16:00 Frankfurt, before both polls)
+            day = (now - timedelta(days=2)).date()
+            s.add(FxRate(rate_date=day, base="EUR", quote="USD", rate=D("1.1172"), source="ecb",
+                         first_seen_at=now, updated_at=now))
         for when in (now - timedelta(hours=3), now - timedelta(minutes=5)):  # two polls, three hours apart
             responses = []
             for p in (linode_prov(), ovh_prov(), scaleway_prov(), koyeb_prov()):
@@ -430,15 +532,26 @@ def test_pipeline():
         assert cap == {"linode": 429, "koyeb": 25, "scaleway": 29}, f"the poll fills capacity through the same refresh: {cap}"
         assert cap_changes == 429 + 25 + 29, "the second identical poll adds no capacity history"
         # Linode and Koyeb store a capacity response next to the price response each poll (capacity.py).
-        # Scaleway adds a catalogue + availability response for each of its 9 zones and its own EUR product
-        # catalogue (20 per poll).
+        # Scaleway: its own EUR product catalogue (prices) + a catalogue and availability response for each of its 9
+        # zones (19 per poll; no Shadeform call any more).
         # OVHcloud adds its two bare-metal availability lists (4 per poll).
-        assert stored == {"linode": 4, "ovhcloud": 8, "scaleway": 40, "koyeb": 4}, stored
-        # 7 as before + Scaleway capacity: 3 GPU zones x 2 bodies, plus 6 GPU-less zones whose filtered catalogue and
-        # availability are the same empty body (stored once each) = 19, plus the EUR catalogue = 20. The second,
-        # identical poll adds none.
-        assert bodies == 22, f"identical bodies (plus OVHcloud's 2 bare-metal lists) are stored once: {bodies}"
-        assert listed == {"linode": 13, "ovhcloud": 31, "scaleway": 11, "koyeb": 15}, listed
+        assert stored == {"linode": 4, "ovhcloud": 8, "scaleway": 38, "koyeb": 4}, stored
+        # Linode 2 + OVHcloud 4 + Koyeb 2, + Scaleway: 3 GPU zones x 2 bodies, plus 6 GPU-less zones whose filtered
+        # catalogue and availability are the same empty body (stored once each), plus the EUR catalogue = 7.
+        # The second, identical poll adds none.
+        assert bodies == 21, f"identical bodies (plus OVHcloud's 2 bare-metal lists) are stored once: {bodies}"
+        assert listed == {"linode": 13, "ovhcloud": 31, "scaleway": 6, "koyeb": 15}, listed
+        with Session() as s:
+            prov = s.execute(sql("SELECT listing_id, original_currency, fx_rate, fx_rate_date, price_per_instance_hour "
+                                 "FROM compute_listings WHERE provider = 'scaleway' AND listing_id = 'H100'")).one()
+            obs = s.execute(sql("SELECT count(*), min(original_currency), min(fx_rate) FROM listing_observations "
+                                "WHERE provider = 'scaleway' AND listing_id = 'H100'")).one()
+            others = s.execute(sql("SELECT count(*) FROM compute_listings WHERE provider <> 'scaleway' "
+                                   "AND original_currency IS NOT NULL")).scalar()
+        assert prov.original_currency == "EUR" and prov.fx_rate == D("1.1172") and prov.fx_rate_date == day
+        assert prov.price_per_instance_hour == D("3.202454")
+        assert tuple(obs) == (1, "EUR", D("1.1172")), f"same rate, same EUR price: one observation, with provenance {obs}"
+        assert others == 0, "USD providers carry no FX provenance"
         assert not held, f"nothing held on clean data: {held}"
 
         rollups.rebuild()
@@ -452,13 +565,15 @@ def test_pipeline():
         def voters(gpu, suffix=""):
             return set(votes.get(indices.gpu_index_id(gpu) + suffix, {}))
 
-        assert voters("NVIDIA L40S 48GB", ".general-cloud") == {"ovhcloud", "scaleway", "koyeb"}
+        # Scaleway's only L40S row in the trimmed catalogue (L40S-8-48G) is in shortage in both its zones: no vote.
+        assert voters("NVIDIA L40S 48GB", ".general-cloud") == {"ovhcloud", "koyeb"}
         assert voters("NVIDIA A100 80GB SXM4", ".general-cloud") == {"koyeb"}
         # GPUs with no class index yet vote in the all-provider index only.
         assert voters("NVIDIA L4 24GB") == {"ovhcloud", "scaleway"}
         assert voters("NVIDIA RTX 4000 Ada 20GB") == {"linode"}
         assert voters("NVIDIA H100 80GB PCIe") == {"scaleway"}
-        assert voters("NVIDIA H100 80GB SXM5") == set(), "no new H100 is labelled SXM"
+        # Scaleway's H100-SXM-8 (a type Shadeform lacked) is listed but in shortage at fr-par-2: listed, no vote.
+        assert voters("NVIDIA H100 80GB SXM5") == set()
         assert not any(set(NEW) & set(v) for k, v in votes.items() if k.endswith(".neocloud")), \
             "general clouds never vote in a neocloud index"
         l40s = votes[indices.gpu_index_id("NVIDIA L40S 48GB") + ".general-cloud"]
@@ -468,8 +583,10 @@ def test_pipeline():
 
 
 if __name__ == "__main__":
-    for t in (test_linode, test_ovhcloud, test_koyeb, test_scaleway, test_scaleway_own_catalogue_raw_only,
-              test_scaleway_catalogue_fails_open, test_ovhcloud_baremetal_raw_only, test_ovhcloud_baremetal_fails_open,
+    for t in (test_linode, test_ovhcloud, test_koyeb, test_scaleway_own_prices_converted,
+              test_scaleway_continuity_with_shadeform_history, test_scaleway_counted_once,
+              test_scaleway_fails_closed_without_a_fresh_rate, test_scaleway_zone_prices_that_differ_split,
+              test_scaleway_catalogue_rows_and_failures, test_ovhcloud_baremetal_raw_only, test_ovhcloud_baremetal_fails_open,
               test_fetch_failures, test_registry,
               test_pipeline):
         t()

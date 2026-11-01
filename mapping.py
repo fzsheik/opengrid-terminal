@@ -1034,16 +1034,56 @@ OVHCLOUD = ProviderMapping(
 )
 
 
-SCALEWAY = _shadeform("scaleway", "Scaleway", [
-    "Scaleway does publish a keyless catalogue (api.scaleway.com product-catalog), but in EUR per "
-    "minute only; this app stores USD without FX, so Shadeform's USD listing is read instead. "
-    "Scaleway's own EUR catalogue (GPU Instance rows, every zone, including the H100-SXM types Shadeform "
-    "lacks) is fetched each poll and stored raw only (providers/shadeform.py scaleway_eur_prices); it never "
-    "becomes a listing or enters statistics until an FX policy exists.",
-    "Only Scaleway's PCIe H100 / L4 / L40S VMs and the B300-SXM node are in Shadeform's list; "
-    "its H100-SXM and GH200 types are not.",
-    "A general-purpose cloud: never part of a neocloud index.",
-])
+_FX = "fx.convert at the ECB EUR->USD reference rate in force at fetch time (methodology/fx.md)"
+
+SCALEWAY = ProviderMapping(
+    provider="scaleway",
+    display_name="Scaleway (own EUR catalogue, converted)",
+    endpoints={
+        "GET api.scaleway.com/product-catalog/v2alpha1/public-catalog/products?product_types=instance":
+            "Scaleway's own list price per Instance type and zone, EUR; anonymous; GPU rows kept",
+        "GET api.scaleway.com/instance/v1/zones/{zone}/products/servers": "server types per zone (GPU ones kept)",
+        "GET api.scaleway.com/instance/v1/zones/{zone}/products/servers/availability": "per-zone stock words",
+    },
+    fields=_fields(
+        "scaleway",
+        sku=(RAW, "properties.instance.offer_id", 'e.g. "H100-SXM-8-80G"'),
+        listing_id=(DERIVED, "offer_id, or the Shadeform id the same product had before 2026-11-01",
+                    'e.g. "H100" for H100-1-80G, kept so the price history continues; new types use the offer_id'),
+        raw_gpu_name=(DERIVED, "hardware.gpu.type + VRAM from the offer_id", 'e.g. "H100-SXM 80GB"'),
+        gpu_count=(RAW, "properties.hardware.gpu.count"),
+        region=(DERIVED, "the zones the offer is priced in, joined", 'e.g. "fr-par-2; pl-waw-2"'),
+        country=(DERIVED, "the zones' ISO prefix when they share one", "None across countries"),
+        price_per_gpu_hour=(DERIVED, "= USD instance price / gpu count", _FX),
+        price_per_instance_hour=(DERIVED, "retail_price (units + nanos) x 60 (per minute) x EUR->USD rate", _FX),
+        currency=(CONSTANT, '"USD"', "after conversion; the original is in original_currency"),
+        provider_tier=(CONSTANT, '"vm"'),
+        available=(DERIVED, "any priced zone says available or scarce", "False when every zone says shortage"),
+        capacity=(ABSENT, "-", "per-zone stock words are capacity rows (capacity.py)"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, "hardware.cpu.virtual.count"),
+        ram_gb=(DERIVED, "hardware.ram.size / 2^30"),
+        storage_gb=(DERIVED, "zone catalogue scratch_storage_max_size / 1e9", "None when the type has no scratch"),
+        original_currency=(RAW, "retail_price.currency_code", 'must be "EUR" or the row is skipped'),
+        original_price_per_gpu_hour=(DERIVED, "EUR instance-hour price / gpu count"),
+        original_price_per_instance_hour=(DERIVED, "retail_price x 60 (per minute) or x 1 (per hour)"),
+        fx_rate=(LOOKUP, "fx_rates (ECB EUR->USD)", "the newest rate published before the fetch; fail closed if > 5 days old"),
+        fx_rate_date=(LOOKUP, "fx_rates.rate_date"),
+        fx_source=(CONSTANT, '"ecb"'),
+    ),
+    quirks=[
+        "Since 2026-11-01 Scaleway's prices are its own EUR list prices converted at the ECB reference rate. "
+        "Before that they were Shadeform's USD listing of Scaleway, which sat 3-8% above the converted list "
+        "price: that step is a source change, not a market move (methodology/fx.md).",
+        "Shadeform no longer produces any Scaleway price row; Scaleway is counted once.",
+        "Only general_availability types are listed. An offer priced differently in two zones becomes one "
+        "listing per zone (listing_id@zone).",
+        "H100-SXM 2/4/8 and RENDER-S (P100, unmapped) were never in Shadeform's list; they are new listings.",
+        "No ECB rate, or one more than 5 days old: no Scaleway listing is converted (fail closed); the previous "
+        "state ages out of statistics like any feed that stops.",
+        "A general-purpose cloud: never part of a neocloud index.",
+    ],
+)
 
 
 KOYEB = ProviderMapping(

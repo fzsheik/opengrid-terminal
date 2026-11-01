@@ -1,7 +1,9 @@
 """Shadeform's public catalogue: archived captures of GET api.shadeform.ai/v1/instances/types.
 
 The live poller reads this one anonymous endpoint for every cloud that has no feed of its own (providers/shadeform.py:
-Crusoe, Latitude.sh, Denvr, Boost Run, Horizon, Phyntec, Scaleway) and keeps each cloud's rows. An archived capture is
+Crusoe, Latitude.sh, Denvr, Boost Run, Horizon, Phyntec) and keeps each cloud's rows. Scaleway left this list on
+2026-11-01 (its own EUR catalogue, converted: providers/scaleway.py), so Shadeform captures no longer give it archived
+rows either: they carried Shadeform's margin, not Scaleway's list price. An archived capture is
 the same whole catalogue, so each of those clouds gets one Source over the same URL whose parser is the live one:
 keep that cloud's rows, then <Cloud>Provider.normalize. The download is shared through the archive cache.
 

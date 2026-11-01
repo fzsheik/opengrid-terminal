@@ -333,6 +333,12 @@ _add("NVIDIA H200 141GB SXM5", "Nvidia H200 GPU (141GB)")
 _add("NVIDIA RTX 4000 Ada 20GB", "RTX4000 Ada")
 _add("NVIDIA L4 24GB", "L4 24GB", "L4 pcie", "gpu-nvidia-l4 24GB")
 _add("NVIDIA B300 288GB SXM", "B300 sxm")
+# Scaleway's own catalogue (providers/scaleway.py): hardware.gpu.type + the VRAM in the offer id. Same products as
+# the Shadeform names above ("H100 pcie", "L4 pcie", "L40S pcie", "B300 sxm"), so the canonical names continue.
+# Scaleway's H100-SXM types are HGX H100 (SXM5). RENDER-S's "P100" stays unmapped (no canonical P100 yet).
+_add("NVIDIA H100 80GB PCIe", "H100-PCIe 80GB")
+_add("NVIDIA H100 80GB SXM5", "H100-SXM 80GB")
+_add("NVIDIA B300 288GB SXM", "B300-SXM 288GB")
 _add("NVIDIA L40S 48GB", "gpu-nvidia-l40s 48GB")
 _add("NVIDIA RTX A6000 48GB", "gpu-nvidia-rtx-a6000 48GB")
 _add("NVIDIA RTX 4000 SFF Ada 20GB", "gpu-nvidia-rtx-4000-sff-ada 20GB")

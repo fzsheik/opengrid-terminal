@@ -114,7 +114,8 @@ def test_linode_types_through_the_live_normalizer():
 def test_shadeform_catalogue_one_source_per_cloud():
     body = (FIX / "shadeform_types_2026-01.json").read_bytes()
     by_cloud = {s.provider: s for s in shadeform.SOURCES}
-    assert {"crusoe", "latitude", "boostrun", "horizon", "phyntec", "scaleway"} <= set(by_cloud)
+    assert {"crusoe", "latitude", "boostrun", "horizon", "phyntec"} <= set(by_cloud)
+    assert "scaleway" not in by_cloud, "Scaleway has its own (converted EUR) feed: Shadeform rows never price it"
     assert "denvr" not in by_cloud, "Denvr is read from its own page only (two sources ~5% apart would alternate)"
     assert {s.url for s in shadeform.SOURCES} == {shadeform.URL}
     ls, used = by_cloud["latitude"].parse(body, AT)

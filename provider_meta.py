@@ -82,8 +82,9 @@ _ALL = [
                  "GPU plans from the anonymous plan catalogue; per-GPU rate = plan price / GPU count"),
     ProviderMeta("ovhcloud", "OVHcloud", "general_cloud", "public_api", "api.us.ovhcloud.com, ca.api.ovh.com",
                  "https://www.ovhcloud.com", "Public Cloud GPU flavors from the two USD catalogues (US and World)"),
-    ProviderMeta("scaleway", "Scaleway", "general_cloud", "aggregator", "api.shadeform.ai", "https://www.scaleway.com",
-                 "prices as listed by Shadeform (Scaleway's own catalogue is EUR-only)"),
+    ProviderMeta("scaleway", "Scaleway", "general_cloud", "public_api", "api.scaleway.com", "https://www.scaleway.com",
+                 "Scaleway's own public catalogue, EUR list prices converted to USD at the ECB reference rate "
+                 "(Shadeform's USD listing until 2026-11-01)"),
     ProviderMeta("koyeb", "Koyeb", "general_cloud", "public_api", "app.koyeb.com", "https://www.koyeb.com",
                  "serverless GPU instances, billed per second; hourly list price"),
     ProviderMeta("oracle", "Oracle Cloud", "hyperscaler", "public_pricing_file", "apexapps.oracle.com",
