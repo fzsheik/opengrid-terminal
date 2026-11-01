@@ -962,6 +962,8 @@ OVHCLOUD = ProviderMapping(
     endpoints={
         "GET api.us.ovhcloud.com/1.0/order/catalog/public/cloud?ovhSubsidiary=US": "OVHcloud US catalogue, USD",
         "GET ca.api.ovh.com/1.0/order/catalog/public/cloud?ovhSubsidiary=WS": "OVHcloud World catalogue, USD",
+        "GET {ca.api.ovh.com,api.us.ovhcloud.com}/v1/dedicated/server/datacenter/availabilities":
+            "dedicated GPU server delivery words per datacenter; stored raw only",
     },
     fields=_fields(
         "ovhcloud",
@@ -994,6 +996,8 @@ OVHCLOUD = ProviderMapping(
         '"H100 80GB" and "A100 80GB" do not say SXM or PCIe, "H200 141GB" not SXM or NVL: all unmapped. '
         "No canonical V100S yet.",
         "A general-purpose cloud: never part of a neocloud index.",
+        "Dedicated (bare-metal) GPU server stock from the anonymous availabilities list is stored raw only "
+        "(baremetal_availability): those servers are not Public Cloud flavors, so no listing to join to.",
     ],
 )
 
