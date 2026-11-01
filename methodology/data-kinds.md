@@ -44,3 +44,13 @@ even though the row says "1 Hour". The comparable figure is:
 table as Azure's on-demand listings. A size missing from that table is stored but never converted. Example
 (eastus, Standard_ND96isr_H100_v5, 8 x H100, Oct 2026): 1 year $551,221 = $7.87 per GPU-hour, 3 years
 $1,134,310 = $5.40, against $12.29 on demand. Code: `providers/azure.py` (`reservation_price`).
+
+## Stored raw, not yet used
+
+Public feeds OpenGrid fetches and keeps raw because a later data model needs them. None of them is a listing, a
+capacity row or a score, and none enters indices, spreads, percentiles, routing or reliability.
+
+| Source | What is stored | Why it is not used yet |
+|---|---|---|
+| Scaleway product catalogue (`/product-catalog/v2alpha1/public-catalog/products`) | Scaleway's own list price per GPU Instance type and zone, in EUR (per minute or hour as Scaleway states it), with its status (`general_availability`, `retired`, ...). Code: `providers/shadeform.py` (`scaleway_eur_prices`). | It is EUR-only and OpenGrid converts no currency, so Scaleway listings keep Shadeform's USD price. |
+| AWS Spot Instance Advisor (`spot-advisor-data.json`) | Per GPU instance type, region and OS: interruption band `r` (0-4, the feed's own labels `<5%` to `>20%` over the trailing month) and average spot saving `s` (%), with the feed's Last-Modified time. Code: `providers/aws.py` (`spot_advice`). | No AWS spot listings exist (spot prices need credentials); provider reliability counts only OpenGrid's own launches; a band is not stock. The feed is coarse and slow-moving: it was last rewritten on 20 Mar 2026. |

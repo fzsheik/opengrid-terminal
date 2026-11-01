@@ -514,7 +514,9 @@ DIGITALOCEAN = ProviderMapping(
 AWS = ProviderMapping(
     provider="aws",
     display_name="AWS EC2 (hyperscaler list price)",
-    endpoints={"GET awsstatic price file": "every EC2 type in us-east-1, Linux; no credentials"},
+    endpoints={"GET awsstatic price file": "every EC2 type in us-east-1, Linux; no credentials",
+               "GET spot-bid-advisor.s3.amazonaws.com/spot-advisor-data.json":
+                   "Spot Advisor interruption band and savings per GPU type, region and OS; stored raw only"},
     fields=_fields(
         "aws",
         sku=(RAW, "Instance Type", 'e.g. "p5.48xlarge"'),
@@ -539,6 +541,9 @@ AWS = ProviderMapping(
         "List prices: big buyers rarely pay them, so AWS sits well above the neoclouds. "
         "p5.48xlarge is 8x H100 at $55.04/hr = $6.88 per GPU-hour.",
         "Only us-east-1 Linux on-demand. Polled hourly; list prices change rarely.",
+        "The Spot Advisor feed (interruption band r 0-4 = <5% .. >20%, savings s %) is stored raw with its "
+        "Last-Modified header and read only by spot_advice(): there are no AWS spot listings, reliability is "
+        "OpenGrid's own launches only, and a band is not stock. It was last rewritten 20 Mar 2026.",
     ],
 )
 

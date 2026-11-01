@@ -7,10 +7,25 @@ An instance type missing from that table is not guessed: it is skipped and logge
 
 These are list prices. Large customers rarely pay them, which is why the
 provider tier is "hyperscaler".
+
+Spot Instance Advisor (raw only). The same poll stores AWS's public Spot Advisor
+feed (SPOT_ADVISOR, the JSON behind aws.amazon.com/ec2/spot/instance-advisor/),
+GPU-family instance types only, every region: per type, region and OS an
+interruption band `r` (0-4, labelled by the feed's own `ranges`: <5%, 5-10%,
+10-15%, 15-20%, >20% of instances interrupted over the trailing month) and `s`,
+the average saving of spot over on-demand in percent. Its Last-Modified header
+is kept, because the feed is updated rarely. normalize() never reads it: there
+are no AWS spot listings (spot prices need credentials), provider reliability is
+measured only from OpenGrid's own launches (methodology/reliability.md), and the
+band is not stock, so it is not capacity. spot_advice() reads it for later use.
+A failed or reshaped feed is stored as a failed fetch and never touches prices.
 """
 
 import logging
 import re
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 import httpx
@@ -65,6 +80,9 @@ GPU_INSTANCES: dict[str, tuple[int, str]] = {
 GPU_INSTANCES = {k: v for k, v in GPU_INSTANCES.items() if v[0] > 0}
 
 _GIB = re.compile(r"^([\d.]+) GiB$")
+_GPU_FAMILY = re.compile(r"^(p\d|g\d|dl\d|trn|inf)")
+
+SPOT_ADVISOR = "https://spot-bid-advisor.s3.amazonaws.com/spot-advisor-data.json"
 
 
 def _keep(row: dict) -> dict:
@@ -90,6 +108,24 @@ class AwsProvider(Provider):
         )
 
     async def fetch(self) -> list[RawResponse]:
+        return [*await self._prices(), await self._spot_advisor()]
+
+    async def _spot_advisor(self) -> RawResponse:
+        """The Spot Advisor feed, GPU-family types only, verbatim, plus its Last-Modified header. Fails open."""
+        started_wall, started = datetime.now(timezone.utc), time.perf_counter()
+        base = dict(provider=self.name, endpoint=SPOT_ADVISOR, fetched_at=started_wall)
+        try:
+            resp = await self._client.get(SPOT_ADVISOR)
+            resp.raise_for_status()
+            body = resp.json()
+            payload = spot_advisor_payload(body, resp.headers.get("last-modified"))
+        except Exception as exc:
+            return RawResponse(**base, duration_ms=int((time.perf_counter() - started) * 1000), ok=False,
+                               error=f"{type(exc).__name__}: {exc}"[:500])
+        return RawResponse(**base, status_code=resp.status_code, ok=True, payload=payload,
+                           duration_ms=int((time.perf_counter() - started) * 1000))
+
+    async def _prices(self) -> list[RawResponse]:
         raw = await self.get(ENDPOINT)
         regions = (raw.payload or {}).get("regions") if isinstance(raw.payload, dict) else None
         if not isinstance(regions, dict) or REGION_NAME not in regions:
@@ -150,3 +186,58 @@ class AwsProvider(Provider):
 
 
 _SEEN_UNLISTED: set[str] = set()
+
+
+def spot_advisor_payload(body, last_modified: str | None) -> dict:
+    """What is stored from the feed: its band table, and the GPU-family rows of every region and OS, verbatim.
+    Raises (so the fetch is stored as failed) when the feed is reshaped or carries no GPU row at all."""
+    if not isinstance(body, dict) or not isinstance(body.get("spot_advisor"), dict) or not isinstance(body.get("ranges"), list):
+        raise ValueError("aws spot advisor: no spot_advisor map / ranges list - feed reshaped")
+    bands = {r.get("index") for r in body["ranges"] if isinstance(r, dict)}
+    if bands != {0, 1, 2, 3, 4}:
+        raise ValueError(f"aws spot advisor: interruption bands are no longer 0-4: {sorted(bands, key=str)}")
+    advisor = {
+        region: {os_: {t: v for t, v in rows.items() if _GPU_FAMILY.match(t)}
+                 for os_, rows in by_os.items() if isinstance(rows, dict)}
+        for region, by_os in body["spot_advisor"].items() if isinstance(by_os, dict)
+    }
+    gpu_types = {t for by_os in advisor.values() for rows in by_os.values() for t in rows}
+    if not gpu_types:
+        raise ValueError("aws spot advisor: no GPU instance type in any region - feed reshaped")
+    types = body.get("instance_types") if isinstance(body.get("instance_types"), dict) else {}
+    return {"last_modified": last_modified, "ranges": body["ranges"], "global_rate": body.get("global_rate"),
+            "instance_types": {t: types[t] for t in sorted(gpu_types) if t in types}, "spot_advisor": advisor}
+
+
+@dataclass(frozen=True)
+class SpotAdvice:
+    """One (instance type, region) row of AWS's Spot Advisor, Linux. Never a listing, capacity row or score."""
+
+    instance_type: str
+    region: str
+    gpu_count: int
+    raw_gpu_name: str
+    canonical_gpu_name: str | None
+    interruption_band: int      # the feed's r: 0 (<5%) .. 4 (>20%)
+    interruption_label: str     # the feed's own label for that band, e.g. "<5%"
+    savings_pct: int            # the feed's s: average spot saving over on-demand, percent
+    last_modified: str | None   # when AWS last rewrote the feed
+
+
+def spot_advice(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[SpotAdvice]:
+    """Stored Spot Advisor rows for the GPU types this module prices (GPU_INSTANCES), Linux, every region. Pure.
+    A row whose band or saving is not an integer in range is skipped, never guessed."""
+    rows = find_endpoint(by_endpoint, SPOT_ADVISOR)
+    body = rows[0].payload if rows and isinstance(rows[0].payload, dict) else {}
+    labels = {r["index"]: str(r.get("label")) for r in body.get("ranges") or [] if isinstance(r, dict) and "index" in r}
+    out = []
+    for region, by_os in sorted((body.get("spot_advisor") or {}).items()):
+        for itype, v in sorted(((by_os or {}).get("Linux") or {}).items()):
+            spec, r, s = GPU_INSTANCES.get(itype), (v or {}).get("r"), (v or {}).get("s")
+            if spec is None or not isinstance(r, int) or r not in labels or not isinstance(s, int) or not 0 <= s <= 100:
+                continue
+            count, raw_name = spec
+            out.append(SpotAdvice(instance_type=itype, region=region, gpu_count=count, raw_gpu_name=raw_name,
+                                  canonical_gpu_name=canonical.canonical_gpu_name(raw_name), interruption_band=r,
+                                  interruption_label=labels[r], savings_pct=s, last_modified=body.get("last_modified")))
+    return out
