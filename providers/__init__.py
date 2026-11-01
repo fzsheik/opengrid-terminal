@@ -31,6 +31,7 @@ from providers.fireworks import FireworksProvider
 from providers.gcore import GcoreProvider
 from providers.gcp import GcpProvider
 from providers.gpuai import GpuAiProvider
+from providers.hetzner import HetznerProvider
 from providers.hotaisle import HotAisleProvider
 from providers.huggingface import HuggingFaceProvider
 from providers.hydrahost import HydraHostProvider
@@ -131,6 +132,7 @@ PROVIDERS: dict[str, type[Provider]] = {
         GcoreProvider,
         FireworksProvider,
         IonosProvider,
+        HetznerProvider,
     )
 }
 
@@ -195,6 +197,7 @@ __all__ = [
     "GcoreProvider",
     "FireworksProvider",
     "IonosProvider",
+    "HetznerProvider",
     "find_endpoint",
     "gather_limited",
     "to_decimal",

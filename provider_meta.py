@@ -148,6 +148,10 @@ _ALL = [
     ProviderMeta("ionos", "IONOS Cloud", "general_cloud", "public_page", "docs.ionos.com", "https://cloud.ionos.com",
                  "Cloud GPU VM (H200 PCIe, 1/2/4/8 GPUs) from IONOS CLOUD Inc.'s published USD price list; "
                  "Frankfurt and Worcester"),
+    ProviderMeta("hetzner", "Hetzner", "general_cloud", "public_page", "www.hetzner.com",
+                 "https://www.hetzner.com/dedicated-rootserver/matrix-gpu/",
+                 "dedicated GEX GPU servers at the printed hourly rate (EUR excl. VAT, converted at the ECB rate); "
+                 "a one-time setup fee applies"),
     ProviderMeta("simplepod", "SimplePod", "marketplace", "public_api", "api.simplepod.ai", "https://simplepod.ai",
                  "own racks plus community hosts; one listing per open on-demand offer (Docker and VM); disk billed extra"),
     ProviderMeta("clore", "Clore.ai", "marketplace", "authenticated_api", "api.clore.ai", "https://clore.ai",

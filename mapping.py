@@ -1670,6 +1670,45 @@ IONOS = ProviderMapping(
 )
 
 
+HETZNER = ProviderMapping(
+    provider="hetzner",
+    display_name="Hetzner (dedicated GPU servers)",
+    endpoints={"GET www.hetzner.com/dedicated-rootserver/matrix-gpu/": "the public GPU server matrix: one card per GEX model, EUR"},
+    fields=_fields(
+        "hetzner",
+        sku=(RAW, "card name", 'e.g. "GEX130"; a "New" badge is dropped'),
+        listing_id=(DERIVED, "lower-case sku", 'e.g. "gex45"'),
+        raw_gpu_name=(DERIVED, "spec GPU line model + per-GPU VRAM", 'e.g. "NVIDIA RTX PRO 6000 Blackwell Max-Q 96GB"'),
+        gpu_count=(RAW, 'GPU line "4x NVIDIA ..."', "1 when no multiplier"),
+        region=(RAW, "details panel locations, joined", 'e.g. "HEL1; FSN1"'),
+        country=(DERIVED, "the locations' flag when they agree", "None across countries"),
+        price_per_gpu_hour=(DERIVED, "= USD hourly price / gpu count", _FX),
+        price_per_instance_hour=(DERIVED, '"€ 0.3429 per hour, excl. VAT" x EUR->USD rate', _FX),
+        currency=(CONSTANT, '"USD"', "after conversion; the original is in original_currency"),
+        provider_tier=(CONSTANT, '"dedicated"'),
+        available=(ABSENT, "-", "no stock signal"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(ABSENT, "-", "the card prints physical cores, not vCPUs"),
+        ram_gb=(RAW, 'spec RAM line, e.g. "from 256 GB DDR5"', "the base configuration"),
+        storage_gb=(ABSENT, "-", "in the details panel only"),
+        original_currency=(CONSTANT, '"EUR"', "the page prints €, excl. VAT"),
+        original_price_per_gpu_hour=(DERIVED, "EUR hourly price / gpu count"),
+        original_price_per_instance_hour=(RAW, "the hourly price span"),
+        fx_rate=(LOOKUP, "fx_rates (ECB EUR->USD)", "the newest rate published before the fetch; fail closed if > 5 days old"),
+        fx_rate_date=(LOOKUP, "fx_rates.rate_date"),
+        fx_source=(CONSTANT, '"ecb"'),
+    ),
+    quirks=[
+        "The printed hourly rate is read (hourly billing, capped at the monthly price), not monthly / 730: the "
+        "monthly price is the cheaper full-month rate (GEX45 €214.00/month = €0.2932/h vs €0.3429/h hourly).",
+        "A one-time setup fee (about one month's price) applies and is not added.",
+        '"from monthly" models (GEX131) are priced at their base configuration; upgrades are not modelled.',
+        '"NVIDIA RTX PRO 4000 Blackwell SFF Edition 24GB" stays unmapped (no canonical SFF Blackwell).',
+    ],
+)
+
+
 MODAL = ProviderMapping(
     provider="modal",
     display_name="Modal (serverless GPU)",
@@ -2066,6 +2105,7 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         GCORE,
         FIREWORKS,
         IONOS,
+        HETZNER,
     )
 }  # fmt: skip
 

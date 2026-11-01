@@ -600,6 +600,11 @@ _add(None, "H100 80 GB GPU")
 # (see the Oracle note above); IONOS's docs describe PCIe passthrough of it.
 _add("NVIDIA H200 143GB NVL", "NVIDIA H200 PCIe")
 
+# Hetzner (providers/hetzner.py): the card's GPU line + per-GPU VRAM. The RTX PRO 4000 Blackwell SFF Edition has no
+# canonical model yet (not the full-height RTX PRO 4000 Blackwell, as the SFF Ada is not the RTX 4000 Ada).
+_add("NVIDIA RTX PRO 6000 Blackwell 96GB Max-Q", "NVIDIA RTX PRO 6000 Blackwell Max-Q 96GB")
+_add(None, "NVIDIA RTX PRO 4000 Blackwell SFF Edition 24GB")
+
 # --------------------------------------------------------------------------
 # Seen, deliberately not mapped
 # --------------------------------------------------------------------------
