@@ -43,6 +43,15 @@ class ProviderMapping:
         return {f.field: f for f in self.fields}
 
 
+def _usd_only() -> list["FieldMap"]:
+    """The FX provenance fields of a provider priced in USD: never converted (fx.py)."""
+    return [FieldMap(f, ABSENT, "-", "priced in USD: never converted") for f in FX_FIELDS]
+
+
+FX_FIELDS = ("original_currency", "original_price_per_gpu_hour", "original_price_per_instance_hour", "fx_rate",
+             "fx_rate_date", "fx_source")
+
+
 SALAD = ProviderMapping(
     provider="salad",
     display_name="SaladCloud",
@@ -73,6 +82,7 @@ SALAD = ProviderMapping(
         FieldMap("ram_gb", ABSENT, "-", "not exposed"),
         FieldMap("storage_gb", ABSENT, "-", "not exposed"),
         FieldMap("observed_at", RAW, "raw_snapshots.fetched_at", "provider fetch time, not normalize time"),
+        *_usd_only(),
     ],
     quirks=[
         "One GPU class becomes four listings, one per priority tier.",
@@ -121,6 +131,7 @@ HYPERSTACK = ProviderMapping(
         FieldMap("ram_gb", RAW, "flavors -> flavors[].ram"),
         FieldMap("storage_gb", RAW, "flavors -> flavors[].disk", "bigroot SKUs differ only here"),
         FieldMap("observed_at", RAW, "raw_snapshots.fetched_at", "provider fetch time, not normalize time"),
+        *_usd_only(),
     ],
     quirks=[
         "Listings come from /core/flavors, NOT from the stock configurations map: "
@@ -165,6 +176,7 @@ LAMBDA = ProviderMapping(
         FieldMap("ram_gb", RAW, "data[].instance_type.specs.memory_gib"),
         FieldMap("storage_gb", RAW, "data[].instance_type.specs.storage_gib"),
         FieldMap("observed_at", RAW, "raw_snapshots.fetched_at", "provider fetch time, not normalize time"),
+        *_usd_only(),
     ],
     quirks=[
         "Price is in CENTS and per INSTANCE, the inverse of Hyperstack's per-GPU "
@@ -215,6 +227,7 @@ RUNPOD = ProviderMapping(
         FieldMap("ram_gb", RAW, "lowestPrice.minMemory", "pod minimum, in GB"),
         FieldMap("storage_gb", RAW, "lowestPrice.minDisk", "almost always null"),
         FieldMap("observed_at", RAW, "raw_snapshots.fetched_at", "provider fetch time, not normalize time"),
+        *_usd_only(),
     ],
     quirks=[
         "GraphQL only. The REST API at rest.runpod.io/v1 has no GPU pricing "
@@ -266,6 +279,8 @@ def _fields(provider: str, **given: FieldMap | tuple) -> list[FieldMap]:
         "market_type": (CONSTANT, '"on_demand"', ""),
         "interruptible": (CONSTANT, "False", ""),
         "observed_at": (RAW, "raw_snapshots.fetched_at", "provider fetch time, not normalize time"),
+        # FX provenance (fx.py): only a provider priced in another currency fills these; see SCALEWAY.
+        **{f: (ABSENT, "-", "priced in USD: never converted") for f in FX_FIELDS},
     }
     merged = {**defaults, **given}
     return [FieldMap(f, *merged[f]) for f in MODEL_FIELDS if f in merged]

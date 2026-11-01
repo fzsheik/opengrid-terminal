@@ -35,6 +35,10 @@ TRACKED = (
     "capacity_unit",
 )
 
+# FX provenance copied onto each observation of a converted listing (fx.py), so history can tell a currency
+# move from a list-price move. Not tracked: a new rate moves the USD price, and that is what writes the row.
+OBSERVED_PROVENANCE = ("original_currency", "original_price_per_instance_hour", "fx_rate", "fx_rate_date")
+
 # Each endpoint's newest successful fetch time. The recursive CTE walks distinct
 # endpoints through ix_raw_provider_endpoint_time (a loose index scan) instead of
 # grouping every row; the lateral LIMIT 1 then reads one index entry per endpoint.
@@ -210,6 +214,7 @@ def record_observations(listings: list[ComputeListing]) -> int:
                 "available": listing.available,
                 "capacity": listing.capacity,
                 "capacity_unit": listing.capacity_unit,
+                **{f: getattr(listing, f) for f in OBSERVED_PROVENANCE},
             }
             for listing in listings
             if _moved(listing, previous.get((listing.provider, listing.listing_id)))
@@ -343,6 +348,10 @@ def history(q: str | None = None, limit: int = 200) -> list[dict]:
             o.capacity,
             o.capacity_unit,
             o.observed_at,
+            o.original_currency,
+            o.original_price_per_instance_hour,
+            o.fx_rate,
+            o.fx_rate_date,
         )
         .join(c, (c.provider == o.provider) & (c.listing_id == o.listing_id))
         .order_by(o.observed_at.desc(), o.provider, o.listing_id)

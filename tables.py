@@ -6,7 +6,7 @@
     reference_prices     provider price entries that are not listings (kept, not dropped)
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -122,6 +122,14 @@ class ComputeListingRow(Base):
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
+    # FX provenance (fx.py; methodology/fx.md): only on listings converted to USD from another currency.
+    original_currency: Mapped[str | None] = mapped_column(String(3))
+    original_price_per_gpu_hour: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))
+    original_price_per_instance_hour: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))
+    fx_rate: Mapped[Decimal | None] = mapped_column(Numeric(18, 8))
+    fx_rate_date: Mapped[date | None]
+    fx_source: Mapped[str | None] = mapped_column(String(16))
+
 
 class ListingObservation(Base):
     """Price and supply history.
@@ -153,6 +161,13 @@ class ListingObservation(Base):
     available: Mapped[bool | None]
     capacity: Mapped[int | None]
     capacity_unit: Mapped[str | None] = mapped_column(String(16))
+
+    # FX provenance of a converted price (see ComputeListingRow): lets history tell a currency move from a
+    # list-price move. None for prices observed in USD.
+    original_currency: Mapped[str | None] = mapped_column(String(3))
+    original_price_per_instance_hour: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))
+    fx_rate: Mapped[Decimal | None] = mapped_column(Numeric(18, 8))
+    fx_rate_date: Mapped[date | None]
 
 
 class ReferencePrice(Base):

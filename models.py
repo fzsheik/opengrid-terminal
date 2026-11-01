@@ -5,7 +5,7 @@
 `CapacityObservation` is one provider's own word on how much of one SKU it can supply in one region.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -66,6 +66,15 @@ class ComputeListing(BaseModel):
 
     # TIME
     observed_at: datetime
+
+    # FX PROVENANCE (fx.py; methodology/fx.md). Set only on a listing the provider priced in another currency and
+    # OpenGrid converted to USD; None on every listing priced in USD. The price fields above are always USD.
+    original_currency: str | None = None
+    original_price_per_gpu_hour: Decimal | None = None
+    original_price_per_instance_hour: Decimal | None = None
+    fx_rate: Decimal | None = None          # USD per one unit of original_currency
+    fx_rate_date: date | None = None        # the reference date of that rate (ECB publication day)
+    fx_source: str | None = None            # "ecb"
 
 
 class CapacityObservation(BaseModel):
