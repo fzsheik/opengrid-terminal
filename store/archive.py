@@ -51,3 +51,5 @@ class ArchivedPrice(Base):
     valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # aws_price_list period end
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     note: Mapped[str | None] = mapped_column(Text)
+    # data tier (0027_visibility): archived rows of a wholly internal provider are internal; public reads filter it
+    visibility: Mapped[str] = mapped_column(String(8), default="public", server_default="public")

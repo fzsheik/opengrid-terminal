@@ -18,6 +18,7 @@ from decimal import Decimal
 from sqlalchemy.dialects.postgresql import insert
 
 import normalize
+import provider_meta
 from models import ComputeListing
 from store.archive import ArchivedPrice
 
@@ -41,6 +42,8 @@ def _rows(listings: list[ComputeListing], *, source: str, source_url: str, sha25
             "price_per_instance_hour": l.price_per_instance_hour, "currency": l.currency,
             "market_type": l.market_type, "interruptible": l.interruptible, "observed_at": l.observed_at,
             "valid_to": valid_to, "imported_at": now,
+            # archives are public pages; a wholly internal provider's archived rows stay internal all the same
+            "visibility": provider_meta.enforce(l.provider, l.visibility),
         })
     # One listing id once per document: a page that prints the same shape twice keeps the first.
     seen, unique = set(), []

@@ -121,7 +121,8 @@ def _rank(spec: dict) -> dict:
               max_price=spec.get("max_price_per_gpu_hour"), mode=spec["mode"], weights=spec.get("weights"),
               exclude_providers=p.get("exclude_providers") or (), include_providers=p.get("include_providers"),
               require_level=p.get("require_level") or 0, require_available=bool(p.get("require_available")),
-              strict_region=bool(spec.get("strict_region")), limit=100)
+              strict_region=bool(spec.get("strict_region")), limit=100,
+              tier="all")  # OpenGrid's own execution: internal listings route too (methodology/data-visibility.md)
     if spec.get("variants"):  # a family with allow_variants: rank each variant, merge, tag each candidate
         return scoring.rank_variants(spec["variants"], family=spec["family"], **kw)
     return scoring.rank_listings(spec["gpu"], **kw)

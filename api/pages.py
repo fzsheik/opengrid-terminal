@@ -149,7 +149,7 @@ def _boot() -> dict:
     import provider_meta
     from providers import PROVIDERS
 
-    names = sorted(set(PROVIDERS) | set(provider_meta.PROVIDER_META))
+    names = sorted(n for n in set(PROVIDERS) | set(provider_meta.PROVIDER_META) if provider_meta.is_public_provider(n))
     return {
         "base_url": settings.public_base_url.rstrip("/"),
         "gpus": sorted([s, n] for s, n in gpu_slugs().items()),
@@ -423,7 +423,7 @@ def seo_provider(params: dict):
     from providers import PROVIDERS
 
     name = params["name"]
-    if name not in PROVIDERS and name not in provider_meta.PROVIDER_META:
+    if (name not in PROVIDERS and name not in provider_meta.PROVIDER_META) or not provider_meta.is_public_provider(name):
         raise HTTPException(404)
     m = provider_meta.meta(name)
     dn = m.display_name

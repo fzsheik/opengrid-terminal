@@ -44,8 +44,14 @@ class ProviderMapping:
 
 
 def _usd_only() -> list["FieldMap"]:
-    """The FX provenance fields of a provider priced in USD: never converted (fx.py)."""
-    return [FieldMap(f, ABSENT, "-", "priced in USD: never converted") for f in FX_FIELDS]
+    """The FX provenance fields of a provider priced in USD: never converted (fx.py); plus the data tier."""
+    return [FieldMap(f, ABSENT, "-", "priced in USD: never converted") for f in FX_FIELDS] + [
+        FieldMap("visibility", *VISIBILITY_DEFAULT)]
+
+
+# Every listing's data tier (methodology/data-visibility.md): public unless provider_meta.INTERNAL_SOURCES names
+# its source. normalize.save stamps provider_meta.enforce() of it.
+VISIBILITY_DEFAULT = (LOOKUP, "provider_meta.INTERNAL_SOURCES", 'public unless the registry names the source')
 
 
 FX_FIELDS = ("original_currency", "original_price_per_gpu_hour", "original_price_per_instance_hour", "fx_rate",
@@ -281,6 +287,7 @@ def _fields(provider: str, **given: FieldMap | tuple) -> list[FieldMap]:
         "observed_at": (RAW, "raw_snapshots.fetched_at", "provider fetch time, not normalize time"),
         # FX provenance (fx.py): only a provider priced in another currency fills these; see SCALEWAY.
         **{f: (ABSENT, "-", "priced in USD: never converted") for f in FX_FIELDS},
+        "visibility": VISIBILITY_DEFAULT,
     }
     merged = {**defaults, **given}
     return [FieldMap(f, *merged[f]) for f in MODEL_FIELDS if f in merged]
@@ -1639,7 +1646,8 @@ DEEPINFRA = ProviderMapping(
     endpoints={
         "GET /gpu-instances": "the public price page; the On-Demand Cloud Pricing table (every listing field)",
         "GET /v1/containers/gpu_availability": "with DEEPINFRA_API_KEY (api.deepinfra.com): the `available` flag "
-                                               "per GPU configuration, for capacity only",
+                                               "per GPU configuration (public capacity), and `usd_per_hour` "
+                                               "(INTERNAL listings '<model>:<n>x:api', never published)",
     },
     fields=_fields(
         "deepinfra",
@@ -1658,12 +1666,15 @@ DEEPINFRA = ProviderMapping(
         vcpu=(RAW, "vCPU cell", '"16 cores" -> 16'),
         ram_gb=(RAW, "RAM cell"),
         storage_gb=(RAW, "Disk cell", '"2 TB SSD" -> 2000 (decimal TB)'),
+        visibility=(LOOKUP, "provider_meta.INTERNAL_SOURCES",
+                    'page rows public; container-API rows "internal" (usable by routing, never republished)'),
     ),
     quirks=[
         "Cells are read by their labels, not position. The hero cards repeat some prices and are not read.",
         "The page's spec block names the card \"NVIDIA B200 SXM6\", so the B200 maps to the SXM part.",
-        "The container API's usd_per_hour ($3.69 per B200 GPU-hour on 2026-11-01, vs $4.89 on the page) is kept "
-        "raw and never published: it may be account-specific, and the terms treat non-public pricing as confidential.",
+        "The container API's usd_per_hour differs from the page and may be account-specific; the terms treat "
+        "non-public pricing as confidential, so those rows are INTERNAL listings: routing may use them, nothing "
+        "public reads them (methodology/data-visibility.md).",
         "Per-token model API prices are on other pages and never read.",
     ],
 )

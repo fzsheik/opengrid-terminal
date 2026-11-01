@@ -41,6 +41,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert
 
 import normalize
+import provider_meta
 from models import ComputeListing
 from providers import PROVIDERS
 from quality import checks, incidents
@@ -383,6 +384,7 @@ def _apply(s, q: Quarantine) -> bool:
         listing = ComputeListing(**base)
 
     row = listing.model_dump()
+    row["visibility"] = provider_meta.enforce(listing.provider, listing.visibility)  # same rule as normalize.save
     stmt = insert(ComputeListingRow).values({**row, "first_seen_at": listing.observed_at})
     s.execute(stmt.on_conflict_do_update(
         index_elements=["provider", "listing_id"],

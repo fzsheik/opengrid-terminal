@@ -43,7 +43,7 @@ _PC = OBSERVED_MARKET_PRICE
 def _known_providers() -> list[str]:
     names = set(PROVIDERS) | set(providers.feed_health()) | set(providers.provider_value_all())
     names |= {r["provider"] for r in dispersion.current_listings()}
-    return sorted(names)
+    return sorted(n for n in names if provider_meta.is_public_provider(n))
 
 
 def _resolve_provider(value: str, strict: bool = True) -> str | None:

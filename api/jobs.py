@@ -37,6 +37,7 @@ from fastapi.responses import JSONResponse, Response
 import jobs.relaunch  # noqa: F401  registers the job_relaunch background job (a no-op unless enabled)
 import jobs.sync  # noqa: F401  registers the job_sync background job
 from accounts.auth import Principal, require_scope
+from routing import disclosure
 from api.common import ESTIMATED, INFERRED, TRANSACTION, envelope
 from jobs import orchestrator as O
 from jobs import tokens
@@ -113,7 +114,7 @@ def job_readiness(who: Principal = Depends(require_scope("route:preview"))):
 async def job_preview(request: Request, who: Principal = Depends(require_scope("route:preview"))):
     body = await _json_body(request)
     out = _refused(lambda: O.preview(body, who))
-    return envelope(out, kind=ESTIMATED, methodology=METH, also=["/methodology/workloads"])
+    return envelope(disclosure.redact(out, who), kind=ESTIMATED, methodology=METH, also=["/methodology/workloads"])
 
 
 @router.post("/v1/jobs", tags=["jobs"], summary="Submit a job (Idempotency-Key required)")
@@ -122,7 +123,8 @@ async def job_submit(request: Request, who: Principal = Depends(require_scope("r
 
     def run():
         code, out = _refused(lambda: O.submit(body, who))
-        return code, envelope(out, kind=TRANSACTION if not out.get("sandbox") else "simulated", methodology=METH,
+        return code, envelope(disclosure.redact(out, who), kind=TRANSACTION if not out.get("sandbox") else "simulated",
+                              methodology=METH,
                               simulated=bool(out.get("sandbox")),
                               also=["/methodology/execution-safety", "/methodology/runner"])
 
@@ -136,7 +138,8 @@ _STATUS = "^(open|" + "|".join(O.S.STATES) + ")$"
 @router.get("/v1/jobs", tags=["jobs"], summary="Your jobs")
 def job_list(status: str | None = Query(None, pattern=_STATUS), limit: int = Query(100, ge=1, le=500),
              offset: int = Query(0, ge=0), who: Principal = Depends(READ)):
-    return envelope(O.list_for(who, status=status, limit=limit, offset=offset), kind=TRANSACTION, methodology=METH,
+    return envelope(disclosure.redact(O.list_for(who, status=status, limit=limit, offset=offset), who),
+                    kind=TRANSACTION, methodology=METH,
                     limit=limit, offset=offset)
 
 
@@ -144,7 +147,7 @@ def job_list(status: str | None = Query(None, pattern=_STATUS), limit: int = Que
 def job_get(job_id: str, who: Principal = Depends(READ)):
     _valid_id(job_id)
     out = _refused(lambda: O.get(job_id, who, sync_first=True))
-    return envelope(out, kind="simulated" if out.get("sandbox") else TRANSACTION, methodology=METH,
+    return envelope(disclosure.redact(out, who), kind="simulated" if out.get("sandbox") else TRANSACTION, methodology=METH,
                     simulated=bool(out.get("sandbox")))
 
 

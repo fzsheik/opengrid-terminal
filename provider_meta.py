@@ -17,6 +17,14 @@ source_type (how OpenGrid reads prices)
     public_page         a public pricing page we read
     aggregator          another service's listing of this provider (e.g. Shadeform)
     public_pricing_file a published machine-readable price file
+
+visibility (methodology/data-visibility.md): which tier a source's data is in
+    public      may be republished or sold: site, public API, indices, fixings, exports, settlement
+    internal    OpenGrid may read and use it (routing, recommendations, deployment) but never republish it:
+                never in a public page, public API answer, statistic, index vote, fixing or export
+Every source is public unless INTERNAL_SOURCES below names it, with the reason. The tier is decided here only;
+normalize.save / capacity.save stamp it on each row (compute_listings.visibility, capacity_*.visibility,
+archived_prices.visibility) and public readers filter on that column.
 """
 
 from dataclasses import dataclass
@@ -133,6 +141,87 @@ _ALL = [
 
 PROVIDER_META: dict[str, ProviderMeta] = {m.name: m for m in _ALL}
 PROVIDER_CLASSES = ("hyperscaler", "neocloud", "general_cloud", "marketplace", "decentralized")
+
+
+# --------------------------------------------------------------------------
+# Data visibility: the single registry of INTERNAL sources (everything else is public)
+# --------------------------------------------------------------------------
+
+PUBLIC, INTERNAL = "public", "internal"
+VISIBILITIES = (PUBLIC, INTERNAL)
+ALL_SOURCES = "*"          # an entry for every source of a provider: the provider is wholly internal
+DATA_KINDS = ("listings", "capacity", "signals")
+
+
+@dataclass(frozen=True)
+class InternalSource:
+    """One source whose data OpenGrid may read and use, but not republish.
+
+    provider  the provider name (PROVIDERS key)
+    source    the endpoint / feed it comes from, exactly as the provider module stores it (RawSnapshot.endpoint,
+              CapacityObservation.source); ALL_SOURCES makes every row of the provider internal
+    data      what it feeds: listings (prices), capacity (stock rows), signals (anything else routing may read)
+    reason    why it is internal (terms, confidentiality); written for the methodology page, no confidential numbers
+    used_by   where OpenGrid uses it
+    """
+
+    provider: str
+    source: str
+    data: tuple[str, ...]
+    reason: str
+    used_by: str
+
+
+INTERNAL_SOURCES: tuple[InternalSource, ...] = (
+    InternalSource(
+        "deepinfra", "/v1/containers/gpu_availability", ("listings",),
+        "The container API's hourly prices are not the public price-page prices and may be specific to OpenGrid's "
+        "account; DeepInfra's terms (s.17) count non-public pricing as Confidential Information. The public "
+        "listings stay the /gpu-instances page prices. The same response's in-stock flag stays public capacity.",
+        "routing, recommendations and job placement (internal listings '<model>:<n>x:api')"),
+    InternalSource(
+        "aws", "https://spot-bid-advisor.s3.amazonaws.com/spot-advisor-data.json", ("signals",),
+        "AWS Spot Instance Advisor interruption bands and savings: AWS's site terms restrict gathering and "
+        "republishing data from aws.amazon.com, so the bands are never shown publicly.",
+        "routing (routing/internal_data.spot_interruption_bands); spot is not ranked yet, so no route uses it today"),
+)
+
+
+def internal_entries(provider: str | None = None) -> list[InternalSource]:
+    return [e for e in INTERNAL_SOURCES if provider is None or e.provider == provider]
+
+
+def provider_internal(provider: str) -> bool:
+    """True when every source of `provider` is internal (an ALL_SOURCES entry)."""
+    return any(e.provider == provider and e.source == ALL_SOURCES for e in INTERNAL_SOURCES)
+
+
+def visibility(provider: str, source: str | None = None, data: str = "listings") -> str:
+    """The tier of `data` read from `provider`'s `source`. PUBLIC unless the registry names it (or the provider)."""
+    for e in INTERNAL_SOURCES:
+        if e.provider == provider and (e.source == ALL_SOURCES or (source is not None and e.source == source)) \
+                and (data in e.data or e.source == ALL_SOURCES):
+            return INTERNAL
+    return PUBLIC
+
+
+def enforce(provider: str, claimed: str | None) -> str:
+    """The tier a row is STORED with. Fails closed: a wholly internal provider, an internal claim, or any value
+    that is not exactly 'public' stores as internal. Called by normalize.save and capacity.save."""
+    if provider_internal(provider) or claimed != PUBLIC:
+        return INTERNAL
+    return PUBLIC
+
+
+def is_public_provider(name: str) -> bool:
+    """False for a wholly internal provider: it is not named on public provider lists either."""
+    return not provider_internal(name)
+
+
+def visibility_registry() -> list[dict]:
+    """The registry as data (admin endpoint, methodology checks)."""
+    return [{"provider": e.provider, "source": e.source, "data": list(e.data), "visibility": INTERNAL,
+             "reason": e.reason, "used_by": e.used_by} for e in INTERNAL_SOURCES]
 
 
 def meta(name: str) -> ProviderMeta:

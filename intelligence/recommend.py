@@ -1,6 +1,10 @@
 """Recommendation: estimate -> compatible GPUs and counts -> fresh market listings -> tiers, picks, cost scenarios.
 
-    recommend(req: WorkloadRequirements, who: Principal, *, limit=10, now=None) -> dict   (contract section 3)
+    recommend(req: WorkloadRequirements, who: Principal, *, limit=10, now=None, tier=None) -> dict   (contract section 3)
+
+Data tiers (methodology/data-visibility.md): an anonymous (public) caller is ranked on public listings only; an API
+key or the operator (the one-API-key product) also on internal listings, each option labelled `visibility`.
+`tier` overrides that (the assistant always passes "public": its answers are a public surface).
 
 Pipeline
     1. estimate(req): memory per GPU for 1/2/4/8 GPUs, needs_gpu, questions. needs_gpu False -> no options;
@@ -228,7 +232,14 @@ def _summary(x: dict, bfw: dict | None, basis: str | None) -> str:
     return f"{more}, with no advantage for this workload"
 
 
-def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime | None = None) -> dict:
+def tier_for(who) -> str:
+    """'public' for an anonymous caller, 'all' for an API key or the operator."""
+    return "public" if getattr(who, "kind", None) in (None, "public") else "all"
+
+
+def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime | None = None,
+              tier: str | None = None) -> dict:
+    tier = tier or tier_for(who)
     now = now or datetime.now(timezone.utc)
     limit = max(1, min(int(limit), 20))
     c = req.constraints or Constraints()
@@ -250,7 +261,7 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
                                       "lowest_estimated_job_cost": None},
            "picks_unavailable": {},
            "options": [], "excluded": [], "excluded_total": 0, "excluded_by_code": {}, "questions": est["questions"],
-           "notes": notes, "as_of": now.isoformat(), "methodology": METHODOLOGY}
+           "notes": notes, "as_of": now.isoformat(), "methodology": METHODOLOGY, "tier": tier}
     if est["needs_gpu"] is False:
         out["notes"] = [f"This workload does not need a GPU: {est['needs_gpu_reason']}. No GPU options are shown; "
                         "a regular CPU server is enough."]
@@ -285,7 +296,7 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
             notes.append(f"GPU count fixed at {hint} (hardware_hints.gpu_count).")
     usable = float(mem.get("usable_vram_fraction") or 1.0)
     hreq = _hw_requirements(req, prof)
-    listed = wsel._listed_gpus()
+    listed = wsel._listed_gpus(tier)
     training = (mem["method"] or "").startswith("training")
 
     excluded: list[dict] = []
@@ -352,7 +363,8 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
             rows = rows_by_gpu[g] = scoring.listing_rows(g)
         rk = scoring.rank_listings(g, count=n, region_group=region, max_price=c.max_price_per_gpu_hour,
                                    mode="BALANCED", exclude_providers=c.exclude_providers,
-                                   include_providers=c.include_providers or None, limit=1000, now=now, rows=rows)
+                                   include_providers=c.include_providers or None, limit=1000, now=now, rows=rows,
+                                   tier=tier)
         if scale:       # a larger shape of a GPU that already fits: its listings join, its exclusions do not
             for cd in rk["candidates"]:
                 b = bills.setdefault(cd["provider"], wsel.billing(cd["provider"]))
@@ -516,7 +528,7 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
             "option_id": oid, "tier": None, "gpu": g, "gpu_slug": gpu_slug(g), "vram_gb": vram,
             "form_factor": spec.get("form_factor"), "architecture": spec.get("architecture"),
             "gpu_count": n, "provider": cd["provider"], "provider_display": provider_meta.meta(cd["provider"]).display_name,
-            "region": cd["region"], "listing_id": cd["listing_id"],
+            "region": cd["region"], "listing_id": cd["listing_id"], "visibility": cd["visibility"],
             "price_per_gpu_hour": round(cd["price_per_gpu_hour"], 6), "price_per_instance_hour": round(x["price_inst"], 6),
             "price_kind": "observed", "available": cd["available"], "observed_at": cd["observed_at"],
             "age_seconds": cd["age_seconds"], "fresh": True,

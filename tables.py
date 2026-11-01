@@ -11,6 +11,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKeyConstraint,
     ForeignKey,
@@ -88,6 +89,7 @@ class ComputeListingRow(Base):
     __table_args__ = (
         Index("ix_listing_canonical", "canonical_gpu_name"),
         Index("ix_listing_available", "available"),
+        CheckConstraint("visibility IN ('public', 'internal')", name="ck_listing_visibility"),
     )
 
     provider: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -129,6 +131,11 @@ class ComputeListingRow(Base):
     fx_rate: Mapped[Decimal | None] = mapped_column(Numeric(18, 8))
     fx_rate_date: Mapped[date | None]
     fx_source: Mapped[str | None] = mapped_column(String(16))
+
+    # Data tier (0027_visibility; provider_meta.INTERNAL_SOURCES; methodology/data-visibility.md). Public readers
+    # filter `visibility = 'public'`; routing / recommendations / job placement read both. An observation belongs
+    # to exactly one listing (the foreign key below), so listing_observations inherit the tier by that join.
+    visibility: Mapped[str] = mapped_column(String(8), default="public", server_default="public")
 
 
 class ListingObservation(Base):

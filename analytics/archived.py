@@ -28,7 +28,7 @@ _POINTS = text("""
     SELECT provider, source, source_url, observed_at, max(valid_to) AS valid_to,
            min(price_per_gpu_hour) AS price, count(*) AS listings
     FROM archived_prices
-    WHERE gpu = :gpu AND market_type = :seg
+    WHERE gpu = :gpu AND market_type = :seg AND visibility = 'public'
       AND (CAST(:t0 AS timestamptz) IS NULL OR observed_at >= :t0)
       AND (CAST(:t1 AS timestamptz) IS NULL OR observed_at <= :t1)
     GROUP BY provider, source, source_url, observed_at

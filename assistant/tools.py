@@ -12,6 +12,7 @@ composed ONLY from these payloads (engine.py), and an optional LLM's reply is ch
 
 There are NO mutation tools: nothing here previews a route, issues a quote, launches, writes a row or
 calls a provider. rank_listings reads compute_listings; engine.preview (which persists quotes) is never used.
+Public data tier only (methodology/data-visibility.md): rank_listings at its default tier, recommend(tier="public").
 """
 
 from __future__ import annotations
@@ -165,7 +166,8 @@ def estimate(req: dict) -> dict:
 
 
 def recommend(req: dict, who, *, limit: int = TOP) -> dict:
-    rec = _intel("recommend").recommend(requirements(req), who, limit=limit)
+    # tier="public" whoever asks: an assistant answer is a public surface (methodology/data-visibility.md)
+    rec = _intel("recommend").recommend(requirements(req), who, limit=limit, tier="public")
     if isinstance(rec, dict) and isinstance(rec.get("excluded"), list):
         rec = {**rec, "excluded": rec["excluded"][:10]}
     return rec

@@ -38,6 +38,8 @@ class CapacityCurrent(Base):
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # data tier (0027_visibility; methodology/data-visibility.md): public readers filter visibility = 'public'
+    visibility: Mapped[str] = mapped_column(String(8), default="public", server_default="public")
 
 
 class CapacityChange(Base):
@@ -54,6 +56,7 @@ class CapacityChange(Base):
     available_count: Mapped[int | None] = mapped_column(Integer)
     total_count: Mapped[int | None] = mapped_column(Integer)
     raw_value: Mapped[str] = mapped_column(Text)
+    visibility: Mapped[str] = mapped_column(String(8), default="public", server_default="public")
 
     __table_args__ = (Index("ix_capacity_changes_key_time", "provider", "sku", "region_key", "observed_at"),
                       Index("ix_capacity_changes_gpu_time", "canonical_gpu_name", "observed_at"))

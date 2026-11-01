@@ -76,6 +76,10 @@ class ComputeListing(BaseModel):
     fx_rate_date: date | None = None        # the reference date of that rate (ECB publication day)
     fx_source: str | None = None            # "ecb"
 
+    # DATA TIER (provider_meta.INTERNAL_SOURCES; methodology/data-visibility.md). "internal": usable by routing,
+    # recommendations and deployment, never republished. normalize.save stores provider_meta.enforce() of it.
+    visibility: Literal["public", "internal"] = "public"
+
 
 class CapacityObservation(BaseModel):
     """How much of one SKU a provider says it can supply in one region, right now.
@@ -112,3 +116,6 @@ class CapacityObservation(BaseModel):
     # PROVENANCE
     source: str  # the endpoint it came from
     observed_at: datetime
+
+    # DATA TIER: set from provider_meta.visibility(provider, source, "capacity"); capacity.save stores enforce() of it
+    visibility: Literal["public", "internal"] = "public"
