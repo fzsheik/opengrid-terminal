@@ -145,3 +145,12 @@ python -m backfill import --no-download        # re-parse only what is cached (s
 
 Downloads are one request at a time, at least 4.5 s apart, with back-off on 429/5xx, and are cached on
 disk (`OPENGRID_ARCHIVE_CACHE`, default `~/.cache/opengrid/wayback`).
+
+## Coverage
+
+`python -m backfill coverage [--market on_demand|spot|reserved_1y|reserved_3y|transacted|all] [--json]` prints, per
+provider and canonical GPU, the earliest and latest archived date, whole months from the earliest date to today,
+the number of points and of months that have one, the sources and bases, and whether it reaches 24, 36 and 60
+months. Unmapped points are counted per provider; providers with no archived point are listed. Months back are
+not months of data: an "effective since" anchor or a single old capture reaches far back with nothing in between,
+which is why the months-with-data column is shown next to it.

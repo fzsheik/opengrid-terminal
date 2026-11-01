@@ -369,6 +369,32 @@ def test_skypilot_loader_on_a_sample():
         scratchdb.drop(DB)
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# 6. Coverage report
+# ---------------------------------------------------------------------------------------------------------------
+
+def test_coverage_months_and_bars():
+    from backfill import coverage
+    _db()
+    try:
+        az, _ = azure_since.points(AZ, READ)
+        load.store(load._rows([l for l, _ in az], source="azure_retail", source_url="u", sha256="0" * 64,
+                              parser="t", basis="effective_since")[0])
+        rep = coverage.coverage("on_demand", today=datetime(2026, 11, 1).date(),
+                                known_providers={"azure", "lambda", "paperspace"})
+        (row,) = rep["rows"]
+        assert row["provider"] == "azure" and row["gpu"] == "NVIDIA A100 40GB SXM4" and row["first"] == "2021-03-01"
+        assert row["months"] == 68 and row["ge_24"] and row["ge_36"] and row["ge_60"]
+        assert row["bases"] == ["effective_since"]
+        assert rep["providers_without"] == ["lambda", "paperspace"]
+        assert coverage.months_between(datetime(2021, 11, 1).date(), datetime(2026, 11, 1).date()) == 60
+        assert coverage.months_between(datetime(2021, 11, 2).date(), datetime(2026, 11, 1).date()) == 59
+        assert "60" in coverage.render(rep) and "lambda, paperspace" in coverage.render(rep)
+        assert coverage.coverage("spot", today=datetime(2026, 11, 1).date(), known_providers=set())["rows"][0]["months"] == 2
+    finally:
+        scratchdb.drop(DB)
+
+
 TESTS = [v for k, v in list(globals().items()) if k.startswith("test_") and callable(v)]
 
 if __name__ == "__main__":

@@ -13,6 +13,8 @@
                               one pass of the daily gpuhunt catalogue copy (the server job does this daily)
     python -m backfill skypilot [--cloud aws ...] [--dry-run]
                               SkyPilot catalogue history; refuses unless skypilot_catalog_enabled + licence are set
+    python -m backfill coverage [--market on_demand|spot|reserved_1y|transacted|all] [--json]
+                              earliest archived date and months of history per provider and GPU (24/36/60 bars)
 
 Downloads go one at a time through backfill/wayback.py (polite, cached under OPENGRID_ARCHIVE_CACHE,
 default ~/.cache/opengrid/wayback), so the first full import takes about an hour and a re-run takes seconds.
@@ -58,6 +60,9 @@ def main(argv=None) -> int:
     p = sub.add_parser("skypilot", help="SkyPilot catalogue history (disabled until a licence is confirmed)")
     p.add_argument("--cloud", action="append")
     p.add_argument("--dry-run", action="store_true")
+    p = sub.add_parser("coverage", help="months of archived history per provider and GPU")
+    p.add_argument("--market", default="on_demand")
+    p.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
 
     if a.cmd == "datasets":
@@ -78,6 +83,11 @@ def main(argv=None) -> int:
         except skypilot.Disabled as exc:
             print(exc, file=sys.stderr)
             return 2
+        return 0
+    if a.cmd == "coverage":
+        from backfill import coverage
+        rep = coverage.coverage(a.market)
+        print(json.dumps(rep, default=str, indent=1) if a.json else coverage.render(rep))
         return 0
 
     if a.cmd == "azure-since":
