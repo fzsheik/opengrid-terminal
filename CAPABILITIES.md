@@ -145,7 +145,7 @@ provider never holds up the others.
 | CoreWeave | neocloud | public page (on-demand and spot kept separate) |
 | Together AI (GPU Clusters) | neocloud | public page (per GPU-hour; preemptible = spot) |
 | Jarvislabs | neocloud | public page |
-| Hot Aisle (AMD MI300X) | neocloud | public page |
+| Hot Aisle (AMD MI300X) | neocloud | public page; a `HOTAISLE_API_KEY` (+ `HOTAISLE_TEAM`) adds VM stock counts from its own API; prices stay from the page |
 | Vultr | general cloud | public API |
 | Akamai/Linode | general cloud | public API |
 | OVHcloud | general cloud | public API (the two USD catalogues, US and World) |

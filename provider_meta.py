@@ -68,7 +68,8 @@ _ALL = [
                  "GPU Clusters on-demand and preemptible rates, printed per GPU-hour"),
     ProviderMeta("jarvislabs", "Jarvislabs", "neocloud", "authenticated_api", "backendn.jarvislabs.net", "https://jarvislabs.ai"),
     ProviderMeta("hotaisle", "Hot Aisle", "neocloud", "public_page", "hotaisle.xyz", "https://hotaisle.xyz",
-                 "AMD-only; MI300X VM prices per GPU-hour"),
+                 "AMD-only; MI300X VM prices per GPU-hour; with an account key, VM stock counts from its API "
+                 "(its prices there are cross-checked, not published)"),
     ProviderMeta("vultr", "Vultr", "general_cloud", "public_api", "api.vultr.com", "https://www.vultr.com",
                  "only plans Vultr marks deployable on demand"),
     ProviderMeta("gcp", "Google Cloud", "hyperscaler", "authenticated_api", "cloudbilling.googleapis.com",

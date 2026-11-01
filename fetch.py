@@ -103,6 +103,8 @@ def build_fetchers() -> list[Provider]:
     fetchers.append(VerdaProvider(client_id=settings.verda_client_id, client_secret=settings.verda_client_secret))
     # Public prices (its page); a key adds stock from its container API.
     fetchers.append(DeepInfraProvider(api_key=settings.deepinfra_api_key))
+    # Public prices (its page); a key adds VM stock counts from its own API (read-only GETs).
+    fetchers.append(HotAisleProvider(api_key=settings.hotaisle_api_key, team=settings.hotaisle_team))
 
     if settings.thunder_api_key:
         fetchers.append(ThunderComputeProvider(settings.thunder_api_key))
@@ -128,7 +130,6 @@ def build_fetchers() -> list[Provider]:
             BoostRunProvider,
             CoreWeaveProvider,
             TogetherProvider,
-            HotAisleProvider,
             VultrProvider,
             AzureProvider,
             HorizonProvider,

@@ -7,8 +7,8 @@ Kind: **observed** (the provider's own report). Code: `capacity.py`, each provid
 
 ## Providers and what each reports
 
-Twenty-four providers, every one read from data its own module fetches and stores raw first. Most of it was already
-being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute and Verda each add a capacity source.
+Twenty-five providers, every one read from data its own module fetches and stores raw first. Most of it was already
+being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute, Verda and Hot Aisle each add a capacity source.
 
 | Provider | Source | Shape | What the provider says |
 |---|---|---|---|
@@ -25,6 +25,7 @@ being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute and Verda each
 | Lambda | `regions_with_capacity_available` | boolean | Where there is stock, never how much. A type with no listed region gets one provider-wide `false`. |
 | DigitalOcean | `/v2/sizes` `available` + `regions` | boolean | Whether new Droplets can be created with the size, and where. Not confirmed to track live stock. |
 | DeepInfra | `GET /v1/containers/gpu_availability` (API key) | boolean | `available` per GPU configuration (`8xB200-180GB`), the flag its dashboard shows as "Availability status". Not defined further. Provider-wide. Sku is the price page's (`8x NVIDIA B200`), so stock joins to page prices. Prices always come from the public page: the API's own `usd_per_hour` differs from it and is kept raw, never published. Without the key, no capacity. |
+| Hot Aisle | Its own `GET /teams/{handle}/virtual_machines/available/` (API key) | count | `Quantity`: VMs of that type (GPU model and count) that can be provisioned now, provider-wide; unit is instances. The response lists only types in stock, so a size the page prices but the response omits is `false` with no count. Sku is the price page's (`MI300x:1x:vm`). Prices always come from the public page; the API's `OnDemandPrice` is cross-checked against it each poll and never published. Bare-metal availability is stored raw only. Without the key, no capacity. |
 | Vast | Keyed census: `POST /api/v0/bundles/`, verified on-demand offers, rentable and not rentable, per GPU model | count (free + total) | Free GPUs = distinct `gpu_ids` in rentable offers; total = each machine's GPUs (`num_gpus / gpu_frac`) over every machine either search returns. Provider-wide. Total means GPUs on verified machines listed now. A census of 512 offers (the search cap) withholds counts. Prices still from the public search. |
 | Latitude | Latitude's own `GET /plans` (API key) | count, tier | Per plan and location: in stock (`locations.in_stock`), servers in stock (`in_stock_count`), and the region's `stock_level` as tier. Count unit is servers. Without the key, Shadeform's boolean. Prices still from Shadeform. |
 | Clore.ai | `GET /v1/marketplace` (API key), the same call as prices | count (free + total) | Per GPU name, provider-wide: free GPUs = GPUs on servers with `rented: false` ("Is server rented on demand"), total = GPUs on every listed server. Counted over the servers the price book can hold (priced in USD, one GPU model, a GPU count that agrees with `gpu_array`), so free equals the listings' capacity. Sku is the listing sku (`RTX 4090 24GB`); a model with every server rented gets `false` and no price. Free means free of an on-demand rental: a spot renter on it can be displaced. |
@@ -36,7 +37,7 @@ being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute and Verda each
 **Not covered, and why.** Nebius, OVHcloud and the hyperscalers:
 need an account. (OVHcloud's anonymous dedicated-server list does give a delivery word, such as `1H-low`, `72H` or
 `unavailable`, per GPU server configuration and datacenter; it is stored raw only, because those bare-metal servers
-are not listings, so there is no price for a row to join to.) Vultr: its availability endpoint is empty for every GPU plan. CoreWeave, Together, Hot Aisle, IBM:
+are not listings, so there is no price for a row to join to.) Vultr: its availability endpoint is empty for every GPU plan. CoreWeave, Together, IBM:
 no capacity data found.
 
 ## Tier words today
