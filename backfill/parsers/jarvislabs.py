@@ -14,7 +14,7 @@
 Captures from Oct - Nov 2025 render prices client-side (no price in the HTML) and cannot be read.
 
 Names follow the live parser: the printed GPU with "NVIDIA " prefixed (the page sells NVIDIA GPUs only; every row
-carries the Nvidia logo) and providers.jarvislabs.raw_name() appending the printed VRAM; listing ids
+carries the Nvidia logo) and backfill.retired.jarvislabs_page.raw_name() appending the printed VRAM; listing ids
 "<slug>:1x" as live.
 """
 from __future__ import annotations
@@ -54,7 +54,7 @@ def _base(name: str) -> str:
 
 
 def jarvislabs_two_tables(page: str, at: datetime) -> list[ComputeListing]:
-    from providers.jarvislabs import raw_name
+    from backfill.retired.jarvislabs_page import raw_name
 
     tables = _tables(page)
     work = [rows for head, rows in tables if head == _WORKBENCH]

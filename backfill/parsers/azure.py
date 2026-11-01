@@ -16,7 +16,7 @@ from types import SimpleNamespace
 
 from backfill.sources import Source
 from models import ComputeListing
-from providers.azure import _FIELDS, _REQUIRED, PATH, REGIONS, AzureProvider, endpoint
+from providers.azure import _FIELDS, _REQUIRED, REGIONS, AzureProvider, endpoint
 
 
 def azure_retail_first_page(body: bytes, at: datetime) -> list[ComputeListing]:
@@ -25,7 +25,7 @@ def azure_retail_first_page(body: bytes, at: datetime) -> list[ComputeListing]:
         raise ValueError("azure(archive): response has no Items list")
     if d.get("BillingCurrency", "USD") != "USD":
         raise ValueError(f"azure(archive): billing currency {d.get('BillingCurrency')!r}")
-    snaps = []
+    by_endpoint = {}
     for region in REGIONS:
         rows = []
         for item in d["Items"]:
@@ -35,9 +35,10 @@ def azure_retail_first_page(body: bytes, at: datetime) -> list[ComputeListing]:
             if missing:
                 raise ValueError(f"azure(archive): price row lost {missing}")
             rows.append({k: item.get(k) for k in _FIELDS})
-        snaps.append(SimpleNamespace(endpoint=endpoint(region), payload={"region": region, "items": rows},
-                                     fetched_at=at, ok=True))
-    return AzureProvider.normalize({PATH: snaps})
+        # Keyed by the exact consumption endpoint: the live normalizer reads only those labels.
+        by_endpoint[endpoint(region)] = [SimpleNamespace(endpoint=endpoint(region), payload={"region": region, "items": rows},
+                                                         fetched_at=at, ok=True)]
+    return AzureProvider.normalize(by_endpoint)
 
 
 SOURCES = [Source("azure", "prices.azure.com/api/retail/prices",

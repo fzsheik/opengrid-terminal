@@ -52,17 +52,22 @@ def _text_parser(fn: Callable[[str, datetime], list[ComputeListing]]) -> tuple[s
     return f"{fn.__module__}.{fn.__name__}", lambda body, at: fn(body.decode("utf-8", errors="replace"), at)
 
 
+RETIRED = {"jarvislabs", "gcp"}  # live pollers now on official APIs; page scrapers kept in backfill/retired/
+
+
 def live_page(provider: str, module: str, url: str, *older) -> Source:
     """A page the live poller scrapes: reuse providers/<module>.extract + <Provider>.normalize unchanged, then
     the parsers for its older designs (backfill/parsers/<provider>.py), in order."""
     from providers import PROVIDERS
 
-    mod = importlib.import_module(f"providers.{module}")
-    cls = PROVIDERS[provider]
+    # A provider whose live poller moved to an API keeps its old page scraper in backfill/retired/.
+    path = f"backfill.retired.{module}_page" if module in RETIRED else f"providers.{module}"
+    mod = importlib.import_module(path)
+    normalize = mod.normalize if module in RETIRED else PROVIDERS[provider].normalize
 
     def parse(body: bytes, at: datetime) -> list[ComputeListing]:
         payload = mod.extract(body.decode("utf-8", errors="replace"))
-        return cls.normalize({mod.ENDPOINT: [_snapshot(mod.ENDPOINT, payload, at)]})
+        return normalize({mod.ENDPOINT: [_snapshot(mod.ENDPOINT, payload, at)]})
 
     live = (f"providers.{module} (live parser)", parse)
     return Source(provider, url, (live, *(_text_parser(f) for f in older)))

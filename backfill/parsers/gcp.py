@@ -1,10 +1,10 @@
-"""Google Cloud: archived designs of the Accelerator-optimized pricing page the live parser (providers/gcp.py) rejects.
+"""Google Cloud: archived designs of the Accelerator-optimized pricing page the retired page parser (backfill/retired/gcp_page.py) rejects.
 
     gcp_on_demand_column   Mar - Jul 2026: the machine table's price column is headed "On-Demand (USD)" (live:
                            "Price (USD)"), family heading rows ("A4 High") are one cell wide, and until Jul the
                            section is headed "Accelerator-optimized pricing" (live: "GPU-accelerated machines
                            pricing"). Everything else is the live parser's: the us-central1 region check on both
-                           sections, the attachment table (providers.gcp._attachable), price-cell checks, and
+                           sections, the attachment table (backfill.retired.gcp_page._attachable), price-cell checks, and
                            GcpProvider.normalize with its GPU_MACHINES / ATTACHABLE tables and cross-checks.
 """
 from __future__ import annotations
@@ -18,7 +18,7 @@ from models import ComputeListing
 
 
 def _machines_old(body: str) -> list[dict]:
-    from providers import gcp as G
+    from backfill.retired import gcp_page as G
 
     out = []
     for table in G._TABLE.findall(body):
@@ -43,7 +43,7 @@ def _machines_old(body: str) -> list[dict]:
 
 
 def gcp_on_demand_column(page: str, at: datetime) -> list[ComputeListing]:
-    from providers import gcp as G
+    from backfill.retired import gcp_page as G
 
     start = re.compile(G._H.format("GPU-accelerated machines pricing"))
     if not start.search(page):
