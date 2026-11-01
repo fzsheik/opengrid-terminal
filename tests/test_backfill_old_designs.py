@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import scratchdb  # noqa: E402,F401  (first: isolates the process from real networks)
 
 from backfill.__main__ import _day  # noqa: E402
-from backfill.parsers import azure, coreweave, denvr, lambda_, paperspace, runpod, verda  # noqa: E402
+from backfill.parsers import akash, azure, coreweave, denvr, exoscale, huggingface, lambda_, paperspace, runpod, verda  # noqa: E402
 from backfill.sources import sources  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_backfill"
@@ -331,6 +331,49 @@ def test_paperspace_2023_copy_paste_and_2024_commitments_skipped():
     _raises(paperspace.paperspace_cards, "<p>Contact us</p>", AT, contains="no '<machine>")
 
 
+# --------------------------------------------- providers whose live modules are on providers/batch-nokey (pending)
+
+def test_akash_gpu_prices_weighted_average_like_live():
+    ls, used = _src("console-api.akash.network/v1/gpu-prices").parse((FIX / "akash_gpu-prices_2025-07.json").read_bytes(), AT)
+    by = {l.listing_id: l for l in ls}
+    h = by["nvidia-h100-80Gi-SXM5"]                 # the live listing id
+    assert h.raw_gpu_name == "nvidia h100 80Gi SXM5" and h.canonical_gpu_name == "NVIDIA H100 80GB SXM5"
+    assert h.price_per_gpu_hour == D("1.15") and h.provider_tier == "weighted" and h.gpu_count == 1
+    assert by["nvidia-h200-141Gi-SXM5"].price_per_gpu_hour == D("2.1"), "weightedAverage, not min / avg / med"
+    _raises(akash.akash_gpu_prices, b'{"availability": {}}', AT, contains="no `models`")
+
+
+def test_exoscale_opencompute_2021_like_live():
+    ls, used = _src("portal.exoscale.com/api/pricing/opencompute").parse(
+        (FIX / "exoscale_opencompute_2021-01.json").read_bytes(), AT)
+    by = {l.listing_id: l for l in ls}
+    v = by["gpu2.huge"]
+    assert v.gpu_count == 4 and v.price_per_instance_hour == D("3.31944000") and v.canonical_gpu_name == "NVIDIA Tesla V100 16GB"
+    assert v.provider_tier == "vm" and v.region == "AT-VIE-1" and v.country == "AT"
+    assert not any(l.listing_id.startswith("gpu.") for l in ls), "the legacy 'gpu' family is skipped, as live"
+    _raises(exoscale.exoscale_opencompute, b'{"chf": {}}', AT, contains="no `usd`")
+
+
+def test_huggingface_tables_keep_the_resold_tier():
+    by = {}
+    for name in ("huggingface_docs_2022-11_named_sizes", "huggingface_docs_2026-04_instance_types"):
+        ls, _ = _src("huggingface.co/docs/inference-endpoints/pricing").parse((FIX / f"{name}.html").read_bytes(), AT)
+        by[name[17:24]] = {l.listing_id: l for l in ls}
+    a = by["2022-11"]["aws-xlarge-nvidia-a100"]
+    assert a.raw_gpu_name == "aws Nvidia A100 80GB" and a.canonical_gpu_name == "NVIDIA A100 80GB SXM4"
+    assert a.provider_tier == "resold:aws" and a.price_per_instance_hour == D("6.50")
+    t4 = by["2026-04"]["aws-nvidia-t4-x1"]
+    assert t4.raw_gpu_name == "aws Nvidia T4 16GB", "HF prints 14 GB usable; the API (and live raw name) says 16"
+    assert t4.canonical_gpu_name == "NVIDIA T4 16GB" and t4.price_per_gpu_hour == D("0.5")
+    ls, _ = _src("huggingface.co/pricing").parse((FIX / "huggingface_pricing_2025-04_blank_continuation.html").read_bytes(), AT)
+    p = {l.listing_id: l for l in ls}
+    assert p["aws-nvidia-t4-x4"].price_per_instance_hour == D("3.00"), "continuation row: provider / card from above"
+    assert all(l.provider_tier.startswith("resold:") for l in ls)
+    page = _fix("huggingface_docs_2026-04_instance_types.html")
+    _raises(huggingface.hf_gpu_tables, page.replace(">aws<", ">oracle<", 1).replace("<td>aws</td>", "<td>oracle</td>"),
+            AT, contains="provider")
+
+
 TESTS = [test_since_accepts_year_and_month,
          test_azure_vm_page_2018_names_without_s, test_azure_vm_page_2022_spot_column,
          test_azure_vm_page_2020_spot_savings_and_trailing_cell, test_azure_vm_page_old_and_new_designs_fail_loudly,
@@ -342,7 +385,9 @@ TESTS = [test_since_accepts_year_and_month,
          test_runpod_next_data_list_reads_only_offered_clouds, test_runpod_next_data_map_and_lowest_price_designs,
          test_datacrunch_2020_type_codes, test_datacrunch_2021_and_2024_tables,
          test_denvr_denvrdata_2025_list_before_header,
-         test_paperspace_2018_and_2020_cards, test_paperspace_2023_copy_paste_and_2024_commitments_skipped]
+         test_paperspace_2018_and_2020_cards, test_paperspace_2023_copy_paste_and_2024_commitments_skipped,
+         test_akash_gpu_prices_weighted_average_like_live, test_exoscale_opencompute_2021_like_live,
+         test_huggingface_tables_keep_the_resold_tier]
 
 if __name__ == "__main__":
     for t in TESTS:
