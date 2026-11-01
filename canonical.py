@@ -580,6 +580,14 @@ _add(None, "Quadro RTX 8000")
 _add(None, "nvidia rtx5000 16Gi PCIe", "nvidia v100 32Gi PCIe", "nvidia gtx1050 2Gi PCIe", "nvidia m4000 8Gi PCIe",
      "nvidia p4 8Gi PCIe", "nvidia p40 24Gi PCIe")
 
+# Gcore (providers/gcore.py): bare-metal column model + per-GPU VRAM (the page prints SXM / PCIe). Its Virtual GPU
+# rows say only "H100" and "80 GB": "H100 80GB" stays unmapped (SXM or PCIe not stated).
+_add("NVIDIA H100 80GB SXM5", "H100 SXM 80GB")
+_add("NVIDIA A100 80GB SXM4", "A100 SXM 80GB")
+_add("NVIDIA L40S 48GB", "L40S PCIe 48GB")
+_add("NVIDIA H200 141GB SXM5", "H200 SXM 141GB")
+_add(None, "H100 80GB")
+
 # --------------------------------------------------------------------------
 # Seen, deliberately not mapped
 # --------------------------------------------------------------------------

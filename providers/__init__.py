@@ -27,6 +27,7 @@ from providers.deepinfra import DeepInfraProvider
 from providers.digitalocean import DigitalOceanProvider
 from providers.e2e import E2EProvider
 from providers.exoscale import ExoscaleProvider
+from providers.gcore import GcoreProvider
 from providers.gcp import GcpProvider
 from providers.gpuai import GpuAiProvider
 from providers.hotaisle import HotAisleProvider
@@ -125,6 +126,7 @@ PROVIDERS: dict[str, type[Provider]] = {
         GpuAiProvider,
         ExoscaleProvider,
         HuggingFaceProvider,
+        GcoreProvider,
     )
 }
 
@@ -186,6 +188,7 @@ __all__ = [
     "GpuAiProvider",
     "ExoscaleProvider",
     "HuggingFaceProvider",
+    "GcoreProvider",
     "find_endpoint",
     "gather_limited",
     "to_decimal",

@@ -1563,6 +1563,47 @@ HUGGINGFACE = ProviderMapping(
 )
 
 
+GCORE = ProviderMapping(
+    provider="gcore",
+    display_name="Gcore (GPU Cloud)",
+    endpoints={"GET gcore.com/pricing/ai": "the public price page: bare-metal GPU table and Virtual GPU table, EUR"},
+    fields=_fields(
+        "gcore",
+        sku=(DERIVED, '"{bare-metal|vm}:{shape}"', 'e.g. "bare-metal:8xH100 SXM", "vm:1xH100"'),
+        listing_id=(DERIVED, '"{kind}:{n}x-{model slug}"', 'e.g. "bare-metal:8x-h100-sxm"'),
+        raw_gpu_name=(DERIVED, "column / row model + per-GPU VRAM", 'e.g. "H100 SXM 80GB"; Virtual GPU "H100 80GB"'),
+        gpu_count=(RAW, 'shape "8×H100 SXM" / "1×H100"'),
+        region=(ABSENT, "-", "one price list for every GPU Cloud region"),
+        country=(ABSENT, "-"),
+        price_per_gpu_hour=(DERIVED, "= USD instance price / gpu count", _FX),
+        price_per_instance_hour=(DERIVED, '"€21.82 /hr" (bare metal) or "Cost per hour" (VM) x EUR->USD rate', _FX),
+        currency=(CONSTANT, '"USD"', "after conversion; the original is in original_currency"),
+        provider_tier=(DERIVED, '"bare-metal" or "vm"', "the table the offer comes from"),
+        available=(ABSENT, "-", "the page says nothing about stock"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, 'bare metal "vCPUs" row; VM "24 vCPU / 232 GB RAM"'),
+        ram_gb=(RAW, 'bare metal "RAM, GB" row; VM CPU/RAM cell'),
+        storage_gb=(RAW, 'VM "Storage" cell', "None for bare metal (mixed SSD + NVMe text, kept raw)"),
+        original_currency=(CONSTANT, '"EUR"', "the page prints €, excl. VAT"),
+        original_price_per_gpu_hour=(DERIVED, "EUR instance-hour price / gpu count"),
+        original_price_per_instance_hour=(RAW, "the printed € per hour"),
+        fx_rate=(LOOKUP, "fx_rates (ECB EUR->USD)", "the newest rate published before the fetch; fail closed if > 5 days old"),
+        fx_rate_date=(LOOKUP, "fx_rates.rate_date"),
+        fx_source=(CONSTANT, '"ecb"'),
+    ),
+    quirks=[
+        'Only self-serve ("Get started") bare-metal columns are read: 8×B300 (€48.00/hr) and GB300 NVL72 are '
+        '"Contact sales".',
+        "The bare-metal per-GPU figure must equal price / GPUs to the cent or the column is skipped.",
+        "Everywhere Inference (per-minute serverless inference, memory column not per-GPU consistent) is not read.",
+        'Virtual GPU rows do not say SXM or PCIe: "H100 80GB" stays unmapped.',
+        "robots.txt Content-Signal: ai-train=no, ai-input=no (flagged; prices are read into a market table).",
+        "A general-purpose cloud and CDN: never part of a neocloud index.",
+    ],
+)
+
+
 MODAL = ProviderMapping(
     provider="modal",
     display_name="Modal (serverless GPU)",
@@ -1956,6 +1997,7 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         GPUAI,
         EXOSCALE,
         HUGGINGFACE,
+        GCORE,
     )
 }  # fmt: skip
 
