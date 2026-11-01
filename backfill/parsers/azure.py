@@ -133,7 +133,9 @@ def azure_vm_page(page: str, at: datetime) -> list[ComputeListing]:
             if "GPU" in cols:
                 g = _GPU_CELL.match(_text(cells[cols["GPU"]]))
                 if g and int(g["n"]) != count:
-                    raise ValueError(f"azure(page): {size} GPU cell {_text(cells[cols['GPU']])!r} disagrees with {count}")
+                    # The page and the size's own spec disagree (Mar - Apr 2022 printed "1X A10" for the 2-GPU
+                    # NV72ads_A10_v5): that row's per-GPU price is unknowable, so it is not read; the rest are.
+                    continue
             for column, market in ((od, "on_demand"), ("Spot", "spot")):
                 if column not in cols:
                     continue

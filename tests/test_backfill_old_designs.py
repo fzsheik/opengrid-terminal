@@ -107,7 +107,8 @@ def test_azure_vm_page_old_and_new_designs_fail_loudly():
     bad = _fix("azure_vm_2022-01_spot.html").replace('"us-east":27.197', '"us-east":"27.197"', 1)
     _raises(azure.azure_vm_page, bad, AT, contains="amount")
     bad = _fix("azure_vm_2022-01_spot.html").replace("<td>8x A100 (NVlink)</td>", "<td>4x A100 (NVlink)</td>", 1)
-    _raises(azure.azure_vm_page, bad, AT, contains="disagrees")
+    ids = {l.listing_id for l in azure.azure_vm_page(bad, AT)}
+    assert "Standard_ND96asr_v4:eastus" not in ids and "Standard_NC6s_v3:eastus" in ids, "only the disagreeing row is dropped"
 
 
 # ------------------------------------------------------------------------------------------------------ CoreWeave
