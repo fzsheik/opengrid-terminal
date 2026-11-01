@@ -442,8 +442,8 @@ NEBIUS = ProviderMapping(
         'When a price change is announced the page adds a "GPU-hour (Effective <date>)" column; we use it once its '
         "date has arrived, else the plain one.",
         '"Contact us" rows (GB200/GB300 NVL72) have no price and are skipped.',
-        '"NVIDIA RTX PRO 6000" does not say Workstation or Server Edition on the page and stays unmapped, on both '
-        "markets (Nebius's docs call it Server Edition; not yet applied).",
+        '"NVIDIA RTX PRO 6000" names no edition on the page; Nebius\'s docs (VM types) say Server Edition, so the '
+        'Nebius lookup (DOC_NAMES in providers/nebius.py) maps it there on both markets; the generic name stays unmapped elsewhere.',
         'L40S prices are "from $x": a floor over several CPU configs, tagged from_price.',
         "The spot API has spot prices only (no on-demand, reserved or commitment fields). Its 30-day history "
         "(/spot-price/list-series) is not polled.",
@@ -573,7 +573,7 @@ VERDA = ProviderMapping(
         price_per_gpu_hour=(DERIVED, "= price / gpu.number_of_gpus"),
         price_per_instance_hour=(RAW, "price_per_hour | spot_price", "both are for the whole instance"),
         market_type=(DERIVED, "price_per_hour -> on_demand, spot_price -> spot"),
-        provider_tier=(DERIVED, '"confidential" for ".CC" types'),
+        provider_tier=(DERIVED, '"confidential" for ".CC" types (also ".CC.AMD" / ".CC.INTEL")'),
         interruptible=(DERIVED, "= (market_type == spot)"),
         available=(ABSENT, "-", "listings are provider-wide; per-location stock is in the capacity tables (credentials)"),
         capacity=(ABSENT, "-"),
@@ -588,6 +588,8 @@ VERDA = ProviderMapping(
         "as interruptible and never compared with on-demand.",
         'Confidential-computing (".CC") types cost slightly more for the same GPU and stay unmapped.',
         'The B300 is listed at 268GB (usable) against the 288GB others print; it shares one name.',
+        '"RTX PRO 6000 96GB" names no edition; Verda\'s product page says Server Edition, so the lookup uses that '
+        "name (PAGE_NAMES in providers/verda.py) while raw_gpu_name keeps the API text.",
     ],
 )
 

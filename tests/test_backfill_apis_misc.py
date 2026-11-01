@@ -177,6 +177,9 @@ def test_verda_instance_tables():
     assert h100.price_per_gpu_hour == D("4.211") and by["1x-h100-sxm5-80gb-30v:spot"].price_per_gpu_hour == D("2.106")
     assert "1x-b300-cc-sxm6-268gb-30v" in by, "the Confidential computing table in the GPU section is read"
     assert not any("amd" in k for k in by), "the serverless-containers section is not read"
+    rtx = [l for l in ls if l.raw_gpu_name == "RTX PRO 6000 96GB"]
+    assert rtx and {l.canonical_gpu_name for l in rtx} == {"NVIDIA RTX PRO 6000 96GB SE"}, "same lookup as the live API"
+    assert {l.canonical_gpu_name for l in ls if l.raw_gpu_name == "RTX PRO 6000 CC 96GB"} == {None}
     assert len(ls) == 32
 
 

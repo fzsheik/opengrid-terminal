@@ -114,7 +114,7 @@ def test_page_with_preemptible_column():
     h100 = out["NVIDIA HGX H100"]
     assert h100.canonical_gpu_name == "NVIDIA H100 80GB SXM5" and h100.vcpu == 16 and h100.ram_gb == 200
     assert out["NVIDIA L40S with Intel CPU"].provider_tier == "from_price"
-    assert out["NVIDIA RTX PRO 6000"].canonical_gpu_name is None, "edition not stated on the page: unmapped"
+    assert out["NVIDIA RTX PRO 6000"].canonical_gpu_name == "NVIDIA RTX PRO 6000 96GB SE", "Nebius docs: Server Edition"
     assert all(l.market_type == "on_demand" and not l.interruptible and l.region is None for l in out.values())
     # The preemptible floors ($0.99 / $0.79 / $0.74 / $0.90) never become listings.
     assert {l.price_per_gpu_hour for l in out.values()}.isdisjoint({D("0.99"), D("0.79"), D("0.74"), D("0.90")})
@@ -160,7 +160,7 @@ def test_spot_listings():
     page = {l.raw_gpu_name: l.canonical_gpu_name for l in NebiusProvider.normalize({ENDPOINT: [snap(N.extract(PAGE), ENDPOINT)]})}
     assert all(page[l.raw_gpu_name] == l.canonical_gpu_name for l in out.values()), "a spot name the page lacks"
     rtx = [l for l in out.values() if l.raw_gpu_name == "NVIDIA RTX PRO 6000"]
-    assert len(rtx) == 3 and all(l.canonical_gpu_name is None for l in rtx), "unmapped, like the page row"
+    assert len(rtx) == 3 and all(l.canonical_gpu_name == "NVIDIA RTX PRO 6000 96GB SE" for l in rtx), "Server Edition, like the page row"
     assert all(l.listing_id.endswith(":spot") and l.vcpu is None and l.provider_tier is None for l in out.values())
 
     # An unknown platform keeps the API's own title and stays unmapped, never guessed.

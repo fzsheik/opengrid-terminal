@@ -100,6 +100,8 @@ def test_nebius_designs():
     p = _prices(listings)
     assert p["NVIDIA HGX H100"] == D("3.85") and p["NVIDIA HGX B300"] == D("7.85") and p["NVIDIA RTX PRO 6000"] == D("1.80")
     assert "NVIDIA GB300 NVL72" not in p, "'Contact us' is not a price"
+    rtx = next(l for l in listings if l.raw_gpu_name == "NVIDIA RTX PRO 6000")
+    assert rtx.canonical_gpu_name == "NVIDIA RTX PRO 6000 96GB SE", "archived rows: same Nebius lookup as live"
     assert all(l.market_type == "on_demand" and l.gpu_count == 1 for l in listings), "preemptible is never read"
     h100 = next(l for l in listings if l.listing_id == "NVIDIA HGX H100")
     assert h100.canonical_gpu_name == "NVIDIA H100 80GB SXM5"

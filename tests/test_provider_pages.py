@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import httpx  # noqa: E402
 
+import canonical  # noqa: E402
 import mapping  # noqa: E402
 import provider_meta  # noqa: E402
 from providers import PROVIDERS  # noqa: E402
@@ -275,9 +276,14 @@ def test_nebius():
     assert out["NVIDIA HGX B200"].price_per_gpu_hour == D("8.50")
     assert out["NVIDIA HGX B300"].canonical_gpu_name == "NVIDIA B300 288GB SXM"
     assert out["NVIDIA HGX B300"].price_per_gpu_hour == D("9.50") and out["NVIDIA HGX B300"].ram_gb == 346
-    # Workstation or Server Edition is not stated: unmapped, never guessed.
+    # The page names no edition; Nebius's docs say Server Edition, so the Nebius lookup maps it (raw name kept).
+    # The generic words stay unmapped for every other provider (Modal prints the same).
     rtx = out["NVIDIA RTX PRO 6000"]
-    assert rtx.canonical_gpu_name is None and rtx.price_per_gpu_hour == D("1.80")
+    assert rtx.raw_gpu_name == "NVIDIA RTX PRO 6000" and rtx.price_per_gpu_hour == D("1.80")
+    assert rtx.canonical_gpu_name == "NVIDIA RTX PRO 6000 96GB SE", rtx.canonical_gpu_name
+    assert nebius.canonical_name("NVIDIA RTX PRO 6000") == "NVIDIA RTX PRO 6000 96GB SE"
+    assert canonical.canonical_gpu_name("NVIDIA RTX PRO 6000") is None
+    assert canonical.canonical_gpu_name("Nvidia RTX PRO 6000") is None, "Modal's name: edition not stated"
     l40s = out["NVIDIA L40S with Intel CPU"]
     assert l40s.canonical_gpu_name == "NVIDIA L40S 48GB" and l40s.price_per_gpu_hour == D("1.55")
     assert l40s.provider_tier == "from_price" and l40s.vcpu is None and l40s.ram_gb is None, "ranges have no value"

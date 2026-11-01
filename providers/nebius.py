@@ -51,6 +51,17 @@ _PRICE = re.compile(r"^(from )?\$(\d+(?:,\d{3})*(?:\.\d+)?)$")
 _EFFECTIVE = re.compile(r"Effective ([A-Z][a-z]+ \d{1,2}, \d{4})")
 # A preemptible (spot floor) column inside the on-demand table: stored, never a listing.
 _PREEMPTIBLE = re.compile(r"^(Preemptible|Spot)\b", re.I)
+# Nebius names that drop the card's edition -> the name Nebius's docs give it. Only the lookup uses it: raw_gpu_name
+# keeps the page's text. docs.nebius.com/compute/virtual-machines/types (checked 2026-11-01), GPU types table:
+# "NVIDIA RTX PRO 6000 Server Edition" for platforms gpu-rtx6000 and gpu-rtx6000-a. Scoped to Nebius on purpose:
+# Modal prints the same words for an unstated edition, so canonical.py never maps the generic name.
+DOC_NAMES = {"NVIDIA RTX PRO 6000": "NVIDIA RTX PRO 6000 Blackwell Server Edition"}
+
+
+def canonical_name(raw_name: str) -> str | None:
+    return canonical.canonical_gpu_name(DOC_NAMES.get(raw_name.strip(), raw_name))
+
+
 # Words that mark a column as something other than the on-demand rate.
 _NOT_ON_DEMAND = re.compile(r"spot|preemptible|reserv|commit|month|year", re.I)
 
@@ -217,7 +228,7 @@ def _page_listings(snapshot) -> list[ComputeListing]:
                 sku=item,
                 listing_id=item,
                 raw_gpu_name=item,
-                canonical_gpu_name=canonical.canonical_gpu_name(item),
+                canonical_gpu_name=canonical_name(item),
                 gpu_count=1,
                 region=None,
                 country=None,
@@ -252,7 +263,7 @@ def _spot_listings(snapshot) -> list[ComputeListing]:
                 sku=f"{name}:{platform}",
                 listing_id=f"{name}:{platform}:{region}:spot",
                 raw_gpu_name=name,
-                canonical_gpu_name=canonical.canonical_gpu_name(name),
+                canonical_gpu_name=canonical_name(name),
                 gpu_count=1,  # priced per GPU hour
                 region=region,
                 country=COUNTRY.get(region),
