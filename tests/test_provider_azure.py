@@ -2,9 +2,11 @@
 
 The parser runs on trimmed copies of the REAL responses (tests/fixtures_providers/
 azure_eastus*.json, fetched 2026-10-13 with the provider's own anonymous filtered
-GET), served through a mock transport. The last test pushes both regions through
-raw storage, normalize + quality screening, the hourly rollup and the index vote
-in a scratch database.
+GET), served through a mock transport. The reservation tests use trimmed real
+priceType 'Reservation' responses (azure_reservation_eastus*.json, fetched
+2026-10-31 with the provider's own filter; rows verbatim). The last test pushes
+both regions through raw storage, normalize + quality screening, the hourly rollup
+and the index vote in a scratch database, and proves reserved prices never reach them.
 
 Run:  .venv/bin/python tests/test_provider_azure.py
 """
@@ -42,6 +44,10 @@ def body(region):
     return json.loads((FIX / f"azure_{region}.json").read_text(encoding="utf-8"))
 
 
+def res_body(region):
+    return json.loads((FIX / f"azure_reservation_{region}.json").read_text(encoding="utf-8"))
+
+
 def snap(payload, at=NOW):
     return SimpleNamespace(payload=payload, request=None, fetched_at=at)
 
@@ -50,9 +56,11 @@ def by_id(listings):
     return {l.listing_id: l for l in listings}
 
 
-def _serve(pages):
-    """pages: {region: [page body, ...]}; page n>0 is reached via its NextPageLink."""
+def _serve(pages, res_pages=None):
+    """pages / res_pages: {region: [page body, ...]} for priceType Consumption / Reservation;
+    page n>0 is reached via its NextPageLink."""
     seen = []
+    res_pages = real_res_pages() if res_pages is None else res_pages
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request.url)
@@ -60,22 +68,31 @@ def _serve(pages):
             return httpx.Response(404, text="not found")
         q = parse_qs(urlsplit(str(request.url)).query)
         f = q.get("$filter", [""])[0]
-        region = next((r for r in pages if f"armRegionName eq '{r}'" in f), None)
+        book = res_pages if "priceType eq 'Reservation'" in f else pages
+        region = next((r for r in book if f"armRegionName eq '{r}'" in f), None)
         if region is None:
             return httpx.Response(400, json={"Error": "bad filter"})
         n = int(q.get("$skip", ["0"])[0]) // 1000
-        return httpx.Response(200, json=pages[region][n])
+        return httpx.Response(200, json=book[region][n])
 
     return httpx.MockTransport(handler), seen
 
 
-def provider(pages):
-    transport, seen = _serve(pages)
+def provider(pages, res_pages=None):
+    transport, seen = _serve(pages, res_pages)
     return AzureProvider(httpx.AsyncClient(base_url=azure.BASE_URL, transport=transport)), seen
 
 
 def real_pages():
     return {"eastus": [body("eastus")], "eastus2": [body("eastus2")]}
+
+
+def real_res_pages():
+    return {"eastus": [res_body("eastus")], "eastus2": [res_body("eastus2")]}
+
+
+CONSUMPTION_EPS = ["/api/retail/prices#eastus", "/api/retail/prices#eastus2"]
+RESERVATION_EPS = ["/api/retail/prices/reservation#eastus", "/api/retail/prices/reservation#eastus2"]
 
 
 def normalized(raws):
@@ -90,9 +107,9 @@ def normalized(raws):
 def test_fetch_and_normalize():
     prov, seen = provider(real_pages())
     raws = asyncio.run(prov.fetch())
-    assert [r.endpoint for r in raws] == ["/api/retail/prices#eastus", "/api/retail/prices#eastus2"]
+    assert [r.endpoint for r in raws] == CONSUMPTION_EPS + RESERVATION_EPS
     assert all(r.ok for r in raws), [r.error for r in raws]
-    assert len(seen) == 2, "one request per region"
+    assert len(seen) == 4, "one consumption and one reservation request per region"
     assert all(len(r.endpoint) <= 256 for r in raws), "fits raw_snapshots.endpoint"
     assert "armRegionName eq 'eastus'" in raws[0].request["$filter"], "exact filter kept as provenance"
     assert "priceType eq 'Consumption'" in raws[0].request["$filter"]
@@ -174,9 +191,121 @@ def test_pagination():
         "armRegionName eq 'eastus'&$skip=1000"
     prov, seen = provider({"eastus": [one, two], "eastus2": [body("eastus2")]})
     raws = asyncio.run(prov.fetch())
-    assert all(r.ok for r in raws) and len(seen) == 3
+    assert all(r.ok for r in raws) and len(seen) == 5
     assert len(raws[0].payload["items"]) == 31, "both pages merged into one snapshot"
     assert normalized(raws) == normalized(asyncio.run(provider(real_pages())[0].fetch()))
+
+
+def test_reservation_pagination():
+    full = res_body("eastus")
+    one, two = copy.deepcopy(full), copy.deepcopy(full)
+    one["Items"], two["Items"] = full["Items"][:7], full["Items"][7:]
+    one["NextPageLink"] = "https://prices.azure.com:443/api/retail/prices?$filter=" + \
+        "armRegionName eq 'eastus' and priceType eq 'Reservation'&$skip=1000"
+    prov, seen = provider(real_pages(), {"eastus": [one, two], "eastus2": [res_body("eastus2")]})
+    raws = asyncio.run(prov.fetch())
+    assert all(r.ok for r in raws) and len(seen) == 5, "the reservation NextPageLink is followed"
+    res = raws[2]
+    assert res.endpoint == RESERVATION_EPS[0] and len(res.payload["items"]) == len(full["Items"]) == 20
+    assert "priceType eq 'Reservation'" in res.request["$filter"], "the first page's filter is the provenance"
+    whole = asyncio.run(provider(real_pages())[0].fetch())
+    assert azure.reserved_prices(raw_map(raws)) == azure.reserved_prices(raw_map(whole))
+
+
+# --------------------------------------------------------------------------
+# Reservations: raw capture, the per-GPU-hour conversion, never a listing
+# --------------------------------------------------------------------------
+
+
+def raw_map(raws):
+    return {r.endpoint: [snap(r.payload)] for r in raws if r.ok}
+
+
+def test_reservations_raw_capture():
+    raws = asyncio.run(provider(real_pages())[0].fetch())
+    res = {r.endpoint: r for r in raws[2:]}
+    assert list(res) == RESERVATION_EPS and all(r.ok for r in res.values())
+    assert all(len(ep) <= 256 for ep in res), "fits raw_snapshots.endpoint"
+    p = res[RESERVATION_EPS[0]]
+    f = p.request["$filter"]
+    assert "priceType eq 'Reservation'" in f and "armRegionName eq 'eastus'" in f
+    assert "startswith(armSkuName,'Standard_ND')" in f, "GPU families filtered server-side"
+    assert p.payload["region"] == "eastus" and p.payload["price_type"] == "Reservation"
+    assert len(p.payload["items"]) == 20 and set(p.payload["items"][0]) == set(azure._RES_FIELDS)
+    # Every row is stored, mapped or not: unlisted (GB200) and fractional (NV6ads) sizes too.
+    skus = {i["armSkuName"] for i in p.payload["items"]}
+    assert {"Standard_ND128isr_NDR_GB200_v6", "Standard_NV6ads_A10_v5"} <= skus
+    assert {i["reservationTerm"] for i in p.payload["items"]} == {"1 Year", "3 Years", "5 Years"}
+
+    # Fail closed like the consumption call: a row without its term fails that snapshot only.
+    lost = res_body("eastus")
+    del lost["Items"][0]["reservationTerm"]
+    raws = asyncio.run(provider(real_pages(), {"eastus": [lost], "eastus2": [res_body("eastus2")]})[0].fetch())
+    assert [r.ok for r in raws] == [True, True, False, True]
+    assert "lost ['reservationTerm']" in raws[2].error and raws[2].payload is None
+    assert normalized(raws) == normalized(asyncio.run(provider(real_pages())[0].fetch())), \
+        "a failed reservation call never touches consumption listings"
+    mixed = res_body("eastus")
+    mixed["Items"][0]["type"] = "Consumption"
+    raws = asyncio.run(provider(real_pages(), {"eastus": [mixed], "eastus2": [res_body("eastus2")]})[0].fetch())
+    assert not raws[2].ok and "filter not honoured" in raws[2].error
+
+
+def test_reservation_price():
+    row = next(i for i in res_body("eastus")["Items"]
+               if i["armSkuName"] == "Standard_ND96isr_H100_v5" and i["reservationTerm"] == "1 Year")
+    assert row["retailPrice"] == 551221.0 and row["unitOfMeasure"] == "1 Hour", "a whole-term price, labelled '1 Hour'"
+    rp = azure.reservation_price(row)
+    assert rp.sku == "Standard_ND96isr_H100_v5" and rp.region == "eastus" and rp.term_years == 1
+    assert rp.gpu_count == 8 and rp.raw_gpu_name == azure.H100_80
+    assert rp.canonical_gpu_name == "NVIDIA H100 80GB SXM5"
+    assert rp.term_price == D("551221") and rp.term_hours == D(8760)
+    assert rp.price_per_instance_hour == D("551221") / D(8760)
+    assert rp.price_per_gpu_hour == D("551221") / D(8760) / 8
+    assert round(rp.price_per_gpu_hour, 4) == D("7.8656") and rp.currency == "USD"
+
+    got = {(r.region, r.sku, r.term_years): r for r in azure.reserved_prices(
+        raw_map(asyncio.run(provider(real_pages())[0].fetch())))}
+    h100 = {t: round(got[("eastus", "Standard_ND96isr_H100_v5", t)].price_per_gpu_hour, 4) for t in (1, 3, 5)}
+    assert h100 == {1: D("7.8656"), 3: D("5.3953"), 5: D("4.9160")}, h100
+    assert got[("eastus", "Standard_ND96isr_H100_v5", 3)].term_hours == D(26280)
+    assert round(got[("eastus", "Standard_NC64as_T4_v3", 1)].price_per_gpu_hour, 4) == D("0.6398"), "22417/8760/4"
+    assert got[("eastus2", "Standard_ND96isr_MI300X_v5", 1)].canonical_gpu_name == "AMD Instinct MI300X 192GB"
+    # Sizes outside GPU_SIZES are stored raw but never converted (no guessed GPU count).
+    assert not any(r.sku in ("Standard_ND128isr_NDR_GB200_v6", "Standard_NV6ads_A10_v5", "Standard_ND96is_H100_v5",
+                             "Standard_NCC40ads_H100_v5") for r in got.values())
+    assert len(got) == 22, "31 stored rows minus 9 for unmapped sizes"
+
+    # Pure rules: only priced reservations of a known whole-GPU size and a stated term.
+    assert azure.reservation_price({**row, "type": "Consumption"}) is None
+    assert azure.reservation_price({**row, "armSkuName": "Standard_NV6ads_A10_v5"}) is None
+    assert azure.reservation_price({**row, "reservationTerm": "1 Month"}) is None
+    assert azure.reservation_price({**row, "reservationTerm": None}) is None
+    assert azure.reservation_price({**row, "retailPrice": 0}) is None
+    assert azure.reservation_price({**row, "retailPrice": "n/a"}) is None
+    assert azure.reservation_price({**row, "reservationTerm": "5 Years"}).term_hours == D(43800)
+    # A re-priced meter: the later effectiveStartDate wins.
+    newer = {**row, "retailPrice": 500000.0, "effectiveStartDate": "2026-11-01T00:00:00Z"}
+    payload = {"region": "eastus", "price_type": "Reservation", "items": [newer, row]}
+    only = azure.reserved_prices({RESERVATION_EPS[0]: [snap(payload)]})
+    assert len(only) == 1 and only[0].term_price == D("500000")
+    # Reservation rows under the consumption label are not reserved prices (and not listings: see below).
+    assert azure.reserved_prices({CONSUMPTION_EPS[0]: [snap(payload)]}) == []
+
+
+def test_reservations_never_listings():
+    raws = asyncio.run(provider(real_pages())[0].fetch())
+    with_res, without = normalized(raws), normalized(raws[:2])
+    assert with_res == without and len(with_res) == 22
+    assert {l.market_type for l in with_res.values()} == {"on_demand", "spot"}
+    assert with_res["Standard_ND96isr_H100_v5:eastus"].price_per_gpu_hour == D("12.29"), "still on-demand"
+    # Only the reservation snapshots: no listings at all.
+    assert normalized(raws[2:]) == {}
+    # Even reservation rows stored under a consumption label, or tagged in its payload, never list.
+    rows = [{k: i.get(k) for k in azure._RES_FIELDS} for i in res_body("eastus")["Items"]]
+    assert AzureProvider.normalize({CONSUMPTION_EPS[0]: [snap({"region": "eastus", "items": rows})]}) == []
+    good = raws[0].payload
+    assert AzureProvider.normalize({CONSUMPTION_EPS[0]: [snap({**good, "price_type": "Reservation"})]}) == []
 
 
 # --------------------------------------------------------------------------
@@ -279,9 +408,13 @@ def test_pipeline():
             bodies = s.execute(sql("SELECT count(*) FROM raw_payloads")).scalar()
             listed = s.execute(sql("SELECT count(*) FROM compute_listings WHERE provider = 'azure'")).scalar()
             held = s.execute(sql("SELECT listing_id, rule FROM quality_quarantine WHERE status = 'pending'")).all()
-        assert stored == 4 and bodies == 2, (stored, bodies)
-        assert listed == 22, listed
+        assert stored == 8 and bodies == 4, "consumption + reservation, 2 regions, 2 polls; bodies deduplicated"
+        assert listed == 22, "reservation snapshots add no listings"
         assert not held, f"nothing held on clean data: {held}"
+        with Session() as s:
+            kept = azure.reserved_prices(normalize._latest_raw(s, "azure"))
+        assert len(kept) == 22 and any(r.sku == "Standard_ND96isr_H100_v5" and r.term_years == 3 for r in kept), \
+            "reserved prices are readable back from raw storage"
 
         rollups.rebuild()
         with Session() as s:
@@ -299,13 +432,19 @@ def test_pipeline():
         assert abs(vote("NVIDIA T4 16GB")[0] - 1.088) < 1e-9, "cheapest per-GPU size: NC64as at $4.352/4"
         assert abs(vote("NVIDIA H100 94GB NVL", "spot")[0] - 1.289904) < 1e-9, "spot in the spot segment only"
         assert abs(vote("NVIDIA H100 80GB SXM5")[0] - 12.29) < 1e-9, "ND H100 v5: $98.32 / 8"
+        # Reserved prices reach no segment and no statistic.
+        assert {r["segment"] for r in rows if r["provider"] == "azure"} <= {"on_demand", "spot"}
+        reserved = {round(float(r.price_per_gpu_hour), 6) for r in kept}
+        assert not any(round(float(r["min_price"]), 6) in reserved for r in rows if r["provider"] == "azure")
+        assert not any(i.endswith(":reserved") or "reserv" in i for i in votes)
     finally:
         scratchdb.drop(db)
 
 
 if __name__ == "__main__":
-    for t in (test_fetch_and_normalize, test_market_rules, test_pagination, test_fail_closed, test_registry,
-              test_pipeline):
+    for t in (test_fetch_and_normalize, test_market_rules, test_pagination, test_reservation_pagination,
+              test_reservations_raw_capture, test_reservation_price, test_reservations_never_listings,
+              test_fail_closed, test_registry, test_pipeline):
         t()
         print(t.__name__, "ok")
     print("all passed")
