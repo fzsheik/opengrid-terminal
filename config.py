@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     # Market context (context/; methodology/market-context.md). Each source is off until configured.
     eia_api_key: str | None = None               # free: https://www.eia.gov/opendata/register.php
     sec_user_agent: str | None = None            # SEC fair access: "Company Name contact@company-domain" (required)
+    # Alpaca Market Data API (context/equities.py), market data only, never the trading API. INTERNAL research
+    # series: never shown, served or resold (methodology/internal/equities.md). Off until both are set.
+    alpaca_data_key_id: str | None = None
+    alpaca_data_secret_key: str | None = None
+    equity_tickers: str | None = None            # comma-separated override of context/equities.TICKERS
     # Ops alerts (alerts/ops.py): orphans, termination failures, ambiguous launches, kill switches.
     # Any HTTPS webhook (Slack/PagerDuty incoming webhooks work); signed with the secret.
     ops_alert_webhook_url: str | None = None

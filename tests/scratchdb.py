@@ -52,7 +52,8 @@ _SECRET_FIELDS = ("salad_api_key", "salad_org", "hyperstack_api_key", "lambda_ap
                   "verda_client_secret", "anthropic_api_key", "job_artifact_s3_access_key_id",
                   "job_artifact_s3_secret_access_key", "ops_alert_webhook_url", "deployments_webhook_url",
                   "market_webhook_url", "news_webhook_url", "jarvis_api_key", "gcp_api_key",
-                  "massedcompute_api_key", "crusoe_access_key_id", "crusoe_secret_key", "eia_api_key", "sec_user_agent")
+                  "massedcompute_api_key", "crusoe_access_key_id", "crusoe_secret_key", "eia_api_key", "sec_user_agent",
+                  "alpaca_data_key_id", "alpaca_data_secret_key")
 _LOOPBACK = ("127.0.0.1", "localhost", "::1", "[::1]")
 BLOCKED: list[str] = []
 
