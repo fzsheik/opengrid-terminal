@@ -5,6 +5,23 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-02 (fifth release) — Linode capacity: Retry-After on a 200 is not a request to wait
+
+### What shipped
+- `providers.base.rate_limit_wait` reads `Retry-After` only on a refusal (HTTP 429 or 503). Linode sends
+  "Retry-After: 60" on every 200 response; that is its rate-limit window, not a request to wait. Read as a wait,
+  each poll's first call (`/v4/linode/types`, prices) blocked the next one (`/v4/regions/availability`,
+  capacity) for 60 s. That is longer than the 15 s inline wait, so the capacity call was skipped as throttled on
+  every poll from 11:09 UTC on 2026-11-02, and the `capacity_silent` alert fired. Remaining-quota headers
+  (`X-RateLimit-Remaining: 0` with a reset) still pause a provider on any status.
+
+### Deploy notes
+- No migrations and no new variables. Deployed after the running archive import finished. Linode capacity was
+  silent from 11:09 UTC until this deploy.
+- Full suite before push: 127 test files, all passing except the known intermittent `test_jobs_e2e`.
+
+---
+
 ## 2026-11-02 (fourth release) — News: placeholder 1970 dates are not publish times
 
 ### What shipped

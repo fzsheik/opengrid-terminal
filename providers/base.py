@@ -132,16 +132,21 @@ def _seconds(value: str | None, now: float) -> float | None:
     return max(0.0, n - now) if n > 1e9 else max(0.0, n)
 
 
-def rate_limit_wait(headers, now: float | None = None) -> float | None:
+RETRY_AFTER_STATUSES = (429, 503)
+
+
+def rate_limit_wait(headers, now: float | None = None, status: int | None = None) -> float | None:
     """Seconds the provider asks us to wait, from its headers, or None when it asks nothing.
 
-    Reads Retry-After; and, when the remaining quota is 0, the reset of RateLimit-* / X-RateLimit-* / ratelimit-*
+    Reads Retry-After only on a refusal (429 / 503; `status` None = unknown, read it): Linode sends
+    "Retry-After: 60" on every 200, its window length, and reading that as a wait skipped every call after
+    the first one in a poll. Then, when the remaining quota is 0, the reset of RateLimit-* / X-RateLimit-* / ratelimit-*
     (RunPod, Verda, DigitalOcean, Linode) or of the structured `RateLimit: remaining=0, reset=30` header.
     Azure's x-ms-ratelimit-remaining-* counts are read as remaining (no reset is given: back off a minute).
     """
     now = time.time() if now is None else now
     h = {k.lower(): v for k, v in (headers or {}).items()}
-    wait = _seconds(h.get("retry-after"), now)
+    wait = _seconds(h.get("retry-after"), now) if status is None or status in RETRY_AFTER_STATUSES else None
     if wait is not None:
         return wait
     for prefix in ("ratelimit-", "x-ratelimit-", "x-rate-limit-"):
@@ -207,7 +212,7 @@ class Provider(ABC):
         """Read the rate-limit headers; True when this response is a throttle (HTTP 429)."""
         throttled = getattr(resp, "status_code", None) == 429
         try:
-            wait = rate_limit_wait(resp.headers)
+            wait = rate_limit_wait(resp.headers, status=getattr(resp, "status_code", None))
         except Exception:  # noqa: BLE001 - a malformed header never fails a call
             wait = None
         if throttled and backoff:

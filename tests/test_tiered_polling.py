@@ -137,6 +137,11 @@ def test_rate_limit_headers():
     assert rate_limit_wait({"RateLimit": "limit=100, remaining=0, reset=9"}, now) == 9
     assert rate_limit_wait({"x-ms-ratelimit-remaining-retailprices": "0"}, now) == 60
     assert rate_limit_wait({}, now) is None and rate_limit_wait({"Retry-After": "soon"}, now) is None
+    # Linode: Retry-After on every 200 is its window length, not a request to wait; on a 429 it is.
+    linode = {"X-RateLimit-Limit": "1840", "X-RateLimit-Remaining": "1839", "X-RateLimit-Reset": str(now + 60),
+              "Retry-After": "60"}
+    assert rate_limit_wait(linode, now, status=200) is None
+    assert rate_limit_wait(linode, now, status=429) == 60 and rate_limit_wait(linode, now, status=503) == 60
 
 
 class Toy(Provider):
