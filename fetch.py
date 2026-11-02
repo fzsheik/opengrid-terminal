@@ -24,6 +24,8 @@ from providers import (
     GpuAiProvider,
     HetznerProvider,
     IonosProvider,
+    SakuraProvider,
+    YottaProvider,
     FireworksProvider,
     GcoreProvider,
     HotAisleProvider,
@@ -184,6 +186,8 @@ def build_fetchers() -> list[Provider]:
             FireworksProvider,
             IonosProvider,
             HetznerProvider,
+            YottaProvider,
+            SakuraProvider,
         )
     )
     return fetchers

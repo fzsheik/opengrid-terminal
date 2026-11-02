@@ -450,6 +450,8 @@ def _ineligible_reason(row) -> tuple[str, str]:
         return "floor_price", "a 'from $x' floor price, not a purchasable price"
     if row["provider_tier"] == "gpu-attachment":
         return "gpu_only_price", "the GPU's own rate; the host VM is billed on top"
+    if row["provider_tier"] == "tax_inclusive":
+        return "tax_inclusive_price", "a price including sales tax at an unstated rate; not comparable to pre-tax list prices"
     if (row["provider_tier"] or "").startswith("resold:"):
         return "resold_capacity", "another cloud's capacity at a reseller's price; never counted as its own market"
     return "ineligible", "not eligible under market rules"

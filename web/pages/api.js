@@ -36,7 +36,8 @@
       ["GET", "/v1/timeline", "Price timeline for a GPU or provider", "gpu, provider, window, end, segment, move_pct"],
       ["GET", "/v1/timeline/around", "What happened around one moment", "gpu*, at*, window_hours, provider, segment"],
       ["GET", "/v1/fx", "The ECB EUR->USD reference rate in force now; conversion state (ok / stale / missing)", ""],
-      ["GET", "/v1/fx/rates", "Stored ECB EUR->USD reference rates, newest first", "days"],
+      ["GET", "/v1/fx/rates", "Stored ECB EUR->X reference rates (default USD), newest first", "days, quote"],
+      ["GET", "/v1/fx/cross", "X->USD cross rates for every ECB currency (EUR->USD / EUR->X, same ECB date), with both legs", ""],
       ["GET", "/v1/fx/listings", "Listings converted to USD, with original currency, amount, rate and rate date", "provider"],
     ]],
     ["Best execution & recommendations", "pub-best", [

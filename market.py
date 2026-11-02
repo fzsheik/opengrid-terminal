@@ -10,6 +10,8 @@ Which listings count (the same rules the leaderboard used):
     - not a "from $x" floor price
     - not resold capacity (provider_tier "resold:<cloud>": Hugging Face Endpoints on AWS/GCP/Azure, GPU.ai's
       pooled inventory): another cloud's GPUs at a reseller's price, so counting them would count a cloud twice
+    - not a tax-inclusive price (provider_tier "tax_inclusive": Sakura Internet prints JPY prices including
+      consumption tax at an unstated rate, so it cannot be put on the same pre-tax basis as every other list price)
     - in stock, or stock unknown (a sold-out listing is not a price you can pay)
 
 Only PUBLIC listings count (methodology/data-visibility.md): `_ELIGIBLE`, which every public statistic uses,
@@ -38,6 +40,8 @@ from providers import PROVIDERS
 
 # Listings that resell another cloud's capacity carry provider_tier "resold:<underlying cloud>" and never vote.
 RESOLD_PREFIX = "resold:"
+# Listings whose price includes sales tax at an unstated rate (Sakura) carry provider_tier "tax_inclusive": shown, never vote.
+TAX_INCLUSIVE_TIER = "tax_inclusive"
 
 MIN_SPAN = timedelta(minutes=30)  # a change over less than two polls is not a trend
 MAX_HOURS = 24 * 90
@@ -46,7 +50,7 @@ _ELIGIBLE_ANY_TIER = """
     c.canonical_gpu_name IS NOT NULL
     AND c.market_type = 'on_demand'
     AND COALESCE(c.interruptible, false) = false
-    AND COALESCE(c.provider_tier, '') NOT IN ('cheapest', 'from_price', 'gpu-attachment')
+    AND COALESCE(c.provider_tier, '') NOT IN ('cheapest', 'from_price', 'gpu-attachment', 'tax_inclusive')
     AND COALESCE(c.provider_tier, '') NOT LIKE 'resold:%'
 """
 # The public-tier filter for compute_listings aliased `c`. Fail closed: anything not exactly 'public' is out.

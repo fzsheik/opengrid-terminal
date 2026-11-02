@@ -38,7 +38,9 @@ eligible listings sampled at the top of each hour with exactly the market view's
 (canonical GPU, on-demand and not interruptible for the on-demand segment, not Vast's
 "cheapest" row, not a "from $x" floor, not a GPU-only attachment price (Google Cloud T4/V100, host VM
 extra), not resold capacity (provider_tier `resold:<cloud>`: Hugging Face Endpoints on AWS/GCP/Azure,
-GPU.ai's pooled inventory; another cloud's GPUs at a reseller's price would count that cloud twice), not sold out, and only while the listing was still being
+GPU.ai's pooled inventory; another cloud's GPUs at a reseller's price would count that cloud twice), not a
+tax-inclusive price (provider_tier `tax_inclusive`: Sakura Internet prints JPY prices including consumption tax at an
+unstated rate, which cannot be put on the pre-tax basis of every other list price; shown, never counted), not sold out, and only while the listing was still being
 seen; a listing that vanished stops counting after its provider's stale window).
 
 1. **One vote per provider.** A provider's vote is its *lowest* priced eligible listing for the

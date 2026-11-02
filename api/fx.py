@@ -4,7 +4,9 @@
                           stopped (stale / missing: fail closed)
     GET /v1/fx/rates      stored EUR->USD reference rates, newest first (days)
     GET /v1/fx/listings   current listings priced in another currency and converted to USD, with provenance:
-                          original currency and amount, the rate and the rate's date (provider)
+                          original currency and amount, the rate and the rate's date (provider); a cross-rate
+                          listing (fx_source "ecb_cross") also carries both legs (fx_legs)
+    GET /v1/fx/cross      every ECB currency's X->USD cross rate in force now, its two legs and its state
 
 Every converted listing is still a USD listing (`currency` USD) for statistics; the provenance fields are also on
 GET /listings and /history rows. Methodology: /methodology/fx.
@@ -28,10 +30,19 @@ def current(who: Principal = Depends(READ)):
     return envelope(fx.status(), kind=OBSERVED, methodology=METHOD)
 
 
-@router.get("/v1/fx/rates", tags=["fx"], summary="Stored ECB EUR->USD reference rates, newest first")
-def history(days: int = Query(30, ge=1, le=3650), who: Principal = Depends(READ)):
-    rows = fx.rates(days)
-    return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows), window_days=days)
+@router.get("/v1/fx/rates", tags=["fx"], summary="Stored ECB EUR->X reference rates (default USD), newest first")
+def history(days: int = Query(30, ge=1, le=3650), quote: str = Query("USD", pattern="^[A-Z]{3}$"),
+            who: Principal = Depends(READ)):
+    rows = fx.rates(days, quote)
+    return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows), window_days=days, quote=quote)
+
+
+@router.get("/v1/fx/cross", tags=["fx"], summary="X->USD cross rates for every ECB currency, with both legs")
+def cross(who: Principal = Depends(READ)):
+    rows = fx.cross_rates()
+    return envelope(rows, kind="derived", methodology=METHOD, count=len(rows),
+                    method="X->USD = (EUR->USD) / (EUR->X), both legs from the same ECB date; 8 decimals",
+                    min_rate=fx.MIN_CROSS_RATE, max_age_days=fx.MAX_AGE_DAYS)
 
 
 @router.get("/v1/fx/listings", tags=["fx"], summary="Listings converted to USD, with their FX provenance")

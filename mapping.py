@@ -1720,6 +1720,85 @@ HETZNER = ProviderMapping(
 )
 
 
+_FX_CROSS = "fx.convert at the ECB cross rate X->USD = (EUR->USD) / (EUR->X), both legs one ECB date (methodology/fx.md)"
+
+YOTTA = ProviderMapping(
+    provider="yotta",
+    display_name="Yotta Shakti Cloud (on-demand GPU VMs)",
+    endpoints={"GET shakticloud.ai/pricing/": "the public price page; the AI Workspace VM On Demand table, INR per hour"},
+    fields=_fields(
+        "yotta",
+        sku=(RAW, "row name", 'e.g. "VM – 1 x H100 On Demand"'),
+        listing_id=(DERIVED, "slug of the row name", 'e.g. "vm-1-x-h100-on-demand"'),
+        raw_gpu_name=(DERIVED, "GPU line model + per-GPU memory (the printed GB is the VM total / GPUs)",
+                      'e.g. "NVIDIA H100 SXM 80GB"'),
+        gpu_count=(RAW, 'GPU line "2 x Nvidia ..."'),
+        region=(ABSENT, "-", "the page names no data centre per row"),
+        country=(CONSTANT, '"IN"'),
+        price_per_gpu_hour=(DERIVED, "= USD hourly price / gpu count", _FX_CROSS),
+        price_per_instance_hour=(DERIVED, '"₹ 356" (per hour, per compute) x INR->USD cross rate', _FX_CROSS),
+        currency=(CONSTANT, '"USD"', "after conversion; the original is in original_currency"),
+        provider_tier=(CONSTANT, '"vm"'),
+        available=(ABSENT, "-", "no stock signal"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, 'description "vCPU : 24"'),
+        ram_gb=(RAW, 'description "RAM : 240 GB"'),
+        storage_gb=(RAW, 'description "Root Disk : 100 GB"'),
+        original_currency=(CONSTANT, '"INR"', "GST treatment not stated on the page; kept as printed"),
+        original_price_per_gpu_hour=(DERIVED, "INR hourly price / gpu count"),
+        original_price_per_instance_hour=(RAW, "the row's data-price1"),
+        fx_rate=(LOOKUP, "fx_rates (ECB EUR->USD and EUR->INR, one date)", "fail closed if > 5 days old"),
+        fx_rate_date=(LOOKUP, "fx_rates.rate_date of both legs"),
+        fx_source=(CONSTANT, '"ecb_cross"'),
+    ),
+    quirks=[
+        "Only the On Demand VM table is read; Dedicated VMs, Bare Metal (8x H100, 8x B200), clusters, AI Lab and "
+        "serverless rows are terms or other products. The page prints no B300 price.",
+        "The page does not say whether GST is included; the INR price is kept as printed.",
+    ],
+)
+
+
+SAKURA = ProviderMapping(
+    provider="sakura",
+    display_name="Sakura Internet (Koukaryoku DOK GPU containers)",
+    endpoints={"GET ai.sakura.ad.jp/gpu/koukaryoku-dok/": "the public product page; price and spec tables, JPY incl. tax"},
+    fields=_fields(
+        "sakura",
+        sku=(RAW, "spec table プラン名", 'e.g. "h100-8gpu-80gb"'),
+        listing_id=(RAW, "プラン名"),
+        raw_gpu_name=(DERIVED, "GPUシリーズ model + GPUメモリー per GPU", 'e.g. "NVIDIA H100 80GB"'),
+        gpu_count=(RAW, 'GPUシリーズ "NVIDIA H100 x8"', "1 when no multiplier"),
+        region=(ABSENT, "-", "the page names none"),
+        country=(CONSTANT, '"JP"'),
+        price_per_gpu_hour=(DERIVED, "= USD hourly price / gpu count", _FX_CROSS),
+        price_per_instance_hour=(DERIVED, '"1時間あたり 2,988円" (whole plan, tax incl.) x JPY->USD cross rate', _FX_CROSS),
+        currency=(CONSTANT, '"USD"', "after conversion; the original is in original_currency"),
+        provider_tier=(CONSTANT, '"tax_inclusive"', "the page says prices include tax and states no rate"),
+        available=(ABSENT, "-", "no stock signal"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, "vCPUコア数"),
+        ram_gb=(RAW, "メモリー"),
+        storage_gb=(ABSENT, "-", "20 GB result storage, not a disk"),
+        original_currency=(CONSTANT, '"JPY"', "tax-inclusive, as printed"),
+        original_price_per_gpu_hour=(DERIVED, "JPY hourly price / gpu count"),
+        original_price_per_instance_hour=(RAW, "1時間あたり, checked against 円/秒 x 3600"),
+        fx_rate=(LOOKUP, "fx_rates (ECB EUR->USD and EUR->JPY, one date)", "fail closed if > 5 days old"),
+        fx_rate_date=(LOOKUP, "fx_rates.rate_date of both legs"),
+        fx_source=(CONSTANT, '"ecb_cross"'),
+    ),
+    quirks=[
+        "Prices include Japanese consumption tax (表示価格は税込です); the rate is not stated, so no pre-tax price is "
+        "derived and every listing is marked provider_tier \"tax_inclusive\".",
+        "The 8-GPU plan (beta) is priced per box: ¥0.83/s = ¥2,988/h for 8 GPUs.",
+        'SXM or PCIe is not stated, so "NVIDIA H100 80GB" stays unmapped; "NVIDIA V100 32GB" has no canonical model.',
+        "Billed per second with a minimum per task (60 s for H100); the V100 plan ends 2027-03-31.",
+    ],
+)
+
+
 MODAL = ProviderMapping(
     provider="modal",
     display_name="Modal (serverless GPU)",
@@ -2121,6 +2200,8 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         FIREWORKS,
         IONOS,
         HETZNER,
+        YOTTA,
+        SAKURA,
     )
 }  # fmt: skip
 

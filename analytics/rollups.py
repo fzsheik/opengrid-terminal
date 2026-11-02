@@ -50,7 +50,7 @@ log = logging.getLogger(__name__)
 HOUR = timedelta(hours=1)
 OVERLAP = timedelta(hours=3)  # late-normalized observations can land a little in the past
 
-_EXCLUDE = ("COALESCE(c.provider_tier, '') NOT IN ('cheapest', 'from_price', 'gpu-attachment') "
+_EXCLUDE = ("COALESCE(c.provider_tier, '') NOT IN ('cheapest', 'from_price', 'gpu-attachment', 'tax_inclusive') "
             "AND COALESCE(c.provider_tier, '') NOT LIKE 'resold:%' AND c.canonical_gpu_name IS NOT NULL")
 _SEGMENT_SQL = f"""
     CASE

@@ -46,7 +46,7 @@ an unknown component is named and makes the total a lower bound ("≥ $X"), neve
 a complete total. `GET /v1/cost/{components,billing,sources,presets}`. The `/cost` page sits in the GPUs group.
 Nothing statistical reads cost data. Method: `/methodology/full-cost`.
 
-**Eleven providers (47 -> 58).** Seven without keys: Paperspace (via Shadeform's catalogue, Shadeform's resale price, Paperspace
+**Thirteen providers (47 -> 60).** Seven without keys: Paperspace (via Shadeform's catalogue, Shadeform's resale price, Paperspace
 list + $0.04/GPU-h), Akash Network (one weighted bid summary per GPU, bids up to 31 days old), Hydra Host (bare-metal
 inventory, cents converted), CUDO Compute (VMs and bare metal), GPU.ai, Exoscale (22 listings; GPU table from
 Exoscale's pricing page) and Hugging Face Inference Endpoints (38 listings). GPU.ai and Hugging Face resell other
@@ -60,9 +60,21 @@ public price pages, polled hourly:
 - **Fireworks AI** (on-demand deployments per GPU-hour): **internal only**. Its Terms of Service clause (e) forbids
   copying or distributing any part of the Service, so the whole provider is registered in `INTERNAL_SOURCES`: its
   listings are stored internal, routing and keyed recommendations may use them, and no public page, API answer or
-  provider list names it. 58 clouds are monitored, 57 published.
+  provider list names it. 60 clouds are monitored, 59 published.
 - **IONOS Cloud** (H200 PCIe VMs from IONOS CLOUD Inc.'s USD price list) and **Hetzner** (GEX dedicated GPU servers
   at the hourly rate Hetzner prints, capped at the monthly price, EUR at the ECB rate; monthly and setup kept raw).
+- **Yotta Shakti Cloud** (on-demand H100 SXM and L40S VMs, INR; GST treatment not stated, kept as printed) and
+  **Sakura Internet** (Koukaryoku DOK GPU containers incl. the 8x H100 box, JPY), both hourly. Sakura's prices
+  include consumption tax at an unstated rate, so its listings carry `provider_tier` `tax_inclusive` and, like
+  `resold:*`, are stored and shown but never vote in market statistics, rollups, indices or routing's market
+  reference (`market._ELIGIBLE`; routing explains them as `tax_inclusive_price`). Its H100s are unmapped today (form
+  factor not stated), so the rule is preventive.
+
+**Currency cross rates.** `fx.py` now parses every EUR->X quote in the ECB feed (stored bodies re-parsed, so all 29
+currencies share the history) and converts any of them to USD through the euro: X->USD = (EUR->USD) / (EUR->X), both
+legs from the same ECB date, the same 5-day fail-closed rule, 8 decimals, source `ecb_cross`, legs kept; a currency
+below 0.0005 USD (IDR) is refused rather than stored imprecisely. `GET /v1/fx/cross`, `/v1/fx/rates?quote=`, and
+`fx_legs` on `/v1/fx/listings`. No migration.
 
 **Archived history from official sources, back to 2015.** The AWS price-list archive now reads all 123 versions from
 2015-12 (the pre-2018 files lack columns that used to empty them; 2017-11 gives p3.2xlarge $3.06/h), keeps older
@@ -149,7 +161,7 @@ exactly as the Vast poller now stores it.
   also from the stream's first snapshot); a quarantine `duplicate_explosion` hold for any provider whose listing
   count jumps against its norm (new listing ids are withheld until released on /ops); the seven new providers have no
   norm yet, so they are not held. AWS spot polls every 5 minutes with the key.
-- Full suite before push: 121 test files (110 Python, 11 web); all pass except `test_jobs_e2e` (fails here and on
+- Full suite before push: 122 test files (111 Python, 11 web); all pass except `test_jobs_e2e` (fails here and on
   main). Two test-only fixes for time-dependent false results: `test_visibility`'s price marker matched a public
   volatility near the internal price on some days, and `test_settlement`'s trigger check could pick a fixing with
   no evidence just after 00:00 UTC (also failing on main then).

@@ -6,13 +6,19 @@ provenance: the original currency and amount, the rate and the rate's date (Comp
 
 Raw first, like provider prices:
     refresh()      fetches the ECB feed (eurofxref-daily.xml; the 90-day file once, when no rate is stored yet),
-                   stores every response verbatim in fx_snapshots (failures too), then parses EUR->USD into
-                   fx_rates. Every other quote stays in the raw body, unparsed.
+                   stores every response verbatim in fx_snapshots (failures too), then parses every EUR->X quote
+                   the ECB publishes (about 29) into fx_rates. Stored bodies from before cross rates existed are
+                   re-parsed once (reparse_stored).
     rate_at()      the EUR->USD rate in force at an instant: the newest stored rate already PUBLISHED then. The
                    ECB publishes on TARGET business days at about 16:00 CET, so a rate dated D is used from
                    D 16:00 Europe/Berlin; on weekends and TARGET holidays the latest published rate stays in force.
     usd_rate()     rate_at() plus the fail-closed rule: a rate more than MAX_AGE_DAYS calendar days older than
                    the instant (in Frankfurt) is stale, and no listing is converted with it (logged).
+                   EUR uses EUR->USD directly (source "ecb"). Any other ECB currency X is a CROSS rate (source
+                   "ecb_cross"): X->USD = (EUR->USD) / (EUR->X), both legs from the SAME ECB date (the newest date
+                   published at the instant on which both exist), the same staleness rule on that date, rounded to
+                   the 8 decimals compute_listings.fx_rate stores; Rate.legs keeps both legs. A currency whose USD
+                   value is below MIN_CROSS_RATE (IDR) would lose precision at 8 decimals and is refused.
     convert()      original amounts -> the USD fields and provenance fields of a ComputeListing.
 
 Normalizers call usd_rate() with the raw snapshot's fetch time, never "now", so re-running a normalizer over
@@ -43,7 +49,9 @@ SOURCE_NAME = "European Central Bank euro foreign exchange reference rate"
 DAILY_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
 HIST_90D_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist-90d.xml"
 BASE = "EUR"           # every ECB reference rate is quoted against the euro
-PARSED = ("USD",)      # the quotes parsed into fx_rates; the rest stay raw
+CROSS_SOURCE = "ecb_cross"  # Rate.source of an X->USD rate built from two EUR legs
+_RATE_Q = Decimal("0.00000001")  # compute_listings.fx_rate is Numeric(18, 8)
+MIN_CROSS_RATE = Decimal("0.0005")  # USD per unit; below it 8 decimals keep < 5 significant digits
 FRANKFURT = ZoneInfo("Europe/Berlin")
 PUBLISHED_AT = time(16, 0)  # "around 16:00 CET" on TARGET business days
 # Fail closed after this many calendar days. The longest normal gap between two ECB publications is Easter
@@ -118,6 +126,7 @@ class Rate:
     rate: Decimal          # quote units per one base unit
     rate_date: date
     source: str = SOURCE
+    legs: tuple | None = None   # a cross rate's two legs: (EUR->USD, EUR->X) as dicts
 
     @property
     def published_at(self) -> datetime:
@@ -158,27 +167,66 @@ def rate_at(at: datetime, base: str = BASE, quote: str = "USD") -> Rate | None:
     return pick([Rate(base, quote, r.rate, r.rate_date, r.source) for r in rows], at)
 
 
+def cross(eur_usd: Rate, eur_x: Rate) -> Rate:
+    """X->USD from two legs of the same ECB date (pure): (USD per EUR) / (X per EUR), rounded to 8 decimals."""
+    if eur_usd.base != BASE or eur_x.base != BASE or eur_usd.quote != "USD":
+        raise ValueError(f"fx: cross needs EUR->USD and EUR->X legs, got {eur_usd.base}->{eur_usd.quote}, "
+                         f"{eur_x.base}->{eur_x.quote}")
+    if eur_usd.rate_date != eur_x.rate_date:
+        raise ValueError(f"fx: cross legs from different dates ({eur_usd.rate_date}, {eur_x.rate_date})")
+    if eur_x.rate <= 0 or eur_usd.rate <= 0:
+        raise ValueError("fx: cross leg not positive")
+    value = (eur_usd.rate / eur_x.rate).quantize(_RATE_Q, rounding=ROUND_HALF_UP)
+    legs = tuple({"base": r.base, "quote": r.quote, "rate": r.rate, "rate_date": r.rate_date, "source": r.source}
+                 for r in (eur_usd, eur_x))
+    return Rate(eur_x.quote, "USD", value, eur_x.rate_date, CROSS_SOURCE, legs)
+
+
+def cross_at(at: datetime, currency: str) -> Rate | None:
+    """The cross X->USD rate in force at `at`: both legs from the newest ECB date already published that has both."""
+    if at.tzinfo is None:
+        raise ValueError("fx.cross_at needs an aware datetime")
+    with _session()() as s:
+        rows = s.execute(
+            select(FxRate.rate_date, FxRate.quote, FxRate.rate, FxRate.source)
+            .where(FxRate.base == BASE, FxRate.quote.in_(("USD", currency)),
+                   FxRate.rate_date <= at.astimezone(FRANKFURT).date())
+            .order_by(FxRate.rate_date.desc()).limit(20)
+        ).all()
+    by_date: dict[date, dict[str, Rate]] = {}
+    for r in rows:
+        by_date.setdefault(r.rate_date, {})[r.quote] = Rate(BASE, r.quote, r.rate, r.rate_date, r.source)
+    for d in sorted(by_date, reverse=True):
+        legs = by_date[d]
+        if "USD" in legs and currency in legs and published_at(d) <= at:
+            return cross(legs["USD"], legs[currency])
+    return None
+
+
 def usd_rate(currency: str, at: datetime, context: str = "") -> Rate | None:
     """The rate to convert `currency` -> USD at `at`, or None: fail closed (logged) when missing or stale."""
     if currency == "USD":
         return Rate("USD", "USD", Decimal(1), at.astimezone(FRANKFURT).date(), "identity")
-    if currency != BASE:
-        log.warning("fx: no %s->USD reference rate (only %s is parsed)%s; not converted", currency, BASE,
-                    f" ({context})" if context else "")
-        return None
     where = f" ({context})" if context else ""
+    if currency != BASE and (len(currency) != 3 or not currency.isalpha() or not currency.isupper()):
+        log.warning("fx: %r is not a currency code%s; not converted", currency, where)
+        return None
     try:
-        rate = rate_at(at, currency, "USD")
+        rate = rate_at(at, currency, "USD") if currency == BASE else cross_at(at, currency)
     except Exception:  # noqa: BLE001 - a lookup that fails converts nothing (fail closed), it never breaks a feed
         log.exception("fx: %s->USD rate lookup failed%s; conversion stopped (fail closed)", currency, where)
         return None
     if rate is None:
         log.warning("fx: no ECB %s->USD rate published by %s%s; conversion stopped (fail closed)",
-                    currency, at.isoformat(), where)
+                    currency, at.isoformat(), where)  # cross: no ECB date with both legs
         return None
     if is_stale(rate, at):
         log.warning("fx: ECB %s->USD rate of %s is %d days old at %s (max %d)%s; conversion stopped (fail closed)",
                     currency, rate.rate_date, age_days(rate.rate_date, at), at.isoformat(), MAX_AGE_DAYS, where)
+        return None
+    if rate.source == CROSS_SOURCE and rate.rate < MIN_CROSS_RATE:
+        log.warning("fx: %s->USD cross rate %s is below %s: too few significant digits at 8 decimals%s; not converted",
+                    currency, rate.rate, MIN_CROSS_RATE, where)
         return None
     return rate
 
@@ -263,28 +311,53 @@ def save(f: Fetched) -> dict:
                           body=f.body)
         s.add(snap)
         s.flush()
-        rows = [{"rate_date": d, "base": BASE, "quote": q, "rate": rates[q], "source": SOURCE,
-                 "snapshot_id": snap.id, "first_seen_at": now, "updated_at": now}
-                for d, rates in sorted((parsed or {}).items()) for q in PARSED if q in rates]
-        revised = 0
-        if rows:
-            old = {(r.rate_date, r.quote): r.rate for r in s.execute(
-                select(FxRate).where(FxRate.base == BASE, FxRate.rate_date.in_({r["rate_date"] for r in rows}))
-            ).scalars()}
-            for r in rows:
-                prev = old.get((r["rate_date"], r["quote"]))
-                if prev is not None and Decimal(prev) != r["rate"]:
-                    revised += 1
-                    log.warning("fx: ECB revised %s %s->%s from %s to %s", r["rate_date"], BASE, r["quote"], prev, r["rate"])
-            stmt = insert(FxRate).values(rows)
+        rows, revised = _store_rates(s, parsed or {}, snap.id, now)
+    return {"url": f.url, "ok": parsed is not None, "error": error, "dates": len(parsed or {}),
+            "rates": len(rows), "revised": revised}
+
+
+def _store_rates(s, parsed: dict[date, dict[str, Decimal]], snapshot_id: int | None, now: datetime) -> tuple[list, int]:
+    """Upsert every EUR->X quote of a parsed feed; a changed value for a known (date, quote) is a revision (logged)."""
+    rows = [{"rate_date": d, "base": BASE, "quote": q, "rate": rates[q], "source": SOURCE,
+             "snapshot_id": snapshot_id, "first_seen_at": now, "updated_at": now}
+            for d, rates in sorted(parsed.items()) for q in sorted(rates)]
+    revised = 0
+    if rows:
+        old = {(r.rate_date, r.quote): r.rate for r in s.execute(
+            select(FxRate).where(FxRate.base == BASE, FxRate.rate_date.in_({r["rate_date"] for r in rows}))
+        ).scalars()}
+        for r in rows:
+            prev = old.get((r["rate_date"], r["quote"]))
+            if prev is not None and Decimal(prev) != r["rate"]:
+                revised += 1
+                log.warning("fx: ECB revised %s %s->%s from %s to %s", r["rate_date"], BASE, r["quote"], prev, r["rate"])
+        for i in range(0, len(rows), 2000):
+            stmt = insert(FxRate).values(rows[i:i + 2000])
             s.execute(stmt.on_conflict_do_update(
                 index_elements=["rate_date", "base", "quote"],
                 set_={"rate": stmt.excluded.rate, "snapshot_id": stmt.excluded.snapshot_id,
                       "updated_at": stmt.excluded.updated_at},
                 where=FxRate.rate != stmt.excluded.rate,
             ))
-    return {"url": f.url, "ok": parsed is not None, "error": error, "dates": len(parsed or {}),
-            "rates": len(rows), "revised": revised}
+    return rows, revised
+
+
+def reparse_stored() -> dict:
+    """Re-parse every stored ECB body and store all its quotes. Bodies stored before cross rates existed carry
+    every currency already (raw first), so cross rates cover the same history as EUR->USD."""
+    now = datetime.now(timezone.utc)
+    with _session()() as s:
+        snaps = s.execute(select(FxSnapshot.id, FxSnapshot.body).where(FxSnapshot.ok.is_(True))
+                          .order_by(FxSnapshot.fetched_at, FxSnapshot.id)).all()
+    stored = 0
+    for snap_id, body in snaps:
+        try:
+            parsed = parse(body)
+        except ValueError:
+            continue
+        with _session().begin() as s:
+            stored += len(_store_rates(s, parsed, snap_id, now)[0])
+    return {"snapshots": len(snaps), "rates": stored}
 
 
 async def refresh(client: httpx.AsyncClient | None = None) -> dict:
@@ -292,6 +365,10 @@ async def refresh(client: httpx.AsyncClient | None = None) -> dict:
     with _session()() as s:
         empty = not s.execute(select(func.count()).select_from(FxRate).where(FxRate.base == BASE)).scalar()
     urls = [HIST_90D_URL, DAILY_URL] if empty else [DAILY_URL]
+    with _session()() as s:
+        quotes = s.execute(select(func.count(func.distinct(FxRate.quote))).where(FxRate.base == BASE)).scalar()
+    if not empty and quotes <= 1:  # rates stored before cross rates existed: every other quote is in the raw bodies
+        log.info("fx: re-parsing stored ECB bodies for the cross currencies: %s", reparse_stored())
     results = [save(await fetch(u, client)) for u in urls]
     out = {"fetches": results, **status()}
     if out["state"] != "ok":
@@ -319,14 +396,35 @@ def status(now: datetime | None = None) -> dict:
     if rate is not None:
         out.update(rate=rate.rate, rate_date=rate.rate_date, published_at=rate.published_at,
                    age_days=age_days(rate.rate_date, now), state="stale" if is_stale(rate, now) else "ok")
+        with _session()() as s:
+            out["cross_currencies"] = sorted(q for q in s.execute(select(FxRate.quote).where(
+                FxRate.base == BASE, FxRate.rate_date == rate.rate_date)).scalars() if q != "USD")
+    else:
+        out["cross_currencies"] = []
+    out["cross_method"] = "X->USD = (EUR->USD) / (EUR->X), both legs from the same ECB date (source ecb_cross)"
     return out
 
 
-def rates(days: int = 30) -> list[dict]:
-    """Stored EUR->USD rates, newest first."""
+def cross_rates(at: datetime | None = None) -> list[dict]:
+    """Every cross X->USD rate in force at `at`, with both legs and the fail-closed state."""
+    at = at or datetime.now(timezone.utc)
+    st = status(at)
+    out = []
+    for q in st["cross_currencies"]:
+        r = cross_at(at, q)
+        if r is None:
+            continue
+        state = "stale" if is_stale(r, at) else "too_small" if r.rate < MIN_CROSS_RATE else "ok"
+        out.append({"currency": q, "quote": "USD", "rate": r.rate, "rate_date": r.rate_date, "source": r.source,
+                    "state": state, "legs": list(r.legs)})
+    return out
+
+
+def rates(days: int = 30, quote: str = "USD") -> list[dict]:
+    """Stored EUR->`quote` rates, newest first."""
     since = datetime.now(timezone.utc).date() - timedelta(days=days)
     with _session()() as s:
-        rows = s.execute(select(FxRate).where(FxRate.base == BASE, FxRate.rate_date >= since)
+        rows = s.execute(select(FxRate).where(FxRate.base == BASE, FxRate.quote == quote, FxRate.rate_date >= since)
                          .order_by(FxRate.rate_date.desc())).scalars().all()
     return [{"rate_date": r.rate_date, "base": r.base, "quote": r.quote, "rate": r.rate, "source": r.source,
              "published_at": published_at(r.rate_date), "first_seen_at": r.first_seen_at} for r in rows]
@@ -344,7 +442,19 @@ def converted_listings(provider: str | None = None) -> list[dict]:
             "price_per_instance_hour", "currency", "original_currency", "original_price_per_gpu_hour",
             "original_price_per_instance_hour", "fx_rate", "fx_rate_date", "fx_source", "observed_at")
     with _session()() as s:
-        return [{k: getattr(r, k) for k in cols} for r in s.execute(stmt).scalars()]
+        out = [{k: getattr(r, k) for k in cols} for r in s.execute(stmt).scalars()]
+        # a cross rate's legs are the two stored EUR quotes of its date (cross() takes both from one date)
+        need = {(r["fx_rate_date"], r["original_currency"]) for r in out if r["fx_source"] == CROSS_SOURCE}
+        legs = {}
+        if need:
+            for fr in s.execute(select(FxRate).where(FxRate.base == BASE,
+                                                     FxRate.rate_date.in_({d for d, _ in need}))).scalars():
+                legs[(fr.rate_date, fr.quote)] = {"base": BASE, "quote": fr.quote, "rate": fr.rate,
+                                                  "rate_date": fr.rate_date, "source": fr.source}
+        for r in out:
+            if r["fx_source"] == CROSS_SOURCE:
+                r["fx_legs"] = [legs.get((r["fx_rate_date"], "USD")), legs.get((r["fx_rate_date"], r["original_currency"]))]
+    return out
 
 
 # --------------------------------------------------------------------------
