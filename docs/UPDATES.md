@@ -161,8 +161,8 @@ exactly as the Vast poller now stores it.
   also from the stream's first snapshot); a quarantine `duplicate_explosion` hold for any provider whose listing
   count jumps against its norm (new listing ids are withheld until released on /ops); the seven new providers have no
   norm yet, so they are not held. AWS spot polls every 5 minutes with the key.
-- Full suite before push: 122 test files (111 Python, 11 web); all pass except `test_jobs_e2e` (fails here and on
-  main). Two test-only fixes for time-dependent false results: `test_visibility`'s price marker matched a public
+- Full suite before push: 122 test files (111 Python, 11 web); all pass on the final run. `test_jobs_e2e` is
+  intermittent ("no usage slice metered" on earlier runs, here and on main). Two test-only fixes for time-dependent false results: `test_visibility`'s price marker matched a public
   volatility near the internal price on some days, and `test_settlement`'s trigger check could pick a fixing with
   no evidence just after 00:00 UTC (also failing on main then).
 
