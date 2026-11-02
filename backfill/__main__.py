@@ -2,11 +2,8 @@
 
     python -m backfill survey                          captures per source, nothing downloaded or stored
     python -m backfill import [--since 2025-10-21] [--until 2026-10-21] [--provider coreweave ...]
-    python -m backfill import --since 2016-01 --provider azure --no-aws     everything archived since Jan 2016
-
---since / --until take YYYY, YYYY-MM or YYYY-MM-DD (--since: the period's first day; --until: its last). The default
-window is the last 365 days; parsers know designs back to 2016 (Azure), so a deeper --since is safe.
                               [--no-download] [--dry-run] [--no-aws] [--report report.json]
+    python -m backfill import --since 2016-01 --provider azure --no-aws     everything archived since Jan 2016
     python -m backfill aws [--since 2015-12-01] [--no-download] [--dry-run]
                               AWS's EC2 price-list archive only (all 123 versions by default; on-demand + reserved)
     python -m backfill azure-since [--dry-run]
@@ -19,6 +16,9 @@ window is the last 365 days; parsers know designs back to 2016 (Azure), so a dee
                               SkyPilot catalogue history; refuses unless skypilot_catalog_enabled + licence are set
     python -m backfill coverage [--market on_demand|spot|reserved_1y|transacted|all] [--json]
                               earliest archived date and months of history per provider and GPU (24/36/60 bars)
+
+--since / --until take YYYY, YYYY-MM or YYYY-MM-DD (--since: the period's first day; --until: its last). The default
+window is the last 365 days; parsers know designs back to 2016 (Azure), so a deeper --since is safe.
 
 Downloads go one at a time through backfill/wayback.py (polite, cached under OPENGRID_ARCHIVE_CACHE,
 default ~/.cache/opengrid/wayback), so the first full import takes about an hour and a re-run takes seconds.

@@ -353,7 +353,8 @@ def detect_capacity(s, t0=None) -> list[dict]:
 
 
 def _archived_points(s) -> list[dict]:
-    """Archived points from BEFORE OpenGrid recorded that provider and GPU live: once observed data exists the
+    """Public archived points from BEFORE OpenGrid recorded that provider and GPU live (internal ones never make a
+    public shift): once observed data exists the
     observed shifts cover it, and archived samples are never mixed into it (methodology/archived-history.md)."""
     rows = s.execute(text("""
         SELECT a.provider, a.gpu, a.observed_at AS captured, min(a.price_per_gpu_hour) AS price,
@@ -361,7 +362,8 @@ def _archived_points(s) -> list[dict]:
         FROM archived_prices a
         LEFT JOIN (SELECT gpu, provider, min(hour) AS first_hour FROM market_hourly WHERE segment = :seg
                    GROUP BY gpu, provider) o ON o.gpu = a.gpu AND o.provider = a.provider
-        WHERE a.gpu IS NOT NULL AND a.market_type = :seg AND (o.first_hour IS NULL OR a.observed_at < o.first_hour)
+        WHERE a.gpu IS NOT NULL AND a.market_type = :seg AND a.visibility = 'public'
+          AND (o.first_hour IS NULL OR a.observed_at < o.first_hour)
         GROUP BY a.provider, a.gpu, a.observed_at"""), {"seg": SEGMENT}).all()
     # Marketplace / decentralized rows are host asks, not one provider's list price: excluded, as for live shifts.
     return [{"provider": r.provider, "gpu": r.gpu, "t": r.captured, "price": float(r.price), "source_url": r.source_url}

@@ -329,7 +329,7 @@ def test_news_families_and_components():
     comps = {"entity_points": 15.0, "topic_points": 10, "signal": 25.0, "tier_mult": 1.0, "recency_mult": 1.0}
     item = SimpleNamespace(id=1, story_id=1, source_id="nope", title="t", url="u", summary="s", author=None,
                            published_at=NOW, published_at_inferred=False, first_seen_at=NOW, relevance=31,
-                           topics=[], entities={}, relevance_components=comps)
+                           topics=[], entities={}, relevance_components=comps, backfilled=False, provenance=None)
     assert store.item_dict(item)["relevance_components"] == comps
     assert c.get("/v1/news").status_code == 200
 

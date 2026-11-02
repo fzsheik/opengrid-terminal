@@ -5,6 +5,57 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-02 (second release) — Archived page history back to 2017, news history, explained price shifts, internal equities
+
+### What shipped
+- **Archived page history.** Archived pricing pages are parsed into `archived` points (never in statistics):
+  - Azure: Linux VM page from 2017 to 2024, and the 2019–21 design.
+  - Lambda: 2020–2025.
+  - CoreWeave: 2021–2024, three designs plus the a-la-carte page.
+  - RunPod: 2022–2024.
+  - Verda / DataCrunch: 2020–2025.
+  - Paperspace: 2017–2026.
+  - Exoscale: from 2021.
+  - Hugging Face Inference Endpoints: from 2022, tier `resold:<vendor>`.
+  - CUDO: 2024–25.
+  - Akash: from July 2025.
+  - Denvr: 2025.
+
+  `--since` / `--until` take YYYY, YYYY-MM or YYYY-MM-DD. A re-import fills the GPU on rows that were stored
+  unmapped, and never changes a mapped one.
+- **News history.** Past news items are recovered from feed archives, Wayback captures of changelogs, SEC EDGAR and
+  GDELT, with archive provenance on each item (`news_items.backfilled`, `provenance`).
+- **Major shifts.** Large moves are detected in observed and archived history: market medians, indices, provider
+  repricings and capacity episodes. Each shift stores its related news items and events, ranked by time distance and
+  relevance. They are served at `GET /v1/shifts` and shown on the GPU page and the news timeline under a "related,
+  not causal" heading. The new `market_shifts` job keeps them current.
+- **Equities (internal only).** Alpaca market data (never the trading API) supplies daily bars from 2016 and hourly
+  bars for 5 years for GPU-relevant tickers, stored raw first with split and dividend refetches. They are read only
+  at the admin-only `/v1/ops/context/equities` and never appear on public pages, APIs, indices or exports. The
+  `context_equities` job runs hourly when both keys are set.
+- **Build.** `git` is now in the production image (`RAILPACK_DEPLOY_APT_PACKAGES=git`), so `python -m backfill
+  datasets` works in production. It failed in the previous release with "No such file or directory: 'git'".
+
+### Planned but not shipped, and why
+- GPU-name cleanup for unmapped rows (`data/unmapped-cleanup`) was still in progress at merge time. It ships in the
+  next release.
+
+### Deploy notes
+- Migrations: `0033_equities` -> `0029_news_history`. The news migration was re-chained after `0033_equities` at
+  merge; it was written against `0026_fx`.
+- New variables: `ALPACA_DATA_KEY_ID`, `ALPACA_DATA_SECRET_KEY` (market-data keys) and
+  `RAILPACK_DEPLOY_APT_PACKAGES=git`.
+- One-offs after deploy, in this order:
+  1. `python -m backfill datasets`
+  2. `python -m context equities backfill`
+  3. `python -m news.history run`
+  4. `python -m backfill import --since 2016-01` (the first run downloads archives one at a time)
+  5. `python -m analytics.shifts run` (after the history imports, so shifts see them)
+  6. `python -m backfill coverage`
+- Full suite before push: SUITE_RESULT
+
+---
+
 ## 2026-11-02 — Data release: public/internal tiers, freshness, full cost, 7 providers, AWS history to 2015, Lium live feed
 
 ### What shipped

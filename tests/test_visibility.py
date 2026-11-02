@@ -189,6 +189,8 @@ def setup_world():
         r = S.run(now=now, start=ft_start)
         if not r["hourly"] and not r["daily"]:
             break
+    from analytics import shifts
+    shifts.run(now=now)   # market_shifts + their related items, over observed and archived history
     cache.clear_all()
 
 
@@ -299,6 +301,10 @@ def _values(name: str, route_path: str) -> list[tuple[str, tuple[str, ...]]]:
         return [(f, ()) for f in W.get("fixing_ids") or ["1"]]
     if name == "at":
         return [(W["now"].isoformat(), ())]
+    if name == "shift_id":
+        with W["Session"]() as s:
+            ids = list(s.execute(text("SELECT id FROM market_shifts ORDER BY id LIMIT 5")).scalars())
+        return [(str(i), ()) for i in ids or [1]]
     if name in ("item_id", "service_id", "target_id", "target", "id"):
         return [("1", ())]
     return []
@@ -370,7 +376,8 @@ def test_derived_tables_have_no_internal_rows():
         tables = [r[0] for r in s.execute(text(
             "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename = ANY(:t)"), {"t": [
                 "market_hourly", "market_gpu_hourly", "index_levels", "index_fixings", "fixing_evidence",
-                "structure_gpu_daily", "structure_provider_daily", "market_events", "event_detector_state"]})]
+                "structure_gpu_daily", "structure_provider_daily", "market_events", "event_detector_state",
+                "market_shifts", "market_shift_items"]})]
         counts = {}
         for t in tables:
             rows = [r[0] for r in s.execute(text(f"SELECT row_to_json(x)::text FROM {t} x"))]
