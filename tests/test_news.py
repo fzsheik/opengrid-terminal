@@ -77,6 +77,8 @@ def test_parse_time():
     assert parse.parse_time("2026-10-06T18:58:44.908Z").tzinfo == UTC
     assert parse.parse_time("2026-10-06T10:00:00") == datetime(2026, 10, 6, 10, tzinfo=UTC), "naive read as UTC"
     assert parse.parse_time("yesterday") is None and parse.parse_time(None) is None
+    assert parse.parse_time("Thu, 01 Jan 1970 00:00:00 +0000") is None, "epoch placeholder is not a publish time"
+    assert parse.parse_time("1970-01-01T00:00:00Z") is None
 
 
 # --------------------------------------------------------------------------- dedupe

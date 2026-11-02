@@ -5,6 +5,22 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-02 (fourth release) — News: placeholder 1970 dates are not publish times
+
+### What shipped
+- `news.parse.parse_time` returns None for stamps before 1995. TrendForce's feed sends "Thu, 01 Jan 1970 08:00:00
+  +0800" for some items, and those were stored as published on 1970-01-01. They are now undated items, with the
+  time inferred from when they were read (the archive capture time for backfilled items), like any other undated
+  item.
+- Production repair, run on 2026-11-02 before this deploy: the 60 stored items dated before 1995 (all TrendForce,
+  all backfilled) were set to their capture time and marked inferred. The earliest news item is now 2008-02-07.
+
+### Deploy notes
+- No migrations and no new variables. Deployed after the running history imports finished, because a deploy
+  restarts the container and stops one-off jobs.
+
+---
+
 ## 2026-11-02 (third release) — Fewer unmapped GPUs, none guessed
 
 ### What shipped

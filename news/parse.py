@@ -63,8 +63,12 @@ def clean_text(s: str | None, limit: int | None = None) -> str | None:
     return t or None
 
 
+EARLIEST_PUBLISH_YEAR = 1995  # older stamps are feed placeholders ("01 Jan 1970", the Unix epoch), not publish times
+
+
 def parse_time(value: str | None) -> datetime | None:
-    """RFC 822, ISO 8601 or YYYY-MM-DD -> aware UTC datetime; None when unreadable."""
+    """RFC 822, ISO 8601 or YYYY-MM-DD -> aware UTC datetime; None when unreadable or a placeholder (before 1995),
+    so the item's time is inferred from when it was read, like any undated item."""
     if not value:
         return None
     v = value.strip()
@@ -87,7 +91,8 @@ def parse_time(value: str | None) -> datetime | None:
                 return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+    dt = dt.astimezone(timezone.utc)
+    return None if dt.year < EARLIEST_PUBLISH_YEAR else dt
 
 
 # --------------------------------------------------------------------------- XML
