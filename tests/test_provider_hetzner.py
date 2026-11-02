@@ -72,7 +72,7 @@ def test_normalize():
         out = {l.listing_id: l for l in HetznerProvider.normalize({ENDPOINT: [snap(extract(page()))]})}
     assert sorted(out) == ["gex131", "gex430", "gex45", "gex63"]
     a = out["gex45"]
-    assert (a.gpu_count, a.raw_gpu_name, a.canonical_gpu_name) == (1, "NVIDIA RTX PRO 4000 Blackwell SFF Edition 24GB", None)
+    assert (a.gpu_count, a.raw_gpu_name, a.canonical_gpu_name) == (1, "NVIDIA RTX PRO 4000 Blackwell SFF Edition 24GB", "NVIDIA RTX PRO 4000 Blackwell SFF 24GB")
     assert a.original_price_per_instance_hour == D("0.3429") and a.price_per_instance_hour == D("0.394335")
     assert (a.region, a.country, a.ram_gb, a.provider_tier, a.fx_source) == ("HEL1", "FI", 64.0, "dedicated", "ecb")
     q = out["gex430"]

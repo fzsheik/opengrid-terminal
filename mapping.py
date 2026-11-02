@@ -2255,3 +2255,55 @@ def as_dicts() -> list[dict]:
         }
         for m in PROVIDER_MAPPINGS.values()
     ]
+
+
+# --------------------------------------------------------------------------- unmapped GPU names: why (2026-11-02)
+# Raw names deliberately left unmapped because no source of the provider's own states the variant (board, memory or
+# edition). normalize.unmapped_gpus() shows these reasons in the to-do queue. Never a guess: when a provider documents
+# the variant, map it (canonical.py alias, or a provider-scoped DOC_NAMES table like providers/nebius.py).
+_FORM = "SXM or PCIe not stated by the provider"
+_EDITION = "RTX PRO 6000 edition (Workstation, Max-Q or Server Edition) not stated by the provider"
+UNMAPPED_REASONS: dict[tuple[str, str], str] = {
+    **{(p, n): _FORM for p, n in (
+        ("arkane", "NVIDIA A100 80GB"), ("arkane", "NVIDIA H100 80GB"), ("baseten", "NVIDIA A100 80GB"),
+        ("baseten", "NVIDIA H100 80GB"), ("civo", "NVIDIA A100 40GB"), ("civo", "NVIDIA A100 80GB"),
+        ("coreweave", "NVIDIA A100 80GB"), ("e2e", "NVIDIA A100 40GB"), ("e2e", "NVIDIA A100 80GB"),
+        ("e2e", "NVIDIA H100 80GB"), ("koyeb", "gpu-nvidia-a100 80GB"), ("koyeb", "gpu-nvidia-h100 80GB"),
+        ("massedcompute", "A100 (80GB)"), ("massedcompute", "H100 (80GB)"), ("modal", "Nvidia A100, 40 GB"),
+        ("modal", "Nvidia A100, 80 GB"), ("nosana", "NVIDIA A100 40GB"), ("nosana", "NVIDIA A100 80GB"),
+        ("nosana", "NVIDIA H100"), ("ovhcloud", "A100 80GB"), ("ovhcloud", "H100 80GB"),
+        ("replicate", "Nvidia A100 (80GB)"), ("replicate", "Nvidia H100"), ("thundercompute", "NVIDIA A100 80GB"),
+        ("gpuai", "a100_80gb"), ("fireworks", "H100 80 GB GPU"), ("sakura", "NVIDIA H100 80GB"))},
+    ("oracle", "NVIDIA A100 40GB"): "Oracle's shapes page says 'NVIDIA A100 40 GB' (BM.GPU4.8), no SXM or PCIe",
+    ("oracle", "NVIDIA A100 80GB"): "Oracle's shapes page gives 8xA100 / 640 GB (BM.GPU.A100-v2.8), no SXM or PCIe",
+    ("oracle", "NVIDIA H100 80GB"): "Oracle's shapes page says '8x H100 80 GB' (BM.GPU.H100.8), no SXM or PCIe",
+    ("gcore", "H100 80GB"): "Virtual GPU rows say 'H100' and '80 GB' only; the bare-metal servers' 'SXM' is not "
+                            "stated for the VMs",
+    ("koyeb", "gpu-nvidia-h200 141GB"): "SXM or NVL not stated by the provider",
+    ("ovhcloud", "H200 141GB"): "SXM or NVL not stated by the provider",
+    **{(p, n): _EDITION for p, n in (
+        ("arkane", "RTX PRO 6000 96GB"), ("e2e", "NVIDIA RTX PRO 6000 96GB"), ("koyeb", "gpu-nvidia-rtx-pro-6000 96GB"),
+        ("massedcompute", "RTX PRO 6000 Blackwell (96GB)"),
+        ("massedcompute", "RTX PRO 6000 Blackwell (96GB) [Reduced Storage]"), ("modal", "Nvidia RTX PRO 6000"),
+        ("oracle", "NVIDIA RTX PRO 6000 96GB"), ("gpuai", "rtx_pro_6000"),
+        ("exoscale", "Exoscale GPURTX6000PRO (NVIDIA RTX PRO 6000 Blackwell 96GB)"),
+        ("jarvislabs", "NVIDIA RTX Pro 6000 Blackwell 96GB"))},
+    ("gpuai", "rtx_pro_4500"): "RTX PRO 4500 edition (Workstation or Server Edition) not stated by the provider",
+    ("e2e", "NVIDIA V100 32GB"): "V100 32GB board (SXM2 or PCIe) not stated by the provider",
+    ("sakura", "NVIDIA V100 32GB"): "V100 32GB board (SXM2 or PCIe) not stated by the provider",
+    ("lium", "NVIDIA Tesla V100 Tensor Core GPU"): "V100 memory (16 or 32 GB) and board not stated",
+    ("vast", "A100 SXM4"): "Vast pools its 40 GB and 80 GB A100 SXM4 cards under one name",
+    ("lium", "NVIDIA B300 SXM6 PC"): "'PC' (vs the mapped 'AC') is not explained by Lium; not merged into B300 SXM",
+    ("verda", "B200 CC SXM6 180GB"): "confidential-computing instance type, kept apart (providers/verda.py)",
+    ("verda", "B300 CC SXM6 268GB"): "confidential-computing instance type, kept apart (providers/verda.py)",
+    ("verda", "RTX PRO 6000 CC 96GB"): "confidential-computing instance type, kept apart (providers/verda.py)",
+    ("ibm", "Intel Gaudi 3 128GB"): "no canonical Gaudi 3 yet: Intel's spec brief was not read",
+    ("digitalocean", "amd_mi350x"): "no canonical MI350X yet: AMD's spec page could not be read",
+    ("paperspace", "H100 (Paperspace: HGX per its page, pcie per Shadeform)"):
+        "Paperspace's page says HGX, Shadeform's tag says pcie: conflicting sources",
+    ("paperspace", "V100_32G pcie"): "board from Shadeform's interconnect tag only, which is wrong on its H100",
+    ("paperspace", "V100 pcie"): "Paperspace's page says only 'V100 16 GB'",
+    ("paperspace", "A100 pcie nvlink"): "no canonical A100 40GB PCIe NVLink variant yet",
+}
+# GRID K520 (AWS g2, price-list archive): no NVIDIA datasheet could be read, so no canonical model.
+UNMAPPED_REASONS[("aws", "NVIDIA GRID K520")] = "no canonical GRID K520 yet: no NVIDIA datasheet could be read"

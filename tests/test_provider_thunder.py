@@ -89,7 +89,7 @@ def test_thundercompute():
     assert sorted(out) == ["a100xl_x1", "a100xl_x2", "a100xl_x4", "a100xl_x8", "a6000_x1",
                            "h100_x1", "h100_x2", "h100_x4", "h100_x8", "l40_x1", "l40_x2", "l40_x4", "l40_x8"]
     h = out["h100_x2"]
-    assert h.raw_gpu_name == "NVIDIA H100 80GB" and h.canonical_gpu_name is None, "SXM/PCIe not in the specs"
+    assert h.raw_gpu_name == "NVIDIA H100 80GB" and h.canonical_gpu_name == "NVIDIA H100 80GB SXM5", "Thunder's own site: H100 SXM"
     assert h.gpu_count == 2 and h.price_per_instance_hour == D("6.4") and h.price_per_gpu_hour == D("3.2")
     assert h.vcpu == 8 and h.ram_gb == 64 and h.storage_gb == 200
     assert h.region is None and h.market_type == "on_demand" and not h.interruptible

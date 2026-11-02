@@ -73,7 +73,7 @@ def test_normalize():
     # Interruptible-only devices give no on-demand listing.
     only = [d["id"] for d in gpu_devices if d["listing"]["isInterruptibleOnly"]]
     assert only and all(i not in out and f"{i}:interruptible" in out for i in only)
-    assert any(l.raw_gpu_name == "Quadro RTX 8000" and l.canonical_gpu_name is None for l in out.values())
+    assert any(l.raw_gpu_name == "Quadro RTX 8000" and l.canonical_gpu_name == "NVIDIA Quadro RTX 8000 48GB" for l in out.values())
     h100 = [l for l in out.values() if l.raw_gpu_name == "NVIDIA H100 80GB HBM3" and l.market_type == "on_demand"]
     assert h100[0].canonical_gpu_name == "NVIDIA H100 80GB SXM5" and h100[0].price_per_gpu_hour == D("2.25")
 

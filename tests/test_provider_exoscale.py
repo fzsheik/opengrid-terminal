@@ -58,7 +58,7 @@ def test_normalize():
     assert v.gpu_count == 3 and v.canonical_gpu_name == "NVIDIA Tesla V100 16GB" and v.country == "AT"
     assert out["gpua5000.small"].canonical_gpu_name == "NVIDIA RTX A5000 24GB"
     assert out["gpu3080ti.medium"].canonical_gpu_name == "NVIDIA RTX 3080 Ti 12GB"
-    assert out["gpua30.small"].canonical_gpu_name is None and out["gpua30.small"].country == "CH"
+    assert out["gpua30.small"].canonical_gpu_name == "NVIDIA A30 24GB" and out["gpua30.small"].country == "CH"
     pro = out["gpurtx6000pro.small"]
     assert pro.canonical_gpu_name is None and pro.country is None and pro.price_per_gpu_hour == D("2.15277778")
     assert all(l.available is None and l.capacity is None and l.currency == "USD" for l in out.values())

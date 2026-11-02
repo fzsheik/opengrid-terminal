@@ -401,10 +401,11 @@ def unmapped_gpus() -> list[dict]:
     with SessionLocal() as s:
         names = {tuple(r) for r in s.execute(stmt)} | {tuple(r) for r in s.execute(capacity_stmt)}
     rows = [{"provider": p, "raw_gpu_name": n} for p, n in sorted(names)]
+    from mapping import UNMAPPED_REASONS
+
     for row in rows:
-        row["reason"] = canonical.NOT_A_SINGLE_GPU.get(
-            row["raw_gpu_name"], "not mapped yet"
-        )
+        row["reason"] = canonical.NOT_A_SINGLE_GPU.get(row["raw_gpu_name"]) or UNMAPPED_REASONS.get(
+            (row["provider"], row["raw_gpu_name"]), "not mapped yet")
     return rows
 
 

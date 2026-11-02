@@ -54,6 +54,14 @@ NV_RTXPRO5000 = "https://www.nvidia.com/en-us/products/workstations/professional
 NV_RTXPRO4500_SE = "https://www.nvidia.com/en-us/data-center/rtx-pro-4500-blackwell-server-edition/"
 NV_RTXPRO4500 = "https://www.nvidia.com/en-us/products/workstations/professional-desktop-gpus/rtx-pro-4500/"
 NV_RTXPRO4000 = "https://www.nvidia.com/en-us/products/workstations/professional-desktop-gpus/rtx-pro-4000/"
+NV_RTXPRO4000_SFF = "https://www.nvidia.com/en-us/products/workstations/professional-desktop-gpus/rtx-pro-4000-sff/"
+NV_A30 = "https://www.nvidia.com/en-us/data-center/products/a30-gpu/"
+NV_GB200 = "https://www.nvidia.com/en-us/data-center/gb200-nvl72/"
+NV_V100_DS = "https://images.nvidia.com/content/technologies/volta/pdf/volta-v100-datasheet-update-us-1165301-r5.pdf"
+NV_K80_DS = "https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/tesla-product-literature/Tesla-K80-BoardSpec-07317-001-v05.pdf"
+NV_M60_DS = "https://images.nvidia.com/content/pdf/tesla/tesla-m60-product-brief.pdf"
+NV_QRTX8000_DS = ("https://www.nvidia.com/content/dam/en-zz/Solutions/design-visualization/quadro-product-literature/"
+                  "quadro-rtx-8000-us-nvidia-946977-r1-web.pdf")
 NV_WS = "https://www.nvidia.com/en-us/design-visualization/desktop-graphics/"
 NV_GEFORCE = "https://www.nvidia.com/en-us/geforce/graphics-cards/compare/"
 AMD_MI300X = "https://www.amd.com/en/products/accelerators/instinct/mi300/mi300x.html"
@@ -102,6 +110,13 @@ _s("NVIDIA B300 MIG 1g.34gb", "NVIDIA", "Blackwell Ultra", "Blackwell", 2025, DC
    "A Multi-Instance GPU partition of one B300 (1 of up to 7 compute slices), not a whole GPU.",
    parent="NVIDIA B300 288GB SXM", fraction_of_parent=1 / 7)
 
+_s("NVIDIA GB200 186GB", "NVIDIA", "Blackwell", "Blackwell", 2024, DC, 186, "HBM3e", 8.0,
+   80, 2500, 2500, 5000, True, "NVLink-C2C to Grace", "NVLink 5, 1.8 TB/s", "Superchip", None, TR, [NV_GB200],
+   "One Blackwell GPU of a GB200 superchip (1 Grace CPU + 2 GPUs), as sold in GB200 NVL72 racks. Per GPU from the "
+   "superchip column (372 GB HBM3e, 16 TB/s, 10 PF FP16/BF16 and 20 PF FP8 with sparsity, 160 TFLOPS FP32) / 2; "
+   "dense tensor figures are half the sparse ones. Providers print 186, 189 or 192 GB (Oracle: 'Blackwell B200 "
+   "192 GB'), the same GPU. TDP is per superchip/rack, not per GPU, so left empty.")
+
 # ---------------------------------------------------------------- NVIDIA Hopper
 _s("NVIDIA H200 141GB SXM5", "NVIDIA", "Hopper", "Hopper", 2024, DC, 141, "HBM3e", 4.8,
    67, 989.5, 989.5, 1979, True, "PCIe Gen5", "NVLink 4, 900 GB/s", "SXM", 700, TR, [NV_H200],
@@ -148,6 +163,10 @@ _s("NVIDIA A10G 24GB", "NVIDIA", "Ampere", "Ampere", 2021, DC, 24, "GDDR6", None
    ["https://aws.amazon.com/ec2/instance-types/g5/"],
    "AWS-only part related to the A10; NVIDIA publishes no datasheet, so throughput and bandwidth are left empty.")
 
+_s("NVIDIA A30 24GB", "NVIDIA", "Ampere", "Ampere", 2021, DC, 24, "HBM2", 0.933,
+   10.3, 165, 165, None, False, "PCIe Gen4", "NVLink bridge (pairs), 200 GB/s", "PCIe", 165, TI, [NV_A30],
+   "Datasheet: 165 TFLOPS FP16/BF16 tensor dense (330 with sparsity). One form factor (PCIe, FHFL); MIG up to 4.")
+
 # ---------------------------------------------------------------- NVIDIA Ada / Turing / Volta datacenter
 _s("NVIDIA L40S 48GB", "NVIDIA", "Ada Lovelace", "Ada", 2023, DC, 48, "GDDR6", 0.864,
    91.6, 362.05, 362.05, 733, True, "PCIe Gen4", None, "PCIe", 350, TI, [NV_L40S],
@@ -170,6 +189,23 @@ _s("NVIDIA Tesla V100 16GB", "NVIDIA", "Volta", "Volta", 2017, DC, 16, "HBM2", 0
    None, None, None, None, False, None, None, None, None, TI, [NV_V100],
    "The provider does not say PCIe (112 TFLOPS, 250 W) or SXM2 (125 TFLOPS, 300 W), so those fields are empty.")
 
+_s("NVIDIA Tesla V100 32GB SXM2", "NVIDIA", "Volta", "Volta", 2018, DC, 32, "HBM2", 0.9,
+   15.7, 125, None, None, False, "NVLink (system interface)", "NVLink 2, 300 GB/s", "SXM", 300, TI, [NV_V100_DS],
+   "Datasheet (Jan 2020) V100 SXM2 column: 32 or 16 GB HBM2, same compute and bandwidth as the 16 GB board.")
+_s("NVIDIA Tesla V100 32GB PCIe", "NVIDIA", "Volta", "Volta", 2018, DC, 32, "HBM2", 0.9,
+   14, 112, None, None, False, "PCIe Gen3", None, "PCIe", 250, TI, [NV_V100_DS],
+   "Datasheet (Jan 2020) V100 PCIe column: 32 or 16 GB HBM2, same compute and bandwidth as the 16 GB card.")
+_s("NVIDIA Tesla V100S 32GB PCIe", "NVIDIA", "Volta", "Volta", 2019, DC, 32, "HBM2", 1.134,
+   16.4, 130, None, None, False, "PCIe Gen3", None, "PCIe", 250, TI, [NV_V100_DS],
+   "Datasheet (Jan 2020) V100S PCIe column; the V100S exists only as a PCIe card, 32 GB.")
+_s("NVIDIA Tesla K80 12GB", "NVIDIA", "Kepler", "Kepler", 2014, DC, 12, "GDDR5", 0.24,
+   None, None, None, None, False, "PCIe Gen3", None, "PCIe", 150, TI, [NV_K80_DS],
+   "ONE of the two GK210 GPUs on a Tesla K80 board, the unit clouds count as a GPU (AWS p2.xlarge = 1 GPU, 12 GiB). "
+   "Board spec: 12 GB and 240 GB/s per GPU, 150 W power cap per GPU (300 W board). The board spec gives no FLOPS.")
+_s("NVIDIA Tesla M60 8GB", "NVIDIA", "Maxwell", "Maxwell", 2015, DC, 8, "GDDR5", 0.16,
+   None, None, None, None, False, "PCIe Gen3", None, "PCIe", None, GI, [NV_M60_DS],
+   "ONE of the two GM204 GPUs on a Tesla M60 board, the unit clouds count as a GPU (AWS g3s.xlarge = 1 GPU, 8 GiB). "
+   "Product brief: 8 GB and 160 GB/s per GPU; board power 300 W passive / 240 W active for both GPUs; no FLOPS given.")
 # ---------------------------------------------------------------- NVIDIA RTX PRO Blackwell
 _rtxpro = "No dense FP16/FP8 tensor rate is published for RTX PRO Blackwell (only FP4 'AI TOPS' with sparsity), so left empty."
 _s("NVIDIA RTX PRO 6000 96GB SE", "NVIDIA", "Blackwell", "Blackwell", 2025, DC, 96, "GDDR7", 1.597,
@@ -197,6 +233,10 @@ _s("NVIDIA RTX PRO 4500 Blackwell 32GB SE", "NVIDIA", "Blackwell", "Blackwell", 
    51, None, None, None, True, "PCIe Gen5", None, "PCIe", 165, GI, [NV_RTXPRO4500_SE], _rtxpro)
 _s("NVIDIA RTX PRO 4000 Blackwell 24GB", "NVIDIA", "Blackwell", "Blackwell", 2025, WS, 24, "GDDR7", 0.672,
    40, None, None, None, True, "PCIe Gen5", None, "PCIe", 145, GI, [NV_RTXPRO4000], _rtxpro)
+_s("NVIDIA RTX PRO 4000 Blackwell SFF 24GB", "NVIDIA", "Blackwell", "Blackwell", 2025, WS, 24, "GDDR7", 0.432,
+   24, None, None, None, True, "PCIe Gen5", None, "PCIe", 70, GI, [NV_RTXPRO4000_SFF],
+   "Small form factor (2.7 in high, dual slot, 70 W), a different board from the full-height RTX PRO 4000 Blackwell "
+   "(672 GB/s, 145 W). NVIDIA gives AI TOPS as sparse FP4 only, so tensor fields are left empty.")
 
 # ---------------------------------------------------------------- NVIDIA workstation (Ada, Ampere, Turing)
 _ada_ws = "Datasheet 'Tensor Performance' is FP8 with sparsity; dense FP8 is half, dense FP16 a quarter."
@@ -225,6 +265,9 @@ _s("NVIDIA RTX A2000 6GB", "NVIDIA", "Ampere", "Ampere", 2021, WS, 6, "GDDR6", 0
 _s("NVIDIA Quadro RTX 6000 24GB", "NVIDIA", "Turing", "Turing", 2018, WS, 24, "GDDR6", 0.672,
    16.3, 130.5, None, None, False, "PCIe Gen3", "NVLink bridge (pairs), 100 GB/s", "PCIe", 295, GI, [NV_WS],
    "Turing: no BF16/FP8, no sparsity; 130.5 TFLOPS tensor is the datasheet figure.")
+_s("NVIDIA Quadro RTX 8000 48GB", "NVIDIA", "Turing", "Turing", 2018, WS, 48, "GDDR6", 0.672,
+   16.3, 130.5, None, None, False, "PCIe Gen3", "NVLink bridge (pairs), 100 GB/s", "PCIe", 295, GI, [NV_QRTX8000_DS],
+   "Datasheet (Mar 2019): 48 GB GDDR6, 672 GB/s, 16.3 TFLOPS FP32, 130.5 TFLOPS tensor, 295 W board power.")
 
 # ---------------------------------------------------------------- NVIDIA GeForce (consumer)
 _gf = "GeForce: fp16/bf16 is the FP32-accumulate tensor rate from NVIDIA's architecture whitepaper (FP16-accumulate is 2x)."
