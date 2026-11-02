@@ -77,4 +77,92 @@ def verda_instance_tables(page: str, at: datetime) -> list[ComputeListing]:
     return out
 
 
-SOURCES = [own_page("verda", "verda.com/pricing", verda_instance_tables)]
+# --------------------------------------------------------------------------------------------------------------
+# datacrunch.io/products (DataCrunch, Verda's former name), Sep 2020 - Dec 2021.
+# --------------------------------------------------------------------------------------------------------------
+# The instance name is Verda's instance type ("1V100.6V", "8A6000.80V", "1A100.22V"; "...M" = bare metal), which is
+# what the live API's listing ids are, so it is the listing id. The GPU model is the table's "GPU Model" cell
+# (2021) or the name's own code (2020: "4V100.20V" is "4x V100", as the page itself explains under each table).
+# Raw name: model + per-GPU VRAM, in the API's spelling where the model is unambiguous ("Tesla V100 16GB",
+# "RTX A6000 48GB"); "A100 80GB" does not say SXM or PCIe and stays unmapped.
+_DC_CODE = re.compile(r"^(?P<n>\d+)(?P<code>[A-Z0-9]+?)(?:\.(?P<mem>\d+)(?P<form>[SP]))?\.(?P<cpu>\d+)(?P<kind>[VM])$")
+DC_MODEL = {"V100": "Tesla V100", "A6000": "RTX A6000", "RTX A6000": "RTX A6000", "A100": "A100",
+            "RTX6000": "Quadro RTX 6000", "V100 16GB": "Tesla V100", "A100 80GB": "A100", "A100 40GB": "A100"}
+# Page spellings -> the live API's, where they differ only in spacing / prefix.
+DC_RAW = {"RTX6000 Ada 48GB": "RTX 6000 Ada 48GB"}
+_DC_PLAIN = re.compile(r"^\$?(?P<v>\d+(?:\.\d+)?)(?:/h)?$")
+_DC_NUM_GB = re.compile(r"^(?P<v>\d+(?:\.\d+)?)(?:\s*GB)?$")
+
+
+def _dc_table_rows(page: str):
+    for tm in _TABLE.finditer(page):
+        rows = [[text(c) for c in re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", rm["r"], re.S)] for rm in _TR.finditer(tm["t"])]
+        if rows and rows[0]:
+            yield rows[0], rows[1:]
+
+
+def datacrunch_products(page: str, at: datetime) -> list[ComputeListing]:
+    """Two designs of the instance tables:
+      2020 - Jul 2021: Instance | GPUs | vCPU (or CPU) | Mem [GiB] | GPU Mem [GiB] | GPU P2P | Storage | Price [$/h]
+                       ("0.65": the whole instance, dollars per hour; GPU Mem is the instance total)
+      Sep 2021 - 2024: Instance name | GPU Model | GPU | CPU | RAM | VRAM | [P2P |] Price on demand (On demand
+                       price) | weekly / monthly / 6-month / 2-year prices ("$2.20/h"; commitments, never read)
+    For most of 2022 the page fills its tables by script (header, no rows): reported, nothing read."""
+    out, tables, empty = [], 0, 0
+    for head, rows in _dc_table_rows(page):
+        h = [x.strip() for x in head]
+        hl = [x.lower() for x in h]
+        if hl[:1] == ["instance"] and h[-1] == "Price [$/h]":
+            name_i, price_i, count_i, model_i = 0, len(h) - 1, h.index("GPUs"), None
+            vram_i, total_vram = h.index("GPU Mem [GiB]"), True
+        elif hl[:1] == ["instance name"] and ("price on demand" in hl or "on demand price" in hl) and "gpu model" in hl:
+            price_i = hl.index("price on demand") if "price on demand" in hl else hl.index("on demand price")
+            name_i, count_i, model_i = 0, hl.index("gpu"), hl.index("gpu model")
+            vram_i, total_vram = hl.index("vram"), True
+        else:
+            continue
+        tables += 1
+        if not [r for r in rows if [c.lower() for c in r] != hl]:
+            empty += 1
+            continue
+        for cells in rows:
+            if [c.lower() for c in cells] == hl:
+                continue  # the header repeated (2023: desktop and mobile layouts in one table)
+            if len(cells) != len(h):
+                raise ValueError(f"datacrunch(archive): row {cells[:1]} has {len(cells)} cells, header {len(h)}")
+            if cells[name_i].startswith("CPU.") and cells[count_i] == "0":
+                continue  # a CPU-only type listed in a GPU table
+            code = _DC_CODE.match(cells[name_i])
+            if code is None or not cells[count_i].isdigit() or int(cells[count_i]) != int(code["n"]):
+                raise ValueError(f"datacrunch(archive): instance {cells[name_i]!r} / GPUs {cells[count_i]!r}")
+            count = int(code["n"])
+            price_cell = cells[price_i]
+            pm = _DC_PLAIN.match(price_cell)
+            if pm is None:
+                if re.search(r"\d", price_cell):
+                    raise ValueError(f"datacrunch(archive): {cells[name_i]} price {price_cell!r}")
+                continue  # Coming Soon
+            vm = _DC_NUM_GB.match(cells[vram_i])
+            if vm is None:
+                raise ValueError(f"datacrunch(archive): {cells[name_i]} VRAM {cells[vram_i]!r}")
+            per_gpu_vram = float(vm["v"]) / count if total_vram else float(vm["v"])
+            model = re.sub(r"^(?:NVidia|NVIDIA|Nvidia)\s+", "", cells[model_i] if model_i is not None else code["code"])
+            base = re.sub(r"\s*\d+GB$", "", model)
+            base = DC_MODEL.get(model, DC_MODEL.get(base, base))
+            if base == "A100" and code["form"] == "S":
+                base = "A100 SXM4"  # the type code says it: "1A100.40S.22V" is the API's "A100 SXM4 40GB"
+            raw = DC_RAW.get(f"{base} {per_gpu_vram:g}GB", f"{base} {per_gpu_vram:g}GB")
+            o = listing("verda", sku=cells[name_i], listing_id=cells[name_i], raw=raw, count=count,
+                        instance_price=dec(pm["v"]), at=at, tier="datacrunch-page")
+            out.append(o.model_copy(update={"canonical_gpu_name": canonical_name(raw)}))
+    if not tables:
+        raise ValueError("datacrunch(archive): no instance table")
+    if not out:
+        if empty == tables:
+            raise ValueError("datacrunch(archive): instance tables are empty (filled by script)")
+        raise ValueError("datacrunch(archive): instance tables have no priced row")
+    return out
+
+
+SOURCES = [own_page("verda", "verda.com/pricing", verda_instance_tables),
+           own_page("verda", "datacrunch.io/products", datacrunch_products)]

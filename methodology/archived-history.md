@@ -100,6 +100,17 @@ can miss short price moves entirely. Stock is never inferred from an archived pa
   has written a parser for yet therefore shows up as a gap, never as wrong numbers.
 - GPU names go through `canonical.py` like live ones. A name the live pipeline leaves unmapped on purpose
   (e.g. "NVIDIA A100 80GB", SXM or PCIe not stated) stays unmapped: stored with `gpu = null`, not charted.
+- **Component prices, said so.** CoreWeave (2021 - 24) and CUDO (2024 - 25) priced GPU instances a la carte and
+  their pages print only the GPU component per GPU-hour (vCPUs and RAM extra). Those rows carry provider_tier
+  `a-la-carte` / `vm-gpu-component` and their own listing ids: a lower bound on what the GPU cost, never the same
+  listing as a whole-instance price.
+- **Commitment prices are never read** (reserved, weekly / monthly / 6-month / 2-year columns, starred "3-year"
+  rates): only the on-demand column or card, and spot where the page prints one.
+- **Providers not merged yet.** Archived pages of providers whose live module is still on a branch
+  (`backfill.sources.PENDING`) are read with that branch's listing ids and GPU names (`backfill/pending_names.py`),
+  so the series join once it lands. Resellers keep their live tier (`resold:<vendor>`).
+- A row first stored unmapped (`gpu = null`) takes its canonical GPU on a later re-import once canonical.py knows
+  the name; a mapped row is never changed.
 - The same sanity bound applies as for live data: a price per GPU-hour must be positive and at most $200.
 - Imports are idempotent: `(source, source_url, provider, listing_id)` is unique (one archived document, e.g. a
   Shadeform catalogue, can list several providers).
@@ -141,6 +152,7 @@ view shows each provider separately.
 python -m backfill survey                      # captures per source; nothing downloaded or stored
 python -m backfill import --report report.json # download (polite, cached), parse, store
 python -m backfill import --no-download        # re-parse only what is cached (seconds)
+python -m backfill import --since 2016-01 --provider azure --no-aws   # one provider, everything archived since 2016
 ```
 
 Downloads are one request at a time, at least 4.5 s apart, with back-off on 429/5xx, and are cached on

@@ -52,6 +52,10 @@ def _text_parser(fn: Callable[[str, datetime], list[ComputeListing]]) -> tuple[s
     return f"{fn.__module__}.{fn.__name__}", lambda body, at: fn(body.decode("utf-8", errors="replace"), at)
 
 
+# Providers whose live modules are on a branch not merged yet (providers/batch-nokey): their archived pages are
+# registered already, so the history joins up as soon as the live provider lands.
+PENDING = {"paperspace", "akash", "cudo", "exoscale", "huggingface"}
+
 RETIRED = {"jarvislabs", "gcp"}  # live pollers now on official APIs; page scrapers kept in backfill/retired/
 
 

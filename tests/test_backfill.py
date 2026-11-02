@@ -21,7 +21,7 @@ import normalize  # noqa: E402
 from analytics import archived  # noqa: E402
 from backfill import aws_price_list, load, wayback
 from backfill.parsers import coreweave as cw_archive  # noqa: E402
-from backfill.sources import Source, live_page, sources  # noqa: E402
+from backfill.sources import PENDING, Source, live_page, sources  # noqa: E402
 from models import ComputeListing  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_backfill"
@@ -178,6 +178,18 @@ def test_store_is_idempotent_bounded_and_monthly_votes():
                                     source="wayback", source_url="u", sha256="0" * 64, parser="t")
         assert not rows and len(rejected) == 2, "out-of-bounds prices are rejected, never stored"
 
+        # an unmapped row takes the canonical GPU a later re-import gives it; a mapped one is never changed
+        rows, _ = load._rows([_listing("y", "not yet known", "1.0", d(1, 2))], source="wayback", source_url="u2",
+                             sha256="0" * 64, parser="t")
+        assert rows[0]["gpu"] is None and load.store(rows) == 1
+        mapped = [dict(rows[0], gpu="NVIDIA H100 80GB SXM5")]
+        assert load.store(mapped) == 0, "an update is not an insert"
+        assert load.store([dict(rows[0], gpu="NVIDIA A10 24GB PCIe")]) == 0
+        from sqlalchemy import text as sqltext
+        with normalize.SessionLocal.begin() as s:
+            assert s.execute(sqltext("SELECT gpu FROM archived_prices WHERE provider = 'y'")).scalar() == "NVIDIA H100 80GB SXM5"
+            s.execute(sqltext("DELETE FROM archived_prices WHERE provider = 'y'"))
+
         a = archived.gpu_archived("NVIDIA H100 80GB SXM5")
         assert a["kind"] == "archived" and len(a["points"]) == 4
         jan, feb = a["monthly"]
@@ -224,7 +236,7 @@ def test_every_source_names_a_known_provider_and_parser():
     srcs = sources()
     assert len({(s.provider, s.url) for s in srcs}) == len(srcs), "no duplicate sources"
     for s in srcs:
-        assert s.provider in PROVIDERS, s.provider
+        assert s.provider in PROVIDERS or s.provider in PENDING, s.provider
         assert s.parsers and all(name for name, _ in s.parsers)
     assert isinstance(live_page("coreweave", "coreweave", "u"), Source)
 

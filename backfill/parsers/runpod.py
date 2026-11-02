@@ -132,4 +132,56 @@ def gpu_rows(page: str, at: datetime) -> list[ComputeListing]:
     return out
 
 
-SOURCES = [own_page("runpod", "www.runpod.io/pricing", gpu_cards, gpu_rows)]
+_NEXT = re.compile(r'<script id="__NEXT_DATA__"[^>]*>(?P<j>.*?)</script>', re.S)
+
+
+def next_data_gpu_types(page: str, at: datetime) -> list[ComputeListing]:
+    """www.runpod.io/gpu-instance/pricing, Jul 2022 - mid 2024: the page's __NEXT_DATA__ carries RunPod's GraphQL
+    GpuType objects themselves (pageProps.data: a list, or from May 2024 {"gpu": {id: GpuType}}), with the live
+    API's gpu `id`. Each cloud the type is offered in (secureCloud / communityCloud true) becomes one 1-GPU listing at
+    that cloud's per-GPU price (securePrice / communityPrice): the live normalizer's listing id "<id>:<cloud>:1".
+    A price for a cloud whose flag is false is not read (the page fills it anyway).
+    Jul - Sep 2022 carried only lowestPrice.uninterruptablePrice (the cheaper cloud's price): read only when the type is
+    offered in exactly one cloud, so the cloud is known. Spot / bid prices (communitySpotPrice, minimumBidPrice) are
+    not read: the live RunPod listings have no spot market."""
+    import json
+
+    m = _NEXT.search(page)
+    if m is None:
+        raise ValueError("runpod(archive): no __NEXT_DATA__")
+    data = ((json.loads(m["j"]).get("props") or {}).get("pageProps") or {}).get("data")
+    if isinstance(data, dict) and isinstance(data.get("gpu"), dict):
+        types = list(data["gpu"].values())
+    elif isinstance(data, list):
+        types = data
+    else:
+        raise ValueError("runpod(archive): __NEXT_DATA__ pageProps.data is not a GpuType list / map")
+    out = []
+    for g in types:
+        if not isinstance(g, dict) or g.get("__typename") != "GpuType" or not g.get("id"):
+            raise ValueError(f"runpod(archive): not a GpuType: {str(g)[:80]}")
+        gpu_id = g["id"]
+        offered = [c for c, flag in (("secure", "secureCloud"), ("community", "communityCloud")) if g.get(flag) is True]
+        prices = {}
+        if "securePrice" in g or "communityPrice" in g:
+            for cloud in offered:
+                prices[cloud] = g.get(f"{cloud}Price")
+        elif len(offered) == 1:
+            prices[offered[0]] = (g.get("lowestPrice") or {}).get("uninterruptablePrice")
+        for cloud, v in prices.items():
+            if v is None:
+                continue
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                raise ValueError(f"runpod(archive): {gpu_id} {cloud} price {v!r}")
+            if v <= 0:
+                continue
+            o = listing("runpod", sku=f"{gpu_id}:{cloud}", listing_id=f"{gpu_id}:{cloud}:1", raw=gpu_id, count=1,
+                        instance_price=dec(str(v)), at=at, tier=cloud)
+            out.append(o.model_copy(update={"interruptible": cloud == "community"}))
+    if not out:
+        raise ValueError("runpod(archive): no priced GpuType in __NEXT_DATA__")
+    return out
+
+
+SOURCES = [own_page("runpod", "www.runpod.io/pricing", gpu_cards, gpu_rows, next_data_gpu_types),
+           own_page("runpod", "www.runpod.io/gpu-instance/pricing", next_data_gpu_types)]

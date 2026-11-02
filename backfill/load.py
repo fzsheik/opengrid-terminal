@@ -15,6 +15,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from sqlalchemy import literal_column
 from sqlalchemy.dialects.postgresql import insert
 
 import normalize
@@ -58,14 +59,20 @@ def _rows(listings: list[ComputeListing], *, source: str, source_url: str, sha25
 
 
 def store(rows: list[dict]) -> int:
+    """Insert new rows; returns how many were inserted. A row already stored is left as it was, except that an
+    unmapped one (gpu null) takes the canonical GPU a re-import now gives it: canonical.py learns names after a
+    page was first imported (or before a pending provider's branch is merged), and a re-run should not need a purge."""
     if not rows:
         return 0
     n = 0
     with normalize.SessionLocal.begin() as s:
         for i in range(0, len(rows), 1000):
-            stmt = insert(ArchivedPrice).values(rows[i:i + 1000]).on_conflict_do_nothing(
-                constraint="uq_archived_doc_listing").returning(ArchivedPrice.id)
-            n += len(s.execute(stmt).all())
+            stmt = insert(ArchivedPrice).values(rows[i:i + 1000])
+            stmt = stmt.on_conflict_do_update(
+                constraint="uq_archived_doc_listing", set_={"gpu": stmt.excluded.gpu},
+                where=ArchivedPrice.gpu.is_(None) & stmt.excluded.gpu.isnot(None),
+            ).returning(literal_column("(xmax = 0)"))
+            n += sum(1 for (inserted,) in s.execute(stmt).all() if inserted)
     return n
 
 
