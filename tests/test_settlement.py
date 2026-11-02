@@ -335,7 +335,10 @@ def test_chain_and_trigger():
         if q is None:
             break
     assert n == v["ledger_rows"] and paged["head_hash"] == v["head_hash"]
-    first = _q("SELECT seq, fixing_id FROM index_fixings WHERE status = 'final' ORDER BY seq LIMIT 1")[0]
+    # a final fixing WITH evidence rows: a row-level trigger never fires on a DELETE that matches nothing (just
+    # after 00:00 UTC the first final fixing can have none, and the evidence DELETE then "passes" vacuously)
+    first = _q("SELECT seq, fixing_id FROM index_fixings f WHERE status = 'final' AND EXISTS "
+               "(SELECT 1 FROM fixing_evidence e WHERE e.fixing_seq = f.seq) ORDER BY seq LIMIT 1")[0]
     for sql in ("UPDATE index_fixings SET value = 1 WHERE seq = :q", "DELETE FROM index_fixings WHERE seq = :q",
                 "UPDATE index_fixings SET status = 'not_published' WHERE seq = :q",
                 "DELETE FROM fixing_evidence WHERE fixing_seq = :q", "TRUNCATE index_fixings",

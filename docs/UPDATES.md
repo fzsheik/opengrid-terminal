@@ -11,14 +11,15 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 **Public and internal data tiers.** Every listing, capacity row and archived price now carries a `visibility`
 (migration `0027_visibility`; `public` by default, CHECK on listings). The one registry of internal sources is
-`provider_meta.INTERNAL_SOURCES`, each with its reason (DeepInfra's container-API prices; the AWS Spot Advisor); every
+`provider_meta.INTERNAL_SOURCES`, each with its reason (DeepInfra's container-API prices; the AWS Spot Advisor;
+Fireworks AI as a whole provider, below); every
 other source is public, and `enforce()` fails closed. Every public statistic (market view, rollups, indices, fixings,
 spreads, capacity, archived history, legacy JSON, trust) reads the public tier only. Routing, job placement and keyed
 recommendations may still use internal rows to choose and order candidates, but a non-admin caller never sees an
 internal value: the candidate shows the public list price of the same product or no price (`price_basis: "quote"`,
 "available via OpenGrid"), and derived numbers (quotes, savings, comparisons, cost estimates, the stored audit
 record) are rewritten. The operator and platform-admin keys see everything, labelled. `tests/test_visibility.py`
-seeds unmistakable internal rows and calls every public GET route enumerated from the app (221 requests over 125
+seeds unmistakable internal rows and calls every public GET route enumerated from the app (223 requests over 127
 routes) plus the public POSTs; it fails on any internal name, price or count. Method: `/methodology/data-visibility`.
 
 **Freshness: when a change happened, and how old each feed is.** Price history gains `prev_observed_at` (the last
@@ -45,12 +46,23 @@ an unknown component is named and makes the total a lower bound ("≥ $X"), neve
 a complete total. `GET /v1/cost/{components,billing,sources,presets}`. The `/cost` page sits in the GPUs group.
 Nothing statistical reads cost data. Method: `/methodology/full-cost`.
 
-**Seven providers without keys (47 -> 54).** Paperspace (via Shadeform's catalogue, Shadeform's resale price, Paperspace
+**Eleven providers (47 -> 58).** Seven without keys: Paperspace (via Shadeform's catalogue, Shadeform's resale price, Paperspace
 list + $0.04/GPU-h), Akash Network (one weighted bid summary per GPU, bids up to 31 days old), Hydra Host (bare-metal
 inventory, cents converted), CUDO Compute (VMs and bare metal), GPU.ai, Exoscale (22 listings; GPU table from
 Exoscale's pricing page) and Hugging Face Inference Endpoints (38 listings). GPU.ai and Hugging Face resell other
 clouds, so their listings carry `provider_tier` `resold:<vendor>` and, by a new shared rule, are stored and shown but
-never enter the market view, rollups, indices or routing validation. Six of them add capacity. All are public tier.
+never enter the market view, rollups, indices or routing validation. Six of them add capacity. Four more from
+public price pages, polled hourly:
+- **Gcore** (bare metal and Virtual GPU, EUR at the ECB rate; 8 listings). Public on the site and API, but its
+  robots.txt sets `Content-Signal: ai-input=no`, so its rows are kept out of everything the OpenGrid Assistant is
+  grounded on (and so any LLM phrasing) and out of every MCP tool answer, local `opengrid mcp` and hosted `/mcp`
+  (`provider_meta.AI_INPUT_EXCLUDED`, mirrored in the CLI). Aggregates over all providers are unchanged.
+- **Fireworks AI** (on-demand deployments per GPU-hour): **internal only**. Its Terms of Service clause (e) forbids
+  copying or distributing any part of the Service, so the whole provider is registered in `INTERNAL_SOURCES`: its
+  listings are stored internal, routing and keyed recommendations may use them, and no public page, API answer or
+  provider list names it. 58 clouds are monitored, 57 published.
+- **IONOS Cloud** (H200 PCIe VMs from IONOS CLOUD Inc.'s USD price list) and **Hetzner** (GEX dedicated GPU servers
+  at the hourly rate Hetzner prints, capped at the monthly price, EUR at the ECB rate; monthly and setup kept raw).
 
 **Archived history from official sources, back to 2015.** The AWS price-list archive now reads all 123 versions from
 2015-12 (the pre-2018 files lack columns that used to empty them; 2017-11 gives p3.2xlarge $3.06/h), keeps older
@@ -71,8 +83,17 @@ diff; a stale book is never written. The REST poller keeps running as the fallba
 at the same time (`live.locks`). Live price changes reach price history with `changed_at_basis` `exact`. `GET
 /v1/live/status` and `/v1/live/events` are operator-only. Method: `/methodology/live-feeds`.
 
+**Market context: power prices and AI capex.** EIA state electricity prices (industrial and commercial, monthly,
+public domain) and SEC EDGAR XBRL series (NVIDIA and AMD total and Data Center revenue; capex of Microsoft,
+Alphabet, Amazon, Meta, Oracle, CoreWeave, NVIDIA, AMD), raw first in `context_snapshots`, parsed into
+`context_series` with publication date, first-seen date and revisions (migration `0032_context_series`). `GET
+/v1/context/series` and `GET /v1/context/power` (US listings by state beside the state's electricity price), both
+public. Context, never cause: nothing statistical reads them. Each source is off until configured. Method:
+`/methodology/market-context`.
+
 **Integration fixes found while merging.** The full-cost estimator read internal listings and returned their
-prices on the public `/v1/cost/estimate` (fixed; now in the leak test, mutation-checked). `/v1/freshness` never names
+prices on the public `/v1/cost/estimate`, and `/v1/context/power` counted internal listings and named their
+providers (both fixed: public tier only; both in the leak test, mutation-checked). `/v1/freshness` never names
 a wholly internal provider. Migrations chained linearly. The Vast full-cost reader is tested against an offer
 exactly as the Vast poller now stores it.
 
@@ -80,6 +101,8 @@ exactly as the Vast poller now stores it.
 
 | Item | Why not |
 |---|---|
+| Gcore in market aggregates seen by the assistant | Only Gcore's own rows are withheld from AI input; a market median or provider count that includes it is not recomputed. |
+| ENTSO-E and US wholesale (LMP) power prices | No clear reuse licence; the power-exchange and market-operator terms restrict redistribution. |
 | SkyPilot catalogue history | `skypilot-catalog` has no licence file. The loader is ready and refuses to run until `SKYPILOT_CATALOG_ENABLED` and `SKYPILOT_CATALOG_LICENCE` name the licence SkyPilot confirm. |
 | SF Compute order book | Needs an account token; not ingested. Raw + depth series + transaction index design in `/methodology/live-feeds`. |
 | gpuhunt catalogues as prices | Kept raw only: the bucket states no licence for the data. |
@@ -99,7 +122,7 @@ exactly as the Vast poller now stores it.
 
 ### Deploy notes
 - Migrations run at startup, in order: `0027_visibility` -> `0028_changed_at` -> `0030_cost_components` ->
-  `0031_backfill_sources` -> `0031_stream_events` (one head).
+  `0031_backfill_sources` -> `0031_stream_events` -> `0032_context_series` (one head).
 - **Write pause.** `0028_changed_at` builds the partial index `ix_raw_throttled_time` on `raw_snapshots` with a plain
   `CREATE INDEX`, which blocks writes to `raw_snapshots` while it scans the table. Pollers' saves wait for it; expect
   a short gap in fetches during the migration.
@@ -115,16 +138,21 @@ exactly as the Vast poller now stores it.
      185 monthly points (Vast, 2022-10 to 2026-07).
   Then `python -m backfill coverage` to check.
 - New jobs: `cost_components` (daily), `gpuhunt_snapshot` (daily, `GPUHUNT_SNAPSHOT_ENABLED`, default true),
-  `lium_stream` (long-lived supervisor). `cost_components` and `lium_stream` are off when the poller is off;
+  `lium_stream` (long-lived supervisor), `context_series` (daily; registered only when `EIA_API_KEY` or
+  `SEC_USER_AGENT` is set). `cost_components` and `lium_stream` are off when the poller is off;
   `gpuhunt_snapshot` runs whenever jobs run.
 - New variables: `LIUM_STREAM_ENABLED` (default true), `GPUHUNT_SNAPSHOT_ENABLED` (default true),
   `SKYPILOT_CATALOG_ENABLED` (default false) and `SKYPILOT_CATALOG_LICENCE` (unset); leave the SkyPilot ones off.
+  `EIA_API_KEY` (free registration at eia.gov/opendata) and `SEC_USER_AGENT` ("Company Name contact@domain", SEC
+  fair access): market context stays off until each is set; `/v1/context/*` has no values until then.
 - Expected effects: schema-change incidents for Vast and Lium on their first polls (fields added to stored raw; Lium
   also from the stream's first snapshot); a quarantine `duplicate_explosion` hold for any provider whose listing
   count jumps against its norm (new listing ids are withheld until released on /ops); the seven new providers have no
   norm yet, so they are not held. AWS spot polls every 5 minutes with the key.
-- Full suite before push: 116 test files (105 Python, 11 web); all pass except `test_jobs_e2e` (fails here and on
-  main).
+- Full suite before push: 121 test files (110 Python, 11 web); all pass except `test_jobs_e2e` (fails here and on
+  main). Two test-only fixes for time-dependent false results: `test_visibility`'s price marker matched a public
+  volatility near the internal price on some days, and `test_settlement`'s trigger check could pick a fixing with
+  no evidence just after 00:00 UTC (also failing on main then).
 
 ---
 

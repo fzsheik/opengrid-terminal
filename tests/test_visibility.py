@@ -198,6 +198,9 @@ _TEXT_PRICE = re.compile(r"(?<![\d.])0\.00(43|432)\d*")  # not the seconds of a 
 _TEXT_COUNT = re.compile(r"\b4,?321\b")  # a word of its own: not the inside of a hex hash
 
 
+_SECRET_SHOWN = {d: float(round(SECRET, d)) for d in (4, 5, 6)}
+
+
 def leaks(obj, echo: tuple[str, ...] = (), path="$") -> list[str]:
     """Every place in a JSON value where an internal row shows: its names, its price, its capacity count."""
     out = []
@@ -211,7 +214,9 @@ def leaks(obj, echo: tuple[str, ...] = (), path="$") -> list[str]:
     elif isinstance(obj, bool) or obj is None:
         pass
     elif isinstance(obj, (int, float)):
-        if 0.00425 <= obj <= 0.0044 or obj == COUNT:
+        # the internal price as shown (exact, or rounded to 4-6 places) or the internal count. Not a window around
+        # it: a public statistic (a 0.0043 volatility on some days) may legitimately fall near the price.
+        if any(abs(obj - _SECRET_SHOWN[d]) < 1e-12 for d in _SECRET_SHOWN) or obj == COUNT:
             out.append(f"{path} = {obj}")
     elif isinstance(obj, str):
         s = obj
