@@ -111,13 +111,16 @@ def test_static_rules():
 def alpaca(fail=None, split_change=False, hourly_change=False):
     """Serves the fixtures by (timeframe, adjustment, page_token); records every request."""
     seen = []
-    state = {"429": fail == "429", "403": fail == "403"}
+    state = {"429": fail == "429", "403": fail == "403", "drop": fail == "drop"}
 
     def handler(req: httpx.Request):
         q = dict(req.url.params)
         seen.append((req.url.host, req.url.path, q, req.headers.get("apca-api-key-id"), req.headers.get("apca-api-secret-key")))
         if fail == "500":
             return httpx.Response(500, text=f"boom {KEY}")
+        if state["drop"]:
+            state["drop"] = False
+            raise httpx.ReadError("connection reset", request=req)
         if state["429"]:
             state["429"] = False
             return httpx.Response(429, headers={"retry-after": "0"}, json={"message": "too many requests"})
@@ -200,7 +203,9 @@ def test_db_api_visibility():
         out4 = asyncio.run(eq.refresh(alpaca(hourly_change=True)[0], symbols=("NVDA",), now=NOW))
         assert "1Hour:split:NVDA" in out4["refetched"] and out4["hourly"]["split"]["revised"] >= 15, out4
         # 429 then success; 403 (recent SIP) steps the end back an hour, never to IEX; a 500 is stored, key redacted
-        eq.RETRY_SECONDS = 0
+        eq.RETRY_SECONDS, eq.BACKOFF_SECONDS = 0, (0, 0, 0)
+        client, seen = alpaca(fail="drop")   # a dropped connection is retried, not a failed fetch
+        assert asyncio.run(eq.refresh(client, symbols=syms, now=NOW, hourly=False))["failed"] == 0
         client, seen = alpaca(fail="429")
         assert asyncio.run(eq.refresh(client, symbols=syms, now=NOW, hourly=False))["failed"] == 0
         client, seen = alpaca(fail="403")

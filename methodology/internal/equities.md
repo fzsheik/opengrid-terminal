@@ -25,7 +25,8 @@ never logged or stored; error text is redacted before it is saved).
   an hour earlier. It never falls back to IEX: IEX volume is a small share of consolidated volume, and feeds are never
   mixed in one series.
 - **Pace**: at most ~170 requests a minute (free plan: 200), `limit=10000` per page, `next_page_token` followed; a 429
-  waits for `Retry-After` (or 60 s), up to three times.
+  waits for `Retry-After` (or 60 s), up to three times. A dropped connection, timeout or 5xx is retried after 2, 10 and 30 s;
+  a page that still fails is stored as a failed fetch and the next run resumes from the latest stored bar.
 - **History**: daily bars from 2016-01-01 (SIP history starts 2016; IEX only from 2020-07), hourly bars for the last
   5 years. Companies listed later (ARM 2023, CRWV 2025, NBIS's relisting) start at their first trading day.
 

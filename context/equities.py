@@ -52,13 +52,14 @@ PAGE_LIMIT = 10000
 PACE_SECONDS = 0.35           # <= ~170 requests a minute; Alpaca's free plan allows 200
 RETRY_SECONDS = 60.0          # after a 429 without Retry-After
 MAX_429 = 3
+BACKOFF_SECONDS = (2.0, 10.0, 30.0)   # dropped connections, timeouts, 5xx
 SIP_DELAY = timedelta(minutes=16)
 SESSION_DONE = time(20, 15)   # ET: extended hours end at 20:00
 OVERLAP_DAILY = timedelta(days=10)
 OVERLAP_HOURLY = timedelta(days=3)
 POLL_SECONDS = 3600
 Q = Decimal("0.000001")
-TIMEOUT = 60
+TIMEOUT = httpx.Timeout(60.0, connect=15.0)
 RULE = ("INTERNAL: equity prices are OpenGrid research context, never displayed, served publicly or republished. "
         "Context, not cause.")
 
@@ -281,18 +282,34 @@ class Fetcher:
         return msg[:500]
 
     async def _get(self, params: dict):
-        for attempt in range(MAX_429 + 1):
+        """429: wait (Retry-After) and retry; a dropped connection, timeout or 5xx: back off and retry. The last
+        attempt's response (or exception) is what the caller sees."""
+        transient = 0
+        throttled = 0
+        while True:
             await asyncio.sleep(PACE_SECONDS)
             self.requests += 1
             started = _time.perf_counter()
-            resp = await self.client.get(BARS_URL, params=params, headers=self.headers)
+            try:
+                resp = await self.client.get(BARS_URL, params=params, headers=self.headers)
+            except httpx.TransportError:
+                if transient >= len(BACKOFF_SECONDS):
+                    raise
+                await asyncio.sleep(BACKOFF_SECONDS[transient])
+                transient += 1
+                continue
             ms = int((_time.perf_counter() - started) * 1000)
-            if resp.status_code != 429 or attempt == MAX_429:
-                return resp, ms
-            wait = float(resp.headers.get("retry-after") or RETRY_SECONDS)
-            log.warning("alpaca 429; waiting %.0fs", wait)
-            await asyncio.sleep(min(wait, 120.0))
-        raise AssertionError("unreachable")
+            if resp.status_code == 429 and throttled < MAX_429:
+                throttled += 1
+                wait = float(resp.headers.get("retry-after") or RETRY_SECONDS)
+                log.warning("alpaca 429; waiting %.0fs", wait)
+                await asyncio.sleep(min(wait, 120.0))
+                continue
+            if resp.status_code >= 500 and transient < len(BACKOFF_SECONDS):
+                await asyncio.sleep(BACKOFF_SECONDS[transient])
+                transient += 1
+                continue
+            return resp, ms
 
     async def bars(self, symbols: list[str], timeframe: str, adjustment: str, start: datetime, end: datetime,
                    on_page) -> int:
