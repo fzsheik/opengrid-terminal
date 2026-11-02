@@ -97,6 +97,8 @@ def is_page_path(path: str) -> bool:
 PUBLIC_V1 = ("gpus", "markets", "indices", "history", "spreads", "events", "news", "providers", "heatmaps",
              "overview", "tape", "methodology", "timeline", "best", "capabilities", "opportunities", "trust",
              "families", "scopes", "fixings", "recommend", "assistant", "compare", "regions", "hardware", "uptime", "probes", "capacity", "fx", "freshness",
+             # Major shifts with related items (read-only, like events; never causal).
+             "shifts",
              # Reserved / committed list prices (read-only, like capacity). Not "reservations" (private, below).
              "reserved",
              # Full cost: cost components, billing increments, the reference-job estimator (read-only).

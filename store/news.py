@@ -9,6 +9,11 @@
                      into stories (story_id = id of the story's first item)
     news_entities    (item, type, value) for indexed lookups: gpu | gpu_family | provider |
                      region | topic
+
+History backfill (news/history.py, migration 0029_news_history): a raw item recovered from an
+archive (an Internet Archive capture of the feed, the feed's own archive pages, GDELT, EDGAR)
+records origin != 'live' with the archive URL and capture time; its news_items row is marked
+backfilled with the same provenance. The url_hash key dedupes backfilled against live items.
 """
 
 from datetime import datetime
@@ -72,6 +77,10 @@ class NewsRawItem(Base):
     url: Mapped[str | None] = mapped_column(Text)
     # {"parsed": {...fields as read...}, "raw": {xml | json item}}
     payload: Mapped[dict] = mapped_column(JSONB)
+    # live | wayback_feed | feed_archive | wayback_index | gdelt | edgar (news/history.py)
+    origin: Mapped[str] = mapped_column(String(16), default="live", server_default="live")
+    archive_url: Mapped[str | None] = mapped_column(Text)        # the capture / archive page this was read from
+    captured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # when the archive captured it
 
 
 class NewsItem(Base):
@@ -103,6 +112,10 @@ class NewsItem(Base):
     entities: Mapped[dict] = mapped_column(JSONB, default=dict)
     classified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     raw_item_id: Mapped[int | None] = mapped_column(BigInteger)
+    # True when the item was recovered from an archive rather than seen in a live poll.
+    backfilled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # {"method", "archive_url", "captured_at", "published_raw"} for backfilled items; null for live ones.
+    provenance: Mapped[dict | None] = mapped_column(JSONB)
 
 
 class NewsEntity(Base):

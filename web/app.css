@@ -1058,6 +1058,10 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .gp-list .mono { flex: none; min-width: 42px; }
 .gp-around { margin-top: 8px; }
 .gp-around:not(:empty) { border: 1px solid var(--line-2); border-radius: 3px; padding: 6px 8px; background: var(--surface); }
+.sh-row { cursor: pointer; }
+.sh-row:hover, .sh-row:focus { background: var(--surface); outline: none; }
+.sh-top { display: block; font-size: var(--fs-xs); }
+.sh-top > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70ch; }
 .gp-around-h { display: flex; justify-content: space-between; gap: 8px; align-items: center; font-size: var(--fs-sm); }
 @media (max-width: 1280px) { .gp-grid { grid-template-columns: minmax(0, 1fr) 320px; } }
 @media (max-width: 1080px) { .gp-grid { grid-template-columns: minmax(0, 1fr); } .gp-quote { flex-direction: column; } .gp-quote .stats { border-left: 0; border-top: 1px solid var(--line); } }

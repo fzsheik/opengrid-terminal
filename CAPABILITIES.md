@@ -368,6 +368,16 @@ Structured events detected every hour, idempotent, with severities and the numbe
 - **Timeline**: price moves, availability changes, market events and news on one axis, and
   *"Related news and events around this move (not necessarily causal)"*. OpenGrid never claims
   news caused a move.
+- **SEC EDGAR, changelogs, GDELT** (2026-11-01): 16 EDGAR submissions sources (NVIDIA, AMD, Intel,
+  CoreWeave, hyperscalers, Nebius, DigitalOcean, Super Micro; Form D for Lambda, Crusoe, Fluidstack),
+  DigitalOcean release notes, Together changelog, Lambda status history, two GDELT queries.
+- **News history** (`news/history.py`, methodology/news-history.md): past items recovered from the feeds'
+  own archive pages, Internet Archive captures of feed and index pages, EDGAR and GDELT; raw first with
+  provenance, marked backfilled, deduplicated against live items (live wins), same classifier.
+- **Major shifts** (`analytics/shifts.py`, `GET /v1/shifts`, methodology/shifts.md): GPU median and index
+  moves beyond their own volatility, provider-wide repricings, capacity collapses, and archived list-price
+  changes before live coverage; each with stored, ranked related items (news, announcements, filings,
+  OpenGrid events) under *"Related news and events around this shift (not necessarily causal)"*.
 
 ---
 

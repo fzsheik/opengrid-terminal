@@ -66,7 +66,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
       const st = {
         win: WINDOWS.some(w => w[0] === wq) ? wq : "7d",
         view: OG.qs.get("view") === "providers" ? "providers" : "market",
-        overlays: new Set((OG.qs.get("ov", "events,news,moves")).split(",").filter(Boolean)),
+        overlays: new Set((OG.qs.get("ov", "events,news,moves,shifts")).split(",").filter(Boolean)),
         g: null, idx: undefined, ctxd: undefined, tl: null, chartData: null, count: Number(OG.qs.get("count", 1)) || 1,
       };
 
@@ -88,6 +88,9 @@ Nothing is computed here that the API does not state, except display arithmetic 
       const newsBox = slot();
       const eventsBox = slot();
       const altBox = slot();
+      // Major shifts for this GPU (observed and archived), with the items stored around each; markers on the chart.
+      const shiftsBox = OG.shiftsPanel(ctx, { gpu: slug, limit: 30 }, { slot: "gp-shifts", empty: "No major shift recorded for this GPU.",
+        onRows: (rows, open) => { st.shifts = rows; st.openShift = open; if (st.chartData) drawChart(); } });
       const archBox = slot("Loading sources…");
       let archLoaded = false;
       const bestBox = slot("Ranking listings…");
@@ -103,9 +106,10 @@ Nothing is computed here that the API does not state, except display arithmetic 
         v => { st.view = v; OG.qs.set({ view: v === "market" ? null : v }); loadChart(); });
       const ovChip = (k, label, title) => h("button", { class: "chip sm", "aria-pressed": String(st.overlays.has(k)), title,
         onclick: e => { st.overlays.has(k) ? st.overlays.delete(k) : st.overlays.add(k); e.currentTarget.setAttribute("aria-pressed", String(st.overlays.has(k)));
-          OG.qs.set({ ov: [...st.overlays].join(",") === "events,news,moves" ? null : [...st.overlays].join(",") || "none" }); drawChart(); } }, label);
+          OG.qs.set({ ov: [...st.overlays].join(",") === "events,news,moves,shifts" ? null : [...st.overlays].join(",") || "none" }); drawChart(); } }, label);
       const chartCtl = h("div", { class: "gp-ctl" }, viewSeg, winSeg,
-        h("span", { class: "flt" }, h("span", {}, "overlay"), ovChip("events", "Events", "notable and major market events"), ovChip("news", "News", "news mentioning this GPU"), ovChip("moves", "Moves", "hour-over-hour moves of the lowest price ≥ 3%")));
+        h("span", { class: "flt" }, h("span", {}, "overlay"), ovChip("events", "Events", "notable and major market events"), ovChip("news", "News", "news mentioning this GPU"), ovChip("moves", "Moves", "hour-over-hour moves of the lowest price ≥ 3%"),
+          ovChip("shifts", "Shifts", "major shifts: moves large against this GPU's own volatility (click one: related items, not necessarily causal)")));
       const evSevSeg = OG.seg([["info", "All"], ["notable", "Notable+"], ["major", "Major"]], OG.qs.get("sev", "notable"), v => { OG.qs.set({ sev: v === "notable" ? null : v }); loadEvents(v); });
       const countSeg = OG.seg([[1, "1×"], [2, "2×"], [4, "4×"], [8, "8×"]], st.count, v => { st.count = Number(v); OG.qs.set({ count: v == 1 ? null : v }); loadBest(); });
 
@@ -115,6 +119,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
         section("providers", "Provider ranking", null, provBox),
         section("regions", "Region pricing", null, regionBox),
         section("moves", "Price moves and related news", null, h("div", { class: "cols-2 gp-two" }, h("div", {}, h("div", { class: "lbl" }, "Moves of the lowest price"), movesBox, aroundBox0), h("div", {}, h("div", { class: "lbl" }, "News mentioning this GPU"), newsBox))),
+        section("shifts", "Major shifts", OG.badge("not necessarily causal", "warn", OG.SHIFT_HEADING), shiftsBox),
         section("events", "Market events", evSevSeg, eventsBox),
         section("alternatives", "Related and alternative GPUs", null, altBox),
         section("listings", "All current listings", null, listingsBox));
@@ -481,6 +486,10 @@ Nothing is computed here that the API does not state, except display arithmetic 
       }
       function overlayEvents() {
         const t = st.tl, out = [];
+        if (st.overlays.has("shifts") && st.shifts) {
+          for (const sh of st.shifts) out.push({ t: sh.at, label: sh.title, kind: sh.kind === "archived" ? "archived shift" : "shift · " + sh.type.replace(/_/g, " "),
+            severity: sh.severity, detail: OG.SHIFT_HEADING, onClick: () => { st.openShift(sh); shiftsBox.scrollIntoView({ block: "nearest" }); }, hint: "click: related items around this shift" });
+        }
         if (!t) return out;
         if (st.overlays.has("events") && t.market_events && t.market_events.events) {
           const evs = t.market_events.events.filter(e => SEV_RANK[e.severity] >= 1).sort((a, b) => SEV_RANK[b.severity] - SEV_RANK[a.severity]).slice(0, 80);

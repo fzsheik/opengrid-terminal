@@ -18,3 +18,4 @@ from store import freshness  # noqa: F401  (0028_changed_at: per-poll freshness 
 from store import cost  # noqa: F401  (0030_cost_components: raw snapshots of machine-readable cost sources)
 from store import live  # noqa: F401  (0031_stream_events: change-only events from push feeds)
 from store import context  # noqa: F401  (0032_context_series + 0033_equities: market context; internal equity bars)
+from store import shifts  # noqa: F401  (0029_news_history: major shifts + their related items)

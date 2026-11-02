@@ -71,6 +71,9 @@
     ["Events & news", "pub-events", [
       ["GET", "/v1/events", "Market events, newest first", "gpu, provider, type, severity, min_severity, since, until, limit, offset"],
       ["GET", "/v1/events/types", "Event catalogue: triggers, severity rules, data kind", ""],
+      ["GET", "/v1/shifts", "Major shifts with related items (not necessarily causal)", "gpu, provider, kind, type, severity, since, until, limit, offset, top"],
+      ["GET", "/v1/shifts/definition", "How a major shift is defined and its items ranked", ""],
+      ["GET", "/v1/shifts/{shift_id}", "One shift with every related item, ranked", "shift_id*"],
       ["GET", "/v1/news", "News and signals, with filters", "gpu, provider, region, topic, source, q, since, min_relevance, limit, offset"],
       ["GET", "/v1/news/{item_id}", "One news item", "item_id*"],
       ["GET", "/v1/news/sources", "The news sources OpenGrid reads", ""],

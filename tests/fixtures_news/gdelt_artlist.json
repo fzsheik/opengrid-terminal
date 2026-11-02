@@ -1,0 +1,5 @@
+{"articles": [
+ {"url": "https://www.example-news.test/2024/01/meta-h100-gpus?utm_source=x", "url_mobile": "", "title": "Mark Zuckerberg Says Meta Will Own Billions Worth of Nvidia H100 GPUs by Year End", "seendate": "20240118T224500Z", "domain": "example-news.test", "language": "English", "sourcecountry": "United States"},
+ {"url": "javascript:alert(1)", "title": "unsafe link dropped", "seendate": "20240119T133000Z", "domain": "x.test"},
+ {"url": "https://www.datacenterdynamics.com/en/news/cw-deal/", "title": "CoreWeave signs GPU deal", "seendate": "20240120T101500Z", "domain": "datacenterdynamics.com"}
+]}

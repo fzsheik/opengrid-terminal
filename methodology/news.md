@@ -15,6 +15,12 @@ enabled, it has to work in a real fetch. A source we could not fetch, or whose s
 automated access (CME, for one), stays in the registry as disabled with a note saying why, so
 the gap is visible. `GET /v1/news/sources` lists every source with its fetch health.
 
+Two official APIs besides the Federal Register are read the same way: the **SEC EDGAR** submissions API (8-K
+material events and earnings, quarterly and annual reports, Form D funding notices of private GPU clouds) and the
+**GDELT** DOC 2.0 API (news coverage matching GPU-market queries; free for any use with attribution to the GDELT
+Project). Past items are recovered from archives and marked backfilled: see [news history](news-history). Major
+price shifts list the items around them, never as a cause: see [shifts](shifts).
+
 Each source carries:
 
 - **category**: `provider`, `vendor`, `hyperscaler`, `trade_press`, `regulation` or `markets`.

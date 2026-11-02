@@ -757,6 +757,55 @@ Full docs: web/README.md.
     archived: "Read by OpenGrid from a public archive (an archived price page or price-list version), not observed live",
   };
   OG.badge = (text, tone, title) => h("span", { class: "badge " + (tone || ""), title: title || null }, text);
+  // Major shifts (/v1/shifts) and the items OpenGrid stored around each (methodology/shifts). Being near a shift
+  // in time is all an item shows: the heading says so wherever shifts appear. params: {gpu | provider | kind ...}.
+  OG.SHIFT_HEADING = "Related news and events around this shift (not necessarily causal)";
+  const SHIFT_ITEM = { news: "news", provider_announcement: "announcement", filing: "SEC filing", market_event: "OpenGrid event" };
+  const shiftHref = u => (typeof u === "string" && /^https?:\/\/[^\s]/i.test(u.trim()) ? u.trim() : null);
+  const shiftHours = v => (v < 0 ? "−" : "+") + (Math.abs(v) >= 72 ? (Math.abs(v) / 24).toFixed(0) + "d" : Math.abs(v).toFixed(0) + "h");
+  OG.shiftItem = it => h("li", {},
+    h("span", { class: "mono dim", title: it.position + " the shift" }, shiftHours(it.hours_from_shift)),
+    OG.badge(SHIFT_ITEM[it.item_type] || it.item_type, it.item_type === "market_event" ? (it.severity === "major" ? "bad" : "warn") : "",
+      `related by ${it.match}, score ${Number(it.score).toFixed(2)} (${(it.score_components && it.score_components.formula) || ""})`),
+    it.backfilled ? OG.badge("backfilled", "", "recovered from an archive (" + (it.provenance || "archive") + "), not seen live") : null,
+    h("span", {}, shiftHref(it.url) ? h("a", { class: "lnk", href: shiftHref(it.url), target: "_blank", rel: "external noopener" }, it.title) : it.title,
+      it.source_name ? h("span", { class: "dim" }, " · " + it.source_name) : null));
+  OG.shiftsPanel = (ctx, params, opts = {}) => {
+    const box = h("div", { class: "sh-panel" }, OG.loading("Loading shifts…"));
+    const detail = h("div", { class: "gp-around" });
+    async function open(r) {
+      detail.replaceChildren(OG.loading("Loading related items…"));
+      let d;
+      try { d = await ctx.api("/v1/shifts/" + r.id, { slot: (opts.slot || "shifts") + "-d" }); }
+      catch (e) { if (!e.stale) detail.replaceChildren(OG.error(e)); return; }
+      const items = d.items || [];
+      detail.replaceChildren(
+        h("div", { class: "gp-around-h" }, h("b", {}, d.heading || OG.SHIFT_HEADING), h("button", { class: "btn sm", title: "Close", onclick: () => detail.replaceChildren() }, "×")),
+        h("div", { class: "dim" }, d.title, ` · items read ${fmt.dateTime(d.window_start)} to ${fmt.dateTime(d.window_end)}`,
+          d.kind === "archived" ? " · archived list prices: the change happened somewhere between the two captures" : ""),
+        items.length ? h("ul", { class: "gp-list" }, items.map(OG.shiftItem)) : OG.empty("Nothing recorded within the window."));
+      if (opts.onOpen) opts.onOpen(d);
+    }
+    (async () => {
+      let rows;
+      try { rows = await ctx.api("/v1/shifts", { params: { limit: opts.limit || 20, top: 2, ...params }, slot: opts.slot || "shifts" }); }
+      catch (e) { if (!e.stale) box.replaceChildren(OG.error(e)); return; }
+      rows = Array.isArray(rows) ? rows : (rows && rows.items) || [];
+      if (opts.onRows) opts.onRows(rows, open);
+      if (!rows.length) { box.replaceChildren(OG.empty(opts.empty || "No major shift recorded."), h("p", { class: "note" }, h("a", { class: "lnk", href: "/methodology/shifts" }, "What counts as a major shift →"))); return; }
+      box.replaceChildren(
+        h("p", { class: "nw-nc" }, h("b", {}, "Not necessarily causal. "), "A shift is a large move OpenGrid measured. The items listed with it were published nearby and are about the same GPU, provider or vendor. Click a shift for every related item."),
+        h("ul", { class: "gp-list sh-list" }, rows.map(r => h("li", { class: "sh-row", role: "button", tabindex: "0", title: "Show related items", onclick: () => open(r), onkeydown: e => { if (e.key === "Enter") open(r); } },
+          h("span", { class: "mono dim" }, fmt.dateTime(r.at)),
+          r.kind === "archived" ? OG.badge("archived", "warn", r.label) : OG.badge(r.severity, r.severity === "major" ? "bad" : "warn"),
+          h("span", {}, h("b", {}, r.title),
+            (r.top_items || []).length ? h("span", { class: "sh-top dim" }, (r.top_items || []).map(t => h("span", {}, (SHIFT_ITEM[t.item_type] || t.item_type) + ": " + t.title))) : h("span", { class: "sh-top dim" }, "no related item in the window"))))),
+        detail,
+        h("p", { class: "note" }, "Archived shifts compare list prices recovered from public archives, before OpenGrid recorded live. ", h("a", { class: "lnk", href: "/methodology/shifts" }, "How shifts are defined →")));
+    })();
+    box.openShift = open;
+    return box;
+  };
   // "inferred" is a data kind in the API but is not shown as a badge in the UI
   OG.kindBadge = kind => kind === "inferred" ? null : h("a", { class: "badge kind k-" + kind, href: "/methodology/data-kinds", title: KIND_HELP[kind] || kind }, kind);
   // Poll interval per provider (seconds), from /polling, loaded at start: freshBadge(..., {provider}) uses it.

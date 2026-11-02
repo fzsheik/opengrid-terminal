@@ -15,6 +15,7 @@ Robustness, because real feeds are not always well formed:
     - documents declaring entities (<!ENTITY) are refused outright: no feed needs them and
       they are the vector for entity-expansion attacks. xml.etree never fetches external
       entities.
+EDGAR (kind "edgar"): the SEC submissions JSON, one item per kept filing (`parse_edgar`).
 Times: RFC 822 (RSS), ISO 8601 (Atom, JSON Feed), and plain dates (Federal Register,
 taken as 00:00 UTC on that date). Naive times are read as UTC. Anything unreadable
 returns None; the caller falls back to first-seen and flags it.
@@ -283,6 +284,101 @@ def parse_federal_register(body: bytes | str) -> list[dict]:
     return _finish(items)
 
 
+# SEC EDGAR submissions API (data.sec.gov/submissions/CIK##########.json; also its older-filings pages, which
+# carry the same columns at the top level). Only forms that can matter to compute markets are kept, and an 8-K
+# only when it reports one of the items below (officer changes and shareholder votes alone are dropped).
+EDGAR_FORMS = ("8-K", "8-K/A", "10-Q", "10-K", "20-F", "6-K", "D", "D/A", "S-1", "S-1/A", "424B4")
+EDGAR_8K_ITEMS = {
+    "1.01": ("Entry into a material definitive agreement", ("contracts",)),
+    "1.02": ("Termination of a material definitive agreement", ("contracts",)),
+    "2.01": ("Completion of an acquisition or disposition of assets", ()),
+    "2.02": ("Results of operations and financial condition (earnings release)", ("earnings",)),
+    "2.03": ("Creation of a direct financial obligation (debt financing)", ("funding",)),
+    "2.05": ("Costs associated with exit or disposal activities", ()),
+    "2.06": ("Material impairments", ()),
+    "3.02": ("Unregistered sales of equity securities", ("funding",)),
+    "7.01": ("Regulation FD disclosure", ()),
+    "8.01": ("Other events", ()),
+}
+_EDGAR_FORM_TEXT = {
+    "10-Q": ("Quarterly report", ("earnings",)), "10-K": ("Annual report", ("earnings",)),
+    "20-F": ("Annual report (foreign private issuer)", ("earnings",)), "6-K": ("Report of a foreign private issuer", ()),
+    "D": ("Notice of an exempt offering of securities (funding)", ("funding",)),
+    "D/A": ("Amended notice of an exempt offering of securities (funding)", ("funding",)),
+    "S-1": ("Registration statement (IPO)", ("funding",)), "S-1/A": ("Amended registration statement (IPO)", ("funding",)),
+    "424B4": ("Final prospectus (offering priced)", ("funding",)),
+}
+
+
+def parse_edgar(body: bytes | str, name: str | None = None) -> list[dict]:
+    """EDGAR submissions JSON -> items: one per kept filing, timed by the SEC's acceptance time."""
+    doc = json.loads(body)
+    if not isinstance(doc, dict):
+        raise FeedError("not an EDGAR submissions document")
+    cols = (doc.get("filings") or {}).get("recent") if "filings" in doc else doc
+    if not isinstance(cols, dict) or not isinstance(cols.get("accessionNumber"), list):
+        raise FeedError("not an EDGAR submissions document: no filings columns")
+    company = doc.get("name") or name or (f"CIK {int(doc['cik'])}" if str(doc.get("cik", "")).isdigit() else "issuer")
+    cik = str(doc.get("cik") or "").lstrip("0")
+    n = len(cols["accessionNumber"])
+    col = lambda k, i: (cols.get(k) or [None] * n)[i] if i < len(cols.get(k) or []) else None  # noqa: E731
+    items = []
+    for i in range(n):
+        form = col("form", i)
+        if form not in EDGAR_FORMS:
+            continue
+        acc = col("accessionNumber", i)
+        codes = [c.strip() for c in (col("items", i) or "").split(",") if c.strip()]
+        if form.startswith("8-K"):
+            kept = [c for c in codes if c in EDGAR_8K_ITEMS]
+            if not kept:
+                continue
+            desc = "; ".join(EDGAR_8K_ITEMS[c][0] for c in kept)
+            topics = sorted({t for c in kept for t in EDGAR_8K_ITEMS[c][1]})
+        else:
+            desc, topics = _EDGAR_FORM_TEXT.get(form, (form, ()))
+            topics = list(topics)
+        acc_cik = cik or (acc.split("-")[0].lstrip("0") if acc else "")
+        doc_name = col("primaryDocument", i)
+        url = (f"https://www.sec.gov/Archives/edgar/data/{acc_cik}/{acc.replace('-', '')}/{doc_name}" if doc_name
+               else f"https://www.sec.gov/Archives/edgar/data/{acc_cik}/{acc.replace('-', '')}/")
+        filed, report = col("filingDate", i), col("reportDate", i)
+        summary = f"SEC filing {form} accepted {col('acceptanceDateTime', i) or filed}."
+        if report:
+            summary += f" Report date {report}."
+        if codes:
+            summary += f" Items {', '.join(codes)}."
+        items.append({
+            "guid": acc, "url": url, "title": f"{company} {form}: {desc}", "summary": summary,
+            "author": "SEC EDGAR", "categories": [form] + codes, "topics": topics,
+            "published_raw": col("acceptanceDateTime", i) or filed,
+            "raw": {k: col(k, i) for k in ("accessionNumber", "filingDate", "reportDate", "acceptanceDateTime", "form",
+                                           "items", "primaryDocument", "primaryDocDescription", "size")}
+                   | {"cik": acc_cik, "company": company},
+        })
+    return _finish(items)
+
+
+def parse_gdelt(body: bytes | str) -> list[dict]:
+    """GDELT DOC 2.0 artlist JSON -> items. `seendate` is GDELT's first-seen time (UTC)."""
+    text = body.decode("utf-8", "replace") if isinstance(body, bytes) else body
+    if not text.strip().startswith("{"):
+        raise FeedError(f"not a GDELT response: {text.strip()[:120]}")
+    doc = json.loads(text)
+    items = []
+    for a in doc.get("articles") or []:
+        if not isinstance(a, dict) or not safe_url(a.get("url")):
+            continue  # a GDELT item is a link: without a safe one there is nothing to show
+        seen = a.get("seendate") or ""
+        m = re.match(r"^(\d{8})T(\d{6})Z$", seen)
+        iso = f"{m[1][:4]}-{m[1][4:6]}-{m[1][6:]}T{m[2][:2]}:{m[2][2:4]}:{m[2][4:]}+00:00" if m else None
+        items.append({"guid": a["url"], "url": a["url"], "title": clean_text(a.get("title")), "summary": None,
+                      "author": a.get("domain"), "categories": [c for c in (a.get("sourcecountry"), a.get("language")) if c],
+                      "published_raw": iso, "raw": a})
+    return _finish(items)
+
+
+
 _SAFE_SCHEMES = ("http", "https")
 
 
@@ -318,6 +414,10 @@ def parse(body: bytes | str, kind: str) -> list[dict]:
         return parse_federal_register(body)
     if kind == "json_api":
         return parse_json_feed(body)
+    if kind == "edgar":
+        return parse_edgar(body)
+    if kind == "gdelt":
+        return parse_gdelt(body)
     head = (body[:200].decode("utf-8", "replace") if isinstance(body, bytes) else body[:200]).lstrip()
     if head.startswith("{"):
         return parse_json_feed(body)

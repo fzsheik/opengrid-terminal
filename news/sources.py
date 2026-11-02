@@ -6,21 +6,36 @@ Rules for adding a source:
     - verified from a real fetch before it is enabled. Anything we could not fetch is
       listed disabled with the reason, so the gap is visible rather than forgotten.
 
-Verified 2026-10-06 from the dev machine (HTTP status, feed type, item count).
+Verified 2026-10-06 from the dev machine (HTTP status, feed type, item count). SEC EDGAR, changelog
+and status feeds added 2026-11-01 (verified the same way).
 
 Fields
-    kind          rss | atom | json_api (JSON Feed) | federal_register
+    kind          rss | atom | json_api (JSON Feed) | federal_register | edgar | gdelt
                   rss and atom share one parser that sniffs the root element, so a feed
-                  that switches format does not break.
-    category      provider | vendor | hyperscaler | trade_press | regulation | markets
+                  that switches format does not break. edgar is the SEC's official
+                  submissions API (data.sec.gov, no key, a declared User-Agent; fetch.py).
+    category      provider | vendor | hyperscaler | trade_press | regulation | markets | filings
     topics        default topics every item from this source carries (e.g. export_controls
                   for BIS rules); classification adds more from the text.
     entity_hints  {"provider": id} for a provider's own blog: its posts are about it even
-                  when the text never names it.
+                  when the text never names it. {"vendor": "nvidia" | "amd" | "intel"} for a GPU
+                  vendor's filings: used by shifts (analytics/shifts.py) to relate them to that
+                  vendor's GPUs.
+    day_dates     the source dates items by day (00:00): many items sharing a stamp is normal
+                  there, so the shared-stamp ("single-date feed") rule does not apply.
     trust_tier    official (the company / agency itself) | press | analysis
 """
 
 from dataclasses import dataclass, field
+from urllib.parse import urlencode as _urlencode
+
+# GPU-market searches run against GDELT (live: the last day; history: month by month, news/history.py).
+_GDELT_Q = {
+    "gdelt_gpu_cloud": '("H100" OR "H200" OR "B200" OR "GB200" OR "MI300X" OR "A100") (GPU OR cloud OR datacenter) '
+                       'sourcelang:english',
+    "gdelt_gpu_market": '("GPU prices" OR "GPU rental" OR "GPU shortage" OR "GPU cloud" OR "neocloud" OR '
+                        '"AI compute prices") sourcelang:english',
+}
 
 _FR = ("https://www.federalregister.gov/api/v1/documents.json?per_page=50&order=newest"
        "&fields[]=title&fields[]=abstract&fields[]=html_url&fields[]=publication_date"
@@ -44,6 +59,7 @@ class Source:
     # "url": an article is its canonical link (the default). "guid": for feeds whose entries all
     # link to one page (release notes: one URL, a fragment per day), the entry id is the identity.
     key: str = "url"
+    day_dates: bool = False
 
 
 H = 3600
@@ -151,6 +167,49 @@ _ALL = [
     Source("semianalysis_site", "SemiAnalysis (site)", "https://semianalysis.com/feed/", "rss", "trade_press", "analysis", 3 * H),
     Source("the_information", "The Information", "https://www.theinformation.com/feed", "atom", "trade_press", "press", H,
            note="headlines and teasers only; articles are paywalled"),
+    # ---------------------------------------------------------------- changelogs / release notes / status
+    Source("digitalocean_release_notes", "DigitalOcean release notes", "https://docs.digitalocean.com/release-notes/index.xml",
+           "rss", "provider", "official", 3 * H, entity_hints={"provider": "digitalocean"}, day_dates=True,
+           note="product release notes (Hugo RSS, one item per note, dated by day)"),
+    Source("together_changelog", "Together AI changelog", "https://docs.together.ai/docs/changelog/rss.xml",
+           "rss", "provider", "official", 3 * H, entity_hints={"provider": "together"}, key="guid",
+           note="Mintlify changelog; every entry links to one page with a fragment, so entries key on their id"),
+    Source("lambda_status", "Lambda Cloud status history", "https://status.lambda.ai/history.rss",
+           "rss", "provider", "official", H, entity_hints={"provider": "lambda"}, topics=("outage",),
+           note="incident.io status page history: incidents and maintenance"),
+    # ---------------------------------------------------------------- SEC EDGAR (official submissions API)
+    *[Source(f"sec_{sid}", f"SEC EDGAR: {name}", f"https://data.sec.gov/submissions/CIK{cik:010d}.json",
+             "edgar", "filings", "official", 3 * H, entity_hints=hints, max_items=40,
+             note=note or "8-K (earnings = item 2.02, material agreements = 1.01, other events), 10-Q, 10-K; "
+                          "US government data, public domain")
+      for sid, name, cik, hints, note in (
+          ("nvda", "NVIDIA", 1045810, {"vendor": "nvidia"}, ""),
+          ("amd", "AMD", 2488, {"vendor": "amd"}, ""),
+          ("intc", "Intel", 50863, {"vendor": "intel"}, ""),
+          ("crwv", "CoreWeave", 1769628, {"provider": "coreweave"}, ""),
+          ("msft", "Microsoft", 789019, {"provider": "azure"}, ""),
+          ("googl", "Alphabet", 1652044, {"provider": "gcp"}, ""),
+          ("amzn", "Amazon", 1018724, {"provider": "aws"}, ""),
+          ("meta", "Meta Platforms", 1326801, {}, "capex / datacenter buyer: 8-K, 10-Q, 10-K"),
+          ("orcl", "Oracle", 1341439, {"provider": "oci"}, ""),
+          ("nbis", "Nebius Group", 1513845, {"provider": "nebius"}, "foreign private issuer: 6-K, 20-F (and 8-K / 10-K if filed)"),
+          ("docn", "DigitalOcean", 1582961, {"provider": "digitalocean"}, ""),
+          ("smci", "Super Micro Computer", 1375365, {}, "GPU server maker: 8-K, 10-Q, 10-K"),
+          ("lambda", "Lambda, Inc. (Form D)", 1954966, {"provider": "lambda"}, "private issuer: Form D notices of exempt offerings (funding)"),
+          ("crusoe", "Crusoe Inc. (Form D)", 1924674, {"provider": "crusoe"}, "private issuer: Form D notices of exempt offerings (funding)"),
+          ("crusoe_energy", "Crusoe Energy Systems (Form D)", 1770688, {"provider": "crusoe"}, "private issuer: Form D (funding), earlier entity"),
+          ("fluidstack", "Fluidstack Ltd (Form D)", 2104151, {"provider": "fluidstack"}, "private issuer: Form D (funding)"),
+      )],
+    # ---------------------------------------------------------------- GDELT (open data; attribution required)
+    *[Source(sid, f"GDELT: {label}", "https://api.gdeltproject.org/api/v2/doc/doc?" + _urlencode(
+              {"query": q, "mode": "artlist", "format": "json", "maxrecords": 100, "sort": "datedesc", "timespan": "1d"}),
+             "gdelt", "trade_press", "press", 6 * H, max_items=100,
+             note="GDELT DOC 2.0 API: news articles worldwide matching the query (title only; time = GDELT's "
+                  "first-seen time). Free for any use with citation of the GDELT Project, https://www.gdeltproject.org/")
+      for sid, label, q in (
+          ("gdelt_gpu_cloud", "GPU cloud coverage", _GDELT_Q["gdelt_gpu_cloud"]),
+          ("gdelt_gpu_market", "GPU market coverage", _GDELT_Q["gdelt_gpu_market"]),
+      )],
     # ---------------------------------------------------------------- not enabled (could not verify a feed)
     Source("cme_press", "CME Group press releases", "https://www.cmegroup.com/media-room/press-releases.rss",
            "rss", "markets", "official", 6 * H, topics=("futures",), enabled=False,
@@ -185,9 +244,9 @@ _ALL = [
 ]
 
 SOURCES: dict[str, Source] = {s.id: s for s in _ALL}
-CATEGORIES = ("provider", "vendor", "hyperscaler", "trade_press", "regulation", "markets")
+CATEGORIES = ("provider", "vendor", "hyperscaler", "trade_press", "regulation", "markets", "filings")
 TIERS = ("official", "press", "analysis")
-KINDS = ("rss", "atom", "json_api", "federal_register")
+KINDS = ("rss", "atom", "json_api", "federal_register", "edgar", "gdelt")
 
 assert all(s.category in CATEGORIES and s.trust_tier in TIERS and s.kind in KINDS and s.key in ("url", "guid")
            for s in _ALL)
@@ -204,4 +263,5 @@ def get(source_id: str) -> Source | None:
 def as_dict(s: Source) -> dict:
     return {"id": s.id, "name": s.name, "url": s.url, "kind": s.kind, "category": s.category,
             "trust_tier": s.trust_tier, "poll_seconds": s.poll_seconds, "topics": list(s.topics),
-            "entity_hints": dict(s.entity_hints), "enabled": s.enabled, "note": s.note, "key": s.key}
+            "entity_hints": dict(s.entity_hints), "enabled": s.enabled, "note": s.note, "key": s.key,
+            "day_dates": s.day_dates or s.kind == "federal_register"}
