@@ -3,7 +3,7 @@
     refresh()            the context_series job: EIA (if EIA_API_KEY) and SEC EDGAR (if SEC_USER_AGENT); each
                          response stored raw in context_snapshots, failures too, then parsed into context_series
     catalog()            every series OpenGrid can carry, with whether its source is enabled and its latest point
-    points(ids, since)   the values of some series
+    points(ids, since)   the values of some PUBLIC series (visibility "internal" rows, i.e. Alpaca equities, never)
     power_by_region()    current US listings joined to their state's latest electricity price (context, not cause)
 
 Nothing here reads into listings, indices, spreads, percentiles or routing.
@@ -211,6 +211,9 @@ def register() -> None:
     from config import settings
     from jobs import job
 
+    from context import equities
+
+    equities.register()   # INTERNAL equities job (context_equities), only with the Alpaca market-data keys
     if _registered or not settings.poller_enabled or not any(enabled().values()):
         return
     _registered = True
@@ -220,14 +223,16 @@ def register() -> None:
 # --------------------------------------------------------------------------- reads
 
 def catalog() -> list[dict]:
+    """The PUBLIC catalogue: EIA and EDGAR only. Internal series (Alpaca equities) are never listed here."""
     from sqlalchemy import text
 
     cat = eia.catalog() + edgar.catalog()
     with _session()() as s:
         latest = {r.series_id: r for r in s.execute(text("""
             SELECT DISTINCT ON (series_id) series_id, period_start, period_end, value, published_at, first_seen_at, basis
-            FROM context_series ORDER BY series_id, period_end DESC"""))}
-        counts = dict(s.execute(text("SELECT series_id, count(*) FROM context_series GROUP BY series_id")).all())
+            FROM context_series WHERE visibility = 'public' ORDER BY series_id, period_end DESC"""))}
+        counts = dict(s.execute(text("""SELECT series_id, count(*) FROM context_series WHERE visibility = 'public'
+                                         GROUP BY series_id""")).all())
     on = enabled()
     for c in cat:
         r = latest.get(c["series_id"])
@@ -246,7 +251,8 @@ def points(series_ids: list[str], since: date | None = None) -> list[dict]:
         rows = s.execute(text("""
             SELECT series_id, period_start, period_end, value, unit, source, basis, published_at, first_seen_at,
                    revisions, meta FROM context_series
-            WHERE series_id = ANY(:ids) AND (CAST(:since AS date) IS NULL OR period_end >= :since)
+            WHERE series_id = ANY(:ids) AND visibility = 'public'
+              AND (CAST(:since AS date) IS NULL OR period_end >= :since)
             ORDER BY series_id, period_end"""), {"ids": series_ids, "since": since}).all()
     return [{**dict(r._mapping), "value": float(r.value)} for r in rows]
 
