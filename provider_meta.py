@@ -152,6 +152,13 @@ _ALL = [
                  "https://www.hetzner.com/dedicated-rootserver/matrix-gpu/",
                  "dedicated GEX GPU servers at the printed hourly rate (EUR excl. VAT, converted at the ECB rate); "
                  "a one-time setup fee applies"),
+    ProviderMeta("yotta", "Yotta Shakti Cloud", "neocloud", "public_page", "shakticloud.ai", "https://shakticloud.ai/pricing/",
+                 "on-demand GPU VMs (H100 SXM, L40S) at the printed INR hourly rate, converted at the ECB INR->USD cross "
+                 "rate; GST treatment not stated"),
+    ProviderMeta("sakura", "Sakura Internet", "general_cloud", "public_page", "ai.sakura.ad.jp",
+                 "https://ai.sakura.ad.jp/gpu/koukaryoku-dok/",
+                 "Koukaryoku DOK GPU containers billed per second; JPY prices INCLUDE consumption tax (rate not stated) "
+                 "and are kept tax-inclusive (provider_tier tax_inclusive), converted at the ECB JPY->USD cross rate"),
     ProviderMeta("simplepod", "SimplePod", "marketplace", "public_api", "api.simplepod.ai", "https://simplepod.ai",
                  "own racks plus community hosts; one listing per open on-demand offer (Docker and VM); disk billed extra"),
     ProviderMeta("clore", "Clore.ai", "marketplace", "authenticated_api", "api.clore.ai", "https://clore.ai",

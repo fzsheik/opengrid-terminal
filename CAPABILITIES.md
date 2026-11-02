@@ -44,7 +44,7 @@ important) what it deliberately does not claim.
 
 | | |
 |---|---|
-| GPU clouds monitored | **58** (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb, Civo, Atlantic.Net, E2E Networks, Modal, Replicate, Baseten, Beam, Arkane Cloud, VESSL AI, Mithril, DeepInfra, SimplePod, Nosana, Thunder Compute, Clore.ai, Paperspace, Akash Network, Hydra Host, CUDO Compute, GPU.ai, Exoscale, Hugging Face Inference Endpoints, Gcore, Fireworks AI, IONOS Cloud, Hetzner) |
+| GPU clouds monitored | **60** (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb, Civo, Atlantic.Net, E2E Networks, Modal, Replicate, Baseten, Beam, Arkane Cloud, VESSL AI, Mithril, DeepInfra, SimplePod, Nosana, Thunder Compute, Clore.ai, Paperspace, Akash Network, Hydra Host, CUDO Compute, GPU.ai, Exoscale, Hugging Face Inference Endpoints, Gcore, Fireworks AI, IONOS Cloud, Hetzner, Yotta Shakti Cloud, Sakura Internet) |
 | Canonical GPU models | **91**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL) |
 | OpenGrid indices defined | **251** (per-GPU, family composites, overall compute index, regional, spot, provider-class) |
 | News & signal sources | **44** verified feeds (hyperscalers, neoclouds, NVIDIA/AMD, US Federal Register, trade press) |
@@ -168,6 +168,8 @@ provider never holds up the others.
 | Fireworks AI | general cloud | public page (on-demand dedicated deployments, USD per GPU-hour; **internal only**: its terms forbid republishing) |
 | IONOS Cloud | general cloud | public page (IONOS CLOUD Inc.'s USD price list on docs.ionos.com, Markdown; Cloud GPU VM templates, H200 PCIe) |
 | Hetzner | general cloud | public page (dedicated GEX GPU servers at the printed hourly rate; EUR converted to USD at the ECB reference rate; one-time setup fee not added) |
+| Yotta Shakti Cloud | neocloud | public page (on-demand GPU VMs, H100 SXM and L40S; INR converted at the ECB cross rate; GST treatment not stated) |
+| Sakura Internet | general cloud | public page (Koukaryoku DOK GPU containers billed per second, incl. the 8x H100 box; JPY converted at the ECB cross rate; prices tax-inclusive, marked) |
 | Crusoe · Denvr · Latitude.sh · Boost Run · Horizon Compute · Phyntec · Paperspace | neocloud | aggregator (via Shadeform; Paperspace a few cents above its own list) |
 
 Candidates checked and **not** added (2026-10-13): Paperspace (its own page contradicts the aggregator),

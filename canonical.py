@@ -605,6 +605,11 @@ _add("NVIDIA H200 143GB NVL", "NVIDIA H200 PCIe")
 _add("NVIDIA RTX PRO 6000 Blackwell 96GB Max-Q", "NVIDIA RTX PRO 6000 Blackwell Max-Q 96GB")
 _add(None, "NVIDIA RTX PRO 4000 Blackwell SFF Edition 24GB")
 
+# Yotta Shakti Cloud (providers/yotta.py): "Nvidia H100 SXM (80 GB)" -> "NVIDIA H100 SXM 80GB" (mapped above);
+# "NVIDIA L40S 48GB" (mapped). Sakura Internet DOK (providers/sakura.py): its page states neither SXM nor PCIe for the
+# H100 and there is no canonical 32 GB V100, so both stay unmapped.
+_add(None, "NVIDIA H100 80GB", "NVIDIA V100 32GB")
+
 # --------------------------------------------------------------------------
 # Seen, deliberately not mapped
 # --------------------------------------------------------------------------

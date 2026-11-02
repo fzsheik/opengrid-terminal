@@ -6,7 +6,7 @@ carries the original currency and amount, the rate, and the rate's date. If no f
 converted.
 
 Code: `fx.py` (rates, conversion), `store/fx.py` (tables), `providers/scaleway.py` (the first converted feed).
-Endpoints: `GET /v1/fx`, `GET /v1/fx/rates`, `GET /v1/fx/listings`.
+Endpoints: `GET /v1/fx`, `GET /v1/fx/rates` (`quote=` any ECB currency), `GET /v1/fx/listings`, `GET /v1/fx/cross`.
 
 ## Source
 
@@ -16,8 +16,9 @@ The ECB's daily euro reference rates, the official XML feed
 of the foreign currency per 1 EUR (e.g. `USD 1.1172` on 30 Oct 2026 means 1 EUR = 1.1172 USD).
 
 Raw first, like provider prices. Every fetch is stored verbatim in `fx_snapshots` (the XML body, status, time,
-failures included). Only EUR->USD is parsed into `fx_rates` (one row per rate date); the other 28 quotes stay in
-the raw body, unparsed. A body that is not the ECB's shape (no gesmes envelope, no dated rates, a rate that is not
+failures included). Every quote in it (USD and the other 28 currencies the ECB publishes) is parsed into `fx_rates`,
+one row per rate date and currency. Bodies stored before 2 Nov 2026, when only EUR->USD was parsed, are re-parsed
+once from `fx_snapshots`, so the other currencies have the same history. A body that is not the ECB's shape (no gesmes envelope, no dated rates, a rate that is not
 a positive number, a DOCTYPE) is stored as a failed fetch and changes no rate. If the ECB revises a day already
 stored, the new value replaces it and the revision is logged; the earlier body stays in `fx_snapshots`.
 
@@ -50,6 +51,22 @@ Why 5 and not 4: the longest normal gap between two publications is Easter (Thur
 Easter Tuesday morning, 5 days later) and a Thursday Christmas (24 December's rate until Monday the 29th, 5 days).
 A 4-day rule would stop conversion on those mornings; 6 days without a rate means the feed itself is broken.
 
+## Cross rates (currencies other than EUR)
+
+A price in any other currency the ECB publishes (JPY, INR, GBP, ...) is converted through the euro:
+
+    X->USD = (EUR->USD) / (EUR->X)        rounded half-up to 8 decimals (the scale of compute_listings.fx_rate)
+
+- **One date for both legs.** Both rates come from the same ECB reference date: the newest date already published
+  when the price was fetched on which both are stored. A currency the ECB skipped that day falls back to the last
+  date with both legs, and is then subject to the staleness rule.
+- **Same fail-closed rule.** No pair, or a pair older than 5 days: nothing is converted.
+- **Precision floor.** A currency worth less than 0.0005 USD (the Indonesian rupiah, about 0.000055) would keep
+  fewer than 5 significant digits at 8 decimals, so it is refused, not converted imprecisely.
+- **Source and legs.** `fx_source` is `ecb_cross`. The two legs (EUR->USD and EUR->X of `fx_rate_date`) are the stored
+  ECB rates of that date. They are returned with the listing as `fx_legs` by `GET /v1/fx/listings`, and every
+  current cross rate with its legs by `GET /v1/fx/cross`.
+
 ## Conversion and provenance
 
     USD per instance-hour = original instance-hour price x rate          (rounded half-up to 6 decimals)
@@ -68,7 +85,7 @@ every other statistic read it like any other and read none of the provenance fie
 | `original_price_per_instance_hour`, `original_price_per_gpu_hour` | the provider's own prices, in that currency |
 | `fx_rate` | USD per one unit of `original_currency` |
 | `fx_rate_date` | the ECB reference date of that rate |
-| `fx_source` | `ecb` |
+| `fx_source` | `ecb` (EUR), or `ecb_cross` (any other ECB currency, through the euro) |
 
 All are empty on listings priced in USD. Each history row (`listing_observations`, `GET /history`) of a converted
 listing also keeps the original instance price, the rate and the rate date, so a move in the USD series can be
@@ -85,6 +102,8 @@ moves (at most once per TARGET business day); moves under the usual thresholds (
 | Verda | Any instance type the API prices in EUR only (a type priced in both EUR and USD is read in USD only, so it is never counted twice). Every Verda type was USD on 2026-11-01, so nothing is converted yet. | 2026-11-01 |
 | Gcore | Its public AI pricing page (`gcore.com/pricing/ai`), EUR per hour excl. VAT: self-serve bare-metal GPU servers and Virtual GPU sizes. | 2026-11-01 |
 | Hetzner | Its public GPU server matrix (`hetzner.com/dedicated-rootserver/matrix-gpu/`), EUR per hour excl. VAT (the hourly rate it prints), one listing per GEX model. | 2026-11-01 |
+| Yotta Shakti Cloud | Its public pricing page (`shakticloud.ai/pricing/`), the On Demand VM table: INR per hour per VM, cross rate. The page does not say whether GST is included; the price is kept as printed. | 2026-11-02 |
+| Sakura Internet | Koukaryoku DOK (`ai.sakura.ad.jp/gpu/koukaryoku-dok/`): JPY per hour per plan (the 8-GPU plan per box), cross rate. **Tax-inclusive**: the page says prices include tax and states no rate, so no pre-tax price is derived; listings are marked `provider_tier` `tax_inclusive`. | 2026-11-02 |
 
 Not converted: OVHcloud's EU catalogues (EUR, GBP). OpenGrid reads OVHcloud's two USD catalogues (US and World),
 which already list the same flavors; reading an EU price list as well would need a rule for which of two official

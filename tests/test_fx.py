@@ -162,7 +162,7 @@ def test_convert_rounding_and_provenance():
 
 # --------------------------------------------------------------------------- storage (scratch DB)
 
-def test_refresh_stores_raw_first_and_parses_usd_only():
+def test_refresh_stores_raw_first_and_parses_every_quote():
     Session = _setup_db()
     try:
         from sqlalchemy import func, select
@@ -176,8 +176,10 @@ def test_refresh_stores_raw_first_and_parses_usd_only():
             rates = s.execute(select(FxRate).order_by(FxRate.rate_date)).scalars().all()
         assert [x.body for x in snaps] == [HIST, DAILY], "every response body stored verbatim"
         assert all(x.ok and x.sha256 and x.status_code == 200 for x in snaps)
-        assert len(rates) == 10 and {(r.base, r.quote) for r in rates} == {("EUR", "USD")}, "USD parsed, the rest raw"
-        assert rates[-1].rate_date == FRI and rates[-1].rate == D("1.1172") and rates[-1].snapshot_id == snaps[0].id
+        usd = [r for r in rates if r.quote == "USD"]
+        assert len(usd) == 10 and len({r.rate_date for r in rates}) == 10, "10 ECB days"
+        assert len(rates) == 10 * 29 and {r.base for r in rates} == {"EUR"}, "every quote the ECB publishes is parsed"
+        assert usd[-1].rate_date == FRI and usd[-1].rate == D("1.1172") and usd[-1].snapshot_id == snaps[0].id
 
         out = asyncio.run(fx.refresh(client))
         assert [f["url"] for f in out["fetches"]] == [fx.DAILY_URL], "rates stored: the daily file only"
@@ -191,7 +193,7 @@ def test_refresh_stores_raw_first_and_parses_usd_only():
             last = s.execute(select(FxSnapshot).order_by(FxSnapshot.id.desc())).scalars().first()
             n = s.execute(select(func.count()).select_from(FxRate)).scalar()
         assert last.body == "<html>moved</html>" and not last.ok and "Envelope" in last.error
-        assert n == 10
+        assert n == 10 * 29
         # an ECB revision of a stored day replaces the rate, and says so
         with Logs() as logs:
             res = fx.save(fx.Fetched(fx.DAILY_URL, utc(2026, 11, 1), 200, 1, True, None, DAILY.replace("1.1172", "1.1180")))
@@ -212,9 +214,12 @@ def test_usd_rate_weekend_and_stale_fail_closed():
         with Logs() as logs:
             assert fx.usd_rate("EUR", utc(2026, 11, 6, 9), context="test") is None, "Friday's rate 7 days later"
             assert fx.usd_rate("EUR", utc(2026, 10, 1)) is None, "before any stored rate"
-            assert fx.usd_rate("GBP", sun) is None, "only EUR is parsed"
+            assert fx.usd_rate("XXX", sun) is None, "a currency the ECB does not publish: no leg, nothing converted"
+            assert fx.usd_rate("eur", sun) is None, "not a currency code"
         assert any("7 days old" in m and "fail closed" in m and "test" in m for m in logs.lines), logs.lines
-        assert sum("fail closed" in m for m in logs.lines) == 2
+        assert sum("fail closed" in m for m in logs.lines) == 3
+        gbp = fx.usd_rate("GBP", sun)
+        assert gbp.source == "ecb_cross" and gbp.rate_date == FRI and gbp.rate == (D("1.1172") / D("0.83380")).quantize(D("0.00000001"))
         st = fx.status(utc(2026, 11, 6, 9))
         assert st["state"] == "stale" and st["rate_date"] == FRI and st["age_days"] == 7
         assert fx.status(sun)["state"] == "ok"
@@ -354,7 +359,7 @@ def test_migration_matches_models():
 if __name__ == "__main__":
     for t in (test_parse_real_daily, test_parse_real_history, test_parse_refuses_what_is_not_the_ecb_shape,
               test_publication_time_and_weekend, test_stale_rule_and_easter, test_convert_rounding_and_provenance,
-              test_refresh_stores_raw_first_and_parses_usd_only, test_usd_rate_weekend_and_stale_fail_closed,
+              test_refresh_stores_raw_first_and_parses_every_quote, test_usd_rate_weekend_and_stale_fail_closed,
               test_scaleway_end_to_end_with_provenance_and_no_double_count, test_migration_matches_models):
         t()
         print(t.__name__, "ok")
