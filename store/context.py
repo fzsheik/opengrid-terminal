@@ -5,7 +5,11 @@
     context_series     one row per (series, period): the value, its unit, when the source PUBLISHED it (EDGAR: the
                        filing date; EIA: not given, so null) and when OpenGrid first saw it. Rebuildable from
                        context_snapshots by re-parsing. A later different value for the same period is a revision:
-                       the row takes the new value and counts it.
+                       the row takes the new value and counts it. `visibility` is "public" (EIA, EDGAR) or
+                       "internal" (Alpaca equities, 0033_equities): internal rows are never served by a public read.
+    equity_bars        INTERNAL: intraday (hourly) Alpaca bars, split-adjusted, one row per (symbol, timeframe,
+                       adjustment, bar start). Daily equity bars live in context_series. Research only, never served
+                       publicly, never republished (methodology/internal/equities.md).
 """
 
 from datetime import date, datetime
@@ -52,3 +56,26 @@ class ContextSeries(Base):
     revisions: Mapped[int] = mapped_column(Integer, default=0)
     snapshot_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("context_snapshots.id", ondelete="SET NULL"))
     meta: Mapped[dict | None] = mapped_column(JSONB)        # accession, form, concept, how derived
+    visibility: Mapped[str] = mapped_column(String(16), default="public", server_default="public")
+
+
+class EquityBar(Base):
+    __tablename__ = "equity_bars"
+    __table_args__ = (Index("ix_equity_bars_t", "timeframe", "t"),)
+
+    symbol: Mapped[str] = mapped_column(String(16), primary_key=True)
+    timeframe: Mapped[str] = mapped_column(String(8), primary_key=True)     # "1Hour"
+    adjustment: Mapped[str] = mapped_column(String(8), primary_key=True)    # "split"
+    t: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)  # bar start (UTC)
+    open: Mapped[Decimal] = mapped_column(Numeric(18, 6))
+    high: Mapped[Decimal] = mapped_column(Numeric(18, 6))
+    low: Mapped[Decimal] = mapped_column(Numeric(18, 6))
+    close: Mapped[Decimal] = mapped_column(Numeric(18, 6))
+    volume: Mapped[Decimal] = mapped_column(Numeric(24, 6))
+    vwap: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    trades: Mapped[int | None] = mapped_column(BigInteger)
+    feed: Mapped[str] = mapped_column(String(8))                            # "sip"
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revisions: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    snapshot_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("context_snapshots.id", ondelete="SET NULL"))

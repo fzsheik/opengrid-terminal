@@ -1,0 +1,6 @@
+{
+ "status": 403,
+ "body": {
+  "message": "subscription does not permit querying recent SIP data"
+ }
+}

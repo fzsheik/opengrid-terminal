@@ -17,4 +17,4 @@ from store import fx  # noqa: F401  (0026_fx: ECB euro reference rates + FX prov
 from store import freshness  # noqa: F401  (0028_changed_at: per-poll freshness log for /v1/freshness)
 from store import cost  # noqa: F401  (0030_cost_components: raw snapshots of machine-readable cost sources)
 from store import live  # noqa: F401  (0031_stream_events: change-only events from push feeds)
-from store import context  # noqa: F401  (0032_context_series: market-context raw snapshots + series)
+from store import context  # noqa: F401  (0032_context_series + 0033_equities: market context; internal equity bars)

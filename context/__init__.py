@@ -4,6 +4,7 @@
     context.edgar   SEC EDGAR XBRL: NVIDIA / AMD data-center and total revenue, hyperscaler + CoreWeave capex
     context.geo     provider region -> US state -> wholesale market area
     context.series  fetch, store raw, parse, read; the context_series job
+    context.equities  INTERNAL research only: Alpaca equity bars (visibility "internal"; never served publicly)
 
 Context, never cause, and never an input to listings, indices, spreads, percentiles or routing.
 """
