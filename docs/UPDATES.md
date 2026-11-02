@@ -5,6 +5,30 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-02 (third release) — Fewer unmapped GPUs, none guessed
+
+### What shipped
+**Fewer unmapped GPUs, none guessed.**
+- Nine real GPU models are added to the catalogue, each from NVIDIA's own datasheet or product page: A30, GB200 (one
+  GPU of the superchip), Quadro RTX 8000, RTX PRO 4000 Blackwell SFF, V100 32GB SXM2 and PCIe, V100S, and K80 and
+  M60 (one GPU of the dual-GPU board, as clouds count them).
+- Provider names are mapped only where they state the variant. Thunder Compute's H100 is mapped to SXM because
+  Thunder's own site says so.
+- Names whose board, memory or edition no provider source states stay unmapped: Oracle A100/H100, Gcore's VM H100,
+  Sakura, RTX PRO 6000 editions, Vast's pooled "A100 SXM4", and others. The reason for each is now shown in the
+  unmapped queue (`mapping.UNMAPPED_REASONS`).
+- Unmapped provider GPU names: 192 -> 169. The K80 and M60 aliases also map the AWS price-list archive's p2 and g3
+  rows. A re-import fills the GPU on archived rows stored unmapped. GRID K520, Gaudi 3 and MI350X stay unmapped until
+  a vendor spec is read.
+
+### Deploy notes
+- No migrations and no new variables.
+- The history one-offs listed for the second release run after this deploy, so the archive imports use the new
+  mappings. Re-running `python -m backfill aws` fills the GPU on stored p2 and g3 rows.
+- Full suite before push: 127 test files, all passing except the known intermittent `test_jobs_e2e`.
+
+---
+
 ## 2026-11-02 (second release) — Archived page history back to 2017, news history, explained price shifts, internal equities
 
 ### What shipped
