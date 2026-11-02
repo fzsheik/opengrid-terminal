@@ -100,7 +100,7 @@ def test_coreweave():
     # Ambiguous or unknown hardware stays unmapped.
     assert out["nvidia-a100:8x:north-america"].canonical_gpu_name is None, "A100: SXM4 or PCIe not stated"
     gb = out["nvidia-gb200-nvl72:4x:north-america"]
-    assert gb.gpu_count == 4 and gb.price_per_gpu_hour == D("10.50") and gb.canonical_gpu_name is None
+    assert gb.gpu_count == 4 and gb.price_per_gpu_hour == D("10.50") and gb.canonical_gpu_name == "NVIDIA GB200 186GB"
     # The inference-only column is never read.
     assert all(l.price_per_instance_hour != D("6.16") for l in out.values())
     assert len(out) == 34

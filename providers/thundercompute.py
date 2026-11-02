@@ -43,6 +43,15 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+# The API's "NVIDIA H100 80GB" does not say SXM or PCIe, but Thunder Compute's own site does: "Spin up RTX A6000, L40,
+# A100 80GB, or H100 SXM GPUs" (thundercompute.com, site navigation; checked 2026-11-02). Scoped to Thunder: other
+# providers print the same words for an unstated board. Its A100 80GB board is stated nowhere and stays unmapped.
+DOC_NAMES = {"NVIDIA H100 80GB": "NVIDIA H100 SXM 80GB"}
+
+
+def canonical_name(raw_name: str) -> str | None:
+    return canonical.canonical_gpu_name(DOC_NAMES.get(raw_name.strip(), raw_name))
+
 BASE_URL = "https://api.thundercompute.com:8443"
 PRICING = "/v2/pricing"
 SPECS = "/v2/specs"
@@ -142,7 +151,7 @@ class ThunderComputeProvider(Provider):
             raw_name = _raw_name(spec)
             out.append(CapacityObservation(
                 provider="thundercompute", sku=key, region=None, raw_gpu_name=raw_name,
-                canonical_gpu_name=canonical.canonical_gpu_name(raw_name), gpu_count=spec["gpuCount"],
+                canonical_gpu_name=canonical_name(raw_name), gpu_count=spec["gpuCount"],
                 in_stock=_STOCK.get(stock[key]), raw_value=str(stock[key]), source=STATUS,
                 observed_at=status[0].fetched_at))
         return out
@@ -175,7 +184,7 @@ class ThunderComputeProvider(Provider):
                     sku=key,
                     listing_id=key,
                     raw_gpu_name=raw_name,
-                    canonical_gpu_name=canonical.canonical_gpu_name(raw_name),
+                    canonical_gpu_name=canonical_name(raw_name),
                     gpu_count=count,
                     region=None,
                     country=None,

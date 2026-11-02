@@ -72,7 +72,7 @@ def test_normalize():
     assert b.available is False and b.capacity == 0, "16 of 16 allocated"
     assert out["nvidia-pro6000se-96Gi-PCIe"].canonical_gpu_name == "NVIDIA RTX PRO 6000 96GB SE"
     assert out["nvidia-v100-16Gi-SXM2"].canonical_gpu_name == "NVIDIA Tesla V100 16GB SXM2"
-    assert out["nvidia-v100-32Gi-PCIe"].canonical_gpu_name is None, "no 32 GB V100 canonical: never merged"
+    assert out["nvidia-v100-32Gi-PCIe"].canonical_gpu_name == "NVIDIA Tesla V100 32GB PCIe", "board and memory stated"
     assert out["nvidia-rtx5000-16Gi-PCIe"].canonical_gpu_name is None
 
 

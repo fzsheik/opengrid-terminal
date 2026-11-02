@@ -293,8 +293,10 @@ def test_aliases():
     assert canonical.canonical_gpu_name("Tesla V100SXM216GB 16GB") == "NVIDIA Tesla V100 16GB SXM2"
     assert canonical.canonical_gpu_name("H100 NVL 94GB") == "NVIDIA H100 94GB NVL"
     for name in ("H100 80GB", "Tesla T4 15GB", "L40S 45GB", "RTX 4090 23GB", "RTX 5060 Ti 8GB",
-                 "RTX 3080 12GB", "Tesla V100SXM232GB 32GB", "RTX 4090 D 48GB"):
+                 "RTX 3080 12GB", "RTX 4090 D 48GB"):
         assert canonical.canonical_gpu_name(name) is None, name
+    # since 2026-11-02: the name spells the board (SXM2) and the memory
+    assert canonical.canonical_gpu_name("Tesla V100SXM232GB 32GB") == "NVIDIA Tesla V100 32GB SXM2"
 
 
 # --------------------------------------------------------------------------

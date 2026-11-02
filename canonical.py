@@ -244,7 +244,7 @@ _add("NVIDIA GH200 96GB", "GH200 pcie")
 _add("Intel Gaudi 2 96GB", "GAUDI2 pcie")
 # Paperspace via Shadeform. The RTX A4000/A5000/A6000 exist only as PCIe cards, so the tag cannot mislead.
 # Left unmapped: "V100 pcie" (Paperspace's page says only "V100 16 GB"; Shadeform's interconnect tag is wrong
-# on its H100), "V100_32G pcie" (no canonical 32 GB V100 yet) and the H100, relabelled in providers/shadeform.py
+# on its H100), "V100_32G pcie" (Shadeform's interconnect tag; not trusted for the board) and the H100, relabelled in providers/shadeform.py
 # because Paperspace's page says HGX (SXM) where Shadeform says pcie. "A100 pcie nvlink" (Paperspace's A100x8, 40 GB
 # PCIe cards bridged with NVLink) has no canonical NVLink 40 GB variant yet.
 _add("NVIDIA RTX A4000 16GB", "A4000 pcie")
@@ -280,7 +280,7 @@ _add("NVIDIA RTX 5090 32GB", "RTX5090 pcie")
 # Left unmapped on purpose: "NVIDIA A100 80GB" (CoreWeave and Jarvislabs: SXM4 or
 # PCIe not stated), "NVIDIA A100 40GB", "NVIDIA RTX Pro 6000 Blackwell 96GB"
 # (Jarvislabs: Workstation, Max-Q or Server Edition not stated), "NVIDIA A30 24GB"
-# (no canonical A30 yet) and "NVIDIA GB200 NVL72 186GB" (no canonical GB200 yet).
+# (both mapped since 2026-11-02, see the unmapped-queue cleanup below).
 # --------------------------------------------------------------------------
 _add("NVIDIA H100 80GB SXM5", "NVIDIA HGX H100 80GB", "NVIDIA H100 SXM 80GB")
 _add("NVIDIA H200 141GB SXM5", "NVIDIA HGX H200 141GB", "NVIDIA H200 SXM 141GB")
@@ -345,7 +345,7 @@ _add("NVIDIA H200 141GB SXM5", "Nvidia H200 GPU (141GB)")
 # Left unmapped on purpose: Linode "RTX6000" (Quadro RTX 6000 per Linode's docs,
 # but the API name alone does not say Quadro or Ada); OVHcloud "H100 80GB" and
 # "A100 80GB" (SXM or PCIe not stated), "H200 141GB" (SXM or NVL not stated),
-# "Tesla V100S 32GB" (no canonical V100S yet); Koyeb "gpu-nvidia-h100 80GB",
+# "Tesla V100S 32GB" (mapped in the 2026-11-02 cleanup: the V100S is PCIe only); Koyeb "gpu-nvidia-h100 80GB",
 # "gpu-nvidia-a100 80GB", "gpu-nvidia-h200 141GB" (variant not stated) and
 # "gpu-nvidia-rtx-pro-6000 96GB" (Workstation, Max-Q or Server Edition not stated).
 # --------------------------------------------------------------------------
@@ -371,7 +371,7 @@ _add("NVIDIA A100 80GB SXM4", "gpu-nvidia-a100-sxm 80GB")
 # Left unmapped on purpose: "NVIDIA H100 80GB", "NVIDIA A100 80GB", "NVIDIA A100
 # 40GB" (Oracle never says SXM or PCIe; NVIDIA's blog calls OCI's H100 shape HGX,
 # but the source we read does not), "NVIDIA RTX PRO 6000 96GB" (edition not
-# stated) and "NVIDIA GB200 189GB (NVL72)" (no canonical GB200 yet).
+# stated); "NVIDIA GB200 189GB (NVL72)" is mapped in the unmapped-queue cleanup below.
 # --------------------------------------------------------------------------
 _add("NVIDIA H200 141GB SXM5", "NVIDIA H200 141GB")
 _add("NVIDIA B200 180GB SXM", "NVIDIA B200 180GB")
@@ -600,15 +600,46 @@ _add(None, "H100 80 GB GPU")
 # (see the Oracle note above); IONOS's docs describe PCIe passthrough of it.
 _add("NVIDIA H200 143GB NVL", "NVIDIA H200 PCIe")
 
-# Hetzner (providers/hetzner.py): the card's GPU line + per-GPU VRAM. The RTX PRO 4000 Blackwell SFF Edition has no
-# canonical model yet (not the full-height RTX PRO 4000 Blackwell, as the SFF Ada is not the RTX 4000 Ada).
+# Hetzner (providers/hetzner.py): the card's GPU line + per-GPU VRAM. The RTX PRO 4000 Blackwell SFF Edition is its
+# own canonical model (cleanup below), never the full-height RTX PRO 4000 Blackwell.
 _add("NVIDIA RTX PRO 6000 Blackwell 96GB Max-Q", "NVIDIA RTX PRO 6000 Blackwell Max-Q 96GB")
 _add(None, "NVIDIA RTX PRO 4000 Blackwell SFF Edition 24GB")
 
 # Yotta Shakti Cloud (providers/yotta.py): "Nvidia H100 SXM (80 GB)" -> "NVIDIA H100 SXM 80GB" (mapped above);
 # "NVIDIA L40S 48GB" (mapped). Sakura Internet DOK (providers/sakura.py): its page states neither SXM nor PCIe for the
-# H100 and there is no canonical 32 GB V100, so both stay unmapped.
+# H100 or the board of its V100 32GB, so both stay unmapped.
 _add(None, "NVIDIA H100 80GB", "NVIDIA V100 32GB")
+
+# --------------------------------------------------------------------------
+# Unmapped-queue cleanup (2026-11-02). New canonical models (hardware.py, vendor datasheets): A30, GB200, Quadro
+# RTX 8000, RTX PRO 4000 Blackwell SFF, V100 32GB SXM2 / PCIe, V100S, K80 and M60 (one GPU of the dual-GPU board,
+# the unit clouds count). Only names that state the variant are aliased; these override earlier "not yet" entries.
+# --------------------------------------------------------------------------
+# A30: one form factor (PCIe), one memory size.
+_add("NVIDIA A30 24GB", "NVIDIA A30 24GB", "A30 (24GB)", "NVIDIA A30", "Exoscale GPUA30 (NVIDIA A30 24GB)")
+# GB200: the Blackwell GPU of a GB200 superchip. NVL72 racks only; providers print 186, 189 or 192 GB per GPU.
+_add("NVIDIA GB200 186GB", "NVIDIA GB200 NVL72 186GB", "NVIDIA GB200 189GB (NVL72)", "NVIDIA GB200 NVL72 192GB")
+# NVL boards named with their bridge: still the one 94 GB / 141 GB NVL card.
+_add("NVIDIA H100 94GB NVL", "H100 NVL (94GB) NVLink")
+_add("NVIDIA H200 143GB NVL", "H200 NVL (141GB) NVLink")
+_add("NVIDIA Quadro RTX 8000 48GB", "Quadro RTX 8000", "Quadro RTX 8000 48GB")
+_add("NVIDIA RTX PRO 4000 Blackwell SFF 24GB", "NVIDIA RTX PRO 4000 Blackwell SFF Edition 24GB")
+# V100 32GB: only names that spell the board. "NVIDIA V100 32GB" (Sakura, E2E) and "V100_32G pcie" (Shadeform's
+# interconnect tag, which is wrong on its H100) stay unmapped. The V100S exists only as a 32 GB PCIe card.
+_add("NVIDIA Tesla V100 32GB SXM2", "Tesla V100-SXM2-32GB", "Tesla V100-SXM2-32GB (32 GB)", "Tesla V100SXM232GB 32GB",
+     "NVIDIA Tesla V100-SXM2-32GB")
+_add("NVIDIA Tesla V100 32GB PCIe", "Tesla V100-PCIE-32GB", "Tesla V100PCIE32GB 32GB", "nvidia v100 32Gi PCIe")
+_add("NVIDIA Tesla V100S 32GB PCIe", "Tesla V100S-PCIE-32GB", "Tesla V100SPCIE32GB 32GB", "Tesla V100S 32GB")
+# AWS price-list archive (backfill/aws_price_list.py BACKFILL_INSTANCES): p2 = K80, g3 = M60, per GPU as AWS counts.
+# GRID K520 (g2) stays unmapped: no NVIDIA datasheet for it could be read.
+_add("NVIDIA Tesla K80 12GB", "NVIDIA K80", "Tesla K80")
+_add("NVIDIA Tesla M60 8GB", "NVIDIA Tesla M60", "Tesla M60")
+# Names that spell the variant of an existing model.
+_add("NVIDIA A100 40GB SXM4", "A100-SXM4-40GB (40 GB)", "nvidia a100 40Gi SXM4")
+_add("NVIDIA T4 16GB", "NVIDIA T4 Tensor Core GPU")              # one T4 product (16 GB, PCIe)
+_add("NVIDIA RTX A6000 48GB", "RTX A6000", "RTX A6000 (48GB) NVLink", "RTX A6000 (48GB) [ALT Config]",
+     "RTX A6000 (48GB) [Premium]")                                 # one A6000 product; NVLink is the pair bridge
+_add("NVIDIA RTX 5070 Ti 16GB", "NVIDIA GeForce RTX 5070 Ti")     # one 5070 Ti (16 GB); the 5060 Ti has 8 and 16 GB
 
 # --------------------------------------------------------------------------
 # Seen, deliberately not mapped

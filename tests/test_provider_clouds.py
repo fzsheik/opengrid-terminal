@@ -215,7 +215,7 @@ def test_ovhcloud():
     assert a100.price_per_gpu_hour == D("12.29") / 4 == D("3.0725") and a100.canonical_gpu_name is None
     assert out["WS:h100-380"].price_per_gpu_hour == D("2.99") and out["WS:h100-380"].canonical_gpu_name is None
     assert out["WS:t1-le-45"].canonical_gpu_name == "NVIDIA Tesla V100 16GB", "variant-less V100 name"
-    assert out["US:t2-45"].canonical_gpu_name is None, "no canonical V100S"
+    assert out["US:t2-45"].canonical_gpu_name == "NVIDIA Tesla V100S 32GB PCIe", "the V100S is PCIe only"
     # Not offered for new instances: coming soon (RTX 5000, A10), legacy (GTX 10xx), untagged (WS t1-45).
     for gone in ("WS:rtx5000-28", "WS:a10-45", "WS:g1-15", "WS:t1-45", "WS:t2-45"):
         assert gone not in out, gone

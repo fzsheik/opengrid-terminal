@@ -97,7 +97,7 @@ def test_normalize():
         "BM.GPU.H200.8": (8, D("10"), "NVIDIA H200 141GB SXM5"),
         "BM.GPU.B200.8": (8, D("14"), "NVIDIA B200 180GB SXM"),
         "BM.GPU.B300.8": (8, D("15"), "NVIDIA B300 288GB SXM"),
-        "BM.GPU.GB200.4": (4, D("16"), None),
+        "BM.GPU.GB200.4": (4, D("16"), "NVIDIA GB200 186GB"),
         "BM.GPU.GB300.4": (4, D("18"), "NVIDIA GB300 288GB"),
         "BM.GPU.MI300X.8": (8, D("6"), "AMD Instinct MI300X 192GB"),
         "BM.GPU.MI355X.8": (8, D("8.6"), "AMD Instinct MI355X 288GB"),
@@ -171,7 +171,7 @@ def test_registry():
     # Every shape's GPU name is either mapped or deliberately left unmapped (and documented).
     unmapped = {n for _, _, n in oracle.SHAPES.values() if canonical.canonical_gpu_name(n) is None}
     assert unmapped == {"NVIDIA H100 80GB", "NVIDIA A100 80GB", "NVIDIA A100 40GB",
-                        "NVIDIA RTX PRO 6000 96GB", "NVIDIA GB200 189GB (NVL72)"}, unmapped
+                        "NVIDIA RTX PRO 6000 96GB"}, unmapped
 
 
 def test_pipeline():

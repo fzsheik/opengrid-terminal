@@ -100,8 +100,8 @@ def test_coreweave_older_designs():
         assert all(l.price_per_instance_hour > 0 for l in ls)
         # "Contact sales" rows carry no price and produce no listing
         assert "NVIDIA GB300 NVL72 279GB" not in by, name
-        # deliberately unmapped in canonical.py: kept with no canonical name, as live
-        assert by["NVIDIA GB200 NVL72 186GB"].canonical_gpu_name is None
+        # GB200 has a canonical model since 2026-11-02 (one Blackwell GPU of the superchip)
+        assert by["NVIDIA GB200 NVL72 186GB"].canonical_gpu_name == "NVIDIA GB200 186GB"
 
 
 def test_coreweave_live_parser_still_reads_current_design_via_source():

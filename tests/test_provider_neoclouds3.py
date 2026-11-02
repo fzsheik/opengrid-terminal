@@ -112,7 +112,8 @@ def test_e2e():
     assert out["a100-80gb:1x"].price_per_gpu_hour == D("2.1") and out["a100-80gb:1x"].raw_gpu_name == "NVIDIA A100 80GB"
     assert out["t4:1x"].canonical_gpu_name == "NVIDIA T4 16GB" and out["a40:1x"].canonical_gpu_name == "NVIDIA A40 48GB"
     # Variant not stated: never guessed.
-    for lid in ("h100:1x", "a100-80gb:1x", "a100-40gb:1x", "rtx-pro-6000:1x", "v100:1x", "a30:1x"):
+    assert out["a30:1x"].canonical_gpu_name == "NVIDIA A30 24GB", "the A30 has one form factor"
+    for lid in ("h100:1x", "a100-80gb:1x", "a100-40gb:1x", "rtx-pro-6000:1x", "v100:1x"):
         assert out[lid].canonical_gpu_name is None, lid
     # Spot and committed rates are INR-only: never a listing.
     assert all(l.market_type == "on_demand" for l in out.values())
@@ -160,8 +161,9 @@ def test_simplepod():
     assert vm.provider_tier == "vm/enterprise" and vm.country == "PL" and vm.canonical_gpu_name == "NVIDIA RTX 5090 32GB"
     assert vm.gpu_count == 4 and vm.price_per_instance_hour == D("3.992") and vm.price_per_gpu_hour == D("0.998")
     assert out["vm:30"].canonical_gpu_name == "NVIDIA RTX 4090 24GB" and out["vm:30"].price_per_gpu_hour == D("0.691")
-    # Unmapped on purpose: no canonical V100 32GB, RTX PRO 6000 edition unstated, a MIG slice.
-    assert out["docker:582"].canonical_gpu_name is None
+    # The V100 32GB SXM2 is mapped since 2026-11-02 (SimplePod names the board); unmapped on purpose: RTX PRO 6000
+    # edition unstated, a MIG slice.
+    assert out["docker:582"].canonical_gpu_name == "NVIDIA Tesla V100 32GB SXM2"
     assert out["vm:434"].raw_gpu_name == "RTX PRO 6000 Blackwell (96 GB)" and out["vm:434"].canonical_gpu_name is None
     assert out["docker:289"].canonical_gpu_name is None
 
@@ -220,7 +222,7 @@ def test_registry():
     # New aliases never merge variants.
     assert canonical.canonical_gpu_name("NVIDIA H100 80GB") is None
     assert canonical.canonical_gpu_name("NVIDIA A100 80GB") is None
-    assert canonical.canonical_gpu_name("Tesla V100-SXM2-32GB (32 GB)") is None
+    assert canonical.canonical_gpu_name("Tesla V100-SXM2-32GB (32 GB)") == "NVIDIA Tesla V100 32GB SXM2"  # board stated
 
 
 # --------------------------------------------------------------------------
