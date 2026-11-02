@@ -52,7 +52,7 @@ what is left, and what is next. Add an entry in the same commit as the change.
   4. `python -m backfill import --since 2016-01` (the first run downloads archives one at a time)
   5. `python -m analytics.shifts run` (after the history imports, so shifts see them)
   6. `python -m backfill coverage`
-- Full suite before push: SUITE_RESULT
+- Full suite before push: 126 test files (115 Python, 11 web), all passing except `test_jobs_e2e` ("no usage slice metered"), which fails the same way on the previous release. `test_pages` and `test_developer_docs` read the local dev database, so they were run against a freshly migrated one; a migration from empty reaches the single head `0029_news_history`.
 
 ---
 
