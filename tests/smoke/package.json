@@ -1,0 +1,1 @@
+{"private": true, "description": "Website smoke test (tests/smoke/compare.sh)", "dependencies": {"puppeteer-core": "23.11.1"}}

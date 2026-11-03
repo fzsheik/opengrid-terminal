@@ -183,6 +183,9 @@ carries a `source` field so a second source can be added later without a breakin
 ## 11. Testing
 
 - `tests/run_all.py` runs every test; GitHub Actions runs it on every push (`.github/workflows/tests.yml`).
+- `tests/smoke/compare.sh [ref]` loads all 28 website pages in headless Chrome on this checkout and on `ref`
+  (default `origin/main`), each on a seeded scratch database, and prints only differences: new JS errors,
+  failed requests, changed price / row counts. Run it after every area moves (needs Chrome; not in CI).
 - `tests/test_contract.py` sweeps every Data API route (no 500s, version header, meta, error shape) and covers
   the version header, key pin and data host.
 - Still to come, in order: old-vs-new equivalence for every moved route (before any old route is deleted);
