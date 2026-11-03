@@ -44,7 +44,12 @@ def now() -> datetime:
 
 def envelope(data: Any, *, kind: str | None = None, methodology: str | None = None, **meta) -> dict:
     """Wrap a payload. `methodology` names a doc under /methodology/<name>."""
-    m = {"as_of": now().isoformat()}
+    import observability
+    from api import contract  # lazy: contract imports config, which some importers of common load later
+
+    m = {"as_of": now().isoformat(), "request_id": observability.current().get("request_id"),
+         "api_version": contract.current_version()}
+    m = {k: v for k, v in m.items() if v is not None}
     if kind:
         m["kind"] = kind
     if methodology:

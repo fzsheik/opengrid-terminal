@@ -420,5 +420,8 @@ import alerts.channels  # noqa: E402,F401  (registers the channel_feeds job: Dis
 import alerts.silence  # noqa: E402,F401  (registers the silence_alerts job: provider feeds gone quiet)
 import backfill.gpuhunt  # noqa: E402,F401  (registers gpuhunt_snapshot: daily raw copy of dstack's catalogues)
 import observability  # noqa: E402
+from api import contract  # noqa: E402
 
+# Data API edge (version header, one error shape): inside the request-id middleware, outside the rest.
+app.add_middleware(contract.ContractMiddleware)
 observability.install(app)

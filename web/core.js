@@ -541,7 +541,7 @@ Full docs: web/README.md.
     let body = null;
     if (r.status !== 204) body = ct.includes("json") ? await r.json().catch(() => null) : await r.text().catch(() => null);
     if (!r.ok) {
-      const d = body && typeof body === "object" ? body.detail : body;
+      const d = body && typeof body === "object" ? (body.error || body.detail) : body;  // Data API: {error}
       const msg = typeof d === "string" ? d : d && d.message ? d.message : Array.isArray(d) ? d.map(x => x.msg).join("; ") : `HTTP ${r.status}`;
       throw new ApiError(r.status, msg, url, body);
     }
