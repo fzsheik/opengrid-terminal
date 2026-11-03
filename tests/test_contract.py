@@ -119,6 +119,33 @@ def test_unhandled_exception_is_shaped():
         main.app.router.routes.pop(0)
 
 
+def test_key_pin():
+    from sqlalchemy import text
+
+    from accounts import accounts, keys
+
+    a = accounts.create_account("pinned-co")
+    k = keys.create_key(a["id"], "pin", ["data:read"])
+    assert k["api_version"] == contract.LATEST, k
+    auth = {"Authorization": f"Bearer {k['secret']}"}
+    old = contract.VERSIONS
+    contract.VERSIONS = ("2026-01-01",) + old  # pretend an older version is still served
+    try:
+        with normalize.SessionLocal.begin() as s:
+            s.execute(text("UPDATE api_keys SET api_version = '2026-01-01' WHERE id = :i"), {"i": k["id"]})
+        keys.reset_cache()
+        r = client.get("/v1/gpus", headers=auth)
+        assert r.status_code == 200 and r.headers["opengrid-version"] == "2026-01-01", r.headers
+        assert r.json()["meta"]["api_version"] == "2026-01-01"
+        r = client.get("/v1/gpus", headers={**auth, "OpenGrid-Version": contract.LATEST})
+        assert r.headers["opengrid-version"] == contract.LATEST, "the header beats the pin"
+        err = assert_error(client.get("/v1/gpus/not-a-gpu", headers=auth), 404)
+        assert err["code"] == "not_found" and r.headers["opengrid-version"]
+    finally:
+        contract.VERSIONS = old
+    assert client.get("/v1/gpus").headers["opengrid-version"] == contract.LATEST, "no key, no header: latest"
+
+
 def test_compute_api_keeps_detail():
     r = client.get("/v1/jobs/job-doesnotexist")
     assert r.status_code >= 400 and "error" not in r.json(), r.text

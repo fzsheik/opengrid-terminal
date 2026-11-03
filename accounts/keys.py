@@ -38,6 +38,7 @@ from accounts import ratelimit
 from accounts.auth import ALL, SCOPES, Principal
 from accounts.security import client_ip as _security_client_ip
 from accounts.security import deployed  # noqa: F401  (re-exported: other modules import it from here)
+from api import contract
 from config import settings
 from store.accounts import Account, ApiKey
 from store.security import ApiKeyLineage, SecurityEvent
@@ -99,7 +100,7 @@ def as_dict(k: ApiKey, lineage: ApiKeyLineage | None = None) -> dict:
     return {"id": k.id, "account_id": k.account_id, "name": k.name, "prefix": k.prefix, "scopes": list(k.scopes),
             "state": state, "created_at": k.created_at, "last_used_at": k.last_used_at,
             "last_used_ip": k.last_used_ip, "expires_at": k.expires_at, "revoked_at": k.revoked_at,
-            "rate_limit_per_minute": k.rate_limit_per_minute,
+            "rate_limit_per_minute": k.rate_limit_per_minute, "api_version": k.api_version,
             "parent_key_id": lineage.parent_key_id if lineage else None,
             "platform_admin": bool(lineage and lineage.platform_admin)}
 
@@ -150,7 +151,7 @@ def create_key(account_id: int, name: str = "default", scopes=None, expires_at: 
         now = datetime.now(timezone.utc)
         k = ApiKey(account_id=account_id, name=(name or "default")[:200], prefix=token[:PREFIX_SHOWN],
                    secret_hash=digest, scopes=scopes, expires_at=expires_at,
-                   rate_limit_per_minute=rate_limit_per_minute, created_at=now)
+                   rate_limit_per_minute=rate_limit_per_minute, created_at=now, api_version=contract.LATEST)
         s.add(k)
         s.flush()
         lin = ApiKeyLineage(key_id=k.id, parent_key_id=parent_key_id, platform_admin=bool(platform_admin),
@@ -317,7 +318,7 @@ def verify(token: str, request) -> Principal:
     if not platform_admin:
         scopes = scopes - {"admin"}  # cross-tenant admin only for keys the operator flagged platform_admin
     return Principal(kind="api_key", account_id=k.account_id, key_id=k.id, scopes=scopes,
-                     platform_admin=bool(platform_admin))
+                     platform_admin=bool(platform_admin), api_version=k.api_version)
 
 
 def reset_cache() -> None:

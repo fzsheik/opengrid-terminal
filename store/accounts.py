@@ -77,6 +77,7 @@ class ApiKey(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     rate_limit_per_minute: Mapped[int | None] = mapped_column(Integer)
+    api_version: Mapped[str | None] = mapped_column(String(10))  # Data API version pinned at creation
 
 
 class ApiKeyUsage(Base):

@@ -1,8 +1,8 @@
 """The OpenGrid Data API contract at the HTTP edge (docs/API_CONTRACT.md sections 3 and 4).
 
 On Data API paths (market intelligence; DATA_AREAS below) one pure ASGI middleware:
-    * resolves the API version: `OpenGrid-Version` header, else latest (the per-key pin comes with the key column);
-      an unknown version is a 400 before any route runs;
+    * resolves the API version: `OpenGrid-Version` header, else the version pinned to the API key, else latest;
+      an unknown header value is a 400 before any route runs;
     * echoes the version used in the `OpenGrid-Version` response header (and api.common.envelope puts it, with
       the request id, in `meta`);
     * rewrites EVERY error response into one shape, whoever produced it (HTTPException, validation, the site gate,
@@ -87,10 +87,19 @@ def from_response(status: int, raw: bytes, content_type: str, request_id: str | 
     return error_body(status, message=str(detail) if detail not in (None, "") else None, request_id=request_id)
 
 
+def resolve(state: dict) -> str | None:
+    """Header, else the key's pin, else latest. None outside a Data API request."""
+    if not state.get("data_api"):
+        return None
+    pin = getattr(state.get("principal"), "api_version", None)
+    # shortcut: a pin that is no longer served falls back to latest; give it its own 400 when a version is retired
+    return state.get("api_version_asked") or (pin if pin in VERSIONS else None) or LATEST
+
+
 def current_version() -> str | None:
     """The API version of the request in progress (None outside a Data API request)."""
     st = observability._state.get()
-    return st.get("api_version") if isinstance(st, dict) else None
+    return resolve(st) if isinstance(st, dict) else None
 
 
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -113,13 +122,13 @@ class ContractMiddleware:
             return await _send_json(send, 400, error_body(
                 400, code="unknown_api_version", param=HEADER, request_id=rid,
                 message=f"{HEADER} {asked!r} {reason}; supported: {', '.join(VERSIONS)}"), {})
-        version = asked or LATEST
-        state["api_version"] = version
+        state["data_api"], state["api_version_asked"] = True, asked
         head = scope.get("method") == "HEAD"
         held: dict = {}
 
         async def wrapped(message):
             if message["type"] == "http.response.start":
+                version = resolve(state)  # the key (if any) is known by now
                 headers = [h for h in message.get("headers", []) if h[0].lower() != HEADER.lower().encode()]
                 headers.append((HEADER.lower().encode(), version.encode()))
                 message = {**message, "headers": headers}
@@ -147,7 +156,7 @@ class ContractMiddleware:
                 raise
             log.exception("unhandled error on %s", scope.get("path"))
             await _send_json(send, 500, error_body(500, message="Internal error; quote the request_id when reporting it",
-                                                   request_id=rid), {HEADER: version})
+                                                   request_id=rid), {HEADER: resolve(state)})
 
 
 async def _send_json(send, status: int, body: dict, headers: dict) -> None:
