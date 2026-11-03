@@ -98,7 +98,7 @@ def test_sql():
 
     scratchdb.drop("og_test_market")
     scratchdb.create("og_test_market")
-    engine = create_engine("postgresql+psycopg://localhost:5432/og_test_market")
+    engine = create_engine(scratchdb.url("og_test_market"))
     try:
         Base.metadata.create_all(engine)
         Session = sessionmaker(bind=engine, expire_on_commit=False)

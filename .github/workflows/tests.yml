@@ -14,6 +14,7 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: opengrid  # a few tests boot the app on its default database; here it is empty
           # Not UTC on purpose: the app must return UTC whatever the server zone (tables._utc_session).
           TZ: America/New_York
         ports: ["5432:5432"]
@@ -21,6 +22,7 @@ jobs:
           --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       TEST_PG_URL: postgresql+psycopg://postgres:postgres@localhost:5432
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/opengrid
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
