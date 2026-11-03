@@ -1,7 +1,7 @@
 /* /compare/:a-vs-:b and /compare?a=&b=[&gpu=]: side by side.
 
 Each side resolves to a GPU (canonical slug), a provider, or a region group:
-  GPU vs GPU            /v1/compare + /v1/gpus/{a,b} (providers selling both) + /v1/history/{a,b} (overlay)
+  GPU vs GPU            /v1/compare + /v1/markets/{a,b} (providers selling both) + /v1/history/{a,b} (overlay)
   provider vs provider  /v1/compare (coverage, relative value, common GPUs) + /market/detail for one common GPU
                         (?gpu= picks it: "the same GPU across providers")
   region vs region      /v1/heatmaps/gpu-region-* ("the same GPU across regions"; ?gpu= highlights one)
@@ -138,8 +138,8 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
       })));
 
     // providers that sell both
-    const [ga, gb] = await Promise.all([ctx.api("/v1/gpus/" + a.slug).catch(() => null), ctx.api("/v1/gpus/" + b.slug).catch(() => null)]);
-    const pa = new Map((ga ? ga.market.by_provider : []).map(p => [p.provider, p])), pb = new Map((gb ? gb.market.by_provider : []).map(p => [p.provider, p]));
+    const [ga, gb] = await Promise.all([ctx.api("/v1/markets/" + a.slug).catch(() => null), ctx.api("/v1/markets/" + b.slug).catch(() => null)]);
+    const pa = new Map((ga ? ga.by_provider : []).map(p => [p.provider, p])), pb = new Map((gb ? gb.by_provider : []).map(p => [p.provider, p]));
     const provRows = [...new Set([...pa.keys(), ...pb.keys()])].map(p => ({ provider: p, a: pa.has(p) ? pa.get(p).price : null, b: pb.has(p) ? pb.get(p).price : null,
       ra: pa.has(p) ? pa.get(p).rank : null, rb: pb.has(p) ? pb.get(p).rank : null })).map(r => Object.assign(r, { d: rel(r.a, r.b), both: r.a != null && r.b != null }));
     const provT = OG.table({

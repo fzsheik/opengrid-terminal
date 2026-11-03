@@ -107,11 +107,13 @@ def public_shape(v):
     import gpu_ids
 
     if isinstance(v, dict):
-        out = {k: public_shape(x) for k, x in v.items()}
-        g = out.get("gpu")
-        if isinstance(g, str) and g in gpu_ids.GPU_IDS:
-            out["gpu"] = gpu_ids.GPU_IDS[g]
-            out.setdefault("gpu_name", g)
+        out = {}
+        for k, x in v.items():
+            if k == "gpu" and isinstance(x, str) and x in gpu_ids.GPU_IDS:
+                out["gpu"] = gpu_ids.GPU_IDS[x]
+                out["gpu_name"] = v.get("gpu_name", x)
+            elif k != "gpu_name" or "gpu_name" not in out:
+                out[k] = public_shape(x)
         return out
     if isinstance(v, (list, tuple)):
         return [public_shape(x) for x in v]

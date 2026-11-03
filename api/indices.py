@@ -7,7 +7,6 @@
     GET /v1/history/{gpu}/extended                      daily, archived before recording + observed after (kind per day)
     GET /v1/history/{gpu}/archived                      ARCHIVED prices before (and alongside) recording: captures of
                                                         provider price pages / AWS price-list versions
-    GET /v1/markets/{gpu}/context                       percentiles vs 30d / 90d (stats.gpu_context)
     GET /v1/providers/{provider}/gpus/{gpu}/context     one provider's price vs its own history
     GET /v1/providers/{provider}/listings/context       one listing's price vs its own history
 
@@ -152,16 +151,6 @@ def gpu_history_extended(gpu: str, days: int = Query(365, ge=0, le=3660, descrip
                     note="kind[i] says which: 'archived' days (before archived_until) hold each provider's archived "
                          "price until its next capture; 'observed' days are OpenGrid's own recording. Statistics, "
                          "indices and routing use observed data only.")
-
-
-@router.get("/v1/markets/{gpu}/context", summary="Where the GPU's price sits in its 30d / 90d history")
-def market_context(gpu: str, segment: Segment = "on_demand", _: Principal = Depends(READ)):
-    kind, name = resolve_gpu_or_family(gpu)
-    if kind == "family":
-        from api.families import family_response
-        return family_response(name, requested=gpu, endpoint="context")
-    return envelope(stats.gpu_context(name, segment), kind=OBSERVED, methodology=stats.METHODOLOGY,
-                    price_concept=OBSERVED_MARKET_PRICE)
 
 
 def _provider(value: str) -> str:

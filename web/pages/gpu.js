@@ -1,9 +1,10 @@
 /* /gpu/:slug: one GPU market, laid out like a stock / commodity page.
 
 Data (all in parallel, each section renders as soon as its own request lands):
-  /v1/gpus/{slug}              hardware, current market (dispersion, score, by_provider), capability, alternatives
+  /v1/gpus/{slug}              reference data: vendor specs
+  /v1/markets/{slug}           current market (price, stats, score, by_provider + change_24h), capability,
+                               alternatives, historical context (percentile, label, sentence)
   /v1/indices/{slug}           OpenGrid index level, 24h/7d/30d/90d changes, volatility       (soft: reason shown)
-  /v1/markets/{slug}/context   historical percentile, label, the context sentence             (soft)
   /v1/history/{slug}?window=   hourly lowest / median / highest + index line (chart, market view)
   /market/detail?gpu=&hours=   per-provider step lines (chart, providers view; fine grid for thin history)
   /v1/timeline?gpu=&window=    availability history, inferred price moves, events + news markers
@@ -200,26 +201,21 @@ Nothing is computed here that the API does not state, except display arithmetic 
           : cx && cx.label_reason ? [h("span", { class: "gp-ctx-s dim", title: cx.label_reason }, "Historical context: " + cx.label_reason)] : []), histNote);
       }
 
-      /* ---------- market summary (+ everything that hangs off /v1/gpus/{slug}) ---------- */
+      /* ---------- market summary: /v1/gpus/{slug} (reference) + /v1/markets/{slug} (market, capability,
+         alternatives, historical context; by_provider carries each provider's 24h change) ---------- */
       async function loadSummary() {
         try {
-          const r = await ctx.api("/v1/gpus/" + slug, { full: true, slot: "gp-sum" });
-          st.g = r.data; OG.status.asOf(r.meta && r.meta.as_of);
+          const [ref, r] = await Promise.all([ctx.api("/v1/gpus/" + slug, { slot: "gp-ref" }),
+            ctx.api("/v1/markets/" + slug, { full: true, slot: "gp-sum" })]);
+          const mk = r.data;
+          st.g = { hardware: ref, capability: mk.capability, alternatives: mk.alternatives,
+            market: { ...mk, low: mk.price.low, median: mk.price.median, high: mk.price.high } };
+          st.ctxd = mk.context || null; OG.status.asOf(r.meta && r.meta.as_of);
           drawQuote(); drawProviders(); drawDispersion(); drawDistribution(); drawHardware(); drawCapability(); drawAlternatives();
         } catch (e) { if (!e.stale) quote.replaceChildren(OG.error(e, loadSummary)); }
       }
-      // /v1/markets/{gpu}: per-provider 24h change when the API carries it (soft; the column is hidden otherwise)
-      async function loadMarketChanges() {
-        const mk = await ctx.api("/v1/markets/" + slug).catch(() => null);
-        const rows = mk && (mk.by_provider || mk.providers || (mk.market && mk.market.by_provider)) || [];
-        const m = new Map();
-        for (const p of Array.isArray(rows) ? rows : []) { const x = p.change_24h ?? p.change_24h_pct; if (p.provider && x != null) m.set(p.provider, x); }
-        st.chg = m;
-        if (m.size && st.g) drawProviders();
-      }
       async function loadIndex() {
-        const [idx, cx] = await Promise.all([ctx.api("/v1/indices/" + slug).catch(() => null), ctx.api("/v1/markets/" + slug + "/context").catch(() => null)]);
-        st.idx = idx; st.ctxd = cx; drawQuote();
+        st.idx = await ctx.api("/v1/indices/" + slug).catch(() => null); drawQuote();
       }
 
       /* ---------- providers ---------- */
@@ -729,7 +725,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
       };
       if (scroller) { scroller.addEventListener("scroll", onScroll, { passive: true }); ctx.onCleanup(() => scroller.removeEventListener("scroll", onScroll)); }
 
-      loadSummary(); loadIndex(); loadMarketChanges(); loadChart(); loadTimeline(); loadTrust(); loadRegions(); loadBest(); loadEvents(); loadNews(); loadListings();
+      loadSummary(); loadIndex(); loadChart(); loadTimeline(); loadTrust(); loadRegions(); loadBest(); loadEvents(); loadNews(); loadListings();
       ctx.every(60000, () => { loadSummary(); loadBest(); });
       ctx.every(300000, () => { loadIndex(); loadChart(); loadTimeline(); loadTrust(); loadRegions(); loadEvents(); });
 

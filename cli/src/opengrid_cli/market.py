@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import quote
 
-from .client import Client, Response
+from .client import Client, NotFoundError, Response
 
 PRICE_NOTE = ("prices are observed list prices per GPU-hour as published by providers, not quotes; availability "
               "is what the provider reports and may change; runtime is unknown unless benchmarked")
@@ -58,8 +58,16 @@ def _hw(h: dict | None) -> dict:
 def search_gpus(c: Client, *, model: str | None = None, vendor: str | None = None, min_vram: float | None = None,
                 max_price: float | None = None, available: bool = False, sort: str = "providers",
                 limit: int = 50) -> dict:
-    r = c.get("/v1/gpus", params={"limit": 1000})
-    rows = r.data if isinstance(r.data, list) else []
+    r = c.get("/v1/gpus", params={"limit": 1000})  # reference data; prices come from /v1/markets
+    mk = c.get("/v1/markets", params={"limit": 1000})
+    by_gpu = {m.get("gpu"): m for m in (mk.data if isinstance(mk.data, list) else [])}
+    rows = []
+    for ref in (r.data if isinstance(r.data, list) else []):
+        m = by_gpu.get(ref.get("id")) or {}
+        p, li = m.get("price") or {}, m.get("listings") or {}
+        rows.append({"slug": ref.get("id"), "name": ref.get("name"), "hardware": ref, "low": p.get("low"),
+                     "median": p.get("median"), "high": p.get("high"), "providers": m.get("providers", 0),
+                     "available_listings": li.get("available", 0), "priced_listings": li.get("priced", 0)})
     needle = (model or "").strip().lower().replace(" ", "-")
     out = []
     for g in rows:
@@ -99,9 +107,20 @@ def search_gpus(c: Client, *, model: str | None = None, vendor: str | None = Non
 # ---------------------------------------------------------------- one GPU
 
 def gpu_specs(c: Client, gpu: str, *, max_providers: int = 10) -> dict:
-    r = c.get(f"/v1/gpus/{seg(gpu)}")
-    d = r.data or {}
-    if (r.meta or {}).get("resolved_as") == "family" or "variants" in d:
+    try:
+        ref = c.get(f"/v1/gpus/{seg(gpu)}")
+    except NotFoundError:  # maybe a family (h100): the API answers it on its own route; else the 404 stands
+        r = c.get(f"/v1/families/{seg(gpu)}")
+        ref = None
+    if ref is not None:
+        r = c.get(f"/v1/markets/{seg(gpu)}")
+        mk = r.data or {}
+        d = {"name": ref.data.get("name"), "slug": ref.data.get("id"), "hardware": ref.data,
+             "market": {**mk, **{k: (mk.get("price") or {}).get(k) for k in ("low", "median", "high")}},
+             "alternatives": mk.get("alternatives")}
+    else:
+        d = r.data or {}
+    if ref is None:
         variants, truncated = bound(d.get("variants") or [], 25)
         return {"kind": "family", "requested": gpu, "family": d.get("name"), "slug": d.get("slug"),
                 "note": clip((r.meta or {}).get("note") or d.get("note")),
@@ -127,7 +146,7 @@ def gpu_specs(c: Client, gpu: str, *, max_providers: int = 10) -> dict:
                                   "listings": p.get("listings"),
                                   "change_24h_pct": (p.get("change_24h") or {}).get("pct")} for p in shown],
         "providers_truncated": truncated,
-        "alternatives": [clip(a.get("gpu") or a.get("name"), 80) for a in alts if isinstance(a, dict)],
+        "alternatives": [clip(a.get("gpu_name") or a.get("gpu") or a.get("name"), 80) for a in alts if isinstance(a, dict)],
         "price_kind": "observed", "notes": [PRICE_NOTE], **_meta(r)}
 
 

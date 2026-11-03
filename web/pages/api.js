@@ -12,23 +12,21 @@
   // [group, anchor, [[method, path, summary, params ("name*" = required), sample path values]]]
   const PUBLIC = [
     ["GPUs & hardware", "pub-gpus", [
-      ["GET", "/v1/gpus", "Every canonical GPU: hardware summary and current market", "priced_only, limit, offset"],
-      ["GET", "/v1/gpus/{gpu}", "One GPU: full spec, dispersion, capability pricing, alternatives", "gpu*, days"],
+      ["GET", "/v1/gpus", "Every canonical GPU: reference data and vendor specs", "vendor, family, limit, cursor"],
+      ["GET", "/v1/gpus/{gpu}", "One GPU: reference data and vendor specs", "gpu*"],
       ["GET", "/v1/families", "GPU families and their canonical variants", ""],
       ["GET", "/v1/families/{family}", "One GPU family: every variant side by side", "family*"],
-      ["GET", "/v1/hardware", "Vendor peak specs for every canonical GPU (dense figures)", ""],
       ["GET", "/v1/compare", "Side by side: two GPUs or two providers", "a*, b*, days"],
     ]],
     ["Market prices", "pub-markets", [
       ["GET", "/v1/overview", "Homepage market overview in one payload", ""],
-      ["GET", "/v1/markets/{gpu}", "Current market for one GPU: dispersion, efficiency score, providers", "gpu*"],
-      ["GET", "/v1/markets/{gpu}/context", "Where the GPU's price sits in its 30d / 90d history", "gpu*, segment"],
+      ["GET", "/v1/markets", "Current market per GPU: price, spread, efficiency score", "min_providers, vendor, limit, cursor"],
+      ["GET", "/v1/markets/{gpu}", "One GPU's market: price, stats, providers, capability, alternatives", "gpu*"],
       ["GET", "/v1/markets/{gpu}/dispersion", "Dispersion of one GPU over time", "gpu*, days, resolution"],
       ["GET", "/v1/markets/{gpu}/regions", "One GPU by region group: cheapest, median, providers, premium", "gpu*"],
       ["GET", "/v1/history/{gpu}", "One GPU over time: lowest / median / highest / provider count + index", "gpu*, window, resolution, segment"],
       ["GET", "/v1/history/{gpu}/extended", "One GPU daily as far back as archives reach: archived prices (held between captures) before recording, observed after; kind per day", "gpu*, days, segment"],
       ["GET", "/v1/history/{gpu}/archived", "ARCHIVED prices before recording: Internet Archive captures of provider price pages + AWS price-list versions, per provider and month", "gpu*, segment"],
-      ["GET", "/v1/spreads", "Every GPU ranked by fragmentation and spread", "min_providers"],
       ["GET", "/v1/heatmaps/{kind}", "Heatmap matrix: rows, cols, cells (null = no data)", "kind*, days"],
       ["GET", "/v1/regions", "Region groups and what is listed in each now", ""],
       ["GET", "/v1/opportunities", "Live opportunity monitor", "type, gpu, provider, min_score, limit"],

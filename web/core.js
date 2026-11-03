@@ -670,9 +670,9 @@ Full docs: web/README.md.
     // Every canonical GPU (from the server), weighted by how many providers sell it now (from /market).
     async gpus() {
       let live = null;
-      const v1 = await api.soft("/v1/gpus", { params: { limit: 1000 } });
-      const list = Array.isArray(v1) ? v1 : v1 && Array.isArray(v1.items) ? v1.items : null;
-      if (list) live = list.map(g => ({ name: g.name || g.gpu || g.canonical_name, providers: g.providers || g.provider_count || 0 }));
+      const [ref, mk] = await Promise.all([api.soft("/v1/gpus", { params: { limit: 1000 } }), api.soft("/v1/markets", { params: { limit: 1000 } })]);
+      const list = Array.isArray(ref) ? ref : null, sold = new Map((Array.isArray(mk) ? mk : []).map(m => [m.gpu, m.providers]));
+      if (list) live = list.map(g => ({ name: g.name, providers: sold.get(g.name) || 0 }));
       else { const m = await OG.data.market(24).catch(() => null); live = m ? m.gpus.map(g => ({ name: g.gpu, providers: g.providers })) : []; }
       const weight = new Map(live.filter(g => g.name).map(g => [g.name, typeof g.providers === "number" ? g.providers : Array.isArray(g.providers) ? g.providers.length : 0]));
       const names = new Set([...GPU_BY_SLUG.values(), ...weight.keys()]);

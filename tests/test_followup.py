@@ -153,9 +153,11 @@ def test_family_endpoints():
 
 def test_family_in_gpu_paths():
     c = _client()
-    for path, endpoint in (("/v1/markets/h100", "market"), ("/v1/history/h100", "history"),
-                           ("/v1/gpus/h100", "gpu"), ("/v1/markets/h100/context", "context"),
-                           ("/v1/markets/h100/regions", "regions")):
+    # Data API reference / market routes take one GPU: a family is a 404 that names its own route.
+    for path in ("/v1/markets/h100", "/v1/gpus/h100", "/v1/markets/h100/regions"):
+        r = c.get(path)
+        assert r.status_code == 404 and "/v1/families/h100" in r.json()["error"]["message"], (path, r.text)
+    for path, endpoint in (("/v1/history/h100", "history"),):
         r = c.get(path)
         assert r.status_code == 200, (path, r.text)
         b = r.json()

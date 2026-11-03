@@ -205,3 +205,35 @@ carries a `source` field so a second source can be added later without a breakin
 9. OpenAPI-generated reference, then a Python SDK and CLI with the version built in.
 
 No outside client uses the API yet (only our own UI), so steps 1 to 4 need no aliases or deprecation period.
+
+## 13. Resource shapes (filled in as each area moves)
+
+**GPU** (`/v1/gpus`, `/v1/gpus/{gpu}`): reference data only, no prices.
+```json
+{"id": "nvidia-h100-80gb-sxm5", "name": "NVIDIA H100 80GB SXM5", "families": ["h100", "hopper"],
+ "vendor": "NVIDIA", "architecture": "Hopper", "generation": "Hopper", "released": 2022, "segment": "datacenter",
+ "datacenter": true, "vram_gb": 80, "memory_type": "HBM3", "memory_bandwidth_tbps": 3.35, "fp32_tflops": 67,
+ "fp16_tflops_dense": 989.5, "bf16_tflops_dense": 989.5, "fp8_tflops_dense": 1979, "fp8_supported": true,
+ "interconnect": "PCIe Gen5", "nvlink": "NVLink 4, 900 GB/s", "form_factor": "SXM", "tdp_w": 700,
+ "workload_class": "training", "notes": "...", "sources": ["https://..."]}
+```
+Hardware field names are the vendor-spec names already in use (`vram_gb`, `bf16_tflops_dense`, ...): explicit,
+so not renamed. A family slug on a GPU route is a 404 naming `/v1/families/{family}`.
+
+**Market row** (`/v1/markets`): one per GPU with a live listing.
+```json
+{"gpu": "nvidia-h100-80gb-sxm5", "gpu_name": "NVIDIA H100 80GB SXM5",
+ "price": {"low": 1.6168, "median": 2.4216, "high": 2.9269, "currency": "USD", "unit": "gpu_hour"},
+ "providers": 4, "listings": {"live": 5, "priced": 4, "available": 4, "sold_out": 1, "availability_unknown": 0},
+ "spread": {"abs": 1.3101, "pct_of_low": 0.810304, "pct_of_median": 0.541006},
+ "score": {"efficiency": 69.1, "fragmentation": 30.9, "label": "moderately fragmented", "confidence": "low",
+           "reason": null}}
+```
+`change_24h` per GPU joins this row when the history area moves (additive).
+
+**Market detail** (`/v1/markets/{gpu}`): the market row's fields plus `stats`, full `score`, `by_provider` (each
+provider's lowest price, rank, premium, `change_24h`), `capability`, `alternatives`, `context` (where today's
+price sits in its 30 / 90 day history).
+
+**Lists** page by cursor: `limit` (max 1000) and `cursor`; `meta.next_cursor` (null on the last page), `meta.total`.
+

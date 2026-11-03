@@ -410,7 +410,7 @@ def test_every_public_route_is_clean():
     assert len(templates) >= 80, f"route enumeration found only {len(templates)} public GET routes"
     for must in ("/v1/gpus", "/v1/markets/{gpu}", "/v1/indices/{index_id}", "/v1/fixings", "/v1/capacity",
                  "/v1/fx/listings", "/v1/reserved", "/v1/history/{gpu}/archived", "/v1/best/{gpu}", "/listings",
-                 "/history", "/market", "/gpu/{slug}", "/v1/trust/listings", "/v1/spreads",
+                 "/history", "/market", "/gpu/{slug}", "/v1/trust/listings", "/v1/markets",
                  # 2026-11-02 release: freshness, full cost (API and page)
                  "/v1/freshness", "/v1/cost/components", "/v1/cost/billing", "/v1/cost/sources",
                  "/v1/cost/presets", "/cost", "/v1/context/power", "/v1/context/series"):

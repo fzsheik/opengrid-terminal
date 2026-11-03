@@ -60,6 +60,30 @@ def envelope(data: Any, *, kind: str | None = None, methodology: str | None = No
     return {"data": data, "meta": m}
 
 
+def cursor_page(items: list, limit: int, cursor: str | None) -> tuple[list, dict]:
+    """Slice an already-sorted list by an opaque cursor; returns (items, meta with next_cursor and total).
+
+    shortcut: the cursor encodes an offset, right for small, slowly changing lists (GPUs, providers, markets);
+    time-ordered tables (history, events, news) need keyset cursors (last timestamp + id) instead."""
+    import base64
+    import json
+
+    offset = 0
+    if cursor:
+        try:
+            offset = int(json.loads(base64.urlsafe_b64decode(cursor.encode() + b"==").decode())["o"])
+            assert offset >= 0
+        except Exception:
+            raise HTTPException(400, {"code": "invalid_cursor", "param": "cursor",
+                                      "message": "cursor is not one this API returned; omit it to start over"})
+    limit = max(1, min(limit, MAX_LIMIT))
+    out = items[offset: offset + limit]
+    nxt = None
+    if offset + limit < len(items):
+        nxt = base64.urlsafe_b64encode(json.dumps({"o": offset + limit}).encode()).decode().rstrip("=")
+    return out, {"limit": limit, "next_cursor": nxt, "total": len(items)}
+
+
 def page(items: list, limit: int, offset: int) -> tuple[list, dict]:
     """Slice an already-sorted list; returns (items, pagination meta)."""
     limit = max(1, min(limit, MAX_LIMIT))
