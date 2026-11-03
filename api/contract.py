@@ -41,6 +41,10 @@ _CODE = {400: "bad_request", 401: "authentication_required", 403: "permission_de
 _STD = ("type", "code", "message", "param", "request_id", "docs_url")
 
 
+def on_data_host(host: str) -> bool:
+    return bool(settings.data_api_host) and host.split(":", 1)[0].lower() == settings.data_api_host.lower()
+
+
 def is_data_path(path: str) -> bool:
     if not path.startswith("/v1/"):
         return False
@@ -112,11 +116,27 @@ class ContractMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or not is_data_path(scope.get("path", "")):
+        if scope["type"] != "http":
             return await self.app(scope, receive, send)
+        path = scope.get("path", "")
+        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers") or ()}
         state = scope.setdefault("state", {})
         rid = state.get("request_id")
-        asked = next((v.decode("latin-1").strip() for k, v in scope.get("headers") or () if k == HEADER.lower().encode()), None)
+        if on_data_host(headers.get("host", "")):
+            # The Data API host: Data API routes only, and only with an API key (never the site login or anonymous).
+            if path == "/health":
+                return await self.app(scope, receive, send)
+            if not is_data_path(path):
+                return await _send_json(send, 404, error_body(
+                    404, request_id=rid, message=f"no Data API route at {path}; see /v1/gpus"), {})
+            if not headers.get("authorization", "").lower().startswith("bearer "):
+                return await _send_json(send, 401, error_body(
+                    401, request_id=rid, message="API key required: send Authorization: Bearer opg_live_..."),
+                    {"WWW-Authenticate": "Bearer"})
+        elif not is_data_path(path):
+            return await self.app(scope, receive, send)
+        asked = headers.get(HEADER.lower())
+        asked = asked.strip() if asked is not None else None
         if asked is not None and asked not in VERSIONS:
             reason = "is not a date (YYYY-MM-DD)" if not _DATE.match(asked) else "is not a supported version"
             return await _send_json(send, 400, error_body(

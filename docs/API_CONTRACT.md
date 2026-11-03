@@ -159,7 +159,34 @@ carries a `source` field so a second source can be added later without a breakin
 - Corrections are visible (section 5).
 - Deprecation: 12 months minimum (section 3).
 
-## 10. Build order
+## 10. Hosting, website and how this is built
+
+- **One repo.** Website, Data API, Compute API and workers deploy from this repo as separate Railway services
+  (same code, a role setting decides routes and jobs). Stages: (1) one service answering all hosts, routed by
+  hostname (`DATA_API_HOST`); (2) web / worker split, exactly one poller; (3) per-product services, a CDN in front
+  of `data.`, a Postgres read replica when load needs it.
+- **The website uses the same Data API** (same handlers, same shapes) on its own domain with the site login;
+  only UI-only views (overview, tape, heatmaps, ...) are `/internal/*`. Its pages send their own
+  `OpenGrid-Version` and upgrade on purpose. No API key is ever put in the browser.
+- **The data host** answers Data API routes only and only with an API key (`api/contract.py`).
+- **Sandbox.** All of this is built on the `api-v1` branch; `main` (production) is frozen until the API is done,
+  then gets one merge. A Railway `staging` environment deploying `api-v1` is the place to click through it.
+- **Price polling is untouched** (pollers call providers outbound). Watch: the probe agents call
+  `/v1/probes/targets` and `/v1/probes/ingest`, so those keep working until both agents are re-uploaded; at the
+  worker split, exactly one poller runs and every provider key is copied to the worker service.
+
+## 11. Testing
+
+- `tests/run_all.py` runs every test; GitHub Actions runs it on every push (`.github/workflows/tests.yml`).
+- `tests/test_contract.py` sweeps every Data API route (no 500s, version header, meta, error shape) and covers
+  the version header, key pin and data host.
+- Still to come, in order: old-vs-new equivalence for every moved route (before any old route is deleted);
+  invariants on the numbers (price > 0, min <= median <= max, per-GPU x count = node price, every ID resolves,
+  index level = recomputed level, no internal field in a response); contract tests once the shape is frozen
+  (saved samples per version, schema diff); staging smoke test, load test, and production checks (source
+  cross-check, our probes probing our own API, alerts).
+
+## 12. Build order
 
 1. Error shape, `request_id`, version header (empty `api/versions/` chain), key-only `/v1`, website on
    `/internal/*`, `data.` host routing.

@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     routing_live_provisioning: bool = False
     # Public base URL, for canonical links and sitemaps.
     public_base_url: str = "https://opengrid-terminal-production.up.railway.app"
+    # Host name of the OpenGrid Data API (e.g. data.tryopengrid.com). Requests to it reach only Data API routes
+    # and need an API key: no site login, no anonymous reads (api/contract.py). Unset: no such host.
+    data_api_host: str | None = None
     # Poll public news / regulatory feeds (news/sources.py) in the background.
     news_enabled: bool = True
     # SEC EDGAR asks automated clients to declare who they are ("Company contact@domain"); set this to the

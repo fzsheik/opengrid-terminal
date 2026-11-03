@@ -146,6 +146,27 @@ def test_key_pin():
     assert client.get("/v1/gpus").headers["opengrid-version"] == contract.LATEST, "no key, no header: latest"
 
 
+def test_data_host_is_key_only():
+    from accounts import accounts, keys
+
+    old = settings.data_api_host
+    settings.data_api_host = "data.test"
+    try:
+        dc = TestClient(main.app, base_url="https://data.test")
+        err = assert_error(dc.get("/v1/gpus"), 401)
+        assert err["code"] == "authentication_required" and "Bearer" in err["message"]
+        assert assert_error(dc.get("/v1/jobs"), 404)["code"] == "not_found", "Compute API is not on the data host"
+        assert assert_error(dc.get("/"), 404)["code"] == "not_found", "no website on the data host"
+        assert dc.get("/health").status_code == 200
+        k = keys.create_key(accounts.create_account("host-co")["id"], "h", ["data:read"])
+        r = dc.get("/v1/gpus", headers={"Authorization": f"Bearer {k['secret']}"})
+        assert r.status_code == 200 and r.json()["meta"]["api_version"] == contract.LATEST
+        assert_error(dc.get("/v1/gpus", headers={"Authorization": "Bearer opg_live_wrong"}), 401)
+        assert client.get("/v1/gpus").status_code == 200, "the website host is unchanged"
+    finally:
+        settings.data_api_host = old
+
+
 def test_compute_api_keeps_detail():
     r = client.get("/v1/jobs/job-doesnotexist")
     assert r.status_code >= 400 and "error" not in r.json(), r.text
