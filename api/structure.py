@@ -155,14 +155,15 @@ def market_regions(gpu: str, who: Principal = Depends(READ)):
         cheap = min(votes, key=lambda p: (votes[p], p)) if votes else None
         reason = None if votes else (f"no live listing in {g}" if not rows else f"listings in {g}, none priced")
         out.append({
-            "region_group": g, "cheapest": votes.get(cheap), "cheapest_provider": cheap, "median": st["median"],
-            "providers": len(votes), "provider_names": sorted(votes),
-            "live_listings": len(rows), "available_listings": sum(1 for r in rows if r["available"] is True),
+            "region_group": g, "price": price_block(votes.get(cheap), st["median"], max(votes.values(), default=None)),
+            "low_provider": cheap,
+            "providers": len(votes), "provider_ids": sorted(votes),
+            "listings": {"live": len(rows), "available": sum(1 for r in rows if r["available"] is True)},
             "premium_vs_global_median": (round(st["median"] / glob["median"] - 1, 6)
                                          if votes and glob["median"] else None),
             "reason": reason})
-    return envelope({"gpu": name, "slug": gpu_slug(name), "global_median": glob["median"],
-                     "global_providers": glob["providers"], "regions": out},
+    return envelope({"gpu": name, "global": {"price": price_block(glob["low"], glob["median"], glob["high"]),
+                                             "providers": glob["providers"]}, "regions": out},
                     kind=INFERRED, methodology="dispersion", price_concept=_PC,
                     note="region groups from regions.region_group, never guessed; Unassigned = no location given or "
                          "a listing spanning several groups. median = median of each provider's lowest price in the "
@@ -180,8 +181,15 @@ def _coverage(listings: list[dict]) -> dict:
     gpus = sorted({r["gpu"] for r in listings})
     fams = sorted({(hardware.spec(g) or {}).get("architecture") for g in gpus} - {None})
     groups = sorted({regions.region_group(r["provider"], r["region"], r["country"]) for r in listings} - {None})
-    return {"gpus": len(gpus), "gpu_names": gpus, "architectures": fams, "region_groups": groups,
-            "live_listings": len(listings), "priced_listings": sum(1 for r in listings if r["priced"])}
+    return {"gpus": len(gpus), "gpu_ids": [gpu_ids.gpu_id(g) or g for g in gpus], "architectures": fams,
+            "region_groups": groups,
+            "listings": {"live": len(listings), "priced": sum(1 for r in listings if r["priced"])}}
+
+
+def _provider_ref(p: str) -> dict:
+    """Provider id + its descriptive fields (provider_name is added by the response shape)."""
+    m = provider_meta.as_dict(p)
+    return {"provider": p, **{k: m[k] for k in ("provider_class", "source_type", "source", "website", "note")}}
 
 
 def _summary_value(v: dict | None) -> dict | None:
@@ -201,8 +209,7 @@ def providers_list(days: int = Query(30, ge=1, le=365), who: Principal = Depends
         by_p[r["provider"]].append(r)
     out = []
     for p in _known_providers():
-        out.append({"provider": p, "slug": provider_slug(p), "meta": provider_meta.as_dict(p),
-                    "coverage": _coverage(by_p.get(p, [])),
+        out.append({**_provider_ref(p), "coverage": _coverage(by_p.get(p, [])),
                     "relative_value": _summary_value(value.get(p, {}).get(providers.ALL)),
                     "listing_lifetime": life.get(p), "feed_health": health.get(p),
                     "facts": providers.facts(p, value.get(p, {}), days)})
@@ -223,16 +230,15 @@ def provider_detail(provider: str, days: int = Query(30, ge=1, le=365), who: Pri
         mine = next((x for x in markets.get(g, {}).get("by_provider", []) if x["provider"] == p), None)
         current[g] = mine and mine["premium_vs_others_median"]
         regs = sorted({regions.region_group(p, r["region"], r["country"]) or "Unassigned" for r in rows})
-        catalog.append({"gpu": g, "slug": gpu_slug(g), "listings": len(rows),
-                        "priced_listings": sum(1 for r in rows if r["priced"]),
-                        "available_listings": sum(1 for r in rows if r["available"] is True),
-                        "best_price": mine and mine["price"], "rank_now": mine and mine["rank"],
-                        "market_providers": markets.get(g, {}).get("providers", 0),
-                        "market_median": markets.get(g, {}).get("median"),
+        catalog.append({"gpu": g, "listings": {"live": len(rows), "priced": sum(1 for r in rows if r["priced"]),
+                                               "available": sum(1 for r in rows if r["available"] is True)},
+                        "price_per_gpu_hour": mine and mine["price"], "rank_now": mine and mine["rank"],
+                        "market": {"providers": markets.get(g, {}).get("providers", 0),
+                                   "median": markets.get(g, {}).get("median")},
                         "premium_now": current[g], "region_groups": regs,
                         "window": _summary_value(value.get(g))})
     beats, dear = providers.beats_and_expensive(value, current)
-    data = {"provider": p, "meta": provider_meta.as_dict(p), "coverage": _coverage(listings), "catalog": catalog,
+    data = {**_provider_ref(p), "coverage": _coverage(listings), "catalog": catalog,
             "relative_value": _summary_value(value.get(providers.ALL)),
             "rank_distribution": (value.get(providers.ALL) or {}).get("rank_distribution"),
             "rank_history": providers.rank_history(p, days),
@@ -263,9 +269,9 @@ def regions_list(who: Principal = Depends(READ)):
     out = []
     for g in (*regions.REGION_GROUPS, "Unassigned"):
         a = acc.get(g)
-        out.append({"region_group": g, "providers": sorted(a["providers"]) if a else [],
-                    "gpus": len(a["gpus"]) if a else 0, "live_listings": a["live_listings"] if a else 0,
-                    "priced_listings": a["priced_listings"] if a else 0})
+        out.append({"region_group": g, "providers": len(a["providers"]) if a else 0,
+                    "provider_ids": sorted(a["providers"]) if a else [], "gpus": len(a["gpus"]) if a else 0,
+                    "listings": {"live": a["live_listings"] if a else 0, "priced": a["priced_listings"] if a else 0}})
     return envelope(out, kind=OBSERVED, methodology="dispersion",
                     note="Unassigned = no location given, or a listing spanning several groups")
 

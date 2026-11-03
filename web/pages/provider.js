@@ -72,6 +72,11 @@
       el.append(body);
 
       // ------------------------------------------------------------ main payload
+      // /v1/providers/{provider} nests listings / market blocks; this page reads the flat names, so map them once.
+      const flat = d => ({ ...d, meta: { ...d, display_name: d.provider_name },
+        coverage: { ...d.coverage, live_listings: d.coverage.listings.live, priced_listings: d.coverage.listings.priced },
+        catalog: d.catalog.map(c => ({ ...c, slug: OG.slug(c.gpu), best_price: c.price_per_gpu_hour, market_providers: c.market.providers,
+          market_median: c.market.median, listings: c.listings.live, priced_listings: c.listings.priced, available_listings: c.listings.available })) });
       async function load() {
         let res;
         try { res = await ctx.api(`/v1/providers/${encodeURIComponent(p)}`, { params: { days: st.days }, full: true, slot: "provider" }); }
@@ -83,7 +88,7 @@
           if (!st.d) { statsEl.replaceChildren(); catEl.replaceChildren(OG.error(e, load)); }
           return;
         }
-        st.d = res.data; st.meta = res.meta;
+        st.d = flat(res.data); st.meta = res.meta;
         OG.status.asOf(res.meta && res.meta.as_of);
         drawStats(); drawCatalog(); drawBeats(); drawHist(); drawFacts(); drawRegions();
         if (!st.gpu || !st.d.catalog.some(c => c.slug === st.gpu)) {

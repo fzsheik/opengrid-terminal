@@ -396,9 +396,10 @@ Nothing is computed here that the API does not state, except display arithmetic 
         const num = (...v) => { for (const x of v) if (x != null && isFinite(x)) return Number(x); return null; };
         const rows = rl.map(r => ({
           region: r.region_group || r.region || r.group || "Unassigned",
-          cheapest: num(r.cheapest, r.low, r.lowest, r.cheapest_price), provider: r.cheapest_provider || r.low_provider || null,
-          median: num(r.median), premium: num(r.premium_vs_global, r.premium, r.median_vs_global),
-          providers: num(r.providers, r.provider_count), listings: num(r.priced_listings, r.listings, r.listing_count), available: num(r.available_listings),
+          cheapest: num(r.price && r.price.low, r.cheapest, r.low), provider: r.low_provider || r.cheapest_provider || null,
+          median: num(r.price && r.price.median, r.median), premium: num(r.premium_vs_global_median, r.premium_vs_global),
+          providers: num(r.providers), listings: num(r.listings && r.listings.live, r.priced_listings),
+          available: num(r.listings && r.listings.available, r.available_listings),
           reason: OG.reasonOf(r),
         }));
         const fin = rows.map(r => r.cheapest).filter(v => v != null), lo = Math.min(...fin), hi = Math.max(...fin);

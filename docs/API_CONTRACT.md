@@ -238,5 +238,34 @@ so not renamed. A family slug on a GPU route is a 404 naming `/v1/families/{fami
 provider's lowest price, rank, premium, `change_24h`), `capability`, `alternatives`, `context` (where today's
 price sits in its 30 / 90 day history).
 
+**Naming rules** (every area follows them):
+
+| Concept | Field |
+|---|---|
+| Price across providers | `price: {low, median, high, currency, unit}` |
+| One provider's / listing's price | `price_per_gpu_hour` |
+| GPU | `gpu` (id) + `gpu_name` |
+| Provider | `provider` (id) + `provider_name` (both added by `public_shape`) |
+| Counts | `providers`, `gpus` are numbers; lists are `provider_ids`, `gpu_ids` |
+| Listing counts | `listings: {live, priced, available, sold_out, availability_unknown}` (the ones that apply) |
+| Old `slug` fields | removed: the id replaces them (website links compute their own) |
+
+**Family** (`/v1/families`, `/v1/families/{family}`): `id` is the slug (`h100`, `hopper`); `member_families` are
+family ids. Each variant: `gpu`, `gpu_name`, `price`, `low_provider`, `providers`, `listings {available, priced}`,
+`reason`, `index {id, level, published, change_24h}` (detail only), `links {gpu, market, regions, history}`.
+`cheapest_variant_now`: `gpu`, `price_per_gpu_hour`, `provider`, `label` (a cross-variant fact, not a family price).
+
+**Provider** (`/v1/providers`, `/v1/providers/{provider}`): `provider`, `provider_name`, `provider_class`,
+`source_type`, `source`, `website`, `note`, `coverage {gpus, gpu_ids, architectures, region_groups,
+listings {live, priced}}`, `relative_value`, `listing_lifetime`, `feed_health`, `facts`. Detail adds `catalog`
+rows: `gpu`, `listings {live, priced, available}`, `price_per_gpu_hour` (its lowest), `rank_now`,
+`market {providers, median}`, `premium_now`, `region_groups`, `window`; plus `rank_distribution`, `rank_history`,
+`beats_the_market`, `expensive`.
+
+**Region group** (`/v1/regions`): `region_group`, `providers`, `provider_ids`, `gpus`, `listings {live, priced}`.
+**GPU by region** (`/v1/markets/{gpu}/regions`): `gpu`, `global {price, providers}`, `regions[]` with
+`region_group`, `price`, `low_provider`, `providers`, `provider_ids`, `listings {live, available}`,
+`premium_vs_global_median`, `reason`.
+
 **Lists** page by cursor: `limit` (max 1000) and `cursor`; `meta.next_cursor` (null on the last page), `meta.total`.
 

@@ -76,7 +76,7 @@
       }
 
       function drawClassSeg(rows) {
-        const present = CLASSES.filter(c => rows.some(r => r.meta && r.meta.provider_class === c));
+        const present = CLASSES.filter(c => rows.some(r => r.cls === c));
         const cap1 = s => s.charAt(0).toUpperCase() + s.slice(1);
         const opts = [["all", "All"], ...present.map(c => [c, cap1(c.replace("_", " "))])];
         if (!opts.some(o => o[0] === st.cls)) st.cls = "all";
@@ -103,9 +103,9 @@
         const trBy = new Map((st.trust || []).map(t => [t.provider, t]));
         return st.data.map(p => {
           const rv = p.relative_value || {}, rs = rv.reasons || {}, fh = p.feed_health, tr = trBy.get(p.provider), cap = capBy.get(p.provider);
-          return { provider: p.provider, name: (p.meta && p.meta.display_name) || OG.providerName(p.provider), meta: p.meta || {}, cls: (p.meta || {}).provider_class,
-            source_type: (p.meta || {}).source_type, cap, level: cap ? cap.level_implemented : null,
-            gpus: p.coverage.gpus, listings: p.coverage.live_listings, priced: p.coverage.priced_listings, regions: p.coverage.region_groups || [],
+          return { provider: p.provider, name: p.provider_name || OG.providerName(p.provider), meta: p, cls: p.provider_class,
+            source_type: p.source_type, cap, level: cap ? cap.level_implemented : null,
+            gpus: p.coverage.gpus, listings: p.coverage.listings.live, priced: p.coverage.listings.priced, regions: p.coverage.region_groups || [],
             premium: rv.premium_avg ?? null, premium_r: rs.premium_avg, cheapest: rv.cheapest_share ?? null, cheapest_r: rs.cheapest_share,
             avail: rv.availability ?? null, avail_r: rs.availability, vol: rv.volatility_daily ?? null, vol_r: rs.volatility_daily,
             samples: rv.samples, lifetime: p.listing_lifetime, fh, tr, last_ok: (tr && tr.last_ok_fetch) || (fh && fh.last_ok_fetch) || null,
@@ -118,7 +118,7 @@
         drawClassSeg(all);
         const rows = st.cls === "all" ? all : all.filter(r => r.cls === st.cls);
         const live = all.filter(r => r.listings > 0);
-        const gpuSet = new Set(st.data.flatMap(p => p.coverage.gpu_names || []));
+        const gpuSet = new Set(st.data.flatMap(p => p.coverage.gpu_ids || []));
         const healthy = all.filter(r => r.tr ? r.tr.status === "healthy" : r.fh && r.fh.failure_rate_24h === 0).length;
         const withPremium = all.filter(r => r.premium != null).length;
         statsEl.replaceChildren(OG.stats([

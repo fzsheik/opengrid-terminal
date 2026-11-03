@@ -5,7 +5,7 @@
 const puppeteer = require("puppeteer-core");
 const base = process.argv[2];
 const CHROME = process.env.CHROME || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const PAGES = ["/", "/markets", "/gpus", "/gpu/h100-80gb-sxm5", "/gpu/h100", "/providers", "/provider/syn_alpha",
+const PAGES = ["/", "/markets", "/gpus", "/gpu/h100-80gb-sxm5", "/gpu/h100", "/providers", "/provider/lambda", "/provider/runpod",
   "/compare", "/compare/h100-80gb-sxm5-vs-h200-141gb-sxm5", "/explorer", "/indices", "/indices/h100-80gb-sxm5",
   "/opportunities", "/events", "/reserved", "/cost", "/capacity", "/uptime", "/probes", "/news", "/heatmaps",
   "/find", "/route", "/watchlists", "/api", "/developers", "/methodology", "/methodology/dispersion"];

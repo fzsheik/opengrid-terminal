@@ -129,7 +129,7 @@ def test_family_endpoints():
     r = c.get("/v1/families")
     assert r.status_code == 200, r.text
     rows = {f["id"]: f for f in r.json()["data"]}
-    assert "H100" in rows and r.json()["meta"]["kind"] == "family"
+    assert "h100" in rows and r.json()["meta"]["kind"] == "family"
     r = c.get("/v1/families/h100")
     assert r.status_code == 200, r.text
     d = r.json()["data"]
@@ -138,14 +138,13 @@ def test_family_endpoints():
     vs = {v["gpu_name"]: v for v in d["variants"]}  # gpu is the public id
     assert set(vs) == set(families.variants("H100"))
     for v in vs.values():
-        for k in ("slug", "low", "median", "high", "providers", "available_listings", "index_id", "index_level",
-                  "change_24h", "links"):
+        for k in ("gpu", "price", "providers", "listings", "index", "links"):
             assert k in v, (k, v)
-        assert v["change_24h"]["pct"] is not None or v["change_24h"]["reason"]
-        assert v["links"]["market"] == f"/v1/markets/{v['slug']}"
-    priced = [v for v in vs.values() if v["low"] is not None]
+        assert v["index"]["change_24h"]["pct"] is not None or v["index"]["change_24h"]["reason"]
+        assert v["links"]["market"] == f"/v1/markets/{v['gpu']}"
+    priced = [v for v in vs.values() if v["price"]["low"] is not None]
     ch = d["cheapest_variant_now"]
-    assert ch["gpu_name"] == PCIE and ch["low"] == min(v["low"] for v in priced) == 1.0
+    assert ch["gpu_name"] == PCIE and ch["price_per_gpu_hour"] == min(v["price"]["low"] for v in priced) == 1.0
     assert "not a family price" in ch["label"]
     assert c.get("/v1/families/h20").status_code == 404
     assert c.get("/v1/families/blackwell").json()["data"]["kind"] == "architecture"
@@ -292,15 +291,15 @@ def test_market_regions():
     r = c.get("/v1/markets/l4-24gb/regions")
     assert r.status_code == 200, r.text
     d = r.json()["data"]
-    assert d["global_median"] == 1.2 and d["global_providers"] == 3
+    assert d["global"]["price"]["median"] == 1.2 and d["global"]["providers"] == 3
     g = {x["region_group"]: x for x in d["regions"]}
-    assert g["US"]["cheapest"] == 1.0 and g["US"]["cheapest_provider"] == "syn_us" and g["US"]["providers"] == 1
+    assert g["US"]["price"]["low"] == 1.0 and g["US"]["low_provider"] == "syn_us" and g["US"]["providers"] == 1
     assert abs(g["US"]["premium_vs_global_median"] - (1.0 / 1.2 - 1)) < 1e-6
-    assert g["Europe"]["cheapest_provider"] == "syn_eu" and g["Europe"]["premium_vs_global_median"] == 0.0
-    assert g["Unassigned"]["provider_names"] == ["syn_unknown"]
-    assert g["Canada"]["cheapest"] is None and g["Canada"]["premium_vs_global_median"] is None
+    assert g["Europe"]["low_provider"] == "syn_eu" and g["Europe"]["premium_vs_global_median"] == 0.0
+    assert g["Unassigned"]["provider_ids"] == ["syn_unknown"]
+    assert g["Canada"]["price"]["low"] is None and g["Canada"]["premium_vs_global_median"] is None
     assert g["Canada"]["reason"] == "no live listing in Canada"
-    assert g["US"]["available_listings"] == 1 and g["US"]["reason"] is None
+    assert g["US"]["listings"]["available"] == 1 and g["US"]["reason"] is None
 
 
 def test_provider_change_24h():

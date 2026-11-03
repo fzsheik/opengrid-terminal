@@ -6,7 +6,7 @@ import scratchdb, fixtures, normalize  # scratchdb blocks real network
 import uvicorn
 port, db = int(sys.argv[1]), sys.argv[2]
 normalize.SessionLocal = fixtures.session(scratchdb.create(db))
-fixtures.seed(normalize.SessionLocal, days=10)
+fixtures.seed(normalize.SessionLocal, days=10, providers=["lambda", "runpod", "vast", "coreweave", "nebius"])  # real names: provider pages resolve
 from analytics import rollups
 rollups.refresh()
 import main

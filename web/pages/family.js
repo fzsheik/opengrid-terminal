@@ -7,6 +7,7 @@
 
    Data: GET /v1/families/{family}  {id, slug, name, kind, architecture, note, variants: [{gpu, slug, low,
            median, high, providers, available_listings, index_id, index_level, change_24h}], cheapest_variant_now}
+         (flattened from the API's price / listings / index blocks by OG.data.family below)
          GET /v1/history/{variant}?window=  per variant (soft: a variant without history is simply absent)
          GET /v1/news?gpu=<family>          (soft)
    Exposes OG.views.family(el, family, ctx). */
@@ -20,14 +21,18 @@
   // Fixed per-variant colours by position in the family (never by price rank)
   const COLORS = ["#4d94ff", "#f5a524", "#2fbf71", "#e0729e", "#b39cff", "#4fc3d0", "var(--chart-strong)", "#ef5350"];
 
-  // A family object from /v1/families/{slug}, or from /v1/markets/{slug} when it resolves as a family
+  // A family object from /v1/families/{family}. Variants carry price / listings / index blocks; this page reads
+  // the flat names, so map them once here.
+  const flatVariant = v => ({ ...v, low: v.price && v.price.low, median: v.price && v.price.median, high: v.price && v.price.high,
+    available_listings: v.listings && v.listings.available, priced_listings: v.listings && v.listings.priced,
+    index_id: v.index && v.index.id, index_level: v.index && v.index.level, change_24h: v.index && v.index.change_24h });
   OG.data.family = async (slug, api) => {
     const call = api || OG.api;
     const d = await call("/v1/families/" + encodeURIComponent(slug)).catch(() => null);
-    if (d && Array.isArray(d.variants)) return d;
-    const m = await call("/v1/markets/" + encodeURIComponent(slug), { full: true }).catch(() => null);
-    if (m && m.meta && m.meta.resolved_as === "family" && m.data && Array.isArray(m.data.variants)) return m.data;
-    return null;
+    if (!d || !Array.isArray(d.variants)) return null;
+    const cheap = d.cheapest_variant_now;
+    return { ...d, slug: d.id, variants: d.variants.map(flatVariant),
+      cheapest_variant_now: cheap && { ...cheap, low: cheap.price_per_gpu_hour } };
   };
 
   function family(el, fam, ctx) {

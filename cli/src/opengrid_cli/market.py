@@ -122,11 +122,13 @@ def gpu_specs(c: Client, gpu: str, *, max_providers: int = 10) -> dict:
         d = r.data or {}
     if ref is None:
         variants, truncated = bound(d.get("variants") or [], 25)
-        return {"kind": "family", "requested": gpu, "family": d.get("name"), "slug": d.get("slug"),
+        return {"kind": "family", "requested": gpu, "family": d.get("name"), "slug": d.get("id"),
                 "note": clip((r.meta or {}).get("note") or d.get("note")),
-                "variants": [{"slug": v.get("slug"), "gpu": v.get("gpu"), "low_price_per_gpu_hour": v.get("low"),
-                              "median_price_per_gpu_hour": v.get("median"), "providers": v.get("providers"),
-                              "available_listings": v.get("available_listings")} for v in variants],
+                "variants": [{"slug": v.get("gpu"), "gpu": v.get("gpu_name") or v.get("gpu"),
+                              "low_price_per_gpu_hour": (v.get("price") or {}).get("low"),
+                              "median_price_per_gpu_hour": (v.get("price") or {}).get("median"),
+                              "providers": v.get("providers"),
+                              "available_listings": (v.get("listings") or {}).get("available")} for v in variants],
                 "variants_truncated": truncated, "price_kind": "observed", "notes": [PRICE_NOTE], **_meta(r)}
     m = d.get("market") or {}
     lst = m.get("listings") or {}
@@ -182,11 +184,12 @@ def providers(c: Client, *, limit: int = 100) -> dict:
     items, truncated = bound(rows, limit)
     out = []
     for p in items:
-        meta, cov, fh = p.get("meta") or {}, p.get("coverage") or {}, p.get("feed_health") or {}
-        out.append({"provider": p.get("provider"), "display_name": meta.get("display_name"),
-                    "provider_class": meta.get("provider_class"), "source_type": meta.get("source_type"),
-                    "gpus": cov.get("gpus"), "live_listings": cov.get("live_listings"),
-                    "priced_listings": cov.get("priced_listings"), "region_groups": cov.get("region_groups") or [],
+        cov, fh = p.get("coverage") or {}, p.get("feed_health") or {}
+        li = cov.get("listings") or {}
+        out.append({"provider": p.get("provider"), "display_name": p.get("provider_name"),
+                    "provider_class": p.get("provider_class"), "source_type": p.get("source_type"),
+                    "gpus": cov.get("gpus"), "live_listings": li.get("live"),
+                    "priced_listings": li.get("priced"), "region_groups": cov.get("region_groups") or [],
                     "last_ok_fetch": fh.get("last_ok_fetch"), "failure_rate_24h": fh.get("failure_rate_24h")})
     return {"items": out, "total": len(rows), "returned": len(out), "truncated": truncated,
             "notes": ["source_type says how prices are collected (public pricing page, API, ...)"], **_meta(r)}
@@ -196,10 +199,14 @@ def providers(c: Client, *, limit: int = 100) -> dict:
 
 def market_context(c: Client, gpu: str, *, count: int = 1, region: str | None = None,
                    max_price: float | None = None, max_candidates: int = 5) -> dict:
-    ctx = c.get(f"/v1/markets/{seg(gpu)}/context")
+    try:  # historical context is part of the GPU's market; a family has none of its own
+        ctx = c.get(f"/v1/markets/{seg(gpu)}")
+        cd = (ctx.data or {}).get("context") or {}
+    except NotFoundError:
+        cd = {}
     best = c.get(f"/v1/best/{seg(gpu)}", params={"count": count, "region": region, "max_price": max_price,
                                                   "limit": max(1, min(max_candidates, 20))})
-    cd, bd = ctx.data or {}, best.data or {}
+    bd = best.data or {}
     hist = {}
     for k in ("lowest", "median"):
         h = ((cd.get("metrics") or {}).get(k) or {}).get("historical") or {}
@@ -215,7 +222,7 @@ def market_context(c: Client, gpu: str, *, count: int = 1, region: str | None = 
         cands = bd.get("candidates") or []
     shown, truncated = bound(cands, max_candidates)
     return {
-        "gpu": cd.get("gpu") or bd.get("gpu") or bd.get("family"), "requested": gpu,
+        "gpu": cd.get("gpu_name") or cd.get("gpu") or bd.get("gpu") or bd.get("family"), "requested": gpu,
         "current": cd.get("current"), "label": cd.get("label"), "label_reason": clip(cd.get("label_reason")),
         "summaries": [clip(s) for s in (cd.get("summaries") or [])[:5]],
         "historical": hist,

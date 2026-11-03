@@ -103,8 +103,10 @@ def resolve(state: dict) -> str | None:
 def public_shape(v):
     """Data API response body rules applied in one place (docs/API_CONTRACT.md sections 5-6), on a copy:
         * a `gpu` field holding a canonical name becomes the public id, with `gpu_name` beside it;
+        * a `provider` field (already the id) gets `provider_name` (display name) beside it;
         * computed floats lose binary noise (12 significant digits: 2.4215999999999998 -> 2.4216)."""
     import gpu_ids
+    import provider_meta
 
     if isinstance(v, dict):
         out = {}
@@ -112,7 +114,10 @@ def public_shape(v):
             if k == "gpu" and isinstance(x, str) and x in gpu_ids.GPU_IDS:
                 out["gpu"] = gpu_ids.GPU_IDS[x]
                 out["gpu_name"] = v.get("gpu_name", x)
-            elif k != "gpu_name" or "gpu_name" not in out:
+            elif k == "provider" and isinstance(x, str) and x:
+                out["provider"] = x
+                out["provider_name"] = v.get("provider_name") or provider_meta.meta(x).display_name
+            elif k not in out:  # gpu_name / provider_name already placed beside their id
                 out[k] = public_shape(x)
         return out
     if isinstance(v, (list, tuple)):
