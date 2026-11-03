@@ -55,6 +55,8 @@ def envelope(data: Any, *, kind: str | None = None, methodology: str | None = No
     if methodology:
         m["methodology"] = f"/methodology/{methodology}"
     m.update({k: v for k, v in meta.items() if v is not None})
+    if m.get("api_version"):  # a Data API request: public ids and clean numbers (api/contract.public_shape)
+        data = contract.public_shape(data)
     return {"data": data, "meta": m}
 
 

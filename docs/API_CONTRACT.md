@@ -60,7 +60,9 @@ Error (every `/v1` error, including auth and rate limits):
 
 ## 5. Data rules
 
-- **Numbers** are returned exactly as stored, never rounded. Fixings use fixed decimals with round half to even,
+- **Numbers** are returned exactly as stored, never rounded. Computed statistics (medians, spreads, ratios) are cleaned of binary noise to 12 significant digits (`2.4215999999999998` -> `2.4216`).
+- **GPU fields**: every `gpu` field is the public id, with `gpu_name` (the display name) beside it, on every Data API response (applied once in `api.contract.public_shape`).
+- **Numbers (fixings)**: fixings use fixed decimals with round half to even,
   stated in the methodology, and are sent as decimal strings.
 - **Prices**: `price_per_gpu_hour` in USD on every price row. Beside it: original price, currency, unit and
   `gpu_count`. If the GPU count is unknown, `price_per_gpu_hour` is `null`; it is never guessed.

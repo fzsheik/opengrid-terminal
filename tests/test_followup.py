@@ -135,7 +135,7 @@ def test_family_endpoints():
     d = r.json()["data"]
     assert d["note"] == families.NOTE and d["kind"] == "model" and d["architecture"] == "Hopper"
     assert "median" not in d and "low" not in d, "a family has no merged price"
-    vs = {v["gpu"]: v for v in d["variants"]}
+    vs = {v["gpu_name"]: v for v in d["variants"]}  # gpu is the public id
     assert set(vs) == set(families.variants("H100"))
     for v in vs.values():
         for k in ("slug", "low", "median", "high", "providers", "available_listings", "index_id", "index_level",
@@ -145,7 +145,7 @@ def test_family_endpoints():
         assert v["links"]["market"] == f"/v1/markets/{v['slug']}"
     priced = [v for v in vs.values() if v["low"] is not None]
     ch = d["cheapest_variant_now"]
-    assert ch["gpu"] == PCIE and ch["low"] == min(v["low"] for v in priced) == 1.0
+    assert ch["gpu_name"] == PCIE and ch["low"] == min(v["low"] for v in priced) == 1.0
     assert "not a family price" in ch["label"]
     assert c.get("/v1/families/h20").status_code == 404
     assert c.get("/v1/families/blackwell").json()["data"]["kind"] == "architecture"

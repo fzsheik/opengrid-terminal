@@ -347,12 +347,12 @@ def test_hard_rule_and_api():
             assert k in r0, k
         assert not any(k.startswith("_") for k in r0), "internal hints are never served"
         az = client.get("/v1/reserved", params={"provider": "azure", "term": "5y", "gpu": "h100-80gb-sxm5"}).json()["data"]
-        assert az and all(r["provider"] == "azure" and r["term_bucket"] == "5y" and r["gpu"] == "NVIDIA H100 80GB SXM5" for r in az)
+        assert az and all(r["provider"] == "azure" and r["term_bucket"] == "5y" and r["gpu"] == "nvidia-h100-80gb-sxm5" for r in az)
         assert client.get("/v1/reserved", params={"provider": "aws"}).status_code == 404
         assert client.get("/v1/reserved", params={"term": "7y"}).status_code == 422
         assert client.get("/v1/reserved", params={"gpu": "not-a-gpu"}).status_code == 404
         s = client.get("/v1/reserved/summary", params={"gpu": "h100-80gb-sxm5"}).json()
-        assert s["meta"]["count"] == 1 and s["data"][0]["gpu"] == "NVIDIA H100 80GB SXM5"
+        assert s["meta"]["count"] == 1 and s["data"][0]["gpu_name"] == "NVIDIA H100 80GB SXM5"
         terms = s["data"][0]["terms"]
         assert list(terms) == [k for k in reserved.BUCKET_KEYS if k in terms] and {"1y", "3y", "5y"} <= set(terms)
         assert terms["5y"]["provider"] == "azure" and all(t["provider"] != "gcp" for t in terms.values())

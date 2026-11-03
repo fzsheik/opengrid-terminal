@@ -100,6 +100,26 @@ def resolve(state: dict) -> str | None:
     return state.get("api_version_asked") or (pin if pin in VERSIONS else None) or LATEST
 
 
+def public_shape(v):
+    """Data API response body rules applied in one place (docs/API_CONTRACT.md sections 5-6), on a copy:
+        * a `gpu` field holding a canonical name becomes the public id, with `gpu_name` beside it;
+        * computed floats lose binary noise (12 significant digits: 2.4215999999999998 -> 2.4216)."""
+    import gpu_ids
+
+    if isinstance(v, dict):
+        out = {k: public_shape(x) for k, x in v.items()}
+        g = out.get("gpu")
+        if isinstance(g, str) and g in gpu_ids.GPU_IDS:
+            out["gpu"] = gpu_ids.GPU_IDS[g]
+            out.setdefault("gpu_name", g)
+        return out
+    if isinstance(v, (list, tuple)):
+        return [public_shape(x) for x in v]
+    if isinstance(v, float) and v == v and v not in (float("inf"), float("-inf")):
+        return float(f"{v:.12g}")
+    return v
+
+
 def current_version() -> str | None:
     """The API version of the request in progress (None outside a Data API request)."""
     st = observability._state.get()

@@ -175,7 +175,7 @@ def _endpoints():
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["meta"]["methodology"] == "/methodology/events" and body["meta"]["pagination"]["limit"] == 5
-    assert all(e["gpu"] == H100 for e in body["data"])
+    assert all(e["gpu_name"] == H100 for e in body["data"])
     r = c.get("/v1/events", params={"type": "price_move,sold_out", "min_severity": "notable"})
     assert r.status_code == 200 and all(e["type"] in ("price_move", "sold_out") and e["severity"] != "info"
                                         for e in r.json()["data"])
@@ -184,7 +184,7 @@ def _endpoints():
     t = c.get("/v1/events/types").json()["data"]
     assert {x["type"] for x in t["events"]} == set(events.TYPES) and all(x["severity"] for x in t["events"])
     o = c.get("/v1/overview").json()
-    assert o["data"]["losers"]["items"][0]["gpu"] == H100 and o["meta"]["cache_seconds"] == 60
+    assert o["data"]["losers"]["items"][0]["gpu_name"] == H100 and o["meta"]["cache_seconds"] == 60
     op = c.get("/v1/opportunities", params={"type": "price_cut", "gpu": "h100-80gb-sxm5"}).json()
     assert op["data"]["total"] == 2 and op["meta"]["methodology"] == "/methodology/opportunities"
     tp = c.get("/v1/tape", params={"limit": 3}).json()

@@ -332,7 +332,7 @@ def test_endpoints():
         assert c.get("/v1/indices/gpu-compute/history", params={"window": "5y"}).status_code == 422
         r = c.get("/v1/history/h100-80gb-sxm5", params={"window": "7d"})
         d = r.json()["data"]
-        assert r.status_code == 200 and d["series"] and d["index"]["points"] and d["gpu"] == H100
+        assert r.status_code == 200 and d["series"] and d["index"]["points"] and d["gpu_name"] == H100
         assert c.get("/v1/history/not-a-gpu").status_code == 404
         r = c.get("/v1/markets/h100-80gb-sxm5/context")
         assert r.status_code == 200 and r.json()["meta"]["methodology"] == "/methodology/historical-context"

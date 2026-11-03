@@ -388,9 +388,19 @@ Full docs: web/README.md.
   }
 
   /* ================= pure: API envelope ================= */
+  // shortcut: Data API rows say gpu = public id + gpu_name; page code still reads gpu as the display name, so map
+  // it back (the id stays as gpu_id). Remove once every page reads gpu_name (docs/API_CONTRACT.md, step 3).
+  function legacyGpu(v) {
+    if (Array.isArray(v)) return v.map(legacyGpu);
+    if (!v || typeof v !== "object") return v;
+    const o = {};
+    for (const k of Object.keys(v)) o[k] = legacyGpu(v[k]);
+    if (typeof o.gpu_name === "string") { o.gpu_id = o.gpu; o.gpu = o.gpu_name; }
+    return o;
+  }
   function unwrap(j) {
     if (j && typeof j === "object" && !Array.isArray(j) && "data" in j && j.meta && typeof j.meta === "object" &&
-        Object.keys(j).every(k => k === "data" || k === "meta")) return { data: j.data, meta: j.meta };
+        Object.keys(j).every(k => k === "data" || k === "meta")) return { data: legacyGpu(j.data), meta: j.meta };
     return { data: j, meta: null };
   }
   function withParams(path, params) {

@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 from fastapi.testclient import TestClient  # noqa: E402
 
 import fixtures  # noqa: E402
+import gpu_ids  # noqa: E402
 import main  # noqa: E402
 import normalize  # noqa: E402
 import scratchdb  # noqa: E402
@@ -43,6 +44,21 @@ def data_get_paths() -> list[str]:
         if "get" in item and contract.is_data_path(path):
             out.append(re.sub(r"\{([a-z_]+)\}", lambda m: SAMPLE.get(m.group(1), "x"), path))
     return sorted(set(out))
+
+
+def _gpu_fields(v):
+    """Every value of a `gpu` key, anywhere in a body; also checks gpu_name sits beside each public id."""
+    if isinstance(v, dict):
+        g = v.get("gpu")
+        if isinstance(g, str):
+            if g in gpu_ids.BY_ID:
+                assert v.get("gpu_name") == gpu_ids.BY_ID[g], v
+            yield g
+        for x in v.values():
+            yield from _gpu_fields(x)
+    elif isinstance(v, list):
+        for x in v:
+            yield from _gpu_fields(x)
 
 
 def assert_error(r, status=None):
@@ -69,6 +85,9 @@ def test_every_data_route():
             assert_error(r)
             continue
         body = r.json()
+        leaks = [g for g in _gpu_fields(body) if g in gpu_ids.GPU_IDS]
+        if leaks:
+            bad.append(f"canonical name in a gpu field {p}: {leaks[:2]}")
         if isinstance(body, dict) and "meta" in body:
             meta = body["meta"]
             if meta.get("request_id") != r.headers["x-request-id"] or meta.get("api_version") != contract.LATEST:
