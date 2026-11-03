@@ -145,9 +145,12 @@ carries a `source` field so a second source can be added later without a breakin
 
 ## 8. Database changes
 
-- New `gpus` table: `id`, internal key (today's `canonical_gpu_name`), `display_name`, `vendor`, `model`,
-  `memory_gb`, `form_factor`. New `gpu_aliases` table (input only). No existing rows are rewritten:
-  `canonical_gpu_name` stays the internal key in every table, and the API translates at the edge.
+- GPU ids live in `gpu_ids.py` (canonical name -> id), committed and append-only, not in a table: canonical
+  names are code (`canonical.py`), so a table would need syncing. Vendor, memory and form factor already come
+  from `hardware.py`. Old short slugs and full names stay accepted as input aliases (`api.common.resolve_gpu`).
+  No existing rows are rewritten: `canonical_gpu_name` stays the internal key in every table, and the API
+  translates at the edge. `tests/test_gpu_ids.py` enforces the rules.
+- Provider ids are already the stored provider strings (`lambda`, `runpod`).
 - `api_keys`: add `api_version` and `plan`.
 - History tables: add `(timestamp, id)` indexes where cursor pagination needs them.
 - No tables are dropped. `uptime/` keeps polling for internal use.

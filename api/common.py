@@ -89,10 +89,14 @@ def resolve_gpu(value: str, *, strict: bool = True) -> str | None:
     if value in names:
         return value
     low = value.strip().lower()
+    import gpu_ids
+
+    if low in gpu_ids.BY_ID:  # the public id (docs/API_CONTRACT.md section 6)
+        return gpu_ids.BY_ID[low]
     for n in names:
         if n.lower() == low:
             return n
-    hit = gpu_slugs().get(gpu_slug(value))
+    hit = gpu_slugs().get(gpu_slug(value))  # older short slugs stay accepted as input aliases
     if hit is None and strict:
         raise HTTPException(404, f"unknown GPU {value!r}; see /v1/gpus")
     return hit
