@@ -1,7 +1,7 @@
 """Page shell, SEO, sitemap, methodology rendering, and the public-surface gate.
 
 Run:  .venv/Scripts/python tests/test_pages.py
-No database needed: the GPU SEO renderer's data source is replaced with a fixture.
+A few requests read listings, so the app runs on an empty scratch database (never the dev one).
 """
 
 import json
@@ -13,6 +13,7 @@ from pathlib import Path
 
 os.environ["OPENGRID_NO_JOBS"] = "1"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from fastapi.testclient import TestClient  # noqa: E402
 from starlette.requests import Request  # noqa: E402
@@ -21,6 +22,12 @@ import main  # noqa: E402
 from api import markdown, pages  # noqa: E402
 from api.common import gpu_slugs  # noqa: E402
 from config import settings  # noqa: E402
+import fixtures  # noqa: E402
+import normalize  # noqa: E402
+import scratchdb  # noqa: E402
+
+DB = "og_test_pages"
+normalize.SessionLocal = fixtures.session(scratchdb.create(DB))
 
 client = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})  # CSRF header, as web/core.js sends  # no `with`: lifespan (DB init, poller) does not run
 BASE = settings.public_base_url.rstrip("/")
@@ -386,8 +393,12 @@ def test_homepage_markets_and_developers_pages():
 
 
 if __name__ == "__main__":
-    for name, fn in list(globals().items()):
-        if name.startswith("test_") and callable(fn):
-            fn()
-            print("ok ", name)
-    print("all passed")
+    try:
+        for name, fn in list(globals().items()):
+            if name.startswith("test_") and callable(fn):
+                fn()
+                print("ok ", name)
+        print("all passed")
+    finally:
+        normalize.SessionLocal.kw["bind"].dispose()
+        scratchdb.drop(DB)
