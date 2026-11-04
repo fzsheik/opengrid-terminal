@@ -37,7 +37,7 @@ not a claim about the provider's uptime, capacity or service quality.
 
 ## Provider health
 
-`GET /v1/ops/providers` (admin; includes error text) and `GET /v1/trust/providers`
+`GET /v1/ops/providers` (admin; includes error text) and `GET /internal/trust/providers`
 (data:read; no error text or endpoint paths). Per provider, from `raw_snapshots`,
 `compute_listings` and the quality tables:
 

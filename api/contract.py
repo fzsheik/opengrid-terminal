@@ -29,9 +29,9 @@ HEADER = "OpenGrid-Version"
 
 # First path segment after /v1/ of every Data API area. Shrinks to the contract's route list as routes move.
 DATA_AREAS = frozenset({
-    "gpus", "families", "providers", "regions", "markets", "listings", "compare", "heatmaps",
+    "gpus", "families", "providers", "regions", "markets", "listings",
     "reserved", "indices", "fixings", "capacity", "costs", "fx", "reliability",
-    "events", "news", "timeline", "overview", "tape", "opportunities", "live", "macro", "methodology",
+    "events", "news", "timeline", "macro", "methodology",
 })
 
 _TYPE = {401: "authentication", 403: "permission", 429: "rate_limit"}

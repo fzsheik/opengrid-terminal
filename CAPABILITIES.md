@@ -777,12 +777,12 @@ Authentication: `Authorization: Bearer opg_…` (or the operator session). Highl
 
 | Domain | Endpoints |
 |---|---|
-| GPUs & markets | `/v1/gpus`, `/v1/gpus/{gpu}`, `/v1/markets/{gpu}`, `/v1/markets/{gpu}/regions`, `/v1/markets/{gpu} (`context`)`, `/v1/families`, `/v1/gpus`, `/v1/regions`, `/v1/compare` |
+| GPUs & markets | `/v1/gpus`, `/v1/gpus/{gpu}`, `/v1/markets/{gpu}`, `/v1/markets/{gpu}/regions`, `/v1/markets/{gpu} (`context`)`, `/v1/families`, `/v1/gpus`, `/v1/regions`, `/internal/compare` |
 | History & indices | `/v1/markets/{gpu}/history`, `/v1/indices`, `/v1/indices/{id}`, `/v1/indices/{id}/history`, `/v1/indices/{id}/fixings` |
 | Settlement fixings | `/v1/fixings`, `/v1/fixings/{id}`, `…/verify`, `/v1/fixings/chain/verify`, `/v1/fixings/restatements`, `/v1/fixings/methodology` |
-| Structure | `/v1/markets`, `/v1/heatmaps/{kind}`, `/v1/providers`, `/v1/providers/{p}` |
-| Signals | `/v1/overview`, `/v1/events`, `/v1/opportunities`, `/v1/tape`, `/v1/news`, `/v1/timeline` |
-| Trust | `/v1/listings`, `/v1/trust/providers`, `/v1/capabilities` |
+| Structure | `/v1/markets`, `/internal/heatmaps/{kind}`, `/v1/providers`, `/v1/providers/{p}` |
+| Signals | `/internal/overview`, `/v1/events`, `/internal/opportunities`, `/internal/tape`, `/v1/news`, `/v1/timeline` |
+| Trust | `/v1/listings`, `/internal/trust/providers`, `/v1/capabilities` |
 | Routing | `/v1/best/{gpu}`, `/v1/route/preview`, `/v1/route`, `/v1/route/{id}`, `/v1/quotes/{id}` |
 | Deployments | `/v1/deployments`, `/v1/deployments/{id}`, `…/terminate`, `…/stop`, `…/feedback` |
 | MCP (hosted) | `/mcp`: the MCP tool set over streamable HTTP; Bearer API key only (section 6c) |

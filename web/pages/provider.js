@@ -5,7 +5,7 @@
    /v1/events?provider=     market events · /v1/news?provider= related news (never presented as a cause)
    /listings                current listings incl. previous price (recent changes)
    /mapping                 field-level provenance and quirks for this provider's feed
-   soft: /v1/trust/providers, /v1/listings?provider=, /v1/providers/{p}/gpus/{gpu}/context */
+   soft: /internal/trust/providers, /v1/listings?provider=, /v1/providers/{p}/gpus/{gpu}/context */
 (() => {
   const { h, fmt, Lib: L } = OG;
   const V = () => OG.views || {};
@@ -265,7 +265,7 @@
       }
 
       async function loadFeed() {
-        const [trust, d] = [await ctx.api("/v1/trust/providers").catch(() => null), st.d];
+        const [trust, d] = [await ctx.api("/internal/trust/providers").catch(() => null), st.d];
         const t = (trust || []).find(x => x.provider === p), fh = d && d.feed_health, m = (d && d.meta) || m0 || {};
         const life = d && d.listing_lifetime;
         feedEl.replaceChildren(

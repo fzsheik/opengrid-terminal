@@ -10,7 +10,7 @@ Data (all in parallel, each section renders as soon as its own request lands):
   /v1/timeline?gpu=&window=    availability history, inferred price moves, events + news markers
   /v1/timeline/around          "related, not necessarily causal" panel when a move is clicked
   /v1/markets/{slug}/history/archived  ARCHIVED monthly prices per provider (Internet Archive captures, AWS price lists)
-  /v1/events?gpu=  /v1/news?gpu=  /v1/best/{slug}  /v1/listings?gpu=  /v1/heatmaps/gpu-region-*
+  /v1/events?gpu=  /v1/news?gpu=  /v1/best/{slug}  /v1/listings?gpu=  /internal/heatmaps/gpu-region-*
 Nothing is computed here that the API does not state, except display arithmetic (spread, $ deltas).
 */
 (() => {
@@ -372,8 +372,8 @@ Nothing is computed here that the API does not state, except display arithmetic 
         const rg = await ctx.api("/v1/markets/" + slug + "/regions", { full: true }).catch(() => null);
         const rl = rg && (Array.isArray(rg.data) ? rg.data : rg.data && (rg.data.regions || rg.data.items));
         if (Array.isArray(rl) && rl.length) { drawRegionRows(rl, rg.meta || {}); return; }
-        const [ch, pr, av] = await Promise.all(["gpu-region-cheapest", "gpu-region-premium", "gpu-region-availability"].map(k => ctx.api("/v1/heatmaps/" + k).catch(() => null)));
-        if (!ch) { regionBox.replaceChildren(OG.insufficient("Regional matrices unavailable on this server (/v1/heatmaps/gpu-region-*).", "No regional data")); return; }
+        const [ch, pr, av] = await Promise.all(["gpu-region-cheapest", "gpu-region-premium", "gpu-region-availability"].map(k => ctx.api("/internal/heatmaps/" + k).catch(() => null)));
+        if (!ch) { regionBox.replaceChildren(OG.insufficient("Regional matrices unavailable on this server (/internal/heatmaps/gpu-region-*).", "No regional data")); return; }
         const row = (mx) => { if (!mx) return null; const i = mx.rows.indexOf(name); return i < 0 ? null : mx.cells[i]; };
         const c = row(ch), p = row(pr), a = row(av);
         if (!c || c.every(v => v == null)) { regionBox.replaceChildren(OG.empty("No priced listing for this GPU in any region now.")); return; }

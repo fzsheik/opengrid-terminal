@@ -365,7 +365,7 @@ Full docs: web/README.md.
     if (sec > 600) return { tone: "stale", text: "Prices may be out of date: last read " + ago(sec), title: "Prices were last read from providers at " + when + " (your time). They are normally refreshed every few minutes." };
     return { tone: "live", text: "Prices updated " + ago(sec), title: "Prices were last read from providers at " + when + " (your time)." };
   }
-  // When prices were last read: the newest successful provider fetch in /v1/trust/providers (null if none).
+  // When prices were last read: the newest successful provider fetch in /internal/trust/providers (null if none).
   function lastReadOf(providers) {
     let best = null, bt = -Infinity;
     for (const p of Array.isArray(providers) ? providers : []) {
@@ -1424,7 +1424,7 @@ Full docs: web/README.md.
   // When prices were last read from providers (the newest successful fetch), shared for 30 s. Never rejects.
   let readP = null, readT = 0;
   OG.data.lastRead = () => {
-    if (!readP || Date.now() - readT > 30000) { readT = Date.now(); readP = api.soft("/v1/trust/providers", { nocache: true }).then(lastReadOf); }
+    if (!readP || Date.now() - readT > 30000) { readT = Date.now(); readP = api.soft("/internal/trust/providers", { nocache: true }).then(lastReadOf); }
     return readP;
   };
   let pollingP = null;
@@ -1447,11 +1447,11 @@ Full docs: web/README.md.
     }
   }
   // Tape (the same on every page): GPU prices from /market (lowest on-demand $/GPU-hr), then the latest notable
-  // moves from /v1/tape. The status bar's "Prices updated" is the last provider read, not the response time.
+  // moves from /internal/tape. The status bar's "Prices updated" is the last provider read, not the response time.
   const EVENT_WORDS = { sold_out: "sold out", capacity_returned: "back in stock", provider_added_gpu: "now listed", provider_removed_gpu: "delisted",
     new_cheapest_provider: "new cheapest", new_30d_low: "30-day low", new_30d_high: "30-day high", new_all_time_low: "all-time low", new_all_time_high: "all-time high" };
   async function loadTape() {
-    const [m, v1, read] = await Promise.all([OG.data.market(24).catch(() => null), api.soft("/v1/tape"), OG.data.lastRead()]);
+    const [m, v1, read] = await Promise.all([OG.data.market(24).catch(() => null), api.soft("/internal/tape"), OG.data.lastRead()]);
     if (!m) { OG.status.live(false); return; }
     if (read) OG.status.asOf(read); else OG.status.live(true);
     const top = m.gpus.filter(g => g.providers >= 2).slice(0, 16);

@@ -94,9 +94,7 @@ def is_page_path(path: str) -> bool:
 
 
 # /v1 areas readable without a key when PUBLIC_PAGES is on (GET/HEAD only).
-PUBLIC_V1 = ("gpus", "markets", "listings", "indices", "history", "spreads", "events", "news", "providers", "heatmaps",
-             "overview", "tape", "methodology", "timeline", "best", "capabilities", "opportunities", "trust",
-             "families", "scopes", "fixings", "recommend", "assistant", "compare", "regions", "uptime", "capacity", "fx", "reliability",
+PUBLIC_V1 = ("gpus", "markets", "listings", "indices", "events", "news", "providers", "methodology", "timeline", "best", "capabilities", "families", "scopes", "fixings", "recommend", "assistant", "regions", "capacity", "fx", "reliability",
              # Reserved / committed list prices (read-only, like capacity). Not "reservations" (private, below).
              "reserved",
              # Full cost: cost components, billing increments, the reference-job estimator (read-only).
@@ -111,6 +109,9 @@ PUBLIC_POST = ("/v1/recommend/estimate", "/v1/recommend", "/v1/assistant", "/v1/
 # Never public, whatever else matches: money, private data, operator functions.
 PRIVATE_V1 = ("route", "deployments", "keys", "admin", "ops", "me", "usage", "billing", "watchlists", "alerts", "credentials", "jobs", "quotes",
               "reservations")
+# /internal areas readable without the site password when PUBLIC_PAGES is on (UI-only views that were public at
+# /v1). Not "live" (operator-only, as before).
+PUBLIC_INTERNAL = ("overview", "tape", "opportunities", "heatmaps", "compare", "uptime", "trust")
 # Exact paths inside a public area that stay private: /v1/reliability (provider reliability from OpenGrid's own
 # launches, transaction data, api/execution.py) shares its first segment with the public /v1/reliability/* reads.
 PRIVATE_EXACT = ("/v1/reliability",)
@@ -133,6 +134,8 @@ def is_public(request: Request) -> bool:
         if area in PRIVATE_V1 or path.rstrip("/") in PRIVATE_EXACT:
             return False
         return area in PUBLIC_V1
+    if path.startswith("/internal/"):  # the website's own reads: never on the Data API host, never with a key
+        return path[len("/internal/"):].split("/", 1)[0] in PUBLIC_INTERNAL
     if path in ("/robots.txt", "/sitemap.xml") or path in PUBLIC_LEGACY:
         return True
     if path.startswith("/static/"):

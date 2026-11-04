@@ -1,8 +1,8 @@
 /* /uptime: external control-plane uptime and latency, measured by UptimeProject (CC BY 4.0).
    A separate dataset on purpose: these are third-party probes of each provider's public API, not OpenGrid's own
    launches, and nothing here feeds a score or a route.
-   Sources: /v1/uptime/providers (one row per tracked provider that UptimeProject measures),
-   /v1/uptime/services/{id} (checks, hourly history, per-probe latency). The selected provider/service live in the
+   Sources: /internal/uptime/providers (one row per tracked provider that UptimeProject measures),
+   /internal/uptime/services/{id} (checks, hourly history, per-probe latency). The selected provider/service live in the
    URL (/uptime?provider=aws&service=aws-ec2-us-east-1). */
 (() => {
   const { h, fmt } = OG;
@@ -49,7 +49,7 @@
       let tbl = null;
       async function load() {
         try {
-          const res = await ctx.api("/v1/uptime/providers", { full: true, slot: "uptime" });
+          const res = await ctx.api("/internal/uptime/providers", { full: true, slot: "uptime" });
           st.rows = res.data; st.meta = res.meta;
           OG.status.asOf(res.meta && res.meta.as_of);
         } catch (e) { if (!e.stale && !st.rows.length) tblBox.replaceChildren(OG.error(e, load)); return; }
@@ -111,7 +111,7 @@
           ? OG.seg(row.services.map(s => [s.id, s.region || s.name]), st.service, v => { st.service = v; loadDetail(); }) : null;
         detail.replaceChildren(OG.section(`${row.display_name}: ${row.services.find(s => s.id === st.service).name}`, svcSeg, OG.loading("Loading history…")));
         let d;
-        try { d = (await ctx.api("/v1/uptime/services/" + encodeURIComponent(st.service), { params: { hours: st.hours }, full: true, slot: "uptime-svc" })).data; }
+        try { d = (await ctx.api("/internal/uptime/services/" + encodeURIComponent(st.service), { params: { hours: st.hours }, full: true, slot: "uptime-svc" })).data; }
         catch (e) { if (!e.stale) detail.replaceChildren(OG.section(row.display_name, OG.error(e, loadDetail))); return; }
         drawDetail(row, d, svcSeg);
       }
@@ -158,7 +158,7 @@
       // MEASURED dips: scope comes from how many probes failed and how many of the provider's measured regions dipped
       async function fillDips(box, row) {
         let res;
-        try { res = await ctx.api("/v1/uptime/dips", { params: { provider: row.provider, days: daysFor(st.hours), service: st.service }, full: true, slot: "uptime-dips" }); }
+        try { res = await ctx.api("/internal/uptime/dips", { params: { provider: row.provider, days: daysFor(st.hours), service: st.service }, full: true, slot: "uptime-dips" }); }
         catch (e) { if (!e.stale) box.replaceChildren(OG.error(e, () => fillDips(box, row))); return; }
         const rows = res.data;
         if (!rows.length) { box.replaceChildren(OG.empty("No dips in this window: every bucket was 100%.")); return; }

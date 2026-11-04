@@ -197,11 +197,11 @@ def _endpoints():
     assert c.get("/v1/events", params={"gpu": "not-a-gpu"}).status_code == 404
     t = c.get("/v1/events/types").json()["data"]
     assert {x["type"] for x in t["events"]} == set(events.TYPES) and all(x["severity"] for x in t["events"])
-    o = c.get("/v1/overview").json()
-    assert o["data"]["losers"]["items"][0]["gpu_name"] == H100 and o["meta"]["cache_seconds"] == 60
-    op = c.get("/v1/opportunities", params={"type": "price_cut", "gpu": "h100-80gb-sxm5"}).json()
+    o = c.get("/internal/overview").json()
+    assert o["data"]["losers"]["items"][0]["gpu"] == H100 and o["meta"]["cache_seconds"] == 60
+    op = c.get("/internal/opportunities", params={"type": "price_cut", "gpu": "h100-80gb-sxm5"}).json()
     assert op["data"]["total"] == 2 and op["meta"]["methodology"] == "/methodology/opportunities"
-    tp = c.get("/v1/tape", params={"limit": 3}).json()
+    tp = c.get("/internal/tape", params={"limit": 3}).json()
     assert len(tp["data"]) <= 3
 
 

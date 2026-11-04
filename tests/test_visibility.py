@@ -277,7 +277,7 @@ def _values(name: str, route_path: str) -> list[tuple[str, tuple[str, ...]]]:
     """Values for a path / query parameter: (value, strings the response may echo back)."""
     h100, only = gpu_slug(H100), gpu_slug(ONLY_GPU)
     if name in ("gpu", "slug", "a", "b"):
-        if route_path.startswith("/v1/compare") and name in ("a", "b"):
+        if route_path.startswith("/internal/compare") and name in ("a", "b"):
             return [(h100 if name == "a" else gpu_slug("NVIDIA A100 80GB SXM4"), ())]
         return [(h100, ()), (only, ())]
     if name == "provider":
@@ -431,7 +431,7 @@ def test_every_public_route_is_clean():
     assert not bad, "\n".join(bad[:40])
     assert ok >= 0.8 * len(reqs), {k: v[:8] for k, v in status.items() if k != 200}
     # operator-only reads stay closed with public pages on (live feeds: raw executor records)
-    for url in ("/v1/live/status", "/v1/live/events"):
+    for url in ("/internal/live/status", "/internal/live/events"):
         assert c.get(url).status_code in (401, 403), url
         assert c.get(url, headers=BASIC).status_code == 200, url
     # the internal-only GPU has no public price anywhere

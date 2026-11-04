@@ -89,7 +89,7 @@ LOGOUT_PATH = "/logout"
 
 # Paths that are never a web page: API, assets, the hosted MCP endpoint, the login, health and the first UI's
 # JSON reads (some of them private). An unknown path under these keeps its normal answer (401 / 404 JSON).
-_NOT_PAGES = ("/v1", "/static", "/mcp", LOGIN_PATH, LOGOUT_PATH, "/health", "/docs", "/redoc", "/openapi", "/classic", "/market",
+_NOT_PAGES = ("/v1", "/internal", "/static", "/mcp", LOGIN_PATH, LOGOUT_PATH, "/health", "/docs", "/redoc", "/openapi", "/classic", "/market",
               "/listings", "/changes", "/history", "/reference-prices", "/polling", "/mapping", "/unmapped", "/raw",
               "/fetch", "/normalize", "/robots.txt", "/sitemap.xml")
 

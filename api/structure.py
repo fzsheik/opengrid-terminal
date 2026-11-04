@@ -249,7 +249,7 @@ def provider_detail(provider: str, days: int = Query(30, ge=1, le=365), who: Pri
     return envelope(data, kind=INFERRED, methodology=providers.METHODOLOGY, window_days=days, price_concept=_PC)
 
 
-@router.get("/v1/heatmaps/{kind}", summary="Heatmap matrix: rows, cols, cells (null = no data)")
+@router.get("/internal/heatmaps/{kind}", summary="Heatmap matrix: rows, cols, cells (null = no data)")
 def heatmap(kind: str, days: int | None = Query(None, ge=1, le=365), who: Principal = Depends(READ)):
     if kind not in heatmaps.KINDS:
         raise HTTPException(404, f"unknown heatmap {kind!r}; one of {', '.join(heatmaps.KINDS)}")
@@ -298,7 +298,7 @@ def _provider_side(p: str, days: int) -> dict:
             "feed_health": providers.feed_health().get(p)}
 
 
-@router.get("/v1/compare", summary="Side by side: two GPUs or two providers")
+@router.get("/internal/compare", summary="Side by side: two GPUs or two providers")
 def compare(a: str, b: str, days: int = Query(30, ge=1, le=365), who: Principal = Depends(READ)):
     ga, gb = resolve_gpu(a, strict=False), resolve_gpu(b, strict=False)
     if ga and gb:

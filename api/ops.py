@@ -134,7 +134,7 @@ _LISTING_COLS = (
 )
 
 
-@router.get("/v1/trust/providers", summary="Provider feed health (no internal error text)")
+@router.get("/internal/trust/providers", summary="Provider feed health (no internal error text)")
 def trust_providers(who: Principal = Depends(reader)):
     import provider_meta  # a wholly internal provider is not named on public lists
 

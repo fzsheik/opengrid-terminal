@@ -59,7 +59,7 @@ def _unmeasured(provider: str) -> dict:
             "latency_p50_ms_24h": None, "down_minutes_24h": None, "services": []}
 
 
-@router.get("/v1/uptime/providers", tags=["uptime"], summary="Control-plane uptime per tracked provider")
+@router.get("/internal/uptime/providers", tags=["uptime"], summary="Control-plane uptime per tracked provider")
 def providers(who: Principal = Depends(READ)):
     by: dict[str, list[dict]] = {}
     for s in store.services(category=sources.COMPUTE_CATEGORY):
@@ -75,14 +75,14 @@ def providers(who: Principal = Depends(READ)):
                 not_covered=sorted(set(_NAMES) - covered), health=store.health())
 
 
-@router.get("/v1/uptime/services", tags=["uptime"], summary="Every measured service")
+@router.get("/internal/uptime/services", tags=["uptime"], summary="Every measured service")
 def list_services(provider: str | None = None, category: str | None = None, who: Principal = Depends(READ)):
     if provider and provider not in _NAMES:
         raise HTTPException(404, f"unknown provider {provider!r}")
     return _env(store.services(provider=provider, category=category))
 
 
-@router.get("/v1/uptime/services/{service_id}", tags=["uptime"], summary="One service: history and per-probe latency")
+@router.get("/internal/uptime/services/{service_id}", tags=["uptime"], summary="One service: history and per-probe latency")
 def one_service(service_id: str, hours: int = Query(168, ge=1, le=2160), who: Principal = Depends(READ)):
     found = [s for s in store.services() if s["id"] == service_id]
     if not found:
@@ -91,7 +91,7 @@ def one_service(service_id: str, hours: int = Query(168, ge=1, le=2160), who: Pr
                  "probes": store.probes(service_id, 24)}, hours=hours)
 
 
-@router.get("/v1/uptime/health", tags=["uptime"], summary="When OpenGrid last polled UptimeProject")
+@router.get("/internal/uptime/health", tags=["uptime"], summary="When OpenGrid last polled UptimeProject")
 def uptime_health(who: Principal = Depends(READ)):
     return _env(store.health())
 
@@ -101,7 +101,7 @@ def _known(provider: str | None):
         raise HTTPException(404, f"unknown provider {provider!r}")
 
 
-@router.get("/v1/uptime/dips", tags=["uptime"], summary="Dips below 100% with measured scope and reported cause")
+@router.get("/internal/uptime/dips", tags=["uptime"], summary="Dips below 100% with measured scope and reported cause")
 def list_dips(provider: str, days: int = Query(7, ge=1, le=90), service: str | None = None,
               who: Principal = Depends(READ)):
     _known(provider)

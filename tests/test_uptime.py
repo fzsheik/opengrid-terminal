@@ -187,7 +187,7 @@ def test_endpoints():
         _patch_client()
         poll.run()
         client = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})  # no context manager: no lifespan
-        r = client.get("/v1/uptime/providers")
+        r = client.get("/internal/uptime/providers")
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["meta"]["methodology"] == "/methodology/uptime" and body["meta"]["source"] == "uptimeproject"
@@ -203,14 +203,14 @@ def test_endpoints():
         do = provs["digitalocean"]
         assert do["availability"]["7d"] is not None and do["latency_p50_ms_24h"] is not None
         assert len(provs["aws"]["services"]) == 3, "three EC2 regions roll up into one provider row"
-        assert len(client.get("/v1/uptime/services", params={"provider": "aws"}).json()["data"]) > 3
-        assert client.get("/v1/uptime/services", params={"provider": "nobody"}).status_code == 404
-        d = client.get("/v1/uptime/services/digitalocean", params={"hours": 24 * 30}).json()["data"]
+        assert len(client.get("/internal/uptime/services", params={"provider": "aws"}).json()["data"]) > 3
+        assert client.get("/internal/uptime/services", params={"provider": "nobody"}).status_code == 404
+        d = client.get("/internal/uptime/services/digitalocean", params={"hours": 24 * 30}).json()["data"]
         assert len(d["history"]) == 169 and len(d["probes"]) == 5 and d["checks"]
         assert len(d["daily"]) >= 29, "a 30-day window returns the daily buckets too"
-        assert client.get("/v1/uptime/services/nope").status_code == 404
-        assert client.get("/v1/uptime/services/digitalocean", params={"hours": 0}).status_code == 422
-        h = client.get("/v1/uptime/health").json()["data"]
+        assert client.get("/internal/uptime/services/nope").status_code == 404
+        assert client.get("/internal/uptime/services/digitalocean", params={"hours": 0}).status_code == 422
+        h = client.get("/internal/uptime/health").json()["data"]
         assert h["last_ok"] is True
         assert client.get("/uptime").status_code == 200, "the page route"
     finally:
@@ -384,15 +384,15 @@ def test_incident_poll_and_endpoints():
         assert client.get("/v1/reliability/incidents", params={"provider": "nobody"}).json()["data"] == []
         eu = client.get("/v1/reliability/incidents", params={"provider": "gcp", "days": 730, "scope": "regional"}).json()["data"]
         assert eu and all(x["scope"] == "regional" for x in eu) and "updates" in eu[0]
-        provs = {p["provider"]: p for p in client.get("/v1/uptime/providers").json()["data"]}
+        provs = {p["provider"]: p for p in client.get("/internal/uptime/providers").json()["data"]}
         assert provs["nebius"]["measured"] is False and provs["nebius"]["incidents_30d"] is not None, \
             "a provider with no probe still shows the incidents it reported"
         assert provs["aws"]["incidents_30d"] is None and provs["lambda"]["incidents_30d"] is None, "no feed is None, not zero"
-        d = client.get("/v1/uptime/dips", params={"provider": "digitalocean", "days": 7})
+        d = client.get("/internal/uptime/dips", params={"provider": "digitalocean", "days": 7})
         assert d.status_code == 200 and "scope" in d.json()["meta"]["scope_note"]
-        assert client.get("/v1/uptime/dips", params={"provider": "digitalocean", "days": 91}).status_code == 422
-        assert client.get("/v1/uptime/dips").status_code == 422
-        assert client.get("/v1/uptime/dips", params={"provider": "nobody"}).status_code == 404
+        assert client.get("/internal/uptime/dips", params={"provider": "digitalocean", "days": 91}).status_code == 422
+        assert client.get("/internal/uptime/dips").status_code == 422
+        assert client.get("/internal/uptime/dips", params={"provider": "nobody"}).status_code == 404
     finally:
         incidents._client = real
         scratchdb.drop(DB)

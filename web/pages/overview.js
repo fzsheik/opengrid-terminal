@@ -1,4 +1,4 @@
-/* /markets: the on-demand GPU market at a glance. One /v1/overview request for the market sections, plus
+/* /markets: the on-demand GPU market at a glance. One /internal/overview request for the market sections, plus
    /v1/indices (soft), /v1/markets, /v1/events?min_severity=notable, /v1/news (soft) and /market (sparklines only).
    First screen: benchmark indices, a one-line summary, the biggest movers and latest price changes, then the full
    board with events and headlines. The secondary signals (unusual moves, volatility, spreads, coverage,
@@ -21,7 +21,7 @@
   // A section the API could not compute: its reason in plain words. A failed request: one calm line, detail on hover.
   const unavail = reason => h("div", { class: "ov-un" }, "Not available yet: " + (reason || "no reason given"));
   const failed = err => h("div", { class: "ov-un", title: err && err.message ? String(err.message) : "" }, "Could not load this. It retries every minute.");
-  // Panel: header (title, kind badge, rule tooltip, optional link) + body that renders a /v1/overview section.
+  // Panel: header (title, kind badge, rule tooltip, optional link) + body that renders a /internal/overview section.
   function panel(title, opts) {
     opts = opts || {};
     const meta = h("span", { class: "ov-pm" });
@@ -213,7 +213,7 @@
 
       async function loadOverview() {
         let o;
-        try { o = await ctx.api("/v1/overview", { nocache: true }); }
+        try { o = await ctx.api("/internal/overview", { nocache: true }); }
         catch (e) {
           for (const p of [...Object.values(P), ...Object.values(M)]) p.fail(e);
           sumBox.replaceChildren(OG.error(e, loadOverview)); return;

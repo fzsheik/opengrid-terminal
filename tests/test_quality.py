@@ -633,7 +633,7 @@ def test_api():
 
         for path in ("/v1/ops/summary", "/v1/ops/providers", "/v1/ops/incidents", "/v1/ops/quarantine",
                      "/v1/ops/schema-changes", "/v1/ops/stale", "/v1/ops/unmapped", "/v1/ops/jobs",
-                     "/v1/trust/providers", f"/v1/listings?provider={FAKE}"):
+                     "/internal/trust/providers", f"/v1/listings?provider={FAKE}"):
             r = client.get(path)
             assert r.status_code == 200, (path, r.status_code, r.text[:500])
             assert "data" in r.json() and "as_of" in r.json()["meta"], path
@@ -663,7 +663,7 @@ def test_api():
         try:
             h = {"Authorization": "Bearer opg_test"}
             assert client.get("/v1/ops/summary", headers=h).status_code == 403
-            assert client.get("/v1/trust/providers", headers=h).status_code == 200
+            assert client.get("/internal/trust/providers", headers=h).status_code == 200
         finally:
             keys.verify = real
     finally:

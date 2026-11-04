@@ -130,9 +130,9 @@ def test_unhandled_exception_is_shaped():
     def boom():
         raise RuntimeError("secret internals")
 
-    main.app.router.routes.insert(0, __import__("fastapi").routing.APIRoute("/v1/live/__boom", boom))
+    main.app.router.routes.insert(0, __import__("fastapi").routing.APIRoute("/v1/macro/__boom", boom))
     try:
-        err = assert_error(TestClient(main.app, raise_server_exceptions=False).get("/v1/live/__boom"), 500)
+        err = assert_error(TestClient(main.app, raise_server_exceptions=False).get("/v1/macro/__boom"), 500)
         assert err["type"] == "api_error" and "secret internals" not in err["message"]
     finally:
         main.app.router.routes.pop(0)

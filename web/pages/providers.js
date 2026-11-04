@@ -2,7 +2,7 @@
    Sources: /v1/providers (coverage, relative value over a window, feed health, facts, all from the
    hourly rollup, so a figure is null + reason until it has enough compared hours), /v1/capabilities
    (integration level: what OpenGrid implements vs what is verified live, and verified_live is false
-   everywhere and the page says so), /v1/trust/providers (soft: feed status from the quality layer).
+   everywhere and the page says so), /internal/trust/providers (soft: feed status from the quality layer).
    Also exports OG.views.integration / OG.views.share / OG.views.feedStatus for pages/provider.js. */
 (() => {
   const { h, fmt } = OG;
@@ -91,7 +91,7 @@
           const [res, caps, trust] = await Promise.all([
             ctx.api("/v1/providers", { params: { days: st.days }, full: true, slot: "providers" }),
             st.caps ? Promise.resolve(st.caps) : ctx.api("/v1/capabilities").catch(() => null),
-            ctx.api("/v1/trust/providers").catch(() => null), OG.data.intervals()]);
+            ctx.api("/internal/trust/providers").catch(() => null), OG.data.intervals()]);
           st.data = res.data; st.meta = res.meta; st.caps = caps; st.trust = trust; st.loadedDays = days;
           OG.status.asOf(res.meta && res.meta.as_of);
         } catch (e) { if (!e.stale && !(st.data && st.loadedDays === days)) tblBox.replaceChildren(OG.error(e, load)); return; }

@@ -340,6 +340,12 @@ knows, tracked or not). `/v1/timeline` and `/v1/timeline/around` stay two paths 
 the catalogue and their ids are 404. The old `?id=a,b` multi-series form is gone (one shape per path).
 `/v1/macro/power` is public as before; whether it stays in the Data API is still open.
 
+**Website-only reads** (`/internal/*`): overview, tape, opportunities, heatmaps, compare, uptime (UptimeProject),
+trust, live. Shaped for one screen, not part of the contract, free to change. They keep the internal shape
+(full GPU names, no Data API envelope rules), are never served on the Data API host, never accept an API key, and
+are readable without the site password only for the areas in `api/pages.PUBLIC_INTERNAL` (live stays
+operator-only, as before).
+
 **Timestamps** end in `Z`, in `data` and `meta`.
 
 **Lists** page by cursor: `limit` (max 1000) and `cursor`; `meta.next_cursor` (null on the last page), `meta.total`.
