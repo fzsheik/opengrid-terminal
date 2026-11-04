@@ -185,7 +185,7 @@
       // REPORTED incidents: the provider's own status page, with its update text
       async function fillIncidents(box, row) {
         let res;
-        try { res = await ctx.api("/v1/reliability/incidents", { params: { provider: row.provider, days: Math.max(30, daysFor(st.hours)) }, full: true, slot: "uptime-inc-" + row.provider }); }
+        try { res = await OG.allPages(ctx.api, "/v1/reliability/incidents", { params: { provider: row.provider, days: Math.max(30, daysFor(st.hours)) }, slot: "uptime-inc-" + row.provider }); }
         catch (e) { if (!e.stale) box.replaceChildren(OG.error(e, () => fillIncidents(box, row))); return; }
         const rows = res.data;
         if (!row.incidents_30d && !rows.length) { box.replaceChildren(h("p", { class: "note" }, "OpenGrid reads no status feed for " + row.display_name + ", so there is nothing reported to show.")); return; }

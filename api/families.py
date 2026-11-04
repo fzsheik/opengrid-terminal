@@ -10,7 +10,7 @@ See methodology/families.md.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 import families as fam
 from accounts.auth import Principal, require_scope
@@ -86,7 +86,7 @@ def _member_ids(members):
 
 
 @router.get("/v1/families", tags=["families"], summary="GPU families and their canonical variants")
-def families_list(_: Principal = Depends(READ)):
+def families_list(limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, _: Principal = Depends(READ)):
     markets = dispersion.all_markets()
     out = []
     for d in fam.all_families():
@@ -96,7 +96,7 @@ def families_list(_: Principal = Depends(READ)):
                     "variants": [{"gpu": r["gpu"], "price": r["price"], "providers": r["providers"]} for r in rows],
                     "variants_priced": sum(1 for r in rows if r["price"]["low"] is not None),
                     "cheapest_variant_now": cheapest_variant(rows), "link": f"/v1/families/{d['slug']}"})
-    return envelope(out, kind="family", methodology=fam.METHODOLOGY, price_concept=OBSERVED_MARKET_PRICE,
+    return envelope(page=(limit, cursor), data=out, kind="family", methodology=fam.METHODOLOGY, price_concept=OBSERVED_MARKET_PRICE,
                     note=fam.NOTE, count=len(out))
 
 

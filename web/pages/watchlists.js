@@ -72,7 +72,7 @@
       const dl = h("datalist", { id: "wl-gpus" });
       root.append(dl);
       OG.data.gpus().then(gs => { st.gpus = gs; dl.replaceChildren(...gs.sort((a, b) => b.weight - a.weight).map(g => h("option", { value: g.slug }, g.name))); }).catch(() => {});
-      ctx.api("/v1/indices").then(ix => { st.indices = ix || []; drawMain(); drawForm(); }).catch(() => {});
+      OG.all(ctx.api, "/v1/indices").then(ix => { st.indices = ix || []; drawMain(); drawForm(); }).catch(() => {});
 
       /* ----- lists ----- */
       async function loadLists() {
@@ -120,7 +120,7 @@
           out.chgReason = "not applicable to a provider";
           if (p && p.coverage) { out.avail = `${p.coverage.listings.live} live listings · ${p.coverage.listings.priced} priced`; out.detail = `${p.coverage.gpus} GPUs · ${(p.coverage.region_groups || []).join(", ") || "no region groups"}`; }
         } else if (i.kind === "region") {
-          const rs = await softGet("/v1/regions", i.gpu ? { params: { gpu: OG.slug(i.gpu) } } : undefined);
+          const rs = await OG.all(softGet, "/v1/regions");
           const r = rs ? rs.find(x => x.region_group === i.region_group) : null;
           out.chgReason = "region change is available as an alert metric (hourly rollup)";
           if (r) { out.avail = `${r.listings.live} live · ${r.listings.priced} priced`; out.detail = `${r.providers} providers${i.gpu ? " · " + shortG(i.gpu) : ""} · ${r.gpus} GPUs`; }

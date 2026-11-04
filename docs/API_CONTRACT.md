@@ -348,5 +348,6 @@ operator-only, as before).
 
 **Timestamps** end in `Z`, in `data` and `meta`.
 
-**Lists** page by cursor: `limit` (max 1000) and `cursor`; `meta.next_cursor` (null on the last page), `meta.total`.
+**Lists** (every one, enforced by the route sweep in tests/test_contract.py) page by cursor; small reference
+lists use `envelope(page=(limit, cursor))`, time-ordered feeds a keyset cursor: `limit` (max 1000) and `cursor`; `meta.next_cursor` (null on the last page), `meta.total`.
 

@@ -122,25 +122,25 @@ def news_list(gpu: str | None = None, provider: str | None = None, region: str |
 
 
 @router.get("/v1/news/sources")
-def news_sources(_: Principal = Depends(READ)):
+def news_sources(limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, _: Principal = Depends(READ)):
     rows = store.sources_health()
-    return envelope(rows, methodology=METHODOLOGY, enabled=sum(1 for r in rows if r["enabled"]),
+    return envelope(page=(limit, cursor), data=rows, methodology=METHODOLOGY, enabled=sum(1 for r in rows if r["enabled"]),
                     disabled=sum(1 for r in rows if not r["enabled"]))
 
 
 @router.get("/v1/news/topics")
-def news_topics(_: Principal = Depends(READ)):
+def news_topics(limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, _: Principal = Depends(READ)):
     counts = store.topic_counts(30)
     data = [{**t, "items_30d": counts.get(t["id"], 0)} for t in cls.topic_catalog()]
-    return envelope(data, kind=INFERRED, methodology=METHODOLOGY)
+    return envelope(page=(limit, cursor), data=data, kind=INFERRED, methodology=METHODOLOGY)
 
 
 @router.get("/v1/news/families")
-def news_families(_: Principal = Depends(READ)):
+def news_families(limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, _: Principal = Depends(READ)):
     import families
 
     data = families.classifier_families()
-    return envelope(data, kind=INFERRED, methodology="families", count=len(data),
+    return envelope(page=(limit, cursor), data=data, kind=INFERRED, methodology="families", count=len(data),
                     note="every GPU family the news classifier recognises; tracked=false means OpenGrid has no "
                          "canonical variant (no market data) for it yet. " + families.NOTE)
 

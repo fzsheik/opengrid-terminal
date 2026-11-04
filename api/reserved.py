@@ -54,8 +54,8 @@ def rows(gpu: str | None = Query(None, description="GPU slug or canonical name")
 
 
 @router.get("/v1/reserved/summary", tags=["reserved"], summary="Per GPU: the cheapest reserved price in each term")
-def summary(gpu: str | None = Query(None, description="GPU slug or canonical name"), who: Principal = Depends(READ)):
+def summary(gpu: str | None = Query(None, description="GPU slug or canonical name"), limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, who: Principal = Depends(READ)):
     want = resolve_gpu(gpu) if gpu else None
     data, notes, newest = _model()
     out = [g for g in reserved.summary(data) if not want or g["gpu"] == want]
-    return envelope(out, kind=OBSERVED, methodology=METHOD, count=len(out), **_meta(notes, newest))
+    return envelope(page=(limit, cursor), data=out, kind=OBSERVED, methodology=METHOD, count=len(out), **_meta(notes, newest))

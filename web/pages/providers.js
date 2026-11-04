@@ -89,7 +89,7 @@
         if (!st.data || st.loadedDays !== days) { tblBox.replaceChildren(OG.loading("Loading providers…")); tbl = null; }
         try {
           const [res, caps, trust] = await Promise.all([
-            ctx.api("/v1/providers", { params: { days: st.days }, full: true, slot: "providers" }),
+            OG.allPages(ctx.api, "/v1/providers", { params: { days: st.days }, slot: "providers" }),
             st.caps ? Promise.resolve(st.caps) : ctx.api("/v1/capabilities").catch(() => null),
             ctx.api("/internal/trust/providers").catch(() => null), OG.data.intervals()]);
           st.data = res.data; st.meta = res.meta; st.caps = caps; st.trust = trust; st.loadedDays = days;

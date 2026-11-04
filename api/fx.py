@@ -32,6 +32,6 @@ def current(who: Principal = Depends(READ)):
 
 @router.get("/v1/fx/rates/history", tags=["fx"], summary="Stored ECB EUR->X reference rates (default USD), newest first")
 def history(days: int = Query(30, ge=1, le=3650), quote: str = Query("USD", pattern="^[A-Z]{3}$"),
-            who: Principal = Depends(READ)):
+            limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, who: Principal = Depends(READ)):
     rows = fx.rates(days, quote)
-    return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows), window_days=days, quote=quote)
+    return envelope(page=(limit, cursor), data=rows, kind=OBSERVED, methodology=METHOD, count=len(rows), window_days=days, quote=quote)

@@ -261,7 +261,7 @@
           h("span", { class: "ov-nw-s dim" }, s.source_name + (s.source_count > 1 ? ` +${s.source_count - 1}` : "")))));
       }
       async function loadIndices() {
-        const list = await OG.api.soft("/v1/indices", { nocache: true });
+        const list = await OG.all(OG.api.soft, "/v1/indices", { nocache: true });
         if (ctx.alive()) drawIndices(ixBox, list);
       }
       async function loadSpark() {

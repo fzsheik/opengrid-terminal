@@ -40,8 +40,8 @@
       // ------------------------------------------------------------ providers
       async function load() {
         try {
-          const [res, ag] = await Promise.all([ctx.api("/v1/reliability/providers", { params: { hours: st.hours }, full: true, slot: "probes" }),
-            ctx.api("/v1/reliability/agents", { slot: "probe-agents" })]);
+          const [res, ag] = await Promise.all([OG.allPages(ctx.api, "/v1/reliability/providers", { params: { hours: st.hours }, slot: "probes" }),
+            OG.all(ctx.api, "/v1/reliability/agents", { slot: "probe-agents" })]);
           // one row per provider with probe targets: its probes block, flattened as this page reads it
           st.rows = res.data.filter(r => r.probes).map(r => ({ provider: r.provider, ...r.probes })); st.meta = { ...res.meta, agents: ag };
           OG.status.asOf(res.meta && res.meta.as_of);

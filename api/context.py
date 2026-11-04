@@ -52,10 +52,10 @@ def _series(series: str) -> dict:
 
 @router.get("/v1/macro/series", tags=["macro"], summary="Market-context series: the catalogue")
 def macro_series(source: str | None = None, entity: str | None = None, geo: str | None = None,
-                 who: Principal = Depends(READ)):
+                 limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, who: Principal = Depends(READ)):
     rows = [c for c in _catalog() if (not source or c["source"] == source) and (not entity or c["entity"] == entity)
             and (not geo or c["geo"] == geo)]
-    return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows), **_meta())
+    return envelope(page=(limit, cursor), data=rows, kind=OBSERVED, methodology=METHOD, count=len(rows), **_meta())
 
 
 @router.get("/v1/macro/series/{series}", tags=["macro"], summary="One market-context series: source, unit, latest")
@@ -64,16 +64,16 @@ def macro_series_one(series: str, who: Principal = Depends(READ)):
 
 
 @router.get("/v1/macro/series/{series}/history", tags=["macro"], summary="One market-context series over time")
-def macro_series_history(series: str, since: date | None = None, who: Principal = Depends(READ)):
+def macro_series_history(series: str, since: date | None = None, limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, who: Principal = Depends(READ)):
     c = _series(series)
     rows = cs.points([series], since)
-    return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows), series=c, **_meta())
+    return envelope(page=(limit, cursor), data=rows, kind=OBSERVED, methodology=METHOD, count=len(rows), series=c, **_meta())
 
 
 @router.get("/v1/macro/power", tags=["macro"], summary="US listings by state, beside the state's electricity price")
-def macro_power(who: Principal = Depends(READ)):
+def macro_power(limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, who: Principal = Depends(READ)):
     rows = cs.power_by_region()
-    return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows), **_meta(
+    return envelope(page=(limit, cursor), data=rows, kind=OBSERVED, methodology=METHOD, count=len(rows), **_meta(
         note="Listings are mapped to a state only where the region names one (context/geo.py). "
              "Retail prices are averages for the state and sector, not any provider's tariff."))
 

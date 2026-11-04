@@ -67,9 +67,9 @@ def _meta():
 
 @router.get("/v1/indices", summary="OpenGrid indices: current level and changes")
 def list_indices(kind: Literal["gpu", "spot", "regional", "provider_class", "composite"] | None = None,
-                 _: Principal = Depends(READ)):
+                 limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, _: Principal = Depends(READ)):
     items = indices.index_list(kind)
-    return envelope(items, **_meta(), count=len(items),
+    return envelope(page=(limit, cursor), data=items, **_meta(), count=len(items),
                     note="Only indices with data in the last 90 days are listed; "
                          "an index with too few constituents is listed unpublished with its reason.")
 

@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
 from accounts.auth import principal
@@ -655,11 +655,11 @@ def methodology_source(name: str) -> str:
 
 
 @router.get("/v1/methodology", summary="Methodology documents: name, title, links")
-def v1_methodology(who=Depends(principal)):
+def v1_methodology(limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, who=Depends(principal)):
     summaries = _methodology_summaries()
     docs = [{"name": n, "title": t, "summary": summaries.get(n) or None, "html": f"/methodology/{n}", "markdown": f"/v1/methodology/{n}"}
             for n, t in methodology_titles()]
-    return envelope(docs)
+    return envelope(page=(limit, cursor), data=docs)
 
 
 def _methodology_summaries() -> dict:

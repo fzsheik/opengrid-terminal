@@ -118,7 +118,7 @@
       const tables = new Map();
       async function load() {
         let res;
-        try { res = await ctx.api("/v1/indices", { full: true, slot: "ix-list" }); }
+        try { res = await OG.allPages(ctx.api, "/v1/indices", { slot: "ix-list" }); }
         catch (e) { if (!e.stale && !st.rows) body.replaceChildren(OG.error(e, load)); return; }
         st.rows = res.data.map(r => Object.assign({}, r, (st.rows || []).find(o => o.id === r.id) && { _x: (st.rows || []).find(o => o.id === r.id)._x }));
         st.meta = res.meta;
@@ -463,7 +463,7 @@
         if (d.kind === "composite") for (const c of def.components || []) links.push(h("a", { class: "lnk", href: "/indices/" + encodeURIComponent(c.index_id) }, (c.name || c.index_id).replace(/^OpenGrid /, "")));
         relEl.replaceChildren(h("div", { class: "ix-rel-l" }, links.length ? links : h("span", { class: "dim" }, "-")));
         if (!d.gpu) return;
-        const all = await OG.api.soft("/v1/indices");
+        const all = await OG.all(OG.api.soft, "/v1/indices");
         if (!ctx.alive() || !all) return;
         const sib = all.filter(r => r.gpu === d.gpu && r.id !== d.id);
         if (sib.length) relEl.append(h("div", { class: "ix-rel-h" }, "Other indices on this GPU"), h("table", { class: "ix-kv ix-sib" }, h("tbody", {}, sib.map(r =>

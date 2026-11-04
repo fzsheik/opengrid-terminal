@@ -42,8 +42,13 @@ def now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def envelope(data: Any, *, kind: str | None = None, methodology: str | None = None, **meta) -> dict:
-    """Wrap a payload. `methodology` names a doc under /methodology/<name>."""
+def envelope(data: Any, *, kind: str | None = None, methodology: str | None = None, page: tuple | None = None,
+             **meta) -> dict:
+    """Wrap a payload. `methodology` names a doc under /methodology/<name>. page=(limit, cursor) pages a list
+    body by cursor (meta: limit, next_cursor, total), the one paging convention of every Data API list."""
+    if page is not None and isinstance(data, list):
+        data, pg = cursor_page(data, *page)
+        meta = {**meta, **pg}
     import observability
     from api import contract  # lazy: contract imports config, which some importers of common load later
 

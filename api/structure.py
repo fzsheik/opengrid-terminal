@@ -201,7 +201,7 @@ def _summary_value(v: dict | None) -> dict | None:
 
 
 @router.get("/v1/providers", summary="Every provider: meta, coverage, relative value, feed health")
-def providers_list(days: int = Query(30, ge=1, le=365), who: Principal = Depends(READ)):
+def providers_list(days: int = Query(30, ge=1, le=365), limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, who: Principal = Depends(READ)):
     value = providers.provider_value_all(days)
     health = providers.feed_health()
     life = providers.listing_lifetime()
@@ -214,7 +214,7 @@ def providers_list(days: int = Query(30, ge=1, le=365), who: Principal = Depends
                     "relative_value": _summary_value(value.get(p, {}).get(providers.ALL)),
                     "listing_lifetime": life.get(p), "feed_health": health.get(p),
                     "facts": providers.facts(p, value.get(p, {}), days)})
-    return envelope(out, kind=INFERRED, methodology=providers.METHODOLOGY, window_days=days)
+    return envelope(page=(limit, cursor), data=out, kind=INFERRED, methodology=providers.METHODOLOGY, window_days=days)
 
 
 @router.get("/v1/providers/{provider}", summary="One provider: catalog, pricing vs market, rank history, health")
@@ -258,7 +258,7 @@ def heatmap(kind: str, days: int | None = Query(None, ge=1, le=365), who: Princi
 
 
 @router.get("/v1/regions", summary="Region groups and what is listed in each now")
-def regions_list(who: Principal = Depends(READ)):
+def regions_list(limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, who: Principal = Depends(READ)):
     acc = defaultdict(lambda: {"providers": set(), "gpus": set(), "live_listings": 0, "priced_listings": 0})
     for r in dispersion.current_listings():
         g = regions.region_group(r["provider"], r["region"], r["country"]) or "Unassigned"
@@ -273,7 +273,7 @@ def regions_list(who: Principal = Depends(READ)):
         out.append({"region_group": g, "providers": len(a["providers"]) if a else 0,
                     "provider_ids": sorted(a["providers"]) if a else [], "gpus": len(a["gpus"]) if a else 0,
                     "listings": {"live": a["live_listings"] if a else 0, "priced": a["priced_listings"] if a else 0}})
-    return envelope(out, kind=OBSERVED, methodology="dispersion",
+    return envelope(page=(limit, cursor), data=out, kind=OBSERVED, methodology="dispersion",
                     note="Unassigned = no location given, or a listing spanning several groups")
 
 

@@ -409,12 +409,18 @@ Full docs: web/README.md.
     return o;
   }
   OG.legacyHistory = legacyHistory;
+  // Every row of a Data API list as an array (null when a soft call failed): follows meta.next_cursor.
+  OG.all = async (call, path, opts) => {
+    const r = await OG.allPages(call, path, opts);
+    return r && r.meta === undefined ? null : r.data;
+  };
   // Every page of a Data API list: follows meta.next_cursor (1000 rows a request); { data, meta } like full: true.
   OG.allPages = async (call, path, opts) => {
     opts = opts || {};
     let data = [], cursor = null, r = null;
     for (let i = 0; i < 100; i++) {
       r = await call(path, { ...opts, full: true, params: { ...(opts.params || {}), limit: 1000, ...(cursor ? { cursor } : {}) } });
+      if (!r) return { data: null, meta: undefined };  // a soft call that failed
       data = data.concat(Array.isArray(r.data) ? r.data : []);
       cursor = r.meta && r.meta.next_cursor;
       if (!cursor) break;
@@ -707,7 +713,7 @@ Full docs: web/README.md.
     },
     // GPU families (/v1/families): [{slug, id, name, kind, variants?|variant_count}] or [] when unavailable
     families() {
-      if (!familiesP) familiesP = api.soft("/v1/families").then(r => (Array.isArray(r) ? r : r && Array.isArray(r.items) ? r.items : r && Array.isArray(r.families) ? r.families : []));
+      if (!familiesP) familiesP = OG.all(api.soft, "/v1/families").then(r => (Array.isArray(r) ? r : r && Array.isArray(r.items) ? r.items : r && Array.isArray(r.families) ? r.families : []));
       return familiesP;
     },
     // /market overview, shared by every page for 20 s

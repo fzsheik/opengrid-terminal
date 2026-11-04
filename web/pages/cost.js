@@ -141,7 +141,7 @@
       h("p", { class: "note" }, h("a", { class: "lnk", href: "/methodology/full-cost" }, "How the true cost is computed, and where each price comes from →")));
 
       let presets = [], gpus = [];
-      const [pr, gl] = await Promise.all([ctx.api("/v1/costs/presets").catch(() => null), OG.data.gpus().catch(() => [])]);
+      const [pr, gl] = await Promise.all([OG.all(ctx.api, "/v1/costs/presets").catch(() => null), OG.data.gpus().catch(() => [])]);
       presets = Array.isArray(pr) ? pr : [];
       gpus = (gl || []).filter(g => g.live).sort((a, b) => b.weight - a.weight || a.name.localeCompare(b.name));
       if (st.gpu && !gpus.some(g => g.name === st.gpu)) gpus.unshift({ name: st.gpu, short: OG.shortGpu(st.gpu) });

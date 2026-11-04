@@ -224,7 +224,7 @@
       }
 
       drawFilters(); drawView();
-      const [topics, sources, fams] = await Promise.all([ctx.api("/v1/news/topics").catch(() => null), ctx.api("/v1/news/sources").catch(() => null), ctx.api("/v1/news/families").catch(() => null)]);
+      const [topics, sources, fams] = await Promise.all([OG.all(ctx.api, "/v1/news/topics").catch(() => null), OG.all(ctx.api, "/v1/news/sources").catch(() => null), OG.all(ctx.api, "/v1/news/families").catch(() => null)]);
       // GPU family suggestions from the API (fallback: the built-in list)
       const famList = Array.isArray(fams) ? fams : fams && (fams.families || fams.items);
       if (Array.isArray(famList) && famList.length) {

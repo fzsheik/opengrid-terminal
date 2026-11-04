@@ -88,6 +88,8 @@ def test_every_data_route():
         leaks = [g for g in _gpu_fields(body) if g in gpu_ids.GPU_IDS]
         if leaks:
             bad.append(f"canonical name in a gpu field {p}: {leaks[:2]}")
+        if isinstance(body, dict) and isinstance(body.get("data"), list) and "next_cursor" not in body.get("meta", {}):
+            bad.append(f"list without cursor paging {p}")  # every Data API list pages by cursor
         if isinstance(body, dict) and "meta" in body:
             meta = body["meta"]
             if meta.get("request_id") != r.headers["x-request-id"] or meta.get("api_version") != contract.LATEST:

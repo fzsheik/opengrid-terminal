@@ -230,7 +230,7 @@ def test_db_and_api():
         assert "macro" in pages.PUBLIC_V1
         ctx_api._catalog.cache_clear()
         c = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})
-        cat = c.get("/v1/macro/series").json()
+        cat = c.get("/v1/macro/series", params={"limit": 1000}).json()
         assert "Context, not cause" in cat["meta"]["rule"] and cat["meta"]["enabled"] == {"eia": True, "sec_edgar": True}
         rows = {r["series_id"]: r for r in cat["data"]}
         assert rows["eia.retail_price.ind.VA"]["latest"]["value"] == 10.5 and rows["sec.nvda.revenue_data_center"]["points"] == 4

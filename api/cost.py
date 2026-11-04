@@ -42,26 +42,26 @@ def _components():
 
 
 @router.get("/v1/costs/components", tags=["cost"], summary="Egress, storage and other cost components per provider")
-def components(provider: str | None = None, component: str | None = None, who: Principal = Depends(READ)):
+def components(provider: str | None = None, component: str | None = None, limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, who: Principal = Depends(READ)):
     if component and component not in cc.COMPONENTS:
         raise HTTPException(422, {"code": "invalid_component", "message": f"one of {list(cc.COMPONENTS)}"})
     comps, notes = _components()
     rows = [cc.to_json(c) for c in comps if (not provider or c["provider"] == provider)
             and (not component or c["component"] == component)]
-    return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows), notes=notes, rule=RULE,
+    return envelope(page=(limit, cursor), data=rows, kind=OBSERVED, methodology=METHOD, count=len(rows), notes=notes, rule=RULE,
                     kinds={"api": "observed", "provider": "observed", "manual": "manual (source + verified_at)"},
                     providers=sorted({c["provider"] for c in comps}))
 
 
 @router.get("/v1/costs/billing", tags=["cost"], summary="Billing increment and minimum per provider")
-def billing(who: Principal = Depends(READ)):
+def billing(limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, who: Principal = Depends(READ)):
     rows = [{"provider": p, **{k: b.get(k) for k in ("increment_s", "minimum_s", "status", "source", "notes")},
              "products": b.get("products"), "verified_at": manual.V} for p, b in sorted(manual.BILLING.items())]
-    return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows))
+    return envelope(page=(limit, cursor), data=rows, kind=OBSERVED, methodology=METHOD, count=len(rows))
 
 
 @router.get("/v1/costs/sources", tags=["cost"], summary="Machine-readable cost sources and their last fetch")
-def cost_sources(who: Principal = Depends(READ)):
+def cost_sources(limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, who: Principal = Depends(READ)):
     import normalize
 
     with normalize.SessionLocal() as s:
@@ -70,12 +70,12 @@ def cost_sources(who: Principal = Depends(READ)):
              "last_ok_fetch_at": snaps[k]["fetched_at"], "last_attempt_at": snaps[k]["last_attempt_at"],
              "last_attempt_ok": snaps[k]["last_ok"], "last_error": snaps[k]["last_error"]}
             for k, src in sources.SOURCES.items()]
-    return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows), poll_seconds=sources.POLL_SECONDS)
+    return envelope(page=(limit, cursor), data=rows, kind=OBSERVED, methodology=METHOD, count=len(rows), poll_seconds=sources.POLL_SECONDS)
 
 
 @router.get("/v1/costs/presets", tags=["cost"], summary="The published reference jobs")
-def presets(who: Principal = Depends(READ)):
-    return envelope([{"preset": k, **v} for k, v in est.PRESETS.items()], kind=ESTIMATED, methodology=METHOD)
+def presets(limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, who: Principal = Depends(READ)):
+    return envelope(page=(limit, cursor), data=[{"preset": k, **v} for k, v in est.PRESETS.items()], kind=ESTIMATED, methodology=METHOD)
 
 
 async def _body(request: Request) -> dict:
