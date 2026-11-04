@@ -335,6 +335,11 @@ are a sub-resource instead.)
 `/v1/news/{item}`, `/v1/news/sources`, `/v1/news/topics`, `/v1/news/families` (the families the classifier
 knows, tracked or not). `/v1/timeline` and `/v1/timeline/around` stay two paths (two shapes).
 
+**Macro** (`/v1/macro/series`, `/v1/macro/series/{series}`, `/v1/macro/series/{series}/history?since=`,
+`/v1/macro/power`): public-domain series (EIA, SEC EDGAR) beside prices; internal series (equities) are never in
+the catalogue and their ids are 404. The old `?id=a,b` multi-series form is gone (one shape per path).
+`/v1/macro/power` is public as before; whether it stays in the Data API is still open.
+
 **Timestamps** end in `Z`, in `data` and `meta`.
 
 **Lists** page by cursor: `limit` (max 1000) and `cursor`; `meta.next_cursor` (null on the last page), `meta.total`.

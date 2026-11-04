@@ -297,6 +297,8 @@ def _values(name: str, route_path: str) -> list[tuple[str, tuple[str, ...]]]:
         return [(f"{h100}-vs-{gpu_slug('NVIDIA A100 80GB SXM4')}", ()), (f"{h100}-vs-{only}", ())]
     if name == "family":
         return [(W.get("family", "h100"), ())]
+    if name == "series":  # a public series, and an internal (equity) one that must stay a 404
+        return [("eia.retail_price.ind.VA", ()), ("alpaca.nvda.close.split", ())]
     if name == "fixing_id":
         return [(f, ()) for f in W.get("fixing_ids") or ["1"]]
     if name == "at":
@@ -413,7 +415,7 @@ def test_every_public_route_is_clean():
                  "/history", "/market", "/gpu/{slug}", "/v1/listings/history", "/v1/markets",
                  # 2026-11-02 release: freshness, full cost (API and page)
                  "/v1/reliability/providers", "/v1/costs/components", "/v1/costs/billing", "/v1/costs/sources",
-                 "/v1/costs/presets", "/cost", "/v1/context/power", "/v1/context/series"):
+                 "/v1/costs/presets", "/cost", "/v1/macro/power", "/v1/macro/series"):
         assert must in templates, must
     status, bad = {}, []
     for tmpl, url, echo in reqs:
@@ -633,7 +635,7 @@ def test_fireworks_is_wholly_internal():
 
 
 def test_context_power_counts_public_listings_only():
-    """/v1/context/power (US listings per state beside the state's electricity price) is public: an internal
+    """/v1/macro/power (US listings per state beside the state's electricity price) is public: an internal
     listing in a mapped US region changes neither its counts nor its provider and region lists."""
     c = _client()
 
@@ -645,12 +647,12 @@ def test_context_power_counts_public_listings_only():
     with W["Session"].begin() as s:
         s.add(va("pub-va", Decimal("3.5"), "public"))
     cache.clear_all()
-    before = {r["state"]: r for r in c.get("/v1/context/power").json()["data"]}
+    before = {r["state"]: r for r in c.get("/v1/macro/power").json()["data"]}
     assert before.get("VA", {}).get("listings", 0) >= 1, before
     with W["Session"].begin() as s:
         s.add(va("int-va", SECRET, "internal"))
     cache.clear_all()
-    r = c.get("/v1/context/power")
+    r = c.get("/v1/macro/power")
     after = {x["state"]: x for x in r.json()["data"]}
     assert after["VA"]["listings"] == before["VA"]["listings"], (before["VA"], after["VA"])
     assert not body_leaks(r), body_leaks(r)[:5]

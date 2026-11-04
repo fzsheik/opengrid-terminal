@@ -31,7 +31,7 @@ HEADER = "OpenGrid-Version"
 DATA_AREAS = frozenset({
     "gpus", "families", "providers", "regions", "markets", "listings", "compare", "heatmaps",
     "reserved", "indices", "fixings", "capacity", "costs", "fx", "reliability",
-    "events", "news", "timeline", "overview", "tape", "opportunities", "live", "context", "methodology",
+    "events", "news", "timeline", "overview", "tape", "opportunities", "live", "macro", "methodology",
 })
 
 _TYPE = {401: "authentication", 403: "permission", 429: "rate_limit"}

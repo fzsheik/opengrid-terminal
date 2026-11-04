@@ -227,21 +227,22 @@ def test_db_and_api():
         from api import context as ctx_api
         from api import pages
         from fastapi.testclient import TestClient
-        assert "context" in pages.PUBLIC_V1
+        assert "macro" in pages.PUBLIC_V1
         ctx_api._catalog.cache_clear()
         c = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})
-        cat = c.get("/v1/context/series").json()
+        cat = c.get("/v1/macro/series").json()
         assert "Context, not cause" in cat["meta"]["rule"] and cat["meta"]["enabled"] == {"eia": True, "sec_edgar": True}
         rows = {r["series_id"]: r for r in cat["data"]}
         assert rows["eia.retail_price.ind.VA"]["latest"]["value"] == 10.5 and rows["sec.nvda.revenue_data_center"]["points"] == 4
         assert rows["sec.msft.capex"]["points"] == 0 and rows["sec.msft.capex"]["latest"] is None   # 404 in the fixture
-        nv = c.get("/v1/context/series?id=sec.nvda.revenue_data_center,sec.nvda.revenue_total&since=2026-01-01").json()
-        assert {p["series_id"] for p in nv["data"]} == {"sec.nvda.revenue_data_center", "sec.nvda.revenue_total"}
-        assert all(p["period_end"] >= "2026-01-01" for p in nv["data"]) and nv["meta"]["series"][0]["unit"] == "usd"
-        assert c.get("/v1/context/series?id=nope").status_code == 404
-        assert c.get("/v1/context/series?id=" + ",".join(["a"] * 21)).status_code == 422
-        assert {r["source"] for r in c.get("/v1/context/series?source=sec_edgar").json()["data"]} == {"sec_edgar"}
-        pw = {r["state"]: r for r in c.get("/v1/context/power").json()["data"]}
+        nv = c.get("/v1/macro/series/sec.nvda.revenue_data_center/history?since=2026-01-01").json()
+        assert {p["series_id"] for p in nv["data"]} == {"sec.nvda.revenue_data_center"}
+        assert all(p["period_end"] >= "2026-01-01" for p in nv["data"]) and nv["meta"]["series"]["unit"] == "usd"
+        assert c.get("/v1/macro/series/sec.nvda.revenue_total").json()["data"]["series_id"] == "sec.nvda.revenue_total"
+        assert c.get("/v1/macro/series/nope").status_code == 404
+        assert c.get("/v1/macro/series/nope/history").status_code == 404
+        assert {r["source"] for r in c.get("/v1/macro/series?source=sec_edgar").json()["data"]} == {"sec_edgar"}
+        pw = {r["state"]: r for r in c.get("/v1/macro/power").json()["data"]}
         assert set(pw) == {"VA", "TX"} and pw["VA"]["market_area"] == "PJM" and pw["VA"]["price_ind"]["value"] == 10.5
         assert pw["TX"]["providers"] == ["crusoe"] and pw["TX"]["price_ind"]["period"] == "2026-08"
     finally:

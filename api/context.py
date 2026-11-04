@@ -1,15 +1,16 @@
 """Market context: numeric series beside GPU prices (context/; methodology/market-context.md).
 
-    GET /v1/context/series            the catalogue: every series, its source, unit, whether it is enabled, latest
-    GET /v1/context/series?id=a,b     the points of up to 20 series (since=YYYY-MM-DD)
-    GET /v1/context/power             US states with current listings, joined to the state's latest electricity price
+    GET /v1/macro/series                    the catalogue: every series, its source, unit, whether it is enabled, latest
+    GET /v1/macro/series/{series}           one series
+    GET /v1/macro/series/{series}/history   its points (since=YYYY-MM-DD)
+    GET /v1/macro/power                     US states with current listings, joined to the state's latest electricity price
 
     GET /v1/ops/context/equities          ADMIN ONLY. INTERNAL equity research data (Alpaca): coverage per ticker,
                                           ?symbol= daily points (field, adjustment, since, until) or hourly bars
                                           (timeframe=1Hour); never public, never displayed, never republished
     GET /v1/ops/context/equities/moves    ADMIN ONLY. ?start=&end=: equity % moves beside GPU price moves
 
-The /v1/context reads are public (api/pages.py PUBLIC_V1 "context") and NEVER carry visibility "internal" series,
+The /v1/macro reads are public (api/pages.py PUBLIC_V1 "macro") and NEVER carry visibility "internal" series,
 whoever calls them. Context, not cause: nothing here says one series moved another.
 """
 
@@ -27,7 +28,6 @@ router = APIRouter()
 READ = require_scope("data:read")
 ADMIN = require_scope("admin")
 METHOD = "market-context"
-MAX_IDS = 20
 ATTRIBUTION = {"eia": eia.ATTRIBUTION, "sec_edgar": edgar.ATTRIBUTION}
 
 cs.register()  # the context_series job (off until EIA_API_KEY or SEC_USER_AGENT is set)
@@ -42,29 +42,36 @@ def _meta(**kw) -> dict:
     return {"rule": cs.NOT_CAUSAL, "attribution": ATTRIBUTION, "enabled": cs.enabled(), **kw}
 
 
-@router.get("/v1/context/series", tags=["context"], summary="Market-context series: the catalogue, or the points of some")
-def context_series(id: str | None = Query(None, description="comma-separated series ids"), source: str | None = None,
-                   entity: str | None = None, geo: str | None = None, since: date | None = None,
-                   who: Principal = Depends(READ)):
-    cat = _catalog()
-    if not id:
-        rows = [c for c in cat if (not source or c["source"] == source) and (not entity or c["entity"] == entity)
-                and (not geo or c["geo"] == geo)]
-        return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows), **_meta())
-    ids = [i.strip() for i in id.split(",") if i.strip()]
-    if len(ids) > MAX_IDS:
-        raise HTTPException(422, {"code": "too_many_series", "message": f"at most {MAX_IDS} series per request"})
-    known = {c["series_id"]: c for c in cat}
-    unknown = [i for i in ids if i not in known]
-    if unknown:
-        raise HTTPException(404, {"code": "unknown_series", "message": f"unknown series {unknown}; see /v1/context/series"})
-    rows = cs.points(ids, since)
-    return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows),
-                    series=[known[i] for i in ids], **_meta())
+def _series(series: str) -> dict:
+    c = next((c for c in _catalog() if c["series_id"] == series), None)
+    if c is None:
+        raise HTTPException(404, {"code": "unknown_series", "param": "series",
+                                  "message": f"unknown series {series!r}; see /v1/macro/series"})
+    return c
 
 
-@router.get("/v1/context/power", tags=["context"], summary="US listings by state, beside the state's electricity price")
-def context_power(who: Principal = Depends(READ)):
+@router.get("/v1/macro/series", tags=["macro"], summary="Market-context series: the catalogue")
+def macro_series(source: str | None = None, entity: str | None = None, geo: str | None = None,
+                 who: Principal = Depends(READ)):
+    rows = [c for c in _catalog() if (not source or c["source"] == source) and (not entity or c["entity"] == entity)
+            and (not geo or c["geo"] == geo)]
+    return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows), **_meta())
+
+
+@router.get("/v1/macro/series/{series}", tags=["macro"], summary="One market-context series: source, unit, latest")
+def macro_series_one(series: str, who: Principal = Depends(READ)):
+    return envelope(_series(series), kind=OBSERVED, methodology=METHOD, **_meta())
+
+
+@router.get("/v1/macro/series/{series}/history", tags=["macro"], summary="One market-context series over time")
+def macro_series_history(series: str, since: date | None = None, who: Principal = Depends(READ)):
+    c = _series(series)
+    rows = cs.points([series], since)
+    return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows), series=c, **_meta())
+
+
+@router.get("/v1/macro/power", tags=["macro"], summary="US listings by state, beside the state's electricity price")
+def macro_power(who: Principal = Depends(READ)):
     rows = cs.power_by_region()
     return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows), **_meta(
         note="Listings are mapped to a state only where the region names one (context/geo.py). "
