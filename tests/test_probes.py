@@ -261,21 +261,23 @@ def test_api_and_agent():
         assert client.post("/v1/probes/ingest", json=unk).json()["data"]["refused"] == 1
 
         as_("data:read")
-        tg = client.get("/v1/probes/targets").json()
+        assert len(client.get("/v1/probes/targets").json()["data"]) == len(targets.TARGETS), "the agents' own read"
+        tg = client.get("/v1/reliability/targets").json()
         assert tg["meta"]["count"] == len(targets.TARGETS) == len(tg["data"]) and tg["meta"]["source"] == "opengrid_probes"
-        assert client.get("/v1/probes/agents").json()["data"][0]["location"] == "eu-west"
+        assert client.get("/v1/reliability/agents").json()["data"][0]["location"] == "eu-west"
         store.rollup(hours=2)
-        sm = client.get("/v1/probes/summary", params={"hours": 6}).json()
-        assert {p["provider"] for p in sm["data"]} >= {"aws", "lambda", "runpod"} and sm["meta"]["agents"]
-        d = client.get("/v1/probes/targets/aws:ec2-us-east-1").json()["data"]
+        sm = client.get("/v1/reliability/providers", params={"hours": 6}).json()
+        assert {p["provider"] for p in sm["data"] if p["probes"]} >= {"aws", "lambda", "runpod"} and sm["meta"]["agents"]
+        aws = client.get("/v1/reliability/providers/aws").json()["data"]
+        d = next(t for t in aws["targets"] if t["id"] == "aws:ec2-us-east-1")
         assert d["accept"] == [400] and "hourly" in d and "by_location" in d
-        assert client.get("/v1/probes/targets/nope:x").status_code == 404
-        assert client.get("/v1/probes/dips", params={"provider": "aws"}).status_code == 200
-        assert client.get("/v1/probes/dips", params={"provider": "nobody"}).status_code == 404
-        assert client.get("/v1/probes/dips", params={"provider": "aws", "days": 31}).status_code == 422
-        rw = client.get("/v1/probes/raw", params={"target": "aws:ec2-us-east-1"}).json()["data"]
+        assert client.get("/v1/reliability/providers/nobody").status_code == 404
+        assert client.get("/v1/reliability/providers/aws/dips").status_code == 200
+        assert client.get("/v1/reliability/providers/nobody/dips").status_code == 404
+        assert client.get("/v1/reliability/providers/aws/dips", params={"days": 31}).status_code == 422
+        rw = client.get("/v1/reliability/probes", params={"target": "aws:ec2-us-east-1"}).json()["data"]
         assert rw and rw[0]["location"] == "eu-west" and rw[0]["agent_id"] == "eu-1"
-        assert client.get("/v1/probes/raw", params={"target": "nope"}).status_code == 404
+        assert client.get("/v1/reliability/probes", params={"target": "nope"}).status_code == 404
         assert client.get("/probes").status_code == 200, "the page route"
 
         # a remote agent, posting through the real app (no network: every probe fails fast and is recorded as a failure)

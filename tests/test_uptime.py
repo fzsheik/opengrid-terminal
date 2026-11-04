@@ -376,12 +376,13 @@ def test_incident_poll_and_endpoints():
         _patch_client()
         poll.run()
         client = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})
-        inc = client.get("/v1/uptime/incidents", params={"provider": "gcp", "days": 730}).json()
+        inc = client.get("/v1/reliability/incidents", params={"provider": "gcp", "days": 730}).json()
         assert inc["meta"]["reported_not_measured"] is True and len(inc["data"]) == 8
+        assert inc["meta"]["source"] == "provider_status_page"
         assert {x["scope"] for x in inc["data"]} >= {"global", "regional"}
-        assert client.get("/v1/uptime/incidents", params={"scope": "bogus"}).status_code == 422
-        assert client.get("/v1/uptime/incidents", params={"provider": "nobody"}).status_code == 404
-        eu = client.get("/v1/uptime/incidents", params={"provider": "gcp", "days": 730, "scope": "regional"}).json()["data"]
+        assert client.get("/v1/reliability/incidents", params={"scope": "bogus"}).status_code == 422
+        assert client.get("/v1/reliability/incidents", params={"provider": "nobody"}).json()["data"] == []
+        eu = client.get("/v1/reliability/incidents", params={"provider": "gcp", "days": 730, "scope": "regional"}).json()["data"]
         assert eu and all(x["scope"] == "regional" for x in eu) and "updates" in eu[0]
         provs = {p["provider"]: p for p in client.get("/v1/uptime/providers").json()["data"]}
         assert provs["nebius"]["measured"] is False and provs["nebius"]["incidents_30d"] is not None, \

@@ -233,12 +233,12 @@ def _req(method, path):
 def test_is_public_matrix():
     allow = ["/", "/gpus", "/gpu/h100-80gb-sxm5", "/compare/a-vs-b", "/compare", "/methodology", "/methodology/data-kinds", "/explorer",
              "/static/core.js", "/static/logos/lium.png", "/robots.txt", "/sitemap.xml", "/keys", "/route", "/ops",  # page shells hold no data
-             "/v1/gpus", "/v1/gpus/h100-80gb-sxm5", "/v1/markets/x", "/v1/indices", "/v1/history", "/v1/spreads", "/v1/events", "/v1/news",
+             "/v1/gpus", "/v1/gpus/h100-80gb-sxm5", "/v1/markets/x", "/v1/indices", "/v1/listings", "/v1/events", "/v1/news", "/v1/reliability/providers",
              "/v1/providers/lambda", "/v1/heatmaps", "/v1/overview", "/v1/tape", "/v1/methodology", "/v1/methodology/data-kinds",
-             "/v1/timeline", "/v1/best", "/v1/capabilities", "/v1/opportunities", "/v1/trust/listings",
+             "/v1/timeline", "/v1/best", "/v1/capabilities", "/v1/opportunities", "/v1/trust/providers",
              "/market", "/market/detail", "/listings", "/polling"]
     deny = ["/v1/route", "/v1/route/preview", "/v1/deployments", "/v1/deployments/dep_x", "/v1/keys", "/v1/admin/x", "/v1/ops", "/v1/ops/jobs",
-            "/v1/me", "/v1/usage", "/v1/billing", "/v1/billing/invoices", "/v1/watchlists", "/v1/alerts", "/v1/credentials", "/v1/unknown",
+            "/v1/me", "/v1/usage", "/v1/billing", "/v1/billing/invoices", "/v1/reliability", "/v1/probes/targets", "/v1/watchlists", "/v1/alerts", "/v1/credentials", "/v1/unknown",
             "/v1/gpusx", "/raw", "/raw/payload", "/mapping", "/unmapped", "/docs", "/openapi.json", "/classic", "/history", "/reference-prices", "/nope"]
     for p in allow:
         assert pages.is_public(_req("GET", p)), f"GET {p} should be public"
@@ -299,7 +299,7 @@ def test_public_pages_through_the_middleware():
             assert "basic" not in r.headers.get("www-authenticate", "").lower(), (p, r.headers.get("www-authenticate"))
         assert client.post("/fetch").headers.get("www-authenticate", "").lower() == "bearer"
         assert client.get("/v1/me", auth=("opengrid", "s3cret")).status_code == 200, "the signed-in operator still works"
-        for p in ("/v1/compare?a=H100&b=A100", "/v1/regions", "/v1/hardware"):  # read by /compare and the GPU pages
+        for p in ("/v1/compare?a=H100&b=A100", "/v1/regions", "/v1/gpus"):  # read by /compare and the GPU pages
             assert client.get(p).status_code not in (401, 403), p
         settings.public_pages = False
         assert client.get("/gpus").status_code == 401, "off by default: pages need the password"

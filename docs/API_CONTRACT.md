@@ -316,6 +316,15 @@ methodology change, so it is not applied; today the full stored value is publish
 state, ...}]}` (in force now; `eur_usd.state` ok / stale / missing = conversion runs or is stopped);
 `GET /v1/fx/rates/history?quote=&days=`. A listing's own conversion is on its row (`original`).
 
+**Reliability** (`/v1/reliability/*`): one row per provider = `provider`, `probes` (our checks: status,
+availability, latency, reasons; `source: opengrid_probes`), `freshness[]` (per stream: cadence, age, p95, lag;
+`source: opengrid_feeds`), `feed_health` (`source: opengrid_feeds`). Detail adds `targets[]` with each target's
+hourly series per vantage point. `/dips` = hours with a failed check and their measured scope;
+`/v1/reliability/incidents` = providers' own status-page incidents (`source: provider_status_page`, reported, not
+measured). UptimeProject data is never served here. `/v1/reliability` itself (provider reliability from OpenGrid's
+own launches, api/execution.py) stays key-only: whether it becomes public is an open decision. The probe agents keep
+`GET /v1/probes/targets` and `POST /v1/probes/ingest` (agent routes, not Data API).
+
 **Timestamps** end in `Z`, in `data` and `meta`.
 
 **Lists** page by cursor: `limit` (max 1000) and `cursor`; `meta.next_cursor` (null on the last page), `meta.total`.

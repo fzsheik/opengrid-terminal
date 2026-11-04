@@ -2,7 +2,8 @@
    Raw results are stored (probe_results); this page shows the rollups and says, for every dip, WHO could not reach the
    provider (regional vs global), WHICH provider region it was (when the provider has regional endpoints), and WHY
    (the classified failure: dns, timeout, tls, http_5xx ...). Separate from /uptime (UptimeProject's data).
-   Sources: /v1/probes/summary, /v1/probes/targets/{id}, /v1/probes/dips, /v1/probes/raw, /v1/probes/agents (in summary meta). */
+   Sources: /v1/reliability/providers (probes block), /v1/reliability/providers/{p} (targets), .../dips,
+   /v1/reliability/probes (raw), /v1/reliability/agents. */
 (() => {
   const { h, fmt } = OG;
   const REFRESH_MS = 120000;
@@ -39,8 +40,10 @@
       // ------------------------------------------------------------ providers
       async function load() {
         try {
-          const res = await ctx.api("/v1/probes/summary", { params: { hours: st.hours }, full: true, slot: "probes" });
-          st.rows = res.data; st.meta = res.meta;
+          const [res, ag] = await Promise.all([ctx.api("/v1/reliability/providers", { params: { hours: st.hours }, full: true, slot: "probes" }),
+            ctx.api("/v1/reliability/agents", { slot: "probe-agents" })]);
+          // one row per provider with probe targets: its probes block, flattened as this page reads it
+          st.rows = res.data.filter(r => r.probes).map(r => ({ provider: r.provider, ...r.probes })); st.meta = { ...res.meta, agents: ag };
           OG.status.asOf(res.meta && res.meta.as_of);
         } catch (e) { if (!e.stale && !st.rows.length) tblBox.replaceChildren(OG.error(e, load)); return; }
         drawVantage(); drawTable();
@@ -86,11 +89,14 @@
         OG.qs.set({ provider: st.provider, target: st.target });
         const tSeg = row.targets.length > 1 ? OG.seg(row.targets.map(t => [t.id, t.region || t.name]), st.target, v => { st.target = v; loadDetail(); }) : null;
         detail.replaceChildren(OG.section(OG.providerName(row.provider), tSeg, OG.loading("Loading probe history…")));
-        let d, raw = [];
+        let d, raw = [], fails = [];
         try {
-          [d, raw] = await Promise.all([
-            ctx.api("/v1/probes/targets/" + encodeURIComponent(st.target), { params: { hours: st.hours }, full: true, slot: "probe-t" }).then(r => r.data),
-            ctx.api("/v1/probes/raw", { params: { target: st.target, limit: 60 }, full: true, slot: "probe-raw" }).then(r => r.data)]);
+          [d, raw, fails] = await Promise.all([
+            ctx.api("/v1/reliability/providers/" + encodeURIComponent(row.provider), { params: { hours: st.hours }, slot: "probe-t" })
+              .then(p => (p.targets || []).find(t => t.id === st.target) || Promise.reject(new Error("target not found"))),
+            ctx.api("/v1/reliability/probes", { params: { target: st.target, limit: 60 }, full: true, slot: "probe-raw" }).then(r => r.data),
+            ctx.api("/v1/reliability/probes", { params: { target: st.target, limit: 20, failures_only: true }, slot: "probe-fail" })]);
+          d = { ...d, recent_failures: fails };
         } catch (e) { if (!e.stale) detail.replaceChildren(OG.section(OG.providerName(row.provider), OG.error(e, loadDetail))); return; }
         drawDetail(row, d, raw, tSeg);
       }
@@ -142,7 +148,7 @@
       async function fillDips(row) {
         let res;
         const days = Math.max(1, Math.min(30, Math.ceil(st.hours / 24)));
-        try { res = await ctx.api("/v1/probes/dips", { params: { provider: row.provider, days }, full: true, slot: "probe-dips" }); }
+        try { res = await ctx.api("/v1/reliability/providers/" + encodeURIComponent(row.provider) + "/dips", { params: { days }, full: true, slot: "probe-dips" }); }
         catch (e) { if (!e.stale) dipsBox.replaceChildren(OG.error(e, () => fillDips(row))); return; }
         const rows = res.data.filter(r => r.target_id === st.target);
         if (!rows.length) { dipsBox.replaceChildren(OG.empty("No failed checks for this target in the last " + days + " day" + (days === 1 ? "" : "s") + ".")); return; }

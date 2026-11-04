@@ -3,8 +3,10 @@
 OpenGrid's own measurements of whether each provider's public API answers, run from every **vantage point** that
 reports, with every raw result stored and the rollups derived from it.
 
-Kind: **observed**. Code: `probes/`. API: `GET /v1/probes/summary`, `/targets`, `/targets/{id}`, `/dips`, `/raw`,
-`/agents`; `POST /v1/probes/ingest` (scope `probes:write`). Page: `/probes`.
+Kind: **observed**. Code: `probes/`. API: `GET /v1/reliability/providers` (each provider's `probes` block),
+`/v1/reliability/providers/{provider}` (each target's series), `/v1/reliability/providers/{provider}/dips`,
+`/v1/reliability/targets`, `/v1/reliability/agents`, `/v1/reliability/probes` (raw); agents use `GET /v1/probes/targets`
+and `POST /v1/probes/ingest` (scope `probes:write`). Page: `/probes`.
 
 This is a separate dataset from the [UptimeProject data](/methodology/uptime). It does not feed
 [provider reliability](/methodology/reliability) or any routing score, and says nothing about GPU capacity.

@@ -376,14 +376,14 @@ from api import probes as probes_api  # noqa: E402  (registers the probe_local +
 from api import capacity as capacity_api  # noqa: E402
 from api import reserved as reserved_api  # noqa: E402  (read-only; never part of listings or statistics)
 from api import fx as fx_api  # noqa: E402  (registers the fx_rates background job)
-from api import freshness as freshness_api  # noqa: E402  (public, read-only, like capacity)
+from api import reliability as reliability_api  # noqa: E402  (Data API: our probes, freshness, status pages)
 from api import cost as cost_api  # noqa: E402  (full cost; registers the cost_components background job)
 from api import live as live_api  # noqa: E402  (live feeds; registers the lium_stream supervisor job)
 from api import context as context_api  # noqa: E402  (market context; registers context_series when configured)
 from api import shifts as shifts_api  # noqa: E402  (registers the market_shifts job; never causal)
 
 for _module in (execution_api, partners_api, product_api, reconcile_api, uptime_api, probes_api, capacity_api,
-                reserved_api, fx_api, freshness_api, cost_api,
+                reserved_api, fx_api, reliability_api, cost_api,
                 live_api, context_api, shifts_api):
     app.include_router(_module.router)
 

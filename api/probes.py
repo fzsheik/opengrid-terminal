@@ -1,16 +1,9 @@
-"""OpenGrid's own provider probes: raw results in, rollups that tell regional from global out.
+"""The probe agents' own routes (not Data API: the public view is /v1/reliability/*, api/reliability.py).
 
-    GET  /v1/probes/targets          what is probed (public URLs, accepted statuses, provider region)
+    GET  /v1/probes/targets          what is probed (public URLs, accepted statuses, provider region); agents read it
     POST /v1/probes/ingest           a remote agent posts raw results                       [probes:write]
-    GET  /v1/probes/summary          per provider: status now, availability, latency, who reported, failure reasons
-    GET  /v1/probes/targets/{id}     one target: hourly series, per-vantage-point latency, recent raw failures
-    GET  /v1/probes/dips             every hour with a failed check: vantage-point scope, provider-region context,
-                                     failure reasons, overlapping provider-reported incidents
-    GET  /v1/probes/raw              raw results, newest first (audit)
-    GET  /v1/probes/agents           the vantage points that have reported
 
-Measured by OpenGrid itself, from the vantage points listed in /agents. A single vantage point cannot tell a provider
-outage from a path problem; the scope fields say so. Methodology: /methodology/probes.
+Agents call the main host with their key (probes/agent.py). Methodology: /methodology/probes.
 """
 
 import re
@@ -73,41 +66,3 @@ def ingest(body: IngestIn, who: Principal = Depends(WRITE)):
         raise HTTPException(422, "agent_id must be 1-48 of A-Za-z0-9_.:- and location 2-32 lowercase letters, digits or dashes")
     out = store.record([r.model_dump() for r in body.results], body.agent_id, body.location)
     return _env(out)
-
-
-@router.get("/v1/probes/summary", tags=["probes"], summary="Per provider: status, availability, latency, reasons")
-def summary(hours: int = Query(24, ge=1, le=720), who: Principal = Depends(READ)):
-    rows = store.summary(hours)
-    return _env(rows, hours=hours, agents=store.agents(), providers_with_targets=len(rows))
-
-
-@router.get("/v1/probes/targets/{target_id:path}", tags=["probes"], summary="One target: series, per vantage point, failures")
-def one_target(target_id: str, hours: int = Query(24, ge=1, le=720), who: Principal = Depends(READ)):
-    t = targets.BY_ID.get(target_id)
-    if t is None:
-        raise HTTPException(404, f"unknown target {target_id!r}")
-    return _env({**t.public(), **store.target_series(target_id, hours), "recent_failures": store.raw(target_id, limit=20, failures_only=True)},
-                hours=hours)
-
-
-@router.get("/v1/probes/dips", tags=["probes"], summary="Hours with a failed check, with scope and reason")
-def dips(provider: str, days: int = Query(7, ge=1, le=30), who: Principal = Depends(READ)):
-    if not targets.for_provider(provider):
-        raise HTTPException(404, f"no probe targets for provider {provider!r}")
-    return _env(store.dips(provider, days), provider=provider, days=days, agents=len(store.agents()),
-                scope_note=("scope is by vantage point: global = every reporting location failed (at least two reported); "
-                            "regional = some failed while others succeeded; unconfirmed = only one location reported. "
-                            "region_scope compares the provider's own regional endpoints in the same hour."))
-
-
-@router.get("/v1/probes/raw", tags=["probes"], summary="Raw probe results, newest first")
-def raw(target: str, location: str | None = None, limit: int = Query(100, ge=1, le=500), failures_only: bool = False,
-        who: Principal = Depends(READ)):
-    if target not in targets.BY_ID:
-        raise HTTPException(404, f"unknown target {target!r}")
-    return _env(store.raw(target, location, limit, failures_only), target=target)
-
-
-@router.get("/v1/probes/agents", tags=["probes"], summary="Vantage points that have reported")
-def agents(who: Principal = Depends(READ)):
-    return _env(store.agents())

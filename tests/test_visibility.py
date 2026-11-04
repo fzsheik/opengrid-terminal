@@ -412,7 +412,7 @@ def test_every_public_route_is_clean():
                  "/v1/listings", "/v1/reserved", "/v1/markets/{gpu}/history/archived", "/v1/best/{gpu}", "/listings",
                  "/history", "/market", "/gpu/{slug}", "/v1/listings/history", "/v1/markets",
                  # 2026-11-02 release: freshness, full cost (API and page)
-                 "/v1/freshness", "/v1/costs/components", "/v1/costs/billing", "/v1/costs/sources",
+                 "/v1/reliability/providers", "/v1/costs/components", "/v1/costs/billing", "/v1/costs/sources",
                  "/v1/costs/presets", "/cost", "/v1/context/power", "/v1/context/series"):
         assert must in templates, must
     status, bad = {}, []
@@ -622,7 +622,7 @@ def test_fireworks_is_wholly_internal():
     c = _client()
     slug = gpu_slug(gpu)
     for url in (f"/v1/gpus/{slug}", f"/v1/markets/{slug}", f"/v1/best/{slug}", "/v1/listings?provider=fireworks",
-                "/v1/providers", "/v1/freshness", "/listings?q=fireworks", "/history?q=fireworks", "/market"):
+                "/v1/providers", "/v1/reliability/providers", "/listings?q=fireworks", "/history?q=fireworks", "/market"):
         r = c.get(url, headers=BASIC if url.startswith(("/listings", "/history", "/market")) else {})
         assert r.status_code in (200, 404), (url, r.status_code)
         body = r.text.lower()
