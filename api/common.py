@@ -56,7 +56,7 @@ def envelope(data: Any, *, kind: str | None = None, methodology: str | None = No
         m["methodology"] = f"/methodology/{methodology}"
     m.update({k: v for k, v in meta.items() if v is not None or k == "next_cursor"})  # null = last page
     if m.get("api_version"):  # a Data API request: public ids and clean numbers (api/contract.public_shape)
-        data = contract.public_shape(data)
+        data, m = contract.public_shape(data), contract.public_shape(m)
     return {"data": data, "meta": m}
 
 
@@ -74,23 +74,35 @@ def cursor_page(items: list, limit: int, cursor: str | None) -> tuple[list, dict
 
     shortcut: the cursor encodes an offset, right for small, slowly changing lists (GPUs, providers, markets);
     time-ordered tables (history, events, news) need keyset cursors (last timestamp + id) instead."""
+    offset = cursor_offset(cursor)
+    limit = max(1, min(limit, MAX_LIMIT))
+    return items[offset: offset + limit], {"limit": limit, "next_cursor": next_cursor(offset, limit, len(items)),
+                                           "total": len(items)}
+
+
+def cursor_offset(cursor: str | None) -> int:
+    """An offset cursor -> its offset (0 without one); a cursor this API did not issue is 400 invalid_cursor."""
     import base64
     import json
 
-    offset = 0
-    if cursor:
-        try:
-            offset = int(json.loads(base64.urlsafe_b64decode(cursor.encode() + b"==").decode())["o"])
-            assert offset >= 0
-        except Exception:
-            raise HTTPException(400, {"code": "invalid_cursor", "param": "cursor",
-                                      "message": "cursor is not one this API returned; omit it to start over"})
-    limit = max(1, min(limit, MAX_LIMIT))
-    out = items[offset: offset + limit]
-    nxt = None
-    if offset + limit < len(items):
-        nxt = base64.urlsafe_b64encode(json.dumps({"o": offset + limit}).encode()).decode().rstrip("=")
-    return out, {"limit": limit, "next_cursor": nxt, "total": len(items)}
+    if not cursor:
+        return 0
+    try:
+        offset = int(json.loads(base64.urlsafe_b64decode(cursor.encode() + b"==").decode())["o"])
+        assert offset >= 0
+        return offset
+    except Exception:
+        raise HTTPException(400, {"code": "invalid_cursor", "param": "cursor",
+                                  "message": "cursor is not one this API returned; omit it to start over"})
+
+
+def next_cursor(offset: int, limit: int, total: int) -> str | None:
+    import base64
+    import json
+
+    if offset + limit >= total:
+        return None
+    return base64.urlsafe_b64encode(json.dumps({"o": offset + limit}).encode()).decode().rstrip("=")
 
 
 def page(items: list, limit: int, offset: int) -> tuple[list, dict]:

@@ -396,6 +396,7 @@ Full docs: web/README.md.
     const o = {};
     for (const k of Object.keys(v)) o[k] = legacyGpu(v[k]);
     if (typeof o.gpu_name === "string") { o.gpu_id = o.gpu; o.gpu = o.gpu_name; }
+    if (typeof o.index === "string" && !("index_id" in o)) o.index_id = o.index;  // Data API says index
     return o;
   }
   // shortcut: chart code reads lowest / highest; Data API time series say low / high. Remove when charts read

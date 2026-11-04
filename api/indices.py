@@ -77,9 +77,8 @@ def list_indices(kind: Literal["gpu", "spot", "regional", "provider_class", "com
 @router.get("/v1/indices/{index_id}", summary="One index: definition, level, constituents, statistics")
 def index_detail(index_id: str, _: Principal = Depends(READ)):
     d = _index(index_id)
-    lv = indices.index_level(index_id)
-    return envelope({"definition": d.as_dict(), **lv, "constituents_now": indices.constituents_now(index_id)},
-                    **_meta())
+    lv = indices.index_level(index_id)  # definition fields once, then the current state
+    return envelope({**d.as_dict(), **lv, "constituents_now": indices.constituents_now(index_id)}, **_meta())
 
 
 @ttl_cache(300, maxsize=512)
@@ -91,11 +90,11 @@ def _history(index_id: str, window: str, resolution: str):
 
 
 @router.get("/v1/indices/{index_id}/history", summary="Stored index levels over a window")
-def index_history(index_id: str, window: Window = "30d", resolution: Resolution | None = None,
+def index_history(index_id: str, window: Window = "30d", interval: Resolution | None = None,
                   _: Principal = Depends(READ)):
     d = _index(index_id)
-    res = _resolution(window, resolution)
-    return envelope({"index_id": index_id, "name": d.name, "unit": d.unit, "window": window, "resolution": res,
+    res = _resolution(window, interval)
+    return envelope({"index": index_id, "index_name": d.name, "unit": d.unit, "window": window, "interval": res,
                      "points": _history(index_id, window, res)}, **_meta())
 
 

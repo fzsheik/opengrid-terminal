@@ -452,7 +452,7 @@ def test_db_fetch_and_api():
         body = resp.json()
         m = body["meta"]
         assert m["kind"] == "estimated" and m["methodology"] == "/methodology/full-cost" and "never" in m["rule"]
-        assert m["job"]["egress_gb"] == 10000 and m["job"]["gpu"] == H100 and m["lower_bound"] == 1
+        assert m["job"]["egress_gb"] == 10000 and m["job"]["gpu_name"] == H100 and m["lower_bound"] == 1
         got = {r["provider"]: r for r in body["data"]}
         assert set(got) == {"aws", "verda", "oracle"}  # the 2-day-old CoreWeave listing is gone, not priced
         assert got["aws"]["total"] == 5011.69 and got["verda"]["unknown"] == ["egress_internet"]

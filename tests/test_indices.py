@@ -323,11 +323,11 @@ def test_endpoints():
         body = r.json()
         assert body["meta"]["methodology"] == "/methodology/indices" and body["data"]
         r = c.get("/v1/indices/h100-80gb-sxm5")
-        assert r.status_code == 200 and r.json()["data"]["definition"]["unit"] == "usd_per_gpu_hour"
+        assert r.status_code == 200 and r.json()["data"]["unit"] == "usd_per_gpu_hour" and "definition" not in r.json()["data"]
         assert c.get("/v1/indices/nope").status_code == 404
         r = c.get("/v1/indices/gpu-compute/history", params={"window": "7d"})
-        assert r.status_code == 200 and r.json()["data"]["resolution"] == "1h" and r.json()["data"]["points"]
-        r = c.get("/v1/indices/gpu-compute/history", params={"window": "all", "resolution": "1d"})
+        assert r.status_code == 200 and r.json()["data"]["interval"] == "1h" and r.json()["data"]["points"]
+        r = c.get("/v1/indices/gpu-compute/history", params={"window": "all", "interval": "1d"})
         assert r.status_code == 200 and 39 <= len(r.json()["data"]["points"]) <= 42
         assert c.get("/v1/indices/gpu-compute/history", params={"window": "5y"}).status_code == 422
         r = c.get("/v1/markets/h100-80gb-sxm5/history", params={"window": "7d"})

@@ -292,7 +292,18 @@ series. Sub-resources keep one shape each: `/history/daily` (archived then obser
 `/history/archived` (Internet Archive / AWS price-list captures, never in statistics), `/history/dispersion`.
 Time series name aggregates `low` / `high` like everything else.
 
-**Timestamps** end in `Z`.
+**Index** (`/v1/indices/{index}`): the definition fields once (`id`, `name`, `kind`, `segment`, `unit`, `gpu`,
+`components`, `description`, ...) then the current state (`published`, `level`, `raw_level`, `hour`, `changes`,
+`volatility`, ...) and `constituents_now`. Index history: `index`, `index_name`, `unit`, `window`, `interval`,
+`points`. Any `index_id` field is named `index` (the id, like `gpu` / `provider`).
+
+**Fixing** values (`value`, `raw`, in fixings, their inputs and verify results) are **exact decimal strings** of the
+stored double (`"2.2494934019"`), never JSON floats: money may settle on them and float handling must not touch
+them. Fixings and restatements page by cursor (`meta.next_cursor`, `meta.total`).
+Open decision: a rounding rule for published fixings (e.g. 4 decimals, round half to even) is a settlement
+methodology change, so it is not applied; today the full stored value is published.
+
+**Timestamps** end in `Z`, in `data` and `meta`.
 
 **Lists** page by cursor: `limit` (max 1000) and `cursor`; `meta.next_cursor` (null on the last page), `meta.total`.
 
