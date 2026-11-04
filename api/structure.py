@@ -170,11 +170,12 @@ def market_regions(gpu: str, who: Principal = Depends(READ)):
                          "group; premium = group median / global median - 1")
 
 
-@router.get("/v1/markets/{gpu}/dispersion", summary="Dispersion of one GPU over time")
-def market_dispersion(gpu: str, days: int = Query(30, ge=1, le=365), resolution: str = Query("1d", pattern="^(1h|1d)$"),
+@router.get("/v1/markets/{gpu}/history/dispersion", summary="Dispersion of one GPU over time")
+def market_dispersion(gpu: str, days: int = Query(30, ge=1, le=365), interval: str = Query("1d", pattern="^(1h|1d)$"),
                       who: Principal = Depends(READ)):
-    name = resolve_gpu(gpu)
-    return envelope(dispersion.history(name, days, resolution), kind=INFERRED, methodology=dispersion.METHODOLOGY)
+    data = dict(dispersion.history(_gpu_only(gpu), days, interval))
+    data["interval"] = data.pop("resolution", interval)
+    return envelope(data, kind=INFERRED, methodology=dispersion.METHODOLOGY)
 
 
 def _coverage(listings: list[dict]) -> dict:

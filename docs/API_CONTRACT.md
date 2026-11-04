@@ -72,7 +72,7 @@ Error (every `/v1` error, including auth and rate limits):
 - **Enums**: lowercase strings. Clients must accept values they have not seen.
 - **Corrections**: never silent. A corrected value carries `revised_at` and a reason; fixings use restatements.
 - **Pagination**: cursors on every list. Pass `cursor` back until `meta.next_cursor` is `null`. `limit` caps a page.
-- **Time series**: always `<thing>/history` with `from`, `to`, `interval`, `cursor`.
+- **Time series**: always `<thing>/history`; `window` (or `from` / `to` on change feeds), `interval`, and a cursor where rows can be many.
 
 ## 6. IDs
 
@@ -266,6 +266,33 @@ rows: `gpu`, `listings {live, priced, available}`, `price_per_gpu_hour` (its low
 **GPU by region** (`/v1/markets/{gpu}/regions`): `gpu`, `global {price, providers}`, `regions[]` with
 `region_group`, `price`, `low_provider`, `providers`, `provider_ids`, `listings {live, available}`,
 `premium_vs_global_median`, `reason`.
+
+**Listing** (`/v1/listings`): one offer as the provider publishes it, cheapest first.
+```json
+{"provider": "lambda", "provider_name": "Lambda", "listing_id": "...", "sku": "...",
+ "gpu": "nvidia-h100-80gb-sxm5", "gpu_name": "NVIDIA H100 80GB SXM5", "raw_gpu_name": "H100 SXM5 80GB",
+ "gpu_count": 8, "region": "us-east-1", "country": "US", "region_group": "US",
+ "market_type": "on_demand", "interruptible": false, "provider_tier": null,
+ "price_per_gpu_hour": 2.49, "price_per_instance_hour": 19.92, "currency": "USD",
+ "original": null,
+ "available": true, "capacity": null, "capacity_unit": null, "vcpu": 208, "ram_gb": 1800, "storage_gb": 24000,
+ "observed_at": "2026-11-03T14:00:00Z", "first_seen_at": "2026-10-01T09:00:00Z", "trust": {"...": "..."}}
+```
+`original` is set when the provider prices in another currency: `{currency, price_per_gpu_hour,
+price_per_instance_hour, fx {rate, date, source, legs}}` (`legs` for a cross rate: EUR->USD and EUR->X).
+An unmapped GPU has `gpu: null` and keeps `raw_gpu_name`.
+
+**Listing change** (`/v1/listings/history`): `provider`, `listing_id`, `observed_at`, `gpu`, `gpu_count`, `region`,
+`market_type`, `price_per_gpu_hour`, `price_per_instance_hour`, `available`, `capacity`, `capacity_unit`.
+Change-only, newest first, keyset cursor (stable while new rows arrive); `from` / `to` bound the time.
+
+**Price history** (`/v1/markets/{gpu}/history`, `?window=24h|7d|30d|90d|ytd|all&interval=1h|1d&segment=`):
+`series` points `{t, low, median, high, providers}` plus the GPU's `index` line; `currency` and `unit` once per
+series. Sub-resources keep one shape each: `/history/daily` (archived then observed, `kind` per day),
+`/history/archived` (Internet Archive / AWS price-list captures, never in statistics), `/history/dispersion`.
+Time series name aggregates `low` / `high` like everything else.
+
+**Timestamps** end in `Z`.
 
 **Lists** page by cursor: `limit` (max 1000) and `cursor`; `meta.next_cursor` (null on the last page), `meta.total`.
 

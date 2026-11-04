@@ -15,6 +15,7 @@ The Compute API (jobs, routing, reservations, accounts...) keeps FastAPI's {"det
 import json
 import logging
 import re
+from datetime import datetime
 
 import observability
 from config import settings
@@ -28,7 +29,7 @@ HEADER = "OpenGrid-Version"
 
 # First path segment after /v1/ of every Data API area. Shrinks to the contract's route list as routes move.
 DATA_AREAS = frozenset({
-    "gpus", "families", "providers", "regions", "hardware", "markets", "spreads", "compare", "heatmaps", "history",
+    "gpus", "families", "providers", "regions", "hardware", "markets", "listings", "spreads", "compare", "heatmaps", "history",
     "reserved", "indices", "fixings", "capacity", "cost", "fx", "uptime", "probes", "freshness", "trust",
     "events", "shifts", "news", "timeline", "overview", "tape", "opportunities", "live", "context", "methodology",
 })
@@ -104,7 +105,8 @@ def public_shape(v):
     """Data API response body rules applied in one place (docs/API_CONTRACT.md sections 5-6), on a copy:
         * a `gpu` field holding a canonical name becomes the public id, with `gpu_name` beside it;
         * a `provider` field (already the id) gets `provider_name` (display name) beside it;
-        * computed floats lose binary noise (12 significant digits: 2.4215999999999998 -> 2.4216)."""
+        * computed floats lose binary noise (12 significant digits: 2.4215999999999998 -> 2.4216);
+        * UTC timestamps end in Z (2026-11-03T14:00:00Z, not +00:00)."""
     import gpu_ids
     import provider_meta
 
@@ -124,6 +126,10 @@ def public_shape(v):
         return [public_shape(x) for x in v]
     if isinstance(v, float) and v == v and v not in (float("inf"), float("-inf")):
         return float(f"{v:.12g}")
+    if isinstance(v, datetime):
+        v = v.isoformat()
+    if isinstance(v, str) and v.endswith("+00:00") and _ISO.match(v):
+        return v[:-6] + "Z"
     return v
 
 
@@ -134,6 +140,7 @@ def current_version() -> str | None:
 
 
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}")
 
 
 class ContractMiddleware:

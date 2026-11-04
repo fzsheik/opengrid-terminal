@@ -3,13 +3,10 @@
     GET /v1/fx            the EUR->USD rate in force now, its date, and whether conversion runs (ok) or is
                           stopped (stale / missing: fail closed)
     GET /v1/fx/rates      stored EUR->USD reference rates, newest first (days)
-    GET /v1/fx/listings   current listings priced in another currency and converted to USD, with provenance:
-                          original currency and amount, the rate and the rate's date (provider); a cross-rate
-                          listing (fx_source "ecb_cross") also carries both legs (fx_legs)
     GET /v1/fx/cross      every ECB currency's X->USD cross rate in force now, its two legs and its state
 
-Every converted listing is still a USD listing (`currency` USD) for statistics; the provenance fields are also on
-GET /listings and /history rows. Methodology: /methodology/fx.
+Every converted listing is still a USD listing (`currency` USD) for statistics; the provenance is on every
+GET /v1/listings row (`original`). Methodology: /methodology/fx.
 """
 
 from fastapi import APIRouter, Depends, Query
@@ -45,7 +42,3 @@ def cross(who: Principal = Depends(READ)):
                     min_rate=fx.MIN_CROSS_RATE, max_age_days=fx.MAX_AGE_DAYS)
 
 
-@router.get("/v1/fx/listings", tags=["fx"], summary="Listings converted to USD, with their FX provenance")
-def converted(provider: str | None = None, who: Principal = Depends(READ)):
-    rows = fx.converted_listings(provider)
-    return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows), price_concept="list_price converted at the ECB reference rate")

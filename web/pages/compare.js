@@ -1,7 +1,7 @@
 /* /compare/:a-vs-:b and /compare?a=&b=[&gpu=]: side by side.
 
 Each side resolves to a GPU (canonical slug), a provider, or a region group:
-  GPU vs GPU            /v1/compare + /v1/markets/{a,b} (providers selling both) + /v1/history/{a,b} (overlay)
+  GPU vs GPU            /v1/compare + /v1/markets/{a,b} (providers selling both) + /v1/markets/{a,b}/history (overlay)
   provider vs provider  /v1/compare (coverage, relative value, common GPUs) + /market/detail for one common GPU
                         (?gpu= picks it: "the same GPU across providers")
   region vs region      /v1/heatmaps/gpu-region-* ("the same GPU across regions"; ?gpu= highlights one)
@@ -64,7 +64,7 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
     return OG.charts.timeseries(el, { times: ts, series, height: opts.height || 280, label: opts.label, hatchBefore: opts.hatchBefore });
   }
   async function gpuLines(api, side, win) {
-    const hist = await api("/v1/history/" + side.id, { params: { window: win[0] } }).catch(() => null);
+    const hist = OG.legacyHistory(await api("/v1/markets/" + side.id + "/history", { params: { window: win[0] } }).catch(() => null));
     const pts = hist && hist.series ? hist.series.filter(p => p.median != null) : [];
     if (pts.length >= 6) return { hourly: true, coherent: hist.coherent_from, median: pts.map(p => ({ t: p.t, v: p.median })), low: pts.map(p => ({ t: p.t, v: p.lowest })) };
     const d = await api("/market/detail", { params: { gpu: side.name, hours: win[2] } }).catch(() => null);

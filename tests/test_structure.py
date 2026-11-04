@@ -300,7 +300,7 @@ def _endpoints():
 
     c = TestClient(main.app)  # not entered: no lifespan, so nothing touches the dev database
     for path in ("/v1/gpus", "/v1/gpus/h100-80gb-sxm5", "/v1/markets", "/v1/markets/h100-80gb-sxm5",
-                 "/v1/markets/h100-80gb-sxm5/dispersion", "/v1/markets/h100-80gb-sxm5/dispersion?resolution=1h&days=2",
+                 "/v1/markets/h100-80gb-sxm5/history/dispersion", "/v1/markets/h100-80gb-sxm5/history/dispersion?interval=1h&days=2",
                  "/v1/providers", "/v1/providers/syn_alpha", "/v1/regions",
                  "/v1/heatmaps/gpu-region-cheapest", "/v1/heatmaps/gpu-time-volatility",
                  "/v1/compare?a=h100-80gb-sxm5&b=h200-141gb-sxm5", "/v1/compare?a=syn_alpha&b=syn_beta"):

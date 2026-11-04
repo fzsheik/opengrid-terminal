@@ -186,6 +186,39 @@ def test_data_host_is_key_only():
         settings.data_api_host = old
 
 
+def _all_pages(path, **params):
+    rows, cursor = [], None
+    for _ in range(1000):
+        r = client.get(path, params={**params, **({"cursor": cursor} if cursor else {})})
+        assert r.status_code == 200, r.text
+        rows += r.json()["data"]
+        cursor = r.json()["meta"]["next_cursor"]
+        if not cursor:
+            return rows
+    raise AssertionError("cursor never ended")
+
+
+def test_listings_match_the_table_and_page_completely():
+    from sqlalchemy import text
+
+    with normalize.SessionLocal() as s:
+        want = {(r.provider, r.listing_id) for r in s.execute(text(
+            "SELECT provider, listing_id FROM compute_listings WHERE visibility = 'public'"))}
+        obs = s.execute(text("SELECT count(*) FROM listing_observations o JOIN compute_listings c "
+                             "USING (provider, listing_id) WHERE c.visibility = 'public'")).scalar()
+    got = _all_pages("/v1/listings", limit=3)
+    assert len(got) == len(want) and {(r["provider"], r["listing_id"]) for r in got} == want
+    prices = [r["price_per_gpu_hour"] for r in got if r["price_per_gpu_hour"] is not None]
+    assert prices == sorted(prices), "cheapest first"
+    row = got[0]
+    assert row["currency"] == "USD" and "trust" in row and row["region_group"] and row["observed_at"].endswith("Z")
+    hist = _all_pages("/v1/listings/history", limit=7)
+    keys_ = [(r["observed_at"], r["provider"], r["listing_id"]) for r in hist]
+    assert obs > 7 and len(hist) == obs and len(set(keys_)) == obs, "keyset cursor: every change once"
+    assert [k[0] for k in keys_] == sorted((k[0] for k in keys_), reverse=True), "newest first"
+    assert assert_error(client.get("/v1/listings/history", params={"cursor": "junk"}), 400)["code"] == "invalid_cursor"
+
+
 def test_compute_api_keeps_detail():
     r = client.get("/v1/jobs/job-doesnotexist")
     assert r.status_code >= 400 and "error" not in r.json(), r.text

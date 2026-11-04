@@ -330,10 +330,10 @@ def test_endpoints():
         r = c.get("/v1/indices/gpu-compute/history", params={"window": "all", "resolution": "1d"})
         assert r.status_code == 200 and 39 <= len(r.json()["data"]["points"]) <= 42
         assert c.get("/v1/indices/gpu-compute/history", params={"window": "5y"}).status_code == 422
-        r = c.get("/v1/history/h100-80gb-sxm5", params={"window": "7d"})
+        r = c.get("/v1/markets/h100-80gb-sxm5/history", params={"window": "7d"})
         d = r.json()["data"]
         assert r.status_code == 200 and d["series"] and d["index"]["points"] and d["gpu_name"] == H100
-        assert c.get("/v1/history/not-a-gpu").status_code == 404
+        assert c.get("/v1/markets/not-a-gpu/history").status_code == 404
         r = c.get("/v1/markets/h100-80gb-sxm5")  # historical context is part of the GPU's market
         assert r.status_code == 200 and r.json()["data"]["context"]["gpu_name"] == H100
         r = c.get("/v1/providers/syn_alpha/gpus/h100-80gb-sxm5/context")

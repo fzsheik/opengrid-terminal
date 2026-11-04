@@ -5,18 +5,18 @@ Data (all in parallel, each section renders as soon as its own request lands):
   /v1/markets/{slug}           current market (price, stats, score, by_provider + change_24h), capability,
                                alternatives, historical context (percentile, label, sentence)
   /v1/indices/{slug}           OpenGrid index level, 24h/7d/30d/90d changes, volatility       (soft: reason shown)
-  /v1/history/{slug}?window=   hourly lowest / median / highest + index line (chart, market view)
+  /v1/markets/{slug}/history?window=   hourly low / median / high + index line (chart, market view)
   /market/detail?gpu=&hours=   per-provider step lines (chart, providers view; fine grid for thin history)
   /v1/timeline?gpu=&window=    availability history, inferred price moves, events + news markers
   /v1/timeline/around          "related, not necessarily causal" panel when a move is clicked
-  /v1/history/{slug}/archived  ARCHIVED monthly prices per provider (Internet Archive captures, AWS price lists)
-  /v1/events?gpu=  /v1/news?gpu=  /v1/best/{slug}  /v1/trust/listings?gpu=  /v1/heatmaps/gpu-region-*
+  /v1/markets/{slug}/history/archived  ARCHIVED monthly prices per provider (Internet Archive captures, AWS price lists)
+  /v1/events?gpu=  /v1/news?gpu=  /v1/best/{slug}  /v1/listings?gpu=  /v1/heatmaps/gpu-region-*
 Nothing is computed here that the API does not state, except display arithmetic (spread, $ deltas).
 */
 (() => {
   const { h, fmt, Lib: L } = OG;
   const WINDOWS = [["24h", "24H", 24], ["7d", "7D", 168], ["30d", "30D", 720], ["90d", "90D", 2160], ["1y", "1Y", 8760], ["all", "ALL", 0]];
-  // these windows read /v1/history/{slug}/extended: daily, archived prices before recording joined to observed ones
+  // these windows read /v1/markets/{slug}/history/daily: daily, archived prices before recording joined to observed ones
   const LONG = { "1y": 365, all: 0 };
   const SEV_RANK = { info: 0, notable: 1, major: 2 };
   const DIM_LABEL = { similar_vram: "similar VRAM", same_architecture: "same architecture", same_generation: "same generation",
@@ -257,7 +257,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
         } else provTable.update(rows);
       }
       async function loadTrust() {
-        const [r] = await Promise.all([ctx.api("/v1/trust/listings", { params: { gpu: slug, limit: 1000 } }).catch(() => undefined), OG.data.intervals()]);
+        const [r] = await Promise.all([ctx.api("/v1/listings", { params: { gpu: slug, limit: 1000 } }).catch(() => undefined), OG.data.intervals()]);
         trust = r === undefined ? [] : list(r);
         if (r === undefined) trust.unavailable = true;
         if (st.g) { drawProviders(); drawDistribution(); }
@@ -465,11 +465,11 @@ Nothing is computed here that the API does not state, except display arithmetic 
         let data = null;
         try {
           if (LONG[win] != null) {
-            const x = await ctx.api("/v1/history/" + slug + "/extended", { params: { days: LONG[win] }, slot: "gp-chart" }).catch(e => { if (e.stale) throw e; return null; });
+            const x = OG.legacyHistory(await ctx.api("/v1/markets/" + slug + "/history/daily", { params: { days: LONG[win] }, slot: "gp-chart" }).catch(e => { if (e.stale) throw e; return null; }));
             if (x && x.days && x.days.length && x.market.lowest.some(v => v != null)) data = { kind: "long", x };
           }
           if (!data && view === "market") {
-            const hist = await ctx.api("/v1/history/" + slug, { params: { window: w[0] }, slot: "gp-chart" }).catch(e => { if (e.stale) throw e; return null; });
+            const hist = OG.legacyHistory(await ctx.api("/v1/markets/" + slug + "/history", { params: { window: w[0] }, slot: "gp-chart" }).catch(e => { if (e.stale) throw e; return null; }));
             const pts = hist && hist.series ? hist.series.filter(p => p.lowest != null) : [];
             if (pts.length >= 6) data = { kind: "hourly", hist };
           }
@@ -644,7 +644,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
       const utcDay = iso => (iso ? iso.slice(0, 10) : "-");
       async function loadArchived() {
         let a;
-        try { a = await ctx.api("/v1/history/" + slug + "/archived", { slot: "gp-arch" }); }
+        try { a = OG.legacyHistory(await ctx.api("/v1/markets/" + slug + "/history/archived", { slot: "gp-arch" })); }
         catch (e) { if (!e.stale) archBox.replaceChildren(OG.error(e, loadArchived)); return; }
         const provs = a.providers || [];
         archBox.replaceChildren(

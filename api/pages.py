@@ -94,7 +94,7 @@ def is_page_path(path: str) -> bool:
 
 
 # /v1 areas readable without a key when PUBLIC_PAGES is on (GET/HEAD only).
-PUBLIC_V1 = ("gpus", "markets", "indices", "history", "spreads", "events", "news", "providers", "heatmaps",
+PUBLIC_V1 = ("gpus", "markets", "listings", "indices", "history", "spreads", "events", "news", "providers", "heatmaps",
              "overview", "tape", "methodology", "timeline", "best", "capabilities", "opportunities", "trust",
              "families", "scopes", "fixings", "recommend", "assistant", "compare", "regions", "hardware", "uptime", "probes", "capacity", "fx", "freshness",
              # Major shifts with related items (read-only, like events; never causal).

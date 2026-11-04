@@ -6,7 +6,7 @@ miss if they leaked:
     - a wholly internal provider `syn_hidden` (registered for the test as an ALL_SOURCES entry), selling every seeded
       GPU at SECRET = $0.004321 per GPU-hour, far below every public price, so it would be the market low;
     - an internal listing under a PUBLIC provider (`syn_alpha:zzsecret:...`, the DeepInfra container-API pattern),
-      on demand and spot, with FX provenance (so /v1/fx/listings would list it);
+      on demand and spot, with FX provenance (so /v1/listings would carry its FX provenance);
     - a GPU sold ONLY by internal listings (ONLY_GPU);
     - internal capacity rows (count 4321) and an internal archived price.
 Then every derived table is built (rollups -> indices, structure, events; settlement fixings) and EVERY public route
@@ -409,8 +409,8 @@ def test_every_public_route_is_clean():
     templates = {t for t, _, _ in reqs}
     assert len(templates) >= 80, f"route enumeration found only {len(templates)} public GET routes"
     for must in ("/v1/gpus", "/v1/markets/{gpu}", "/v1/indices/{index_id}", "/v1/fixings", "/v1/capacity",
-                 "/v1/fx/listings", "/v1/reserved", "/v1/history/{gpu}/archived", "/v1/best/{gpu}", "/listings",
-                 "/history", "/market", "/gpu/{slug}", "/v1/trust/listings", "/v1/markets",
+                 "/v1/listings", "/v1/reserved", "/v1/markets/{gpu}/history/archived", "/v1/best/{gpu}", "/listings",
+                 "/history", "/market", "/gpu/{slug}", "/v1/listings/history", "/v1/markets",
                  # 2026-11-02 release: freshness, full cost (API and page)
                  "/v1/freshness", "/v1/cost/components", "/v1/cost/billing", "/v1/cost/sources",
                  "/v1/cost/presets", "/cost", "/v1/context/power", "/v1/context/series"):
@@ -586,7 +586,7 @@ def test_deepinfra_internal_listings_route():
     assert any(c["listing_id"] == "nvidia-b200:8x:api" and c["visibility"] == "internal" for c in allt["candidates"])
     c = _client()
     for url in ("/v1/gpus/b200-180gb-sxm", "/v1/markets/b200-180gb-sxm", "/v1/best/b200-180gb-sxm?count=8",
-                "/listings?q=deepinfra", "/v1/trust/listings?provider=deepinfra"):
+                "/listings?q=deepinfra", "/v1/listings?provider=deepinfra"):
         r = c.get(url, headers=BASIC if url.startswith("/listings") else {})
         assert r.status_code == 200, (url, r.status_code)
         assert ":api" not in r.text and f"{api_price:g}" not in r.text, url
@@ -621,7 +621,7 @@ def test_fireworks_is_wholly_internal():
     assert "fireworks" not in prov.feed_health()
     c = _client()
     slug = gpu_slug(gpu)
-    for url in (f"/v1/gpus/{slug}", f"/v1/markets/{slug}", f"/v1/best/{slug}", "/v1/trust/listings?provider=fireworks",
+    for url in (f"/v1/gpus/{slug}", f"/v1/markets/{slug}", f"/v1/best/{slug}", "/v1/listings?provider=fireworks",
                 "/v1/providers", "/v1/freshness", "/listings?q=fireworks", "/history?q=fireworks", "/market"):
         r = c.get(url, headers=BASIC if url.startswith(("/listings", "/history", "/market")) else {})
         assert r.status_code in (200, 404), (url, r.status_code)

@@ -398,6 +398,16 @@ Full docs: web/README.md.
     if (typeof o.gpu_name === "string") { o.gpu_id = o.gpu; o.gpu = o.gpu_name; }
     return o;
   }
+  // shortcut: chart code reads lowest / highest; Data API time series say low / high. Remove when charts read
+  // low / high directly (docs/API_CONTRACT.md, step 3).
+  function legacyHistory(v) {
+    if (Array.isArray(v)) return v.map(legacyHistory);
+    if (!v || typeof v !== "object") return v;
+    const o = {};
+    for (const k of Object.keys(v)) o[k === "low" ? "lowest" : k === "high" ? "highest" : k] = legacyHistory(v[k]);
+    return o;
+  }
+  OG.legacyHistory = legacyHistory;
   function unwrap(j) {
     if (j && typeof j === "object" && !Array.isArray(j) && "data" in j && j.meta && typeof j.meta === "object" &&
         Object.keys(j).every(k => k === "data" || k === "meta")) return { data: legacyGpu(j.data), meta: j.meta };

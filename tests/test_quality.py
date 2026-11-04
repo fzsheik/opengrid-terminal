@@ -633,7 +633,7 @@ def test_api():
 
         for path in ("/v1/ops/summary", "/v1/ops/providers", "/v1/ops/incidents", "/v1/ops/quarantine",
                      "/v1/ops/schema-changes", "/v1/ops/stale", "/v1/ops/unmapped", "/v1/ops/jobs",
-                     "/v1/trust/providers", f"/v1/trust/listings?provider={FAKE}"):
+                     "/v1/trust/providers", f"/v1/listings?provider={FAKE}"):
             r = client.get(path)
             assert r.status_code == 200, (path, r.status_code, r.text[:500])
             assert "data" in r.json() and "as_of" in r.json()["meta"], path
@@ -641,10 +641,10 @@ def test_api():
         assert summ["quarantine"]["pending"] == 1 and summ["suspicious_price_moves"]["pending"] == 1
         assert summ["routing"]["routing_decisions"]["available"] in (True, False)
         assert summ["providers"]["items"][0]["provider"] == FAKE
-        listings = client.get(f"/v1/trust/listings?provider={FAKE}").json()["data"]
+        listings = client.get(f"/v1/listings?provider={FAKE}").json()["data"]
         l0 = next(x for x in listings if x["listing_id"] == "L0")
         assert l0["price_per_gpu_hour"] == 2.0 and l0["trust"]["confidence"] == "low" and l0["trust"]["held"]
-        assert client.get("/v1/trust/listings?gpu=no-such-gpu").status_code == 404
+        assert client.get("/v1/listings?gpu=no-such-gpu").status_code == 404
         q = client.get("/v1/ops/quarantine").json()["data"]
         assert len(q) == 1
         r = client.post(f"/v1/ops/quarantine/{q[0]['id']}/reject", json={"note": "unit error"})

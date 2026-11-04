@@ -8,7 +8,7 @@
    Data: GET /v1/families/{family}  {id, slug, name, kind, architecture, note, variants: [{gpu, slug, low,
            median, high, providers, available_listings, index_id, index_level, change_24h}], cheapest_variant_now}
          (flattened from the API's price / listings / index blocks by OG.data.family below)
-         GET /v1/history/{variant}?window=  per variant (soft: a variant without history is simply absent)
+         GET /v1/markets/{variant}/history?window=  per variant (soft: a variant without history is simply absent)
          GET /v1/news?gpu=<family>          (soft)
    Exposes OG.views.family(el, family, ctx). */
 (() => {
@@ -103,7 +103,7 @@
     ctx.onCleanup(() => chart && chart.destroy());
     async function loadChart() {
       const win = st.win;
-      const hists = await Promise.all(variants.map(v => ctx.api("/v1/history/" + vslug(v), { params: { window: win } }).catch(() => null)));
+      const hists = await Promise.all(variants.map(v => ctx.api("/v1/markets/" + vslug(v) + "/history", { params: { window: win } }).then(OG.legacyHistory).catch(() => null)));
       if (win !== st.win) return;
       const withData = variants.map((v, i) => ({ v, s: hists[i] && Array.isArray(hists[i].series) ? hists[i].series : [] })).filter(x => x.s.some(p => p.lowest != null));
       if (chart) { chart.destroy(); chart = null; }

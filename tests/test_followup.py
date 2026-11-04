@@ -153,17 +153,9 @@ def test_family_endpoints():
 def test_family_in_gpu_paths():
     c = _client()
     # Data API reference / market routes take one GPU: a family is a 404 that names its own route.
-    for path in ("/v1/markets/h100", "/v1/gpus/h100", "/v1/markets/h100/regions"):
+    for path in ("/v1/markets/h100", "/v1/gpus/h100", "/v1/markets/h100/regions", "/v1/markets/h100/history"):
         r = c.get(path)
         assert r.status_code == 404 and "/v1/families/h100" in r.json()["error"]["message"], (path, r.text)
-    for path, endpoint in (("/v1/history/h100", "history"),):
-        r = c.get(path)
-        assert r.status_code == 200, (path, r.text)
-        b = r.json()
-        assert b["meta"]["kind"] == "family" and b["meta"]["resolved_as"] == "family", (path, b["meta"])
-        assert b["meta"]["endpoint"] == endpoint and b["meta"]["requested"] == "h100"
-        assert all(endpoint in v["links"] for v in b["data"]["variants"])
-        assert "median" not in b["data"]
     # A canonical GPU still gets its own market, unchanged in shape.
     r = c.get("/v1/markets/h100-80gb-sxm5")
     assert r.status_code == 200 and r.json()["meta"]["kind"] == "inferred" and "by_provider" in r.json()["data"]

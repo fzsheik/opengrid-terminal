@@ -5,7 +5,7 @@
    /v1/events?provider=     market events · /v1/news?provider= related news (never presented as a cause)
    /listings                current listings incl. previous price (recent changes)
    /mapping                 field-level provenance and quirks for this provider's feed
-   soft: /v1/trust/providers, /v1/trust/listings?provider=, /v1/providers/{p}/gpus/{gpu}/context */
+   soft: /v1/trust/providers, /v1/listings?provider=, /v1/providers/{p}/gpus/{gpu}/context */
 (() => {
   const { h, fmt, Lib: L } = OG;
   const V = () => OG.views || {};
@@ -295,7 +295,7 @@
       const rawRegions = h("div", { class: "pd-raw" });
 
       async function loadListings() {
-        const [rows, tl] = await Promise.all([ctx.api("/listings").catch(e => e), ctx.api("/v1/trust/listings", { params: { provider: p, limit: 1000 } }).catch(() => null)]);
+        const [rows, tl] = await Promise.all([ctx.api("/listings").catch(e => e), ctx.api("/v1/listings", { params: { provider: p, limit: 1000 } }).catch(() => null)]);
         if (rows instanceof Error) { listEl.replaceChildren(OG.error(rows)); chgEl.replaceChildren(OG.error(rows)); return; }
         const mine = rows.filter(r => r.provider === p);
         const trustBy = new Map((tl || []).map(r => [r.listing_id, r.trust]));

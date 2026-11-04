@@ -5,7 +5,6 @@
                                   and the cheapest variant now (a cross-variant fact, not a family price)
 
 A family's public id is its slug (h100, hopper). Variants carry the same price block as /v1/markets.
-family_response is still used by /v1/history/{gpu} for a family slug (until the history routes move).
 See methodology/families.md.
 """
 
@@ -30,7 +29,7 @@ CHEAPEST_LABEL = ("cross-variant fact: the variant with the lowest current obser
 def links(gpu: str) -> dict:
     s = gpu_ids.gpu_id(gpu)
     return {"gpu": f"/v1/gpus/{s}", "market": f"/v1/markets/{s}", "regions": f"/v1/markets/{s}/regions",
-            "history": f"/v1/history/{s}"}
+            "history": f"/v1/markets/{s}/history"}
 
 
 def _composite(fid: str) -> str | None:
@@ -84,15 +83,6 @@ def family_payload(fid: str) -> dict:
 
 def _member_ids(members):
     return [fam.family_slug(m) for m in members] if members else members
-
-
-def family_response(fid: str, *, requested: str, endpoint: str) -> dict:
-    """The 200 answer when a {gpu} path parameter is a family: the variants, each with its own links."""
-    data = family_payload(fid)
-    return envelope(data, kind="family", resolved_as="family", requested=requested, endpoint=endpoint,
-                    methodology=fam.METHODOLOGY, price_concept=OBSERVED_MARKET_PRICE,
-                    note=f"{requested!r} is a GPU family, not one product. {fam.NOTE} "
-                         f"Follow a variant's links.{endpoint} for its {endpoint} data.")
 
 
 @router.get("/v1/families", tags=["families"], summary="GPU families and their canonical variants")

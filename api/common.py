@@ -54,10 +54,19 @@ def envelope(data: Any, *, kind: str | None = None, methodology: str | None = No
         m["kind"] = kind
     if methodology:
         m["methodology"] = f"/methodology/{methodology}"
-    m.update({k: v for k, v in meta.items() if v is not None})
+    m.update({k: v for k, v in meta.items() if v is not None or k == "next_cursor"})  # null = last page
     if m.get("api_version"):  # a Data API request: public ids and clean numbers (api/contract.public_shape)
         data = contract.public_shape(data)
     return {"data": data, "meta": m}
+
+
+def low_high(v):
+    """Time-series bodies use the Data API's low / high (the internals say lowest / highest)."""
+    if isinstance(v, dict):
+        return {{"lowest": "low", "highest": "high"}.get(k, k): low_high(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [low_high(x) for x in v]
+    return v
 
 
 def cursor_page(items: list, limit: int, cursor: str | None) -> tuple[list, dict]:

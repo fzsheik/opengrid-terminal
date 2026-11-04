@@ -290,8 +290,9 @@ def test_scaleway_end_to_end_with_provenance_and_no_double_count():
         client = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})
         cur = client.get("/v1/fx").json()
         assert cur["data"]["state"] == "ok" and cur["data"]["rate"] == 1.1172 and cur["meta"]["methodology"] == "/methodology/fx"
-        conv = client.get("/v1/fx/listings", params={"provider": "scaleway"}).json()["data"]
-        assert {r["listing_id"] for r in conv} == set(rows) and all(r["original_currency"] == "EUR" for r in conv)
+        conv = client.get("/v1/listings", params={"provider": "scaleway"}).json()["data"]  # FX provenance per row
+        assert {r["listing_id"] for r in conv} == set(rows) and all(r["original"]["currency"] == "EUR" for r in conv)
+        assert all(r["currency"] == "USD" and r["original"]["fx"]["rate"] for r in conv)
         listed = [r for r in client.get("/listings", params={"q": "scaleway"}).json() if r["provider"] == "scaleway"]
         assert len(listed) == 6 and all(r["currency"] == "USD" and r["fx_rate"] for r in listed)
         hist = client.get("/history", params={"q": "scaleway"}).json()
