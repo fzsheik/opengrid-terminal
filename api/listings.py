@@ -10,11 +10,9 @@ never served. Replaces /v1/trust/listings and /v1/fx/listings.
 
 from __future__ import annotations
 
-import base64
-import json
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 
 import fx
@@ -22,7 +20,7 @@ import normalize
 import regions
 from accounts.auth import Principal, require_scope
 from quality import trust
-from api.common import OBSERVED, cursor_page, envelope, resolve_gpu
+from api.common import OBSERVED, cursor_page, envelope, keyset_cursor, keyset_values, resolve_gpu
 
 router = APIRouter()
 READ = require_scope("data:read")
@@ -94,19 +92,6 @@ def listings(gpu: str | None = None, provider: str | None = None, region_group: 
                     price_concept="list_price", trust_kind="inferred", **pg)
 
 
-def _enc(t: datetime, provider: str, listing_id: str) -> str:
-    return base64.urlsafe_b64encode(json.dumps([t.isoformat(), provider, listing_id]).encode()).decode().rstrip("=")
-
-
-def _dec(cursor: str) -> tuple:
-    try:
-        t, p, lid = json.loads(base64.urlsafe_b64decode(cursor.encode() + b"==").decode())
-        return datetime.fromisoformat(t), p, lid
-    except Exception:
-        raise HTTPException(400, {"code": "invalid_cursor", "param": "cursor",
-                                  "message": "cursor is not one this API returned; omit it to start over"})
-
-
 @router.get("/v1/listings/history", summary="Recorded listing changes (price, availability, capacity), newest first")
 def listings_history(gpu: str | None = None, provider: str | None = None, listing_id: str | None = None,
                      from_: datetime | None = Query(None, alias="from"), to: datetime | None = None,
@@ -133,7 +118,7 @@ def listings_history(gpu: str | None = None, provider: str | None = None, listin
         q += " AND o.observed_at < :t1"
         params["t1"] = to
     if cursor:  # keyset: strictly after the last row of the previous page in (observed_at desc, provider, id)
-        params["ct"], params["cp"], params["cl"] = _dec(cursor)
+        params["ct"], params["cp"], params["cl"] = keyset_values(cursor, 3)
         q += " AND (o.observed_at < :ct OR (o.observed_at = :ct AND (o.provider, o.listing_id) > (:cp, :cl)))"
     q += " ORDER BY o.observed_at DESC, o.provider, o.listing_id LIMIT :n"
     with normalize.SessionLocal() as s:
@@ -143,7 +128,7 @@ def listings_history(gpu: str | None = None, provider: str | None = None, listin
             "gpu": r.canonical_gpu_name, "gpu_count": r.gpu_count, "region": r.region, "market_type": r.market_type,
             "price_per_gpu_hour": _num(r.price_per_gpu_hour), "price_per_instance_hour": _num(r.price_per_instance_hour),
             "available": r.available, "capacity": r.capacity, "capacity_unit": r.capacity_unit} for r in rows]
-    nxt = _enc(rows[-1].observed_at, rows[-1].provider, rows[-1].listing_id) if more and rows else None
+    nxt = keyset_cursor(rows[-1].observed_at, rows[-1].provider, rows[-1].listing_id) if more and rows else None
     return envelope(out, kind=OBSERVED, methodology="data-trust", price_concept="list_price",
                     note="change-only: a row is written when price, availability or capacity changes",
                     limit=limit, next_cursor=nxt)

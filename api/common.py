@@ -96,6 +96,29 @@ def cursor_offset(cursor: str | None) -> int:
                                   "message": "cursor is not one this API returned; omit it to start over"})
 
 
+def keyset_cursor(*values) -> str:
+    """An opaque cursor holding the sort key of a page's last row (time-ordered feeds: stable while rows arrive)."""
+    import base64
+    import json
+
+    return base64.urlsafe_b64encode(json.dumps([v.isoformat() if hasattr(v, "isoformat") else v
+                                                for v in values]).encode()).decode().rstrip("=")
+
+
+def keyset_values(cursor: str, n: int) -> list:
+    """keyset_cursor's values (the first one, a timestamp, parsed back); a foreign cursor is 400 invalid_cursor."""
+    import base64
+    import json
+
+    try:
+        vals = json.loads(base64.urlsafe_b64decode(cursor.encode() + b"==").decode())
+        assert isinstance(vals, list) and len(vals) == n
+        return [datetime.fromisoformat(vals[0]), *vals[1:]]
+    except Exception:
+        raise HTTPException(400, {"code": "invalid_cursor", "param": "cursor",
+                                  "message": "cursor is not one this API returned; omit it to start over"})
+
+
 def next_cursor(offset: int, limit: int, total: int) -> str | None:
     import base64
     import json

@@ -444,10 +444,10 @@ def test_db_fetch_and_api():
         from api import pages
         from fastapi.testclient import TestClient
 
-        assert "cost" in pages.PUBLIC_V1 and "/v1/cost/estimate" in pages.PUBLIC_POST
+        assert "costs" in pages.PUBLIC_V1 and "/v1/costs/estimate" in pages.PUBLIC_POST
         cost_api._components.cache_clear()
         client = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})
-        resp = client.post("/v1/cost/estimate", json={"preset": "R1"})
+        resp = client.post("/v1/costs/estimate", json={"preset": "R1"})
         assert resp.status_code == 200, resp.text
         body = resp.json()
         m = body["meta"]
@@ -458,12 +458,12 @@ def test_db_fetch_and_api():
         assert got["aws"]["total"] == 5011.69 and got["verda"]["unknown"] == ["egress_internet"]
         assert got["verda"]["components"]["egress_internet"]["amount"] is None
         # the same job by fields, in TB; storage_class narrows the choice
-        b2 = client.post("/v1/cost/estimate", json={"gpu": "h100-80gb-sxm5", "count": 8, "hours": 72, "egress_tb": 10,
+        b2 = client.post("/v1/costs/estimate", json={"gpu": "h100-80gb-sxm5", "count": 8, "hours": 72, "egress_tb": 10,
                                                     "storage_tb": 20, "storage_class": "object_storage"}).json()
         a2 = {r["provider"]: r for r in b2["data"]}["aws"]
         assert a2["components"]["storage"]["class"] == "object_storage"
         assert a2["components"]["storage"]["amount"] == round(20000 * 0.023 * 72 / 730, 2)
-        assert client.post("/v1/cost/estimate", json={"gpu": "nope", "count": 1, "hours": 1}).status_code == 404
+        assert client.post("/v1/costs/estimate", json={"gpu": "nope", "count": 1, "hours": 1}).status_code == 404
         for bad, code in (({"count": 1, "hours": 1}, "invalid_gpu"),
                           ({"gpu": H100, "count": 0, "hours": 1}, "invalid_count"),
                           ({"gpu": H100, "count": 1}, "missing_hours"),
@@ -471,18 +471,18 @@ def test_db_fetch_and_api():
                           ({"gpu": H100, "count": 1, "hours": 1, "colour": "red"}, "unknown_field"),
                           ({"preset": "R9"}, "invalid_preset"),
                           ({"gpu": H100, "count": 1, "hours": 1, "storage_class": "tape"}, "invalid_storage_class")):
-            r = client.post("/v1/cost/estimate", json=bad)
+            r = client.post("/v1/costs/estimate", json=bad)
             assert r.status_code == 422 and code in r.text, (bad, r.status_code, r.text)
-        assert client.post("/v1/cost/estimate", content="x", headers={"content-type": "text/plain"}).status_code == 415
-        cj = client.get("/v1/cost/components?provider=aws").json()
+        assert client.post("/v1/costs/estimate", content="x", headers={"content-type": "text/plain"}).status_code == 415
+        cj = client.get("/v1/costs/components?provider=aws").json()
         assert {c["component"] for c in cj["data"]} >= {"egress_internet", "block_storage", "object_storage"}
         assert all(isinstance(t["price"], float) for c in cj["data"] for t in c["tiers"])
-        assert client.get("/v1/cost/components?component=bandwidth").status_code == 422
-        src = client.get("/v1/cost/sources").json()["data"]
+        assert client.get("/v1/costs/components?component=bandwidth").status_code == 422
+        src = client.get("/v1/costs/sources").json()["data"]
         assert {s["source"] for s in src} == set(sources.SOURCES) and all(s["last_attempt_ok"] for s in src)
-        bill = {b["provider"]: b for b in client.get("/v1/cost/billing").json()["data"]}
+        bill = {b["provider"]: b for b in client.get("/v1/costs/billing").json()["data"]}
         assert bill["oracle"]["products"]["BM."]["minimum_s"] == 3600
-        assert [p["preset"] for p in client.get("/v1/cost/presets").json()["data"]] == ["R0", "R1", "R2", "R3"]
+        assert [p["preset"] for p in client.get("/v1/costs/presets").json()["data"]] == ["R0", "R1", "R2", "R3"]
         assert client.get("/methodology/full-cost").status_code == 200
         # reads wrote nothing
         with Session() as s:
@@ -494,8 +494,8 @@ def test_db_fetch_and_api():
         config.settings.public_pages = True
         try:
             anon = TestClient(main.app)
-            assert anon.post("/v1/cost/estimate", json={"preset": "R3"}, headers={"X-OpenGrid-Request": "1"}).status_code == 200
-            assert anon.get("/v1/cost/components").status_code == 200
+            assert anon.post("/v1/costs/estimate", json={"preset": "R3"}, headers={"X-OpenGrid-Request": "1"}).status_code == 200
+            assert anon.get("/v1/costs/components").status_code == 200
         finally:
             config.settings.app_password = None
             config.settings.public_pages = old

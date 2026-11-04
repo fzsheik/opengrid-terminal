@@ -1,10 +1,10 @@
 """Full cost: cost components beside the hourly price, listing spec fields, and the reference-job estimator.
 
-    GET  /v1/cost/components   egress, storage and other components per provider (filter provider, component)
-    GET  /v1/cost/billing      billing increment and minimum per provider, with sources
-    GET  /v1/cost/sources      the machine-readable cost sources: last fetch, last success, error
-    GET  /v1/cost/presets      the published reference jobs R0-R3
-    POST /v1/cost/estimate     {gpu, count, hours, egress_tb | egress_gb, storage_tb | storage_gb, storage_class,
+    GET  /v1/costs/components   egress, storage and other components per provider (filter provider, component)
+    GET  /v1/costs/billing      billing increment and minimum per provider, with sources
+    GET  /v1/costs/sources      the machine-readable cost sources: last fetch, last success, error
+    GET  /v1/costs/presets      the published reference jobs R0-R3
+    POST /v1/costs/estimate     {gpu, count, hours, egress_tb | egress_gb, storage_tb | storage_gb, storage_class,
                                 min_fabric_gbps} or {"preset": "R1"} -> full cost per provider, unknowns named
 
 Public like /v1/reserved (api/pages.py PUBLIC_V1 "cost"; the POST is in PUBLIC_POST: a read-only computation).
@@ -41,7 +41,7 @@ def _components():
     return comps, notes
 
 
-@router.get("/v1/cost/components", tags=["cost"], summary="Egress, storage and other cost components per provider")
+@router.get("/v1/costs/components", tags=["cost"], summary="Egress, storage and other cost components per provider")
 def components(provider: str | None = None, component: str | None = None, who: Principal = Depends(READ)):
     if component and component not in cc.COMPONENTS:
         raise HTTPException(422, {"code": "invalid_component", "message": f"one of {list(cc.COMPONENTS)}"})
@@ -53,14 +53,14 @@ def components(provider: str | None = None, component: str | None = None, who: P
                     providers=sorted({c["provider"] for c in comps}))
 
 
-@router.get("/v1/cost/billing", tags=["cost"], summary="Billing increment and minimum per provider")
+@router.get("/v1/costs/billing", tags=["cost"], summary="Billing increment and minimum per provider")
 def billing(who: Principal = Depends(READ)):
     rows = [{"provider": p, **{k: b.get(k) for k in ("increment_s", "minimum_s", "status", "source", "notes")},
              "products": b.get("products"), "verified_at": manual.V} for p, b in sorted(manual.BILLING.items())]
     return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows))
 
 
-@router.get("/v1/cost/sources", tags=["cost"], summary="Machine-readable cost sources and their last fetch")
+@router.get("/v1/costs/sources", tags=["cost"], summary="Machine-readable cost sources and their last fetch")
 def cost_sources(who: Principal = Depends(READ)):
     import normalize
 
@@ -73,7 +73,7 @@ def cost_sources(who: Principal = Depends(READ)):
     return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows), poll_seconds=sources.POLL_SECONDS)
 
 
-@router.get("/v1/cost/presets", tags=["cost"], summary="The published reference jobs")
+@router.get("/v1/costs/presets", tags=["cost"], summary="The published reference jobs")
 def presets(who: Principal = Depends(READ)):
     return envelope([{"preset": k, **v} for k, v in est.PRESETS.items()], kind=ESTIMATED, methodology=METHOD)
 
@@ -144,7 +144,7 @@ def parse_job(body: dict) -> dict:
     return job
 
 
-@router.post("/v1/cost/estimate", tags=["cost"],
+@router.post("/v1/costs/estimate", tags=["cost"],
              summary="Full cost of a job per provider: compute + egress + storage, unknown components named")
 async def cost_estimate(request: Request, who: Principal = Depends(READ)):
     job = parse_job(await _body(request))

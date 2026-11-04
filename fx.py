@@ -434,7 +434,7 @@ def converted_listings(provider: str | None = None) -> list[dict]:
     """Current listings whose USD price was converted, with their provenance."""
     from tables import ComputeListingRow as c
 
-    stmt = (select(c).where(c.original_currency.is_not(None), c.visibility == "public")  # public: /v1/fx/listings
+    stmt = (select(c).where(c.original_currency.is_not(None), c.visibility == "public")  # public tier only
             .order_by(c.provider, c.listing_id))
     if provider:
         stmt = stmt.where(c.provider == provider)

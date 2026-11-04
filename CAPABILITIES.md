@@ -299,9 +299,9 @@ has enough samples. Generated sentences like *"H100 is in the 18th percentile of
 **Archived price history** (data kind `archived`, methodology/archived-history.md): about 12 months of prices
 from before OpenGrid started recording, read by OpenGrid's own parsers from Internet Archive captures of
 provider price pages and from AWS's monthly EC2 price-list versions (`python -m backfill import`). Shown per
-provider at `GET /v1/history/{gpu}/archived`, each sample linked to the exact
+provider at `GET /v1/markets/{gpu}/history/archived`, each sample linked to the exact
 archived document. The 1Y / ALL price chart runs one continuous line through it (archived stretch drawn lighter
-and labelled), via `GET /v1/history/{gpu}/extended`. Sampled only on capture days, so it misses short moves;
+and labelled), via `GET /v1/markets/{gpu}/history/daily`. Sampled only on capture days, so it misses short moves;
 never used in percentiles, indices, events or routing.
 
 ### 4.4 Market structure
@@ -777,12 +777,12 @@ Authentication: `Authorization: Bearer opg_…` (or the operator session). Highl
 
 | Domain | Endpoints |
 |---|---|
-| GPUs & markets | `/v1/gpus`, `/v1/gpus/{gpu}`, `/v1/markets/{gpu}`, `/v1/markets/{gpu}/regions`, `/v1/markets/{gpu}/context`, `/v1/families`, `/v1/hardware`, `/v1/regions`, `/v1/compare` |
-| History & indices | `/v1/history/{gpu}`, `/v1/indices`, `/v1/indices/{id}`, `/v1/indices/{id}/history`, `/v1/indices/{id}/fixings` |
+| GPUs & markets | `/v1/gpus`, `/v1/gpus/{gpu}`, `/v1/markets/{gpu}`, `/v1/markets/{gpu}/regions`, `/v1/markets/{gpu} (`context`)`, `/v1/families`, `/v1/gpus`, `/v1/regions`, `/v1/compare` |
+| History & indices | `/v1/markets/{gpu}/history`, `/v1/indices`, `/v1/indices/{id}`, `/v1/indices/{id}/history`, `/v1/indices/{id}/fixings` |
 | Settlement fixings | `/v1/fixings`, `/v1/fixings/{id}`, `…/verify`, `/v1/fixings/chain/verify`, `/v1/fixings/restatements`, `/v1/fixings/methodology` |
-| Structure | `/v1/spreads`, `/v1/heatmaps/{kind}`, `/v1/providers`, `/v1/providers/{p}` |
+| Structure | `/v1/markets`, `/v1/heatmaps/{kind}`, `/v1/providers`, `/v1/providers/{p}` |
 | Signals | `/v1/overview`, `/v1/events`, `/v1/opportunities`, `/v1/tape`, `/v1/news`, `/v1/timeline` |
-| Trust | `/v1/trust/listings`, `/v1/trust/providers`, `/v1/capabilities` |
+| Trust | `/v1/listings`, `/v1/trust/providers`, `/v1/capabilities` |
 | Routing | `/v1/best/{gpu}`, `/v1/route/preview`, `/v1/route`, `/v1/route/{id}`, `/v1/quotes/{id}` |
 | Deployments | `/v1/deployments`, `/v1/deployments/{id}`, `…/terminate`, `…/stop`, `…/feedback` |
 | MCP (hosted) | `/mcp`: the MCP tool set over streamable HTTP; Bearer API key only (section 6c) |

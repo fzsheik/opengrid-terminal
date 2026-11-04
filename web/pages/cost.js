@@ -1,5 +1,5 @@
 /* /cost: "True cost". What a job costs per provider beyond the hourly price: compute rounded to the provider's billing
-   increment, internet egress through its tiers, and storage, from POST /v1/cost/estimate (methodology/full-cost.md).
+   increment, internet egress through its tiers, and storage, from POST /v1/costs/estimate (methodology/full-cost.md).
    A component the provider does not publish (or publishes only in a value OpenGrid could not verify) is shown as
    unknown and makes the total a lower bound ("≥ $X"); it is never drawn as $0. Pure helpers live on OG.trueCost
    (tests/test_web_cost.js). */
@@ -141,7 +141,7 @@
       h("p", { class: "note" }, h("a", { class: "lnk", href: "/methodology/full-cost" }, "How the true cost is computed, and where each price comes from →")));
 
       let presets = [], gpus = [];
-      const [pr, gl] = await Promise.all([ctx.api("/v1/cost/presets").catch(() => null), OG.data.gpus().catch(() => [])]);
+      const [pr, gl] = await Promise.all([ctx.api("/v1/costs/presets").catch(() => null), OG.data.gpus().catch(() => [])]);
       presets = Array.isArray(pr) ? pr : [];
       gpus = (gl || []).filter(g => g.live).sort((a, b) => b.weight - a.weight || a.name.localeCompare(b.name));
       if (st.gpu && !gpus.some(g => g.name === st.gpu)) gpus.unshift({ name: st.gpu, short: OG.shortGpu(st.gpu) });
@@ -181,7 +181,7 @@
         drawForm();
         out.replaceChildren(OG.loading("Pricing the job on every provider…"));
         let res;
-        try { res = await ctx.api("/v1/cost/estimate", { method: "POST", body: b.body, full: true, slot: "true-cost" }); }
+        try { res = await ctx.api("/v1/costs/estimate", { method: "POST", body: b.body, full: true, slot: "true-cost" }); }
         catch (e) { if (!e.stale) out.replaceChildren(OG.error(e, run)); meta.replaceChildren(); return; }
         const m = res.meta || {}, rows = res.data || [], unranked = m.unranked || [];
         OG.status.asOf(m.as_of);

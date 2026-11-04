@@ -6,7 +6,7 @@ and public price APIs, and AWS's own archive of monthly EC2 price lists. These p
 **archived** and are kept apart from everything OpenGrid observes live.
 
 Code: `backfill/` (sources, parsers, loader), `analytics/archived.py`. Table: `archived_prices`.
-API: `GET /v1/history/{gpu}/extended` (one daily series, archived then observed), `GET /v1/history/{gpu}/archived`
+API: `GET /v1/markets/{gpu}/history/daily` (one daily series, archived then observed), `GET /v1/markets/{gpu}/history/archived`
 (the archived samples themselves, with their documents).
 
 ## What "archived" means
@@ -117,7 +117,7 @@ can miss short price moves entirely. Stock is never inferred from an archived pa
 
 ## The daily series (1Y / ALL charts)
 
-`GET /v1/history/{gpu}/extended?days=365` returns one value per provider per UTC day, and the lowest / median /
+`GET /v1/markets/{gpu}/history/daily?days=365` returns one value per provider per UTC day, and the lowest / median /
 highest across providers:
 
 - Before `archived_until` (the first UTC day OpenGrid recorded the GPU live) a provider's value is its archived
@@ -135,7 +135,7 @@ view shows each provider separately.
 
 ## The monthly series
 
-`GET /v1/history/{gpu}/archived` returns:
+`GET /v1/markets/{gpu}/history/archived` returns:
 
 - `points`: one per provider per source document: that provider's lowest priced on-demand listing for the
   GPU in the document, with the document's URL.

@@ -271,6 +271,16 @@ def test_endpoints():
         assert client.get("/v1/capacity", params={"gpu": "not-a-gpu"}).status_code == 404
         h = client.get("/v1/capacity/history", params={"provider": "koyeb", "days": 90}).json()
         assert h["meta"]["count"] == 25 and h["data"][0]["observed_at"] >= h["data"][-1]["observed_at"]
+        # keyset cursor: small pages give back exactly the same 25 changes, in the same order
+        paged, cur = [], None
+        while True:
+            pg = client.get("/v1/capacity/history", params={"provider": "koyeb", "days": 90, "limit": 4,
+                                                            **({"cursor": cur} if cur else {})}).json()
+            paged += pg["data"]
+            cur = pg["meta"]["next_cursor"]
+            if not cur:
+                break
+        assert paged == h["data"], "paging changed the rows"
         assert client.get("/v1/capacity/history", params={"days": 91}).status_code == 422
     finally:
         scratchdb.drop(DB)

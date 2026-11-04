@@ -412,8 +412,8 @@ def test_every_public_route_is_clean():
                  "/v1/listings", "/v1/reserved", "/v1/markets/{gpu}/history/archived", "/v1/best/{gpu}", "/listings",
                  "/history", "/market", "/gpu/{slug}", "/v1/listings/history", "/v1/markets",
                  # 2026-11-02 release: freshness, full cost (API and page)
-                 "/v1/freshness", "/v1/cost/components", "/v1/cost/billing", "/v1/cost/sources",
-                 "/v1/cost/presets", "/cost", "/v1/context/power", "/v1/context/series"):
+                 "/v1/freshness", "/v1/costs/components", "/v1/costs/billing", "/v1/costs/sources",
+                 "/v1/costs/presets", "/cost", "/v1/context/power", "/v1/context/series"):
         assert must in templates, must
     status, bad = {}, []
     for tmpl, url, echo in reqs:
@@ -450,7 +450,7 @@ def test_public_posts_are_clean():
     assert not body_leaks(r), body_leaks(r)[:5]
     # the full-cost estimator ranks list prices: public listings only (the internal H100 is the cheapest)
     for gpu in (H100, ONLY_GPU):
-        r = c.post("/v1/cost/estimate", json={"gpu": gpu, "count": 1, "hours": 10, "egress_tb": 1})
+        r = c.post("/v1/costs/estimate", json={"gpu": gpu, "count": 1, "hours": 10, "egress_tb": 1})
         assert r.status_code == 200, r.text[:300]
         rows = r.json()["data"] + (r.json().get("unranked") or [])
         assert not body_leaks(r), (gpu, body_leaks(r)[:5])
@@ -628,7 +628,7 @@ def test_fireworks_is_wholly_internal():
         body = r.text.lower()
         assert not any(lid in body for lid in rows), (url, "fireworks listing id in a public answer")
         assert '"provider":"fireworks"' not in body.replace(" ", ""), (url, "fireworks named as a provider")
-    r = c.post("/v1/cost/estimate", json={"gpu": gpu, "count": 1, "hours": 10})
+    r = c.post("/v1/costs/estimate", json={"gpu": gpu, "count": 1, "hours": 10})
     assert r.status_code == 200 and "fireworks" not in r.text.lower(), r.text[:300]
 
 

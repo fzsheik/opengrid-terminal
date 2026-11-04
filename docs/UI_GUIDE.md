@@ -411,7 +411,7 @@ In the menu, "Explore" (marked "Free to use, no account needed") holds "GPUs" wi
 ### /gpus (GPU markets)
 
 - **URL**: /gpus. Filters and sort are kept in the URL (q, vendor, arch, vram, wl, ff, avail, all, sort, dir), so a filtered view can be shared.
-- **Who / sign-in**: anyone; no sign-in. Reads /v1/gpus, /market?hours=24 and /v1/spreads, all public.
+- **Who / sign-in**: anyone; no sign-in. Reads /v1/gpus, /market?hours=24 and /v1/markets, all public.
 - **Purpose**: one table of every canonical GPU with its current on-demand price per GPU-hour across providers.
 
 **Layout, top to bottom**
@@ -452,7 +452,7 @@ In the menu, "Explore" (marked "Free to use, no account needed") holds "GPUs" wi
    Clicking a row opens /gpu/{slug}. Unpriced rows are greyed out. On narrow screens the columns drop in this order: "24h trend", "Form", "Arch", "Class". Default sort is "Prov" descending.
 5. Note under the table: an observed badge, then "Observed list prices, on-demand, not interruptible, in stock or stock unknown; one vote per provider (its lowest). Spread, efficiency and 24h change are derived. $/GB and $/PFLOP ... are theoretical, not benchmarks." It ends with the links "Dispersion" and "Hardware" (methodology pages).
 
-**States**: loading shows "Loading GPU markets…". If no row matches the filters, the table says "No GPUs match these filters.". If /v1/gpus fails, the shared error box appears with "Try again". If /market or /v1/spreads fails, the page still loads: the 24h and efficiency cells show "-" or "n/a" with a reason ("24h board unavailable", "spreads unavailable").
+**States**: loading shows "Loading GPU markets…". If no row matches the filters, the table says "No GPUs match these filters.". If /v1/gpus fails, the shared error box appears with "Try again". If /market or /v1/markets fails, the page still loads: the 24h and efficiency cells show "-" or "n/a" with a reason ("24h board unavailable", "spreads unavailable").
 
 **Refresh**: reloads every 60 s, keeping filters and sort.
 
@@ -465,7 +465,7 @@ In the menu, "Explore" (marked "Free to use, no account needed") holds "GPUs" wi
 ### /gpu/{slug} (one GPU market)
 
 - **URL**: /gpu/{canonical-slug}, for example /gpu/h100-80gb-sxm5. URL state: w (window), view, ov (overlays), sev, count. If the slug is not a canonical GPU, the page tries to load it as a GPU family and shows the family page instead (next section). If that fails too, it shows the title "Unknown GPU" with the slug, "No canonical GPU or GPU family has this slug." and a link "All GPU markets →".
-- **Who / sign-in**: anyone. Every read is public: /v1/gpus/{slug}, /v1/indices/{slug}, /v1/markets/{slug}/context and /regions, /v1/history, /market/detail, /v1/timeline (and /around), /v1/events, /v1/news, /v1/best, /v1/trust/listings, /v1/heatmaps, /listings.
+- **Who / sign-in**: anyone. Every read is public: /v1/gpus/{slug}, /v1/indices/{slug}, /v1/markets/{slug}/context and /regions, /v1/history, /market/detail, /v1/timeline (and /around), /v1/events, /v1/news, /v1/best, /v1/listings, /v1/heatmaps, /listings.
 - **Purpose**: everything about one GPU's cloud market, laid out like a stock page: price, history, providers, regions, events, alternatives and specs.
 
 **Layout, top to bottom**
@@ -584,7 +584,7 @@ In the menu, "Explore" (marked "Free to use, no account needed") holds "GPUs" wi
 ### GPU family page (/gpu/{family-slug})
 
 - **URL**: the family page has no route of its own. It is drawn by /gpu/{slug} when the slug names a family or architecture rather than one canonical GPU, for example /gpu/h100 or /gpu/blackwell. URL state: w (chart window).
-- **Who / sign-in**: anyone. Reads /v1/families/{slug} (falling back to /v1/markets/{slug}), /v1/history/{variant} for each variant, and /v1/news?gpu=, all public.
+- **Who / sign-in**: anyone. Reads /v1/families/{slug}, /v1/markets/{variant}/history for each variant, and /v1/news?gpu=, all public.
 - **Purpose**: show each variant of a GPU family side by side with its own price, never merged into one family price.
 
 **Layout, top to bottom**
@@ -834,7 +834,7 @@ Empty states: "No common GPU to chart." and "These providers have no GPU in comm
 ### /explorer (listings explorer)
 
 - **URL**: /explorer. Every filter and the sort live in the URL: gpu, provider, region, min, max, avail, type, tier, count, q, sort, dir.
-- **Who / sign-in**: anyone. Reads /listings, plus /v1/gpus and /v1/trust/listings (optional extras), all public.
+- **Who / sign-in**: anyone. Reads /listings, plus /v1/gpus and /v1/listings (optional extras), all public.
 - **Purpose**: every current listing from every provider, raw, with filters and CSV export.
 
 **Layout, top to bottom**
@@ -876,7 +876,7 @@ Empty states: "No common GPU to chart." and "These providers have no GPU in comm
 
 **Observations**
 - If a refresh fails, the whole table is replaced by the error box, even though good data was on screen a moment before.
-- The table is rebuilt up to twice after the first draw, when the optional /v1/gpus and /v1/trust/listings answers arrive. Columns pop in and the layout jumps.
+- The table is rebuilt up to twice after the first draw, when the optional /v1/gpus and /v1/listings answers arrive. Columns pop in and the layout jumps.
 - "Reset" sits in the page header, while on /gpus, /opportunities and /events "Reset" sits at the end of the filter bar. On /news the same action is called "Clear".
 - Up to 24 columns, with terse labels: "Intr", "Ctry", "Tier", "Stock basis", "Last chg".
 

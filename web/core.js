@@ -409,6 +409,18 @@ Full docs: web/README.md.
     return o;
   }
   OG.legacyHistory = legacyHistory;
+  // Every page of a Data API list: follows meta.next_cursor (1000 rows a request); { data, meta } like full: true.
+  OG.allPages = async (call, path, opts) => {
+    opts = opts || {};
+    let data = [], cursor = null, r = null;
+    for (let i = 0; i < 100; i++) {
+      r = await call(path, { ...opts, full: true, params: { ...(opts.params || {}), limit: 1000, ...(cursor ? { cursor } : {}) } });
+      data = data.concat(Array.isArray(r.data) ? r.data : []);
+      cursor = r.meta && r.meta.next_cursor;
+      if (!cursor) break;
+    }
+    return { data, meta: r && r.meta };
+  };
   function unwrap(j) {
     if (j && typeof j === "object" && !Array.isArray(j) && "data" in j && j.meta && typeof j.meta === "object" &&
         Object.keys(j).every(k => k === "data" || k === "meta")) return { data: legacyGpu(j.data), meta: j.meta };

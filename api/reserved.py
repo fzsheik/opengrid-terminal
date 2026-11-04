@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 import reserved
 from accounts.auth import Principal, require_scope
-from api.common import OBSERVED, envelope, resolve_gpu
+from api.common import OBSERVED, cursor_page, envelope, resolve_gpu
 from cache import ttl_cache
 
 router = APIRouter()
@@ -41,14 +41,16 @@ def _meta(notes, newest) -> dict:
 @router.get("/v1/reserved", tags=["reserved"], summary="Reserved and committed GPU prices, with the on-demand saving")
 def rows(gpu: str | None = Query(None, description="GPU slug or canonical name"), provider: str | None = None,
          term: str | None = Query(None, description="term bucket: " + ", ".join(reserved.BUCKET_KEYS)),
-         who: Principal = Depends(READ)):
+         limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, who: Principal = Depends(READ)):
     _filters(provider, term)
     want = resolve_gpu(gpu) if gpu else None
     data, notes, newest = _model()
     out = [r for r in data if (not want or r["gpu"] == want) and (not provider or r["provider"] == provider)
            and (not term or r["term_bucket"] == term)]
-    return envelope(out, kind=OBSERVED, methodology=METHOD, count=len(out),
-                    derived=sum(1 for r in out if r["derived"]), **_meta(notes, newest))
+    derived = sum(1 for r in out if r["derived"])
+    items, pg = cursor_page(out, limit, cursor)
+    return envelope(items, kind=OBSERVED, methodology=METHOD, count=len(out), derived=derived, **pg,
+                    **_meta(notes, newest))
 
 
 @router.get("/v1/reserved/summary", tags=["reserved"], summary="Per GPU: the cheapest reserved price in each term")

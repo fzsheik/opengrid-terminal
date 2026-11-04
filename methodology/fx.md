@@ -6,7 +6,7 @@ carries the original currency and amount, the rate, and the rate's date. If no f
 converted.
 
 Code: `fx.py` (rates, conversion), `store/fx.py` (tables), `providers/scaleway.py` (the first converted feed).
-Endpoints: `GET /v1/fx`, `GET /v1/fx/rates` (`quote=` any ECB currency), `GET /v1/fx/listings`, `GET /v1/fx/cross`.
+Endpoints: `GET /v1/fx/rates` (in force now: `eur_usd` with its conversion state, `to_usd` cross rates), `GET /v1/fx/rates/history` (`quote=` any ECB currency); each `GET /v1/listings` row carries its FX provenance.
 
 ## Source
 
@@ -42,8 +42,8 @@ history converts each old snapshot at the rate that was in force when it was fet
 
 A rate whose date is more than **5 calendar days** before the fetch date (in Frankfurt) is stale. With a stale
 rate, or none at all, or a failing rate lookup, **no listing is converted**: the provider's converted listings are
-not saved that poll, a warning is logged (`fx: ... conversion stopped (fail closed)`), and `GET /v1/fx` reports
-`state: stale` (or `missing`). The listings saved earlier then age out of statistics exactly like a feed that
+not saved that poll, a warning is logged (`fx: ... conversion stopped (fail closed)`), and `GET /v1/fx/rates` reports
+`eur_usd.state: stale` (or `missing`). The listings saved earlier then age out of statistics exactly like a feed that
 stopped answering (`market.stale_after`), so an old conversion is never presented as current, and nothing is ever
 converted at a guessed rate.
 
@@ -64,8 +64,8 @@ A price in any other currency the ECB publishes (JPY, INR, GBP, ...) is converte
 - **Precision floor.** A currency worth less than 0.0005 USD (the Indonesian rupiah, about 0.000055) would keep
   fewer than 5 significant digits at 8 decimals, so it is refused, not converted imprecisely.
 - **Source and legs.** `fx_source` is `ecb_cross`. The two legs (EUR->USD and EUR->X of `fx_rate_date`) are the stored
-  ECB rates of that date. They are returned with the listing as `fx_legs` by `GET /v1/fx/listings`, and every
-  current cross rate with its legs by `GET /v1/fx/cross`.
+  ECB rates of that date. They are returned with the listing as `original.fx.legs` by `GET /v1/listings`, and every
+  current cross rate with its legs in `to_usd` of `GET /v1/fx/rates`.
 
 ## Conversion and provenance
 
@@ -77,7 +77,7 @@ same stored value and does not write a new history row each poll.
 
 A converted listing is an ordinary USD listing (`currency` is `USD`): indices, spreads, percentiles, routing and
 every other statistic read it like any other and read none of the provenance fields. The provenance is stored on
-`compute_listings` and is returned by `GET /listings` and `GET /v1/fx/listings`:
+`compute_listings` and is returned by `GET /listings` and, as each row's `original`, by `GET /v1/listings`:
 
 | Field | Meaning |
 |---|---|

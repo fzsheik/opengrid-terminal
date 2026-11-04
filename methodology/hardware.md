@@ -1,6 +1,6 @@
 # Hardware specs, capability pricing and alternatives
 
-Used by `/v1/hardware`, `/v1/gpus`, `/v1/gpus/{gpu}`, `/v1/compare`. Code: `hardware.py`,
+Used by `/v1/gpus`, `/v1/gpus`, `/v1/gpus/{gpu}`, `/v1/compare`. Code: `hardware.py`,
 `analytics/capability.py`, `analytics/alternatives.py`. Hardware figures are **vendor peak
 specifications**, not measurements.
 

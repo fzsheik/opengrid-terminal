@@ -1,6 +1,6 @@
 # Data trust: source, freshness, availability basis, confidence
 
-Every listing can carry a **trust block** (`GET /v1/trust/listings`, and
+Every listing can carry a **trust block** (`GET /v1/listings`, and
 `quality.trust.listing_trust(row)` for other modules). It is built from observable facts
 only. OpenGrid does not invent a reliability score: the confidence label is a fixed rule
 over the facts below, and the reasons are returned with it. The listing's own fields are

@@ -303,6 +303,19 @@ them. Fixings and restatements page by cursor (`meta.next_cursor`, `meta.total`)
 Open decision: a rounding rule for published fixings (e.g. 4 decimals, round half to even) is a settlement
 methodology change, so it is not applied; today the full stored value is published.
 
+**Capacity** (`/v1/capacity`, cursor paged): `provider`, `sku`, `region`, `country`, `region_group`, `gpu`,
+`raw_gpu_name`, `gpu_count`, `in_stock`, `tier`, `available_count`, `total_count`, `count_unit`, `raw_value`,
+`observed_at`, `changed_at`, `first_seen_at`, `stale`. `/v1/capacity/history`: changes newest first, keyset cursor.
+
+**Reserved** (`/v1/reserved`, cursor paged; `/v1/reserved/summary`): term rows with `price_per_gpu_hour`,
+`term_bucket`, `on_demand_per_gpu_hour`, `saving_pct`, ... (never in indices).
+
+**Costs** (`/v1/costs/components`, `/billing`, `/sources`, `/presets`, `POST /v1/costs/estimate`): plural path.
+
+**FX**: `GET /v1/fx/rates` = `{eur_usd: {rate, rate_date, state, source, ...}, to_usd: [{currency, rate, legs,
+state, ...}]}` (in force now; `eur_usd.state` ok / stale / missing = conversion runs or is stopped);
+`GET /v1/fx/rates/history?quote=&days=`. A listing's own conversion is on its row (`original`).
+
 **Timestamps** end in `Z`, in `data` and `meta`.
 
 **Lists** page by cursor: `limit` (max 1000) and `cursor`; `meta.next_cursor` (null on the last page), `meta.total`.

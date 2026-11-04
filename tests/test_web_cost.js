@@ -21,7 +21,7 @@ ok(C.buildBody(Object.assign({}, C.DEFAULTS, { egress_tb: "", storage_tb: "" }))
 ok(C.buildBody(Object.assign({}, C.DEFAULTS, { min_fabric_gbps: "3200" })).body.min_fabric_gbps === 3200, "fabric minimum as a number");
 ok(C.buildBody(Object.assign({}, C.DEFAULTS, { count: "1025" })).errors.count, "count capped like the API (1,024)");
 
-// rows from POST /v1/cost/estimate
+// rows from POST /v1/costs/estimate
 const row = o => Object.assign({ provider: "aws", sku: "p5.48xlarge", total: 5011.69, total_is_lower_bound: false, unknown: [],
   extras_vs_compute_pct: 26.5, effective_per_gpu_hour: 8.700851,
   components: { compute: { amount: 3962.88, billed_hours: 72, exact: true, price_per_instance_hour: 55.04 },
@@ -64,7 +64,7 @@ ok(/No current on-demand listing of H100 SXM5 with exactly this many GPUs per ma
 ok(C.PRESETS.join() === "R0,R1,R2,R3" && C.presetLabel({ preset: "R1", label: "Training run" }) === "R1: Training run", "presets");
 const src = require("fs").readFileSync(__dirname + "/../web/pages/cost.js", "utf8");
 ok(!/[–—]/.test(src), "no en or em dashes");
-ok(/\/methodology\/full-cost/.test(src) && /"\/v1\/cost\/estimate"/.test(src), "links the methodology and calls the estimator");
+ok(/\/methodology\/full-cost/.test(src) && /"\/v1\/costs\/estimate"/.test(src), "links the methodology and calls the estimator");
 const html = require("fs").readFileSync(__dirname + "/../web/index.html", "utf8");
 ok(/<a href="\/cost" data-nav="cost"[^>]*>True cost<\/a>/.test(html) && html.includes('src="/static/pages/cost.js"'), "in the GPUs nav group, script loaded");
 
