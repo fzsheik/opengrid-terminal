@@ -3,7 +3,7 @@
    Relevance components come from the list item (else /v1/news/{id}) on hover; family suggestions from /v1/news/families. Source health from /v1/news/sources, topic
    catalogue from /v1/news/topics. view=timeline overlays /v1/timeline for one GPU: prices, availability,
    market events and news on one axis, related in time, not necessarily causal; below it the GPU's major shifts
-   (/v1/shifts) with the items stored around each, under the same not-causal heading. */
+   (/v1/events/shifts) with the items stored around each, under the same not-causal heading. */
 (() => {
   const { h, fmt, Lib: L } = OG;
   const REGIONS = ["US", "Canada", "Europe", "UK", "APAC", "Middle East", "LATAM", "Africa"];
@@ -66,8 +66,9 @@
       }
 
       // ------------------------------------------------------------ feed
-      function apiParams(offset) {
-        const p = { limit: PAGE, offset };
+      function apiParams(cursor) {
+        const p = { limit: PAGE };
+        if (cursor) p.cursor = cursor;
         if (f.gpu) p.gpu = f.gpu;
         if (f.provider) p.provider = f.provider;
         if (f.region) p.region = f.region;
@@ -81,10 +82,10 @@
       async function loadFeed(append, quiet) {
         if (!append) { st.offset = 0; if (!quiet) feedEl.replaceChildren(OG.loading("Loading news…")); }
         let res;
-        try { res = await ctx.api("/v1/news", { params: apiParams(append ? st.offset : 0), full: true, slot: "news" }); }
+        try { res = await ctx.api("/v1/news", { params: apiParams(append ? st.cursor : null), full: true, slot: "news" }); }
         catch (e) { if (!e.stale && !quiet) { feedEl.replaceChildren(OG.error(e, () => loadFeed())); moreEl.replaceChildren(); } return; }
         const items = res.data || [];
-        st.total = (res.meta && res.meta.pagination && res.meta.pagination.total) || items.length;
+        st.total = (res.meta && res.meta.total) || items.length; st.cursor = res.meta && res.meta.next_cursor;
         st.items = append ? st.items.concat(items) : items;
         st.offset += items.length;
         if (!append) feedEl.replaceChildren();

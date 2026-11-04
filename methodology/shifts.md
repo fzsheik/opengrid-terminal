@@ -6,8 +6,8 @@ list so it reads the same next month. **The list is headed "Related news and eve
 necessarily causal)". Being near a shift in time and about the same GPU, provider or vendor is all an item shows.
 OpenGrid never says an item caused a shift.**
 
-Code: `analytics/shifts.py`. Tables: `market_shifts`, `market_shift_items`. API: `GET /v1/shifts`,
-`GET /v1/shifts/{shift_id}`, `GET /v1/shifts/definition`. Shown on each GPU page (section "Major shifts" and a
+Code: `analytics/shifts.py`. Tables: `market_shifts`, `market_shift_items`. API: `GET /v1/events/shifts`,
+`GET /v1/events/shifts/{shift_id}`, `GET /v1/events/shifts/definition`. Shown on each GPU page (section "Major shifts" and a
 "Shifts" chart overlay) and under the news timeline.
 
 ## What counts as a major shift

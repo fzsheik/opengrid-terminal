@@ -23,6 +23,18 @@ RTX, MI300 = "NVIDIA RTX 4090 24GB", "AMD Instinct MI300X 192GB"
 rollups.AFTER_REFRESH.clear()
 
 
+
+def _pages(c, path, limit, **params):
+    """Every row of a cursor-paged Data API list, small pages at a time."""
+    rows, cur = [], None
+    for _ in range(500):
+        b = c.get(path, params={**params, "limit": limit, **({"cursor": cur} if cur else {})}).json()
+        rows += b["data"]
+        cur = b["meta"]["next_cursor"]
+        if not cur:
+            return rows
+    raise AssertionError("cursor never ended")
+
 def _clear():
     movers.overview.cache_clear()
     opportunities.monitor.cache_clear()
@@ -174,8 +186,10 @@ def _endpoints():
     r = c.get("/v1/events", params={"gpu": "h100-80gb-sxm5", "limit": 5})
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["meta"]["methodology"] == "/methodology/events" and body["meta"]["pagination"]["limit"] == 5
+    assert body["meta"]["methodology"] == "/methodology/events" and body["meta"]["limit"] == 5 and "next_cursor" in body["meta"]
     assert all(e["gpu_name"] == H100 for e in body["data"])
+    every = c.get("/v1/events", params={"limit": 1000}).json()["data"]
+    assert len(every) > 3 and _pages(c, "/v1/events", 2) == every, "keyset paging: same events, same order"
     r = c.get("/v1/events", params={"type": "price_move,sold_out", "min_severity": "notable"})
     assert r.status_code == 200 and all(e["type"] in ("price_move", "sold_out") and e["severity"] != "info"
                                         for e in r.json()["data"])

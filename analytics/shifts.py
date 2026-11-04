@@ -633,8 +633,9 @@ def _item(r: MarketShiftItem) -> dict:
 
 
 def query(gpu=None, provider=None, kind=None, types=None, since=None, until=None, severity=None, limit=50, offset=0,
-          top_n: int = 3) -> tuple[list[dict], int]:
-    from sqlalchemy import func
+          top_n: int = 3, before=None) -> tuple[list[dict], int]:
+    """`before` = (at, id) of the previous page's last shift: keyset paging, stable while shifts are added."""
+    from sqlalchemy import func, tuple_
     w = []
     if gpu:
         w.append(MarketShift.gpu == gpu)
@@ -652,6 +653,8 @@ def query(gpu=None, provider=None, kind=None, types=None, since=None, until=None
         w.append(MarketShift.severity == severity)
     with normalize.SessionLocal() as s:
         total = s.execute(select(func.count()).select_from(MarketShift).where(*w)).scalar() or 0
+        if before:
+            w.append(tuple_(MarketShift.at, MarketShift.id) < tuple(before))
         rows = list(s.scalars(select(MarketShift).where(*w).order_by(MarketShift.at.desc(), MarketShift.id.desc())
                               .limit(limit).offset(offset)))
         tops, counts = defaultdict(list), defaultdict(lambda: defaultdict(int))

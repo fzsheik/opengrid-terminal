@@ -790,7 +790,7 @@ Full docs: web/README.md.
     archived: "Read by OpenGrid from a public archive (an archived price page or price-list version), not observed live",
   };
   OG.badge = (text, tone, title) => h("span", { class: "badge " + (tone || ""), title: title || null }, text);
-  // Major shifts (/v1/shifts) and the items OpenGrid stored around each (methodology/shifts). Being near a shift
+  // Major shifts (/v1/events/shifts) and the items OpenGrid stored around each (methodology/shifts). Being near a shift
   // in time is all an item shows: the heading says so wherever shifts appear. params: {gpu | provider | kind ...}.
   OG.SHIFT_HEADING = "Related news and events around this shift (not necessarily causal)";
   const SHIFT_ITEM = { news: "news", provider_announcement: "announcement", filing: "SEC filing", market_event: "OpenGrid event" };
@@ -809,7 +809,7 @@ Full docs: web/README.md.
     async function open(r) {
       detail.replaceChildren(OG.loading("Loading related items…"));
       let d;
-      try { d = await ctx.api("/v1/shifts/" + r.id, { slot: (opts.slot || "shifts") + "-d" }); }
+      try { d = await ctx.api("/v1/events/shifts/" + r.id, { slot: (opts.slot || "shifts") + "-d" }); }
       catch (e) { if (!e.stale) detail.replaceChildren(OG.error(e)); return; }
       const items = d.items || [];
       detail.replaceChildren(
@@ -821,7 +821,7 @@ Full docs: web/README.md.
     }
     (async () => {
       let rows;
-      try { rows = await ctx.api("/v1/shifts", { params: { limit: opts.limit || 20, top: 2, ...params }, slot: opts.slot || "shifts" }); }
+      try { rows = await ctx.api("/v1/events/shifts", { params: { limit: opts.limit || 20, top: 2, ...params }, slot: opts.slot || "shifts" }); }
       catch (e) { if (!e.stale) box.replaceChildren(OG.error(e)); return; }
       rows = Array.isArray(rows) ? rows : (rows && rows.items) || [];
       if (opts.onRows) opts.onRows(rows, open);

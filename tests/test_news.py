@@ -27,6 +27,18 @@ DB = "og_test_news"
 UTC = timezone.utc
 
 
+
+def _pages(c, path, limit, **params):
+    """Every row of a cursor-paged Data API list, small pages at a time."""
+    rows, cur = [], None
+    for _ in range(500):
+        b = c.get(path, params={**params, "limit": limit, **({"cursor": cur} if cur else {})}).json()
+        rows += b["data"]
+        cur = b["meta"]["next_cursor"]
+        if not cur:
+            return rows
+    raise AssertionError("cursor never ended")
+
 def _read(name: str) -> bytes:
     return (FIX / name).read_bytes()
 
@@ -382,6 +394,14 @@ def test_endpoints():
         finally:
             ingest.run = real_run
         assert client.post("/v1/news/reclassify").json()["data"]["reclassified"] == 1
+        # keyset paging: a few unrelated stories at different times, paged one at a time, give the same list
+        store.ingest(src, [{"guid": f"p{i}", "url": f"https://nvidianews.nvidia.com/news/page-{i}",
+                            "title": f"Unrelated announcement number {i} about data center networking {i * 7}",
+                            "summary": "", "author": None, "published_raw": None,
+                            "published_at": now - timedelta(hours=10 + i), "raw": {}} for i in range(4)], now)
+        every = client.get("/v1/news", params={"limit": 200, "min_relevance": 0}).json()["data"]
+        assert len(every) >= 3 and _pages(client, "/v1/news", 1, min_relevance=0) == every, "keyset paging: same stories"
+        assert [x["last_published_at"] for x in every] == sorted((x["last_published_at"] for x in every), reverse=True)
     finally:
         scratchdb.drop(DB)
 

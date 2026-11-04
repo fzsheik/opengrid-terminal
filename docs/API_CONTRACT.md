@@ -325,6 +325,16 @@ measured). UptimeProject data is never served here. `/v1/reliability` itself (pr
 own launches, api/execution.py) stays key-only: whether it becomes public is an open decision. The probe agents keep
 `GET /v1/probes/targets` and `POST /v1/probes/ingest` (agent routes, not Data API).
 
+**Events** (`/v1/events`, keyset cursor on (occurred_at, id)): market events, newest first; `/v1/events/types` is
+the machine-readable catalogue. **Shifts** live under the same root, one shape per path: `/v1/events/shifts`
+(keyset cursor on (at, id)), `/v1/events/shifts/definition`, `/v1/events/shifts/{shift}`. (The plan said
+`type=shift` inside /v1/events; two tables with two shapes in one paged feed would make paging fragile, so they
+are a sub-resource instead.)
+
+**News** (`/v1/news`, keyset cursor on (last activity, story)): story-clustered, newest activity first.
+`/v1/news/{item}`, `/v1/news/sources`, `/v1/news/topics`, `/v1/news/families` (the families the classifier
+knows, tracked or not). `/v1/timeline` and `/v1/timeline/around` stay two paths (two shapes).
+
 **Timestamps** end in `Z`, in `data` and `meta`.
 
 **Lists** page by cursor: `limit` (max 1000) and `cursor`; `meta.next_cursor` (null on the last page), `meta.total`.

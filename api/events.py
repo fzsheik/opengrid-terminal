@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 import analytics.rollups  # noqa: F401  (registers the market_hourly job)
 from accounts.auth import Principal, require_scope
 from analytics import events, movers, opportunities
-from api.common import INFERRED, OBSERVED, OBSERVED_MARKET_PRICE, envelope, resolve_gpu
+from api.common import INFERRED, OBSERVED, OBSERVED_MARKET_PRICE, envelope, keyset_cursor, keyset_values, resolve_gpu
 
 router = APIRouter()
 READ = require_scope("data:read")
@@ -43,7 +43,7 @@ def list_events(gpu: str | None = Query(None, description="GPU slug or canonical
                 severity: str | None = Query(None, description="comma-separated: info, notable, major"),
                 min_severity: str | None = Query(None, pattern="^(info|notable|major)$"),
                 since: datetime | None = None, until: datetime | None = None,
-                limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0),
+                limit: int = Query(100, ge=1, le=1000), cursor: str | None = None,
                 who: Principal = Depends(READ)):
     sev = _csv(severity)
     if sev and any(x not in events.SEVERITIES for x in sev):
@@ -51,10 +51,13 @@ def list_events(gpu: str | None = Query(None, description="GPU slug or canonical
     g = resolve_gpu(gpu) if gpu else None
     items, total = events.query(gpu=g, provider=provider, since=since, until=until,
                                 types=_types(type, events.TYPES), severities=sev, min_severity=min_severity,
-                                limit=limit, offset=offset)
+                                limit=limit + 1, before=keyset_values(cursor, 2) if cursor else None)
+    more, items = len(items) > limit, items[:limit]
+    nxt = keyset_cursor(items[-1]["occurred_at"], items[-1]["id"]) if more and items else None
+    for e in items:
+        e.pop("gpu_slug", None)  # the gpu field is the public id
     return envelope(items, kind="mixed: see each event's kind", methodology=METHOD_EVENTS,
-                    price_concept=OBSERVED_MARKET_PRICE,
-                    pagination={"limit": limit, "offset": offset, "total": total})
+                    price_concept=OBSERVED_MARKET_PRICE, limit=limit, next_cursor=nxt, total=total)
 
 
 @router.get("/v1/events/types", tags=["events"], summary="Event catalogue: triggers, severity rules, data kind")

@@ -374,7 +374,7 @@ Structured events detected every hour, idempotent, with severities and the numbe
 - **News history** (`news/history.py`, methodology/news-history.md): past items recovered from the feeds'
   own archive pages, Internet Archive captures of feed and index pages, EDGAR and GDELT; raw first with
   provenance, marked backfilled, deduplicated against live items (live wins), same classifier.
-- **Major shifts** (`analytics/shifts.py`, `GET /v1/shifts`, methodology/shifts.md): GPU median and index
+- **Major shifts** (`analytics/shifts.py`, `GET /v1/events/shifts`, methodology/shifts.md): GPU median and index
   moves beyond their own volatility, provider-wide repricings, capacity collapses, and archived list-price
   changes before live coverage; each with stored, ranked related items (news, announcements, filings,
   OpenGrid events) under *"Related news and events around this shift (not necessarily causal)"*.
