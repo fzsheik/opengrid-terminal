@@ -344,6 +344,11 @@ trust, live. Shaped for one screen, not part of the contract, free to change. Th
 are readable without the site password only for the areas in `api/pages.PUBLIC_INTERNAL` (live stays
 operator-only, as before).
 
+**Caching**: every successful Data API GET carries an `ETag` (a hash of the data and the API version; never of
+`as_of` / `request_id`), `Cache-Control: private, max-age=60` and `Vary: Authorization, OpenGrid-Version`. A request
+with a matching `If-None-Match` gets `304 Not Modified` with no body. `private` on purpose: a shared cache (CDN)
+would skip per-key rate limits and usage logging, so CDN caching waits for the hosting stage that handles both.
+
 **Timestamps** end in `Z`, in `data` and `meta`.
 
 **Lists** (every one, enforced by the route sweep in tests/test_contract.py) page by cursor; small reference

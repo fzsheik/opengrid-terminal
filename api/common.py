@@ -62,6 +62,7 @@ def envelope(data: Any, *, kind: str | None = None, methodology: str | None = No
     m.update({k: v for k, v in meta.items() if v is not None or k == "next_cursor"})  # null = last page
     if m.get("api_version"):  # a Data API request: public ids and clean numbers (api/contract.public_shape)
         data, m = contract.public_shape(data), contract.public_shape(m)
+        contract.set_etag(data, m["api_version"])
     return {"data": data, "meta": m}
 
 

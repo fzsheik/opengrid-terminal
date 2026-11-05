@@ -221,6 +221,27 @@ def test_listings_match_the_table_and_page_completely():
     assert assert_error(client.get("/v1/listings/history", params={"cursor": "junk"}), 400)["code"] == "invalid_cursor"
 
 
+def test_etag_and_cache_headers():
+    r = client.get("/v1/gpus")
+    tag = r.headers["etag"]
+    assert r.status_code == 200 and tag.startswith('"') and r.headers["cache-control"] == contract.CACHE_CONTROL
+    assert "Authorization" in r.headers["vary"] and "OpenGrid-Version" in r.headers["vary"]
+    assert client.get("/v1/gpus").headers["etag"] == tag, "as_of / request_id change; the ETag does not"
+    nm = client.get("/v1/gpus", headers={"If-None-Match": tag})
+    assert nm.status_code == 304 and nm.content == b"" and nm.headers["etag"] == tag
+    assert client.get("/v1/gpus", headers={"If-None-Match": '"other"'}).status_code == 200
+    assert client.get("/v1/gpus?limit=2").headers["etag"] != tag, "a different body, a different ETag"
+    err = client.get("/v1/gpus/not-a-gpu")
+    assert err.status_code == 404 and "etag" not in err.headers
+    old = contract.VERSIONS
+    contract.VERSIONS = ("2026-01-01",) + old
+    try:
+        assert client.get("/v1/gpus", headers={"OpenGrid-Version": "2026-01-01"}).headers["etag"] != tag, \
+            "another version is another shape"
+    finally:
+        contract.VERSIONS = old
+
+
 def test_compute_api_keeps_detail():
     r = client.get("/v1/jobs/job-doesnotexist")
     assert r.status_code >= 400 and "error" not in r.json(), r.text

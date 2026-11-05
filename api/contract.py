@@ -26,6 +26,7 @@ log = logging.getLogger(__name__)
 VERSIONS = ("2026-11-03",)
 LATEST = VERSIONS[-1]
 HEADER = "OpenGrid-Version"
+CACHE_CONTROL = "private, max-age=60"  # prices change per poll (minutes); 60 s keeps a client's view fresh
 
 # First path segment after /v1/ of every Data API area. Shrinks to the contract's route list as routes move.
 DATA_AREAS = frozenset({
@@ -136,6 +137,16 @@ def public_shape(v):
     return v
 
 
+def set_etag(data, version: str) -> None:
+    """Remember the body's ETag for the response headers (ContractMiddleware): a hash of the data and the version."""
+    import hashlib
+
+    st = observability._state.get()
+    if isinstance(st, dict):
+        raw = json.dumps([version, data], sort_keys=True, default=str, separators=(",", ":")).encode()
+        st["etag"] = '"' + hashlib.sha256(raw).hexdigest()[:32] + '"'
+
+
 def current_version() -> str | None:
     """The API version of the request in progress (None outside a Data API request)."""
     st = observability._state.get()
@@ -156,7 +167,7 @@ class ContractMiddleware:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         path = scope.get("path", "")
-        headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers") or ()}
+        headers = headers_in = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers") or ()}
         state = scope.setdefault("state", {})
         rid = state.get("request_id")
         if on_data_host(headers.get("host", "")):
@@ -188,12 +199,24 @@ class ContractMiddleware:
                 version = resolve(state)  # the key (if any) is known by now
                 headers = [h for h in message.get("headers", []) if h[0].lower() != HEADER.lower().encode()]
                 headers.append((HEADER.lower().encode(), version.encode()))
+                if message["status"] == 200 and scope.get("method") in ("GET", "HEAD") and state.get("etag"):
+                    # Caching: per client only (private): a shared cache would skip per-key limits and usage logs.
+                    headers += [(b"etag", state["etag"].encode()), (b"cache-control", CACHE_CONTROL.encode()),
+                                (b"vary", b"Authorization, OpenGrid-Version")]
+                    if state["etag"] in (headers_in.get("if-none-match") or "").replace("W/", "").split(", "):
+                        held["sent"] = held["not_modified"] = True
+                        keep = [h for h in headers if h[0].lower() not in (b"content-type", b"content-length")]
+                        return await send({**message, "status": 304, "headers": keep})
                 message = {**message, "headers": headers}
                 if message["status"] >= 400 and not head:
                     held["start"], held["body"] = message, b""
                     return
                 held["sent"] = True
                 return await send(message)
+            if message["type"] == "http.response.body" and held.get("not_modified"):
+                if not message.get("more_body"):
+                    await send({"type": "http.response.body", "body": b""})
+                return
             if message["type"] == "http.response.body" and "start" in held:
                 held["body"] += message.get("body", b"")
                 if message.get("more_body"):
