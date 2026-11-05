@@ -112,9 +112,6 @@ PRIVATE_V1 = ("route", "deployments", "keys", "admin", "ops", "me", "usage", "bi
 # /internal areas readable without the site password when PUBLIC_PAGES is on (UI-only views that were public at
 # /v1). Not "live" (operator-only, as before).
 PUBLIC_INTERNAL = ("overview", "tape", "opportunities", "heatmaps", "compare", "uptime", "trust")
-# Exact paths inside a public area that stay private: /v1/reliability (provider reliability from OpenGrid's own
-# launches, transaction data, api/execution.py) shares its first segment with the public /v1/reliability/* reads.
-PRIVATE_EXACT = ("/v1/reliability",)
 # The first UI's JSON reads, which the interim pages still call. Read-only current market data.
 PUBLIC_LEGACY = ("/market", "/market/detail", "/listings", "/polling", "/changes")
 
@@ -131,7 +128,7 @@ def is_public(request: Request) -> bool:
     path = request.url.path
     if path.startswith("/v1/"):
         area = path[4:].split("/", 1)[0]
-        if area in PRIVATE_V1 or path.rstrip("/") in PRIVATE_EXACT:
+        if area in PRIVATE_V1:
             return False
         return area in PUBLIC_V1
     if path.startswith("/internal/"):  # the website's own reads: never on the Data API host, never with a key

@@ -300,8 +300,8 @@ Time series name aggregates `low` / `high` like everything else.
 **Fixing** values (`value`, `raw`, in fixings, their inputs and verify results) are **exact decimal strings** of the
 stored double (`"2.2494934019"`), never JSON floats: money may settle on them and float handling must not touch
 them. Fixings and restatements page by cursor (`meta.next_cursor`, `meta.total`).
-Open decision: a rounding rule for published fixings (e.g. 4 decimals, round half to even) is a settlement
-methodology change, so it is not applied; today the full stored value is published.
+Decided 2026-11-05: publish the full stored value, no rounding. A rounding rule (e.g. 4 decimals, round half
+to even) becomes a dated settlement methodology version once contracts settle on fixings.
 
 **Capacity** (`/v1/capacity`, cursor paged): `provider`, `sku`, `region`, `country`, `region_group`, `gpu`,
 `raw_gpu_name`, `gpu_count`, `in_stock`, `tier`, `available_count`, `total_count`, `count_unit`, `raw_value`,
@@ -321,15 +321,13 @@ availability, latency, reasons; `source: opengrid_probes`), `freshness[]` (per s
 `source: opengrid_feeds`), `feed_health` (`source: opengrid_feeds`). Detail adds `targets[]` with each target's
 hourly series per vantage point. `/dips` = hours with a failed check and their measured scope;
 `/v1/reliability/incidents` = providers' own status-page incidents (`source: provider_status_page`, reported, not
-measured). UptimeProject data is never served here. `/v1/reliability` itself (provider reliability from OpenGrid's
-own launches, api/execution.py) stays key-only: whether it becomes public is an open decision. The probe agents keep
+measured). UptimeProject data is never served here. Reliability of OpenGrid's own launches is a Compute API concern: `GET /v1/execution/reliability`, key only
+(not public, not on the Data API host). The probe agents keep
 `GET /v1/probes/targets` and `POST /v1/probes/ingest` (agent routes, not Data API).
 
 **Events** (`/v1/events`, keyset cursor on (occurred_at, id)): market events, newest first; `/v1/events/types` is
 the machine-readable catalogue. **Shifts** live under the same root, one shape per path: `/v1/events/shifts`
-(keyset cursor on (at, id)), `/v1/events/shifts/definition`, `/v1/events/shifts/{shift}`. (The plan said
-`type=shift` inside /v1/events; two tables with two shapes in one paged feed would make paging fragile, so they
-are a sub-resource instead.)
+(keyset cursor on (at, id)), `/v1/events/shifts/definition`, `/v1/events/shifts/{shift}`. (Decided 2026-11-05: separate from the events feed, one shape each.)
 
 **News** (`/v1/news`, keyset cursor on (last activity, story)): story-clustered, newest activity first.
 `/v1/news/{item}`, `/v1/news/sources`, `/v1/news/topics`, `/v1/news/families` (the families the classifier
@@ -338,7 +336,7 @@ knows, tracked or not). `/v1/timeline` and `/v1/timeline/around` stay two paths 
 **Macro** (`/v1/macro/series`, `/v1/macro/series/{series}`, `/v1/macro/series/{series}/history?since=`,
 `/v1/macro/power`): public-domain series (EIA, SEC EDGAR) beside prices; internal series (equities) are never in
 the catalogue and their ids are 404. The old `?id=a,b` multi-series form is gone (one shape per path).
-`/v1/macro/power` is public as before; whether it stays in the Data API is still open.
+`/v1/macro/power` stays in the Data API, public (decided 2026-11-05).
 
 **Website-only reads** (`/internal/*`): overview, tape, opportunities, heatmaps, compare, uptime (UptimeProject),
 trust, live. Shaped for one screen, not part of the contract, free to change. They keep the internal shape
