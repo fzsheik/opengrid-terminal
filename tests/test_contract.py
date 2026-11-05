@@ -221,6 +221,26 @@ def test_listings_match_the_table_and_page_completely():
     assert assert_error(client.get("/v1/listings/history", params={"cursor": "junk"}), 400)["code"] == "invalid_cursor"
 
 
+def test_listings_as_of():
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import text
+
+    t = datetime.now(timezone.utc) - timedelta(days=3)
+    got = _all_pages("/v1/listings", as_of=t.isoformat(), limit=50)
+    assert got and all(r["trust"] is None and r["original"] is None for r in got)
+    with normalize.SessionLocal() as s:  # independent: the last recorded price at or before t, per listing
+        for r in got[:10]:
+            want = s.execute(text("SELECT price_per_gpu_hour, observed_at FROM listing_observations WHERE provider = :p "
+                                  "AND listing_id = :l AND observed_at <= :t ORDER BY observed_at DESC LIMIT 1"),
+                             {"p": r["provider"], "l": r["listing_id"], "t": t}).one()
+            assert r["price_per_gpu_hour"] == (None if want[0] is None else float(want[0])), (r, want)
+            assert r["observed_at"] <= t.isoformat().replace("+00:00", "Z")
+    assert client.get("/v1/listings", params={"as_of": "2000-01-01T00:00:00Z"}).json()["data"] == []
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    assert assert_error(client.get("/v1/listings", params={"as_of": future}), 422)["param"] == "as_of"
+
+
 def test_etag_and_cache_headers():
     r = client.get("/v1/gpus")
     tag = r.headers["etag"]

@@ -25,7 +25,7 @@
       ["GET", "/v1/markets/{gpu}/history/daily", "One GPU daily as far back as archives reach: archived prices (held between captures) before recording, observed after; kind per day", "gpu*, days, segment"],
       ["GET", "/v1/markets/{gpu}/history/archived", "ARCHIVED prices before recording: Internet Archive captures of provider price pages + AWS price-list versions, per provider and month", "gpu*, segment"],
       ["GET", "/v1/markets/{gpu}/history/dispersion", "Dispersion of one GPU over time", "gpu*, days, interval"],
-      ["GET", "/v1/listings", "Current price listings: every offer, cheapest first, with FX provenance and trust", "gpu, provider, region_group, market_type, available, limit, cursor"],
+      ["GET", "/v1/listings", "Current price listings: every offer, cheapest first, with FX provenance and trust", "gpu, provider, region_group, market_type, available, as_of, limit, cursor"],
       ["GET", "/v1/listings/history", "Recorded listing changes (price, availability, capacity), newest first", "gpu, provider, listing_id, from, to, limit, cursor"],
       ["GET", "/v1/regions", "Region groups and what is listed in each now", ""],
       ["GET", "/v1/timeline", "Price timeline for a GPU or provider", "gpu, provider, window, end, segment, move_pct"],

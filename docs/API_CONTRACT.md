@@ -349,6 +349,15 @@ operator-only, as before).
 with a matching `If-None-Match` gets `304 Not Modified` with no body. `private` on purpose: a shared cache (CDN)
 would skip per-key rate limits and usage logging, so CDN caching waits for the hosting stage that handles both.
 
+**Point in time** (`/v1/listings?as_of=2026-10-01T00:00:00Z`): each public listing's last recorded state at or
+before `as_of`, counted only while it was live (first seen by then, and within its last sighting plus a few polls:
+the rule the charts use). Static fields are current; `original` and `trust` are null (not historical). A future
+`as_of` is a 422. Aggregates over time are the history routes (`/v1/markets/{gpu}/history`, index history).
+
+**Corrections**: listing history is append-only (no code rewrites a past observation) and a suspicious value is held
+in quarantine before it is published (its trust block says `held`), so a published price is never edited
+silently. Fixings correct by restatement (`/v1/fixings/restatements`); the original stays.
+
 **Timestamps** end in `Z`, in `data` and `meta`.
 
 **Lists** (every one, enforced by the route sweep in tests/test_contract.py) page by cursor; small reference
