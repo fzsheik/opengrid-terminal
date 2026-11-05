@@ -32,7 +32,7 @@ CACHE_CONTROL = "private, max-age=60"  # prices change per poll (minutes); 60 s 
 DATA_AREAS = frozenset({
     "gpus", "families", "providers", "regions", "markets", "listings",
     "reserved", "indices", "fixings", "capacity", "costs", "fx", "reliability",
-    "events", "news", "timeline", "macro", "methodology",
+    "events", "news", "timeline", "macro", "methodology", "exports",
 })
 
 _TYPE = {401: "authentication", 403: "permission", 429: "rate_limit"}

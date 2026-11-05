@@ -241,6 +241,38 @@ def test_listings_as_of():
     assert assert_error(client.get("/v1/listings", params={"as_of": future}), 422)["param"] == "as_of"
 
 
+def test_exports():
+    import gzip
+    import json
+    from datetime import date, datetime, time, timedelta, timezone
+
+    from sqlalchemy import text
+
+    day = date.today() - timedelta(days=2)
+    d0 = datetime.combine(day, time.min, tzinfo=timezone.utc)
+    cat = {r["dataset"]: r for r in client.get("/v1/exports").json()["data"]}
+    assert set(cat) == {"listings", "listing_changes", "index_levels", "fixings"} and cat["listings"]["first_date"]
+
+    def rows(name):
+        r = client.get(f"/v1/exports/{name}", params={"date": day.isoformat()})
+        assert r.status_code == 200 and r.headers["content-type"] == "application/gzip", r.text[:200]
+        return [json.loads(x) for x in gzip.decompress(r.content).decode().splitlines() if x]
+
+    snap = rows("listings")
+    end = (d0 + timedelta(days=1) - timedelta(microseconds=1)).isoformat()
+    assert snap == _all_pages("/v1/listings", as_of=end, limit=1000), "the day's snapshot is the as_of read"
+    changes = rows("listing_changes")
+    with normalize.SessionLocal() as s:
+        n = s.execute(text("SELECT count(*) FROM listing_observations o JOIN compute_listings c USING (provider, listing_id) "
+                           "WHERE c.visibility = 'public' AND o.observed_at >= :a AND o.observed_at < :b"),
+                      {"a": d0, "b": d0 + timedelta(days=1)}).scalar()
+    assert n > 0 and len(changes) == n and all(c["observed_at"].endswith("Z") and "gpu_name" in c for c in changes)
+    rows("index_levels"), rows("fixings")
+    today = client.get("/v1/exports/listings", params={"date": date.today().isoformat()})
+    assert assert_error(today, 422)["param"] == "date"
+    assert client.get("/v1/exports/nope", params={"date": day.isoformat()}).status_code == 422
+
+
 def test_etag_and_cache_headers():
     r = client.get("/v1/gpus")
     tag = r.headers["etag"]

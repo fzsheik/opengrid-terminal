@@ -388,8 +388,10 @@ for _module in (execution_api, partners_api, product_api, reconcile_api, uptime_
     app.include_router(_module.router)
 
 from api import listings as listings_api  # noqa: E402  (Data API: /v1/listings)
+from api import exports as exports_api  # noqa: E402  (Data API: /v1/exports, key only)
 
 app.include_router(listings_api.router)
+app.include_router(exports_api.router)
 
 from api import jobs as jobs_api  # noqa: E402  (OpenGrid Jobs; registers the job_sync background job)
 

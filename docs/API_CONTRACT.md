@@ -358,6 +358,12 @@ the rule the charts use). Static fields are current; `original` and `trust` are 
 in quarantine before it is published (its trust block says `held`), so a published price is never edited
 silently. Fixings correct by restatement (`/v1/fixings/restatements`); the original stays.
 
+**Bulk export** (`/v1/exports`, `/v1/exports/{dataset}?date=YYYY-MM-DD`, key only): one completed UTC day of
+`listings` (the end-of-day `as_of` snapshot), `listing_changes`, `index_levels` or `fixings` as one gzipped
+JSON-lines file, rows under the same body rules. Built from the database on request, no file storage;
+`Cache-Control: private, max-age=86400` (a past day never changes). shortcut: built per request; move to stored
+daily files (object storage) when exports are large or frequent.
+
 **Timestamps** end in `Z`, in `data` and `meta`.
 
 **Lists** (every one, enforced by the route sweep in tests/test_contract.py) page by cursor; small reference
