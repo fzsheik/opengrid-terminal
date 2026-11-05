@@ -296,6 +296,21 @@ def test_version_downgrade_steps():
         contract.VERSIONS, contract.STEPS[:], contract.public_shape = old_versions, old_steps, real
 
 
+def test_data_api_openapi():
+    spec = client.get("/v1/openapi.json").json()
+    assert spec["info"]["title"] == "OpenGrid Data API" and spec["info"]["version"] == contract.LATEST
+    ps = set(spec["paths"])
+    assert {"/v1/gpus", "/v1/markets/{gpu}", "/v1/listings", "/v1/exports/{dataset}"} <= ps
+    assert all(contract.is_data_path(p) for p in ps), "only Data API routes"
+    assert not any(p.startswith(("/v1/jobs", "/v1/admin", "/internal", "/v1/ops")) for p in ps)
+    old_pw, old_pub = settings.app_password, settings.public_pages
+    settings.app_password, settings.public_pages = "test-pw", True
+    try:
+        assert TestClient(main.app).get("/v1/openapi.json").status_code == 401, "never anonymous"
+    finally:
+        settings.app_password, settings.public_pages = old_pw, old_pub
+
+
 def test_etag_and_cache_headers():
     r = client.get("/v1/gpus")
     tag = r.headers["etag"]

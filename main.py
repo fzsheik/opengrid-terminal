@@ -18,6 +18,7 @@ import market
 import normalize
 import raw_store
 from accounts import security, sitelogin
+from accounts.auth import require_scope
 from config import settings
 from db import get_db, init_db
 from fetch import fetch_all
@@ -264,6 +265,22 @@ def market_overview(hours: float = Query(24, ge=0, le=24 * 90)):
 @app.get("/market/detail", summary="One canonical GPU: every provider's price over time")
 def market_detail(gpu: str, hours: float = Query(24, ge=0, le=24 * 90)):
     return market.detail(gpu, hours)
+
+
+@app.get("/v1/openapi.json", include_in_schema=False)
+def data_api_openapi(who=Depends(require_scope("data:read"))):
+    """The OpenGrid Data API's own OpenAPI schema: market intelligence routes only (no Compute, ops, admin or website
+    routes). Generated from the code, so it cannot drift; key or site login, like any Data API read."""
+    from api import contract
+
+    spec = app.openapi()
+    paths = {p: v for p, v in spec["paths"].items() if contract.is_data_path(p)}
+    return {**spec, "info": {"title": "OpenGrid Data API", "version": contract.LATEST,
+                             "description": "Market intelligence: GPU prices, indices, fixings, capacity, costs, "
+                                            "reliability, events, news. Contract: docs/API_CONTRACT.md. Send "
+                                            "OpenGrid-Version to pin a version."},
+            "servers": [{"url": f"https://{settings.data_api_host}"}] if settings.data_api_host else [],
+            "paths": paths}
 
 
 @app.get("/health")

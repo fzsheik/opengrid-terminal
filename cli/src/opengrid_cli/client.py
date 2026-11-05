@@ -52,6 +52,8 @@ EXIT_REFUSED = 6        # a safety rule refused: confirmation missing, not sandb
 EXIT_INTERRUPTED = 130
 
 
+API_VERSION = "2026-11-03"  # OpenGrid-Version this client is written against (docs/API_CONTRACT.md)
+
 def version() -> str:
     try:
         from importlib.metadata import version as v
@@ -289,7 +291,8 @@ class Client:
         self.timeout = timeout
         self.retries = max(0, retries)
         self.max_bytes = max_bytes
-        headers = {"User-Agent": f"opengrid-cli/{version()}", "Accept": "application/json"}
+        # The Data API shape this CLI release reads; upgrading the CLI is what moves its users to a new shape.
+        headers = {"User-Agent": f"opengrid-cli/{version()}", "Accept": "application/json", "OpenGrid-Version": API_VERSION}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         self._http = httpx.Client(base_url=self.base_url, headers=headers, transport=transport,

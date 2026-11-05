@@ -371,6 +371,11 @@ JSON-lines file, rows under the same body rules. Built from the database on requ
 `Cache-Control: private, max-age=86400` (a past day never changes). shortcut: built per request; move to stored
 daily files (object storage) when exports are large or frequent.
 
+**Schema and clients**: `GET /v1/openapi.json` is the Data API's own OpenAPI schema (market intelligence routes
+only), generated from the code, key or site login. The CLI sends `OpenGrid-Version` (its `API_VERSION`) on every
+call, so upgrading the CLI is what moves its users to a new shape. A separate Python SDK package (its own repo,
+generated from that schema) is not built yet.
+
 **Timestamps** end in `Z`, in `data` and `meta`.
 
 **Lists** (every one, enforced by the route sweep in tests/test_contract.py) page by cursor; small reference
