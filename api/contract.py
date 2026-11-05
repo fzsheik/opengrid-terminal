@@ -26,6 +26,10 @@ log = logging.getLogger(__name__)
 VERSIONS = ("2026-11-03",)
 LATEST = VERSIONS[-1]
 HEADER = "OpenGrid-Version"
+# Breaking changes, oldest first: (version that introduced it, downgrade(data, path) -> data in the previous shape).
+# A request pinned to an older version gets every newer step's downgrade applied, newest first. Empty until the first
+# breaking change; add the step in api/versions/<date>.py and register it here with its date in VERSIONS.
+STEPS: list[tuple[str, object]] = []
 CACHE_CONTROL = "private, max-age=60"  # prices change per poll (minutes); 60 s keeps a client's view fresh
 
 # First path segment after /v1/ of every Data API area. Shrinks to the contract's route list as routes move.
@@ -137,6 +141,16 @@ def public_shape(v):
     return v
 
 
+def downgrade(data, version: str):
+    """The latest body turned back into `version`'s shape (STEPS newer than it, newest first)."""
+    st = observability._state.get()
+    path = st.get("path", "") if isinstance(st, dict) else ""
+    for introduced, step in reversed(STEPS):
+        if introduced > version:  # ISO dates compare as strings
+            data = step(data, path)
+    return data
+
+
 def set_etag(data, version: str) -> None:
     """Remember the body's ETag for the response headers (ContractMiddleware): a hash of the data and the version."""
     import hashlib
@@ -190,7 +204,7 @@ class ContractMiddleware:
             return await _send_json(send, 400, error_body(
                 400, code="unknown_api_version", param=HEADER, request_id=rid,
                 message=f"{HEADER} {asked!r} {reason}; supported: {', '.join(VERSIONS)}"), {})
-        state["data_api"], state["api_version_asked"] = True, asked
+        state["data_api"], state["api_version_asked"], state["path"] = True, asked, path
         head = scope.get("method") == "HEAD"
         held: dict = {}
 

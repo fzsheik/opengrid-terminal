@@ -1,0 +1,4329 @@
+{
+ "/v1/capacity": {
+  "$": [
+   "array"
+  ]
+ },
+ "/v1/capacity/history": {
+  "$": [
+   "array"
+  ]
+ },
+ "/v1/costs/billing": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].increment_s": [
+   "null",
+   "number"
+  ],
+  "[].minimum_s": [
+   "null",
+   "number"
+  ],
+  "[].notes": [
+   "null",
+   "string"
+  ],
+  "[].products": [
+   "null",
+   "object"
+  ],
+  "[].products.*": [
+   "object"
+  ],
+  "[].products.*.increment_s": [
+   "number"
+  ],
+  "[].products.*.minimum_s": [
+   "number"
+  ],
+  "[].products.*.notes": [
+   "string"
+  ],
+  "[].provider": [
+   "string"
+  ],
+  "[].provider_name": [
+   "string"
+  ],
+  "[].source": [
+   "string"
+  ],
+  "[].status": [
+   "string"
+  ],
+  "[].verified_at": [
+   "string"
+  ]
+ },
+ "/v1/costs/components": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].allowance_scope": [
+   "null",
+   "string"
+  ],
+  "[].as_of": [
+   "string"
+  ],
+  "[].billed_when_stopped": [
+   "boolean",
+   "null"
+  ],
+  "[].component": [
+   "string"
+  ],
+  "[].kind": [
+   "string"
+  ],
+  "[].listing_id": [
+   "null"
+  ],
+  "[].notes": [
+   "null",
+   "string"
+  ],
+  "[].origin": [
+   "string"
+  ],
+  "[].product": [
+   "string"
+  ],
+  "[].provider": [
+   "string"
+  ],
+  "[].provider_name": [
+   "string"
+  ],
+  "[].raw_unit": [
+   "string"
+  ],
+  "[].region": [
+   "null",
+   "string"
+  ],
+  "[].source": [
+   "string"
+  ],
+  "[].status": [
+   "string"
+  ],
+  "[].tiers": [
+   "array"
+  ],
+  "[].tiers[]": [
+   "object"
+  ],
+  "[].tiers[].end_gb": [
+   "null",
+   "number"
+  ],
+  "[].tiers[].price": [
+   "number"
+  ],
+  "[].tiers[].start_gb": [
+   "number"
+  ],
+  "[].unit": [
+   "string"
+  ]
+ },
+ "/v1/costs/presets": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].count": [
+   "number"
+  ],
+  "[].egress_gb": [
+   "number"
+  ],
+  "[].gpu": [
+   "string"
+  ],
+  "[].gpu_name": [
+   "string"
+  ],
+  "[].hours": [
+   "number"
+  ],
+  "[].label": [
+   "string"
+  ],
+  "[].preset": [
+   "string"
+  ],
+  "[].storage_gb": [
+   "number"
+  ]
+ },
+ "/v1/costs/sources": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].description": [
+   "string"
+  ],
+  "[].last_attempt_at": [
+   "null"
+  ],
+  "[].last_attempt_ok": [
+   "null"
+  ],
+  "[].last_error": [
+   "null"
+  ],
+  "[].last_ok_fetch_at": [
+   "null"
+  ],
+  "[].provider": [
+   "string"
+  ],
+  "[].provider_name": [
+   "string"
+  ],
+  "[].source": [
+   "string"
+  ],
+  "[].url": [
+   "string"
+  ]
+ },
+ "/v1/events": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].dedupe_key": [
+   "string"
+  ],
+  "[].detail": [
+   "object"
+  ],
+  "[].detail.basis": [
+   "string"
+  ],
+  "[].detail.direction": [
+   "string"
+  ],
+  "[].detail.examples": [
+   "array"
+  ],
+  "[].detail.examples[]": [
+   "object"
+  ],
+  "[].detail.examples[].gpu": [
+   "string"
+  ],
+  "[].detail.examples[].gpu_name": [
+   "string"
+  ],
+  "[].detail.examples[].provider": [
+   "string"
+  ],
+  "[].detail.examples[].provider_name": [
+   "string"
+  ],
+  "[].detail.from": [
+   "number"
+  ],
+  "[].detail.gpus": [
+   "number"
+  ],
+  "[].detail.is_cheapest": [
+   "boolean"
+  ],
+  "[].detail.last_lowest": [
+   "number"
+  ],
+  "[].detail.last_price": [
+   "number"
+  ],
+  "[].detail.listings": [
+   "number"
+  ],
+  "[].detail.live_markets": [
+   "number"
+  ],
+  "[].detail.lowest": [
+   "number"
+  ],
+  "[].detail.lowest_provider": [
+   "string"
+  ],
+  "[].detail.markets": [
+   "number"
+  ],
+  "[].detail.matched": [
+   "boolean"
+  ],
+  "[].detail.median": [
+   "number"
+  ],
+  "[].detail.metric": [
+   "string"
+  ],
+  "[].detail.previous_price": [
+   "number"
+  ],
+  "[].detail.previous_provider": [
+   "string"
+  ],
+  "[].detail.previous_provider_now": [
+   "null",
+   "number"
+  ],
+  "[].detail.price": [
+   "number"
+  ],
+  "[].detail.priced_listings": [
+   "number"
+  ],
+  "[].detail.providers": [
+   "array",
+   "number"
+  ],
+  "[].detail.providers[]": [
+   "string"
+  ],
+  "[].detail.reason": [
+   "string"
+  ],
+  "[].detail.share": [
+   "number"
+  ],
+  "[].detail.since": [
+   "string"
+  ],
+  "[].detail.sold_out_listings": [
+   "number"
+  ],
+  "[].detail.to": [
+   "number"
+  ],
+  "[].detail.was_cheapest": [
+   "boolean"
+  ],
+  "[].detected_at": [
+   "string"
+  ],
+  "[].gpu": [
+   "null",
+   "string"
+  ],
+  "[].gpu_name": [
+   "string"
+  ],
+  "[].id": [
+   "number"
+  ],
+  "[].kind": [
+   "string"
+  ],
+  "[].occurred_at": [
+   "string"
+  ],
+  "[].pct": [
+   "null",
+   "number"
+  ],
+  "[].provider": [
+   "null",
+   "string"
+  ],
+  "[].provider_name": [
+   "null",
+   "string"
+  ],
+  "[].region_group": [
+   "null"
+  ],
+  "[].segment": [
+   "string"
+  ],
+  "[].severity": [
+   "string"
+  ],
+  "[].title": [
+   "string"
+  ],
+  "[].type": [
+   "string"
+  ],
+  "[].value_after": [
+   "null",
+   "number"
+  ],
+  "[].value_before": [
+   "null",
+   "number"
+  ]
+ },
+ "/v1/events/shifts": {
+  "$": [
+   "array"
+  ]
+ },
+ "/v1/events/shifts/definition": {
+  "$": [
+   "object"
+  ],
+  ".heading": [
+   "string"
+  ],
+  ".items_version": [
+   "string"
+  ],
+  ".note": [
+   "string"
+  ],
+  ".ranking": [
+   "string"
+  ],
+  ".segment": [
+   "string"
+  ],
+  ".thresholds": [
+   "object"
+  ],
+  ".thresholds.archived_min": [
+   "number"
+  ],
+  ".thresholds.baseline_days": [
+   "number"
+  ],
+  ".thresholds.baseline_min_hours": [
+   "number"
+  ],
+  ".thresholds.index_min": [
+   "number"
+  ],
+  ".thresholds.k_times_rms": [
+   "number"
+  ],
+  ".thresholds.major": [
+   "string"
+  ],
+  ".thresholds.median_min": [
+   "number"
+  ],
+  ".thresholds.median_min_providers": [
+   "number"
+  ],
+  ".thresholds.reprice_min_gpus": [
+   "number"
+  ],
+  ".types": [
+   "object"
+  ],
+  ".types.archived_price_change": [
+   "object"
+  ],
+  ".types.archived_price_change.kind": [
+   "string"
+  ],
+  ".types.archived_price_change.label": [
+   "string"
+  ],
+  ".types.archived_provider_repricing": [
+   "object"
+  ],
+  ".types.archived_provider_repricing.kind": [
+   "string"
+  ],
+  ".types.archived_provider_repricing.label": [
+   "string"
+  ],
+  ".types.capacity_collapse": [
+   "object"
+  ],
+  ".types.capacity_collapse.kind": [
+   "string"
+  ],
+  ".types.capacity_collapse.label": [
+   "string"
+  ],
+  ".types.index_move": [
+   "object"
+  ],
+  ".types.index_move.kind": [
+   "string"
+  ],
+  ".types.index_move.label": [
+   "string"
+  ],
+  ".types.market_median": [
+   "object"
+  ],
+  ".types.market_median.kind": [
+   "string"
+  ],
+  ".types.market_median.label": [
+   "string"
+  ],
+  ".types.provider_repricing": [
+   "object"
+  ],
+  ".types.provider_repricing.kind": [
+   "string"
+  ],
+  ".types.provider_repricing.label": [
+   "string"
+  ],
+  ".version": [
+   "string"
+  ],
+  ".window": [
+   "object"
+  ],
+  ".window.after_hours": [
+   "number"
+  ],
+  ".window.archived_pad_days": [
+   "number"
+  ],
+  ".window.before_hours": [
+   "number"
+  ],
+  ".window.max_items": [
+   "number"
+  ],
+  ".window.settle_days": [
+   "number"
+  ]
+ },
+ "/v1/events/types": {
+  "$": [
+   "object"
+  ],
+  ".events": [
+   "array"
+  ],
+  ".events[]": [
+   "object"
+  ],
+  ".events[].description": [
+   "string"
+  ],
+  ".events[].kind": [
+   "string"
+  ],
+  ".events[].severity": [
+   "string"
+  ],
+  ".events[].type": [
+   "string"
+  ],
+  ".opportunities": [
+   "array"
+  ],
+  ".opportunities[]": [
+   "object"
+  ],
+  ".opportunities[].description": [
+   "string"
+  ],
+  ".opportunities[].kind": [
+   "string"
+  ],
+  ".opportunities[].type": [
+   "string"
+  ],
+  ".severities": [
+   "array"
+  ],
+  ".severities[]": [
+   "string"
+  ]
+ },
+ "/v1/exports": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].dataset": [
+   "string"
+  ],
+  "[].description": [
+   "string"
+  ],
+  "[].first_date": [
+   "null",
+   "string"
+  ],
+  "[].format": [
+   "string"
+  ],
+  "[].url": [
+   "string"
+  ]
+ },
+ "/v1/families": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].architecture": [
+   "null",
+   "string"
+  ],
+  "[].cheapest_variant_now": [
+   "null",
+   "object"
+  ],
+  "[].cheapest_variant_now.gpu": [
+   "string"
+  ],
+  "[].cheapest_variant_now.gpu_name": [
+   "string"
+  ],
+  "[].cheapest_variant_now.label": [
+   "string"
+  ],
+  "[].cheapest_variant_now.price_per_gpu_hour": [
+   "number"
+  ],
+  "[].cheapest_variant_now.provider": [
+   "string"
+  ],
+  "[].cheapest_variant_now.provider_name": [
+   "string"
+  ],
+  "[].id": [
+   "string"
+  ],
+  "[].kind": [
+   "string"
+  ],
+  "[].link": [
+   "string"
+  ],
+  "[].member_families": [
+   "array",
+   "null"
+  ],
+  "[].member_families[]": [
+   "string"
+  ],
+  "[].name": [
+   "string"
+  ],
+  "[].variants": [
+   "array"
+  ],
+  "[].variants[]": [
+   "object"
+  ],
+  "[].variants[].gpu": [
+   "string"
+  ],
+  "[].variants[].gpu_name": [
+   "string"
+  ],
+  "[].variants[].price": [
+   "object"
+  ],
+  "[].variants[].price.currency": [
+   "string"
+  ],
+  "[].variants[].price.high": [
+   "null",
+   "number"
+  ],
+  "[].variants[].price.low": [
+   "null",
+   "number"
+  ],
+  "[].variants[].price.median": [
+   "null",
+   "number"
+  ],
+  "[].variants[].price.unit": [
+   "string"
+  ],
+  "[].variants[].providers": [
+   "number"
+  ],
+  "[].variants_priced": [
+   "number"
+  ]
+ },
+ "/v1/families/h100": {
+  "$": [
+   "object"
+  ],
+  ".architecture": [
+   "string"
+  ],
+  ".cheapest_variant_now": [
+   "object"
+  ],
+  ".cheapest_variant_now.gpu": [
+   "string"
+  ],
+  ".cheapest_variant_now.gpu_name": [
+   "string"
+  ],
+  ".cheapest_variant_now.label": [
+   "string"
+  ],
+  ".cheapest_variant_now.price_per_gpu_hour": [
+   "number"
+  ],
+  ".cheapest_variant_now.provider": [
+   "string"
+  ],
+  ".cheapest_variant_now.provider_name": [
+   "string"
+  ],
+  ".composite_index": [
+   "string"
+  ],
+  ".id": [
+   "string"
+  ],
+  ".kind": [
+   "string"
+  ],
+  ".member_families": [
+   "null"
+  ],
+  ".name": [
+   "string"
+  ],
+  ".note": [
+   "string"
+  ],
+  ".variants": [
+   "array"
+  ],
+  ".variants[]": [
+   "object"
+  ],
+  ".variants[].gpu": [
+   "string"
+  ],
+  ".variants[].gpu_name": [
+   "string"
+  ],
+  ".variants[].index": [
+   "object"
+  ],
+  ".variants[].index.change_24h": [
+   "object"
+  ],
+  ".variants[].index.change_24h.pct": [
+   "null",
+   "number"
+  ],
+  ".variants[].index.change_24h.reason": [
+   "null",
+   "string"
+  ],
+  ".variants[].index.id": [
+   "string"
+  ],
+  ".variants[].index.level": [
+   "null",
+   "number"
+  ],
+  ".variants[].index.published": [
+   "boolean"
+  ],
+  ".variants[].links": [
+   "object"
+  ],
+  ".variants[].links.gpu": [
+   "string"
+  ],
+  ".variants[].links.history": [
+   "string"
+  ],
+  ".variants[].links.market": [
+   "string"
+  ],
+  ".variants[].links.regions": [
+   "string"
+  ],
+  ".variants[].listings": [
+   "object"
+  ],
+  ".variants[].listings.available": [
+   "number"
+  ],
+  ".variants[].listings.priced": [
+   "number"
+  ],
+  ".variants[].low_provider": [
+   "null",
+   "string"
+  ],
+  ".variants[].price": [
+   "object"
+  ],
+  ".variants[].price.currency": [
+   "string"
+  ],
+  ".variants[].price.high": [
+   "null",
+   "number"
+  ],
+  ".variants[].price.low": [
+   "null",
+   "number"
+  ],
+  ".variants[].price.median": [
+   "null",
+   "number"
+  ],
+  ".variants[].price.unit": [
+   "string"
+  ],
+  ".variants[].providers": [
+   "number"
+  ],
+  ".variants[].reason": [
+   "null",
+   "string"
+  ],
+  ".variants_priced": [
+   "number"
+  ],
+  ".variants_total": [
+   "number"
+  ]
+ },
+ "/v1/fixings": {
+  "$": [
+   "object"
+  ],
+  ".final_through": [
+   "string"
+  ],
+  ".indices": [
+   "array"
+  ],
+  ".indices[]": [
+   "object"
+  ],
+  ".indices[].daily": [
+   "null"
+  ],
+  ".indices[].hourly": [
+   "null"
+  ],
+  ".indices[].index": [
+   "string"
+  ],
+  ".indices[].index_name": [
+   "string"
+  ],
+  ".indices[].provisional": [
+   "object"
+  ],
+  ".indices[].provisional.final_after": [
+   "string"
+  ],
+  ".indices[].provisional.fixing_time": [
+   "string"
+  ],
+  ".indices[].provisional.note": [
+   "string"
+  ],
+  ".indices[].provisional.reason": [
+   "null",
+   "string"
+  ],
+  ".indices[].provisional.status": [
+   "string"
+  ],
+  ".indices[].provisional.value": [
+   "null",
+   "string"
+  ],
+  ".indices[].unit": [
+   "string"
+  ],
+  ".ledger_head": [
+   "null"
+  ]
+ },
+ "/v1/fixings/chain/verify": {
+  "$": [
+   "object"
+  ],
+  ".break_count": [
+   "number"
+  ],
+  ".breaks": [
+   "array"
+  ],
+  ".checked": [
+   "number"
+  ],
+  ".from_seq": [
+   "null"
+  ],
+  ".head_hash": [
+   "string"
+  ],
+  ".head_seq": [
+   "null"
+  ],
+  ".ledger_rows": [
+   "number"
+  ],
+  ".next_seq": [
+   "null"
+  ],
+  ".ok": [
+   "boolean"
+  ],
+  ".result": [
+   "string"
+  ],
+  ".to_seq": [
+   "null"
+  ]
+ },
+ "/v1/fixings/methodology": {
+  "$": [
+   "object"
+  ],
+  ".correction_windows": [
+   "object"
+  ],
+  ".correction_windows.daily_business_days": [
+   "number"
+  ],
+  ".correction_windows.hourly_hours": [
+   "number"
+  ],
+  ".daily": [
+   "object"
+  ],
+  ".daily.fixing_time": [
+   "string"
+  ],
+  ".daily.hours": [
+   "number"
+  ],
+  ".daily.min_hours": [
+   "number"
+  ],
+  ".daily.statistic": [
+   "string"
+  ],
+  ".hourly": [
+   "object"
+  ],
+  ".hourly.fixing_time": [
+   "string"
+  ],
+  ".hourly.rollup_overlap_hours": [
+   "number"
+  ],
+  ".hourly.safety_margin_hours": [
+   "number"
+  ],
+  ".hourly.taken_after": [
+   "string"
+  ],
+  ".index_methodology_version": [
+   "string"
+  ],
+  ".notices": [
+   "array"
+  ],
+  ".settlement_indices": [
+   "array"
+  ],
+  ".settlement_indices[]": [
+   "string"
+  ],
+  ".settlement_version": [
+   "string"
+  ],
+  ".sufficiency": [
+   "object"
+  ],
+  ".sufficiency.min_components": [
+   "number"
+  ],
+  ".sufficiency.min_constituents": [
+   "number"
+  ],
+  ".surveillance": [
+   "object"
+  ],
+  ".surveillance.concentration_severe": [
+   "number"
+  ],
+  ".surveillance.concentration_warn": [
+   "number"
+  ],
+  ".surveillance.feed_outage_severe_share": [
+   "number"
+  ],
+  ".surveillance.jump_pct": [
+   "number"
+  ],
+  ".surveillance.new_listing_hours": [
+   "number"
+  ],
+  ".surveillance.pre_fix_hours": [
+   "number"
+  ]
+ },
+ "/v1/fixings/restatements": {
+  "$": [
+   "array"
+  ]
+ },
+ "/v1/fx/rates": {
+  "$": [
+   "object"
+  ],
+  ".eur_usd": [
+   "object"
+  ],
+  ".eur_usd.age_days": [
+   "null"
+  ],
+  ".eur_usd.base": [
+   "string"
+  ],
+  ".eur_usd.cross_currencies": [
+   "array"
+  ],
+  ".eur_usd.cross_method": [
+   "string"
+  ],
+  ".eur_usd.last_fetch_at": [
+   "null"
+  ],
+  ".eur_usd.last_fetch_error": [
+   "null"
+  ],
+  ".eur_usd.last_fetch_ok": [
+   "null"
+  ],
+  ".eur_usd.last_ok_fetch_at": [
+   "null"
+  ],
+  ".eur_usd.max_age_days": [
+   "number"
+  ],
+  ".eur_usd.published_at": [
+   "null"
+  ],
+  ".eur_usd.quote": [
+   "string"
+  ],
+  ".eur_usd.rate": [
+   "null"
+  ],
+  ".eur_usd.rate_date": [
+   "null"
+  ],
+  ".eur_usd.source": [
+   "string"
+  ],
+  ".eur_usd.source_name": [
+   "string"
+  ],
+  ".eur_usd.source_url": [
+   "string"
+  ],
+  ".eur_usd.state": [
+   "string"
+  ],
+  ".to_usd": [
+   "array"
+  ]
+ },
+ "/v1/fx/rates/history": {
+  "$": [
+   "array"
+  ]
+ },
+ "/v1/gpus": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].architecture": [
+   "string"
+  ],
+  "[].bf16_tflops_dense": [
+   "null",
+   "number"
+  ],
+  "[].datacenter": [
+   "boolean"
+  ],
+  "[].families": [
+   "array"
+  ],
+  "[].families[]": [
+   "string"
+  ],
+  "[].form_factor": [
+   "null",
+   "string"
+  ],
+  "[].fp16_tflops_dense": [
+   "null",
+   "number"
+  ],
+  "[].fp32_tflops": [
+   "null",
+   "number"
+  ],
+  "[].fp8_supported": [
+   "boolean"
+  ],
+  "[].fp8_tflops_dense": [
+   "null",
+   "number"
+  ],
+  "[].fraction_of_parent": [
+   "number"
+  ],
+  "[].generation": [
+   "string"
+  ],
+  "[].id": [
+   "string"
+  ],
+  "[].interconnect": [
+   "null",
+   "string"
+  ],
+  "[].memory_bandwidth_tbps": [
+   "null",
+   "number"
+  ],
+  "[].memory_type": [
+   "null",
+   "string"
+  ],
+  "[].name": [
+   "string"
+  ],
+  "[].notes": [
+   "string"
+  ],
+  "[].nvlink": [
+   "null",
+   "string"
+  ],
+  "[].parent": [
+   "string"
+  ],
+  "[].released": [
+   "number"
+  ],
+  "[].segment": [
+   "string"
+  ],
+  "[].sources": [
+   "array"
+  ],
+  "[].sources[]": [
+   "string"
+  ],
+  "[].tdp_w": [
+   "null",
+   "number"
+  ],
+  "[].vendor": [
+   "string"
+  ],
+  "[].vram_gb": [
+   "number"
+  ],
+  "[].workload_class": [
+   "string"
+  ]
+ },
+ "/v1/gpus/h100-80gb-sxm5": {
+  "$": [
+   "object"
+  ],
+  ".architecture": [
+   "string"
+  ],
+  ".bf16_tflops_dense": [
+   "number"
+  ],
+  ".datacenter": [
+   "boolean"
+  ],
+  ".families": [
+   "array"
+  ],
+  ".families[]": [
+   "string"
+  ],
+  ".form_factor": [
+   "string"
+  ],
+  ".fp16_tflops_dense": [
+   "number"
+  ],
+  ".fp32_tflops": [
+   "number"
+  ],
+  ".fp8_supported": [
+   "boolean"
+  ],
+  ".fp8_tflops_dense": [
+   "number"
+  ],
+  ".generation": [
+   "string"
+  ],
+  ".id": [
+   "string"
+  ],
+  ".interconnect": [
+   "string"
+  ],
+  ".memory_bandwidth_tbps": [
+   "number"
+  ],
+  ".memory_type": [
+   "string"
+  ],
+  ".name": [
+   "string"
+  ],
+  ".notes": [
+   "string"
+  ],
+  ".nvlink": [
+   "string"
+  ],
+  ".released": [
+   "number"
+  ],
+  ".segment": [
+   "string"
+  ],
+  ".sources": [
+   "array"
+  ],
+  ".sources[]": [
+   "string"
+  ],
+  ".tdp_w": [
+   "number"
+  ],
+  ".vendor": [
+   "string"
+  ],
+  ".vram_gb": [
+   "number"
+  ],
+  ".workload_class": [
+   "string"
+  ]
+ },
+ "/v1/indices": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].change_reasons": [
+   "object"
+  ],
+  "[].change_reasons.*": [
+   "string"
+  ],
+  "[].change_reasons.all": [
+   "string"
+  ],
+  "[].change_reasons.ytd": [
+   "string"
+  ],
+  "[].changes": [
+   "object"
+  ],
+  "[].changes.*": [
+   "null",
+   "number"
+  ],
+  "[].changes.all": [
+   "null",
+   "number"
+  ],
+  "[].changes.ytd": [
+   "null"
+  ],
+  "[].constituents": [
+   "number"
+  ],
+  "[].coverage": [
+   "object"
+  ],
+  "[].coverage.chain_segment": [
+   "null",
+   "number"
+  ],
+  "[].coverage.chain_segment_start": [
+   "null",
+   "string"
+  ],
+  "[].coverage.constituents_now": [
+   "number"
+  ],
+  "[].coverage.first_published": [
+   "null",
+   "string"
+  ],
+  "[].coverage.hours_30d": [
+   "number"
+  ],
+  "[].coverage.published_hours_30d": [
+   "number"
+  ],
+  "[].first_published": [
+   "null",
+   "string"
+  ],
+  "[].gpu": [
+   "null",
+   "string"
+  ],
+  "[].gpu_name": [
+   "string"
+  ],
+  "[].high": [
+   "null",
+   "object"
+  ],
+  "[].high.hour": [
+   "string"
+  ],
+  "[].high.level": [
+   "number"
+  ],
+  "[].high.since": [
+   "string"
+  ],
+  "[].hour": [
+   "string"
+  ],
+  "[].id": [
+   "string"
+  ],
+  "[].interruptible": [
+   "boolean"
+  ],
+  "[].kind": [
+   "string"
+  ],
+  "[].last_published": [
+   "null",
+   "object"
+  ],
+  "[].last_published.hour": [
+   "string"
+  ],
+  "[].last_published.level": [
+   "number"
+  ],
+  "[].level": [
+   "null",
+   "number"
+  ],
+  "[].low": [
+   "null",
+   "object"
+  ],
+  "[].low.hour": [
+   "string"
+  ],
+  "[].low.level": [
+   "number"
+  ],
+  "[].low.since": [
+   "string"
+  ],
+  "[].name": [
+   "string"
+  ],
+  "[].provider_class": [
+   "null"
+  ],
+  "[].published": [
+   "boolean"
+  ],
+  "[].raw_level": [
+   "null",
+   "number"
+  ],
+  "[].reason": [
+   "null",
+   "string"
+  ],
+  "[].region_group": [
+   "null",
+   "string"
+  ],
+  "[].segment": [
+   "string"
+  ],
+  "[].spark_7d": [
+   "array"
+  ],
+  "[].spark_7d[]": [
+   "null",
+   "number"
+  ],
+  "[].unit": [
+   "string"
+  ],
+  "[].volatility": [
+   "object"
+  ],
+  "[].volatility.*": [
+   "object"
+  ],
+  "[].volatility.*.annualized": [
+   "null"
+  ],
+  "[].volatility.*.basis": [
+   "string"
+  ],
+  "[].volatility.*.reason": [
+   "string"
+  ],
+  "[].volatility.*.returns": [
+   "number"
+  ],
+  "[].volatility.*.window_hours": [
+   "number"
+  ]
+ },
+ "/v1/indices/h100-80gb-sxm5": {
+  "$": [
+   "object"
+  ],
+  ".changes": [
+   "object"
+  ],
+  ".changes.*": [
+   "object"
+  ],
+  ".changes.*.from_hour": [
+   "null",
+   "string"
+  ],
+  ".changes.*.from_level": [
+   "null",
+   "number"
+  ],
+  ".changes.*.pct": [
+   "null",
+   "number"
+  ],
+  ".changes.*.reason": [
+   "null",
+   "string"
+  ],
+  ".changes.all": [
+   "object"
+  ],
+  ".changes.all.from_hour": [
+   "string"
+  ],
+  ".changes.all.from_level": [
+   "number"
+  ],
+  ".changes.all.pct": [
+   "number"
+  ],
+  ".changes.all.reason": [
+   "null"
+  ],
+  ".changes.ytd": [
+   "object"
+  ],
+  ".changes.ytd.from_hour": [
+   "null"
+  ],
+  ".changes.ytd.from_level": [
+   "null"
+  ],
+  ".changes.ytd.pct": [
+   "null"
+  ],
+  ".changes.ytd.reason": [
+   "string"
+  ],
+  ".components": [
+   "array"
+  ],
+  ".constituents": [
+   "number"
+  ],
+  ".constituents_now": [
+   "object"
+  ],
+  ".constituents_now.constituents": [
+   "array"
+  ],
+  ".constituents_now.constituents[]": [
+   "object"
+  ],
+  ".constituents_now.constituents[].price": [
+   "number"
+  ],
+  ".constituents_now.constituents[].provider": [
+   "string"
+  ],
+  ".constituents_now.constituents[].provider_class": [
+   "string"
+  ],
+  ".constituents_now.constituents[].provider_name": [
+   "string"
+  ],
+  ".constituents_now.constituents[].recorded_since": [
+   "string"
+  ],
+  ".constituents_now.constituents[].status": [
+   "string"
+  ],
+  ".constituents_now.hour": [
+   "string"
+  ],
+  ".coverage": [
+   "object"
+  ],
+  ".coverage.chain_segment": [
+   "number"
+  ],
+  ".coverage.chain_segment_start": [
+   "string"
+  ],
+  ".coverage.constituents_now": [
+   "number"
+  ],
+  ".coverage.first_published": [
+   "string"
+  ],
+  ".coverage.hours_30d": [
+   "number"
+  ],
+  ".coverage.published_hours_30d": [
+   "number"
+  ],
+  ".description": [
+   "string"
+  ],
+  ".gpu": [
+   "string"
+  ],
+  ".gpu_name": [
+   "string"
+  ],
+  ".high": [
+   "object"
+  ],
+  ".high.hour": [
+   "string"
+  ],
+  ".high.level": [
+   "number"
+  ],
+  ".high.since": [
+   "string"
+  ],
+  ".hour": [
+   "string"
+  ],
+  ".id": [
+   "string"
+  ],
+  ".interruptible": [
+   "boolean"
+  ],
+  ".kind": [
+   "string"
+  ],
+  ".last_published": [
+   "object"
+  ],
+  ".last_published.hour": [
+   "string"
+  ],
+  ".last_published.level": [
+   "number"
+  ],
+  ".level": [
+   "number"
+  ],
+  ".low": [
+   "object"
+  ],
+  ".low.hour": [
+   "string"
+  ],
+  ".low.level": [
+   "number"
+  ],
+  ".low.since": [
+   "string"
+  ],
+  ".method": [
+   "string"
+  ],
+  ".methodology": [
+   "string"
+  ],
+  ".methodology_version": [
+   "string"
+  ],
+  ".name": [
+   "string"
+  ],
+  ".note": [
+   "null"
+  ],
+  ".price_concept": [
+   "string"
+  ],
+  ".provider_class": [
+   "null"
+  ],
+  ".published": [
+   "boolean"
+  ],
+  ".raw_level": [
+   "number"
+  ],
+  ".reason": [
+   "null"
+  ],
+  ".region_group": [
+   "null"
+  ],
+  ".segment": [
+   "string"
+  ],
+  ".spark_7d": [
+   "array"
+  ],
+  ".spark_7d[]": [
+   "null",
+   "number"
+  ],
+  ".unit": [
+   "string"
+  ],
+  ".volatility": [
+   "object"
+  ],
+  ".volatility.*": [
+   "object"
+  ],
+  ".volatility.*.annualized": [
+   "null"
+  ],
+  ".volatility.*.basis": [
+   "string"
+  ],
+  ".volatility.*.reason": [
+   "string"
+  ],
+  ".volatility.*.returns": [
+   "number"
+  ],
+  ".volatility.*.window_hours": [
+   "number"
+  ]
+ },
+ "/v1/indices/h100-80gb-sxm5/fixings": {
+  "$": [
+   "object"
+  ],
+  ".fixings": [
+   "array"
+  ],
+  ".index": [
+   "string"
+  ],
+  ".index_name": [
+   "string"
+  ],
+  ".settlement_index": [
+   "boolean"
+  ],
+  ".unit": [
+   "string"
+  ]
+ },
+ "/v1/indices/h100-80gb-sxm5/history": {
+  "$": [
+   "object"
+  ],
+  ".index": [
+   "string"
+  ],
+  ".index_name": [
+   "string"
+  ],
+  ".interval": [
+   "string"
+  ],
+  ".points": [
+   "array"
+  ],
+  ".points[]": [
+   "object"
+  ],
+  ".points[].constituents": [
+   "number"
+  ],
+  ".points[].level": [
+   "null",
+   "number"
+  ],
+  ".points[].link_constituents": [
+   "null",
+   "number"
+  ],
+  ".points[].published": [
+   "boolean"
+  ],
+  ".points[].raw_level": [
+   "number"
+  ],
+  ".points[].reason": [
+   "null",
+   "string"
+  ],
+  ".points[].segment_no": [
+   "null",
+   "number"
+  ],
+  ".points[].t": [
+   "string"
+  ],
+  ".unit": [
+   "string"
+  ],
+  ".window": [
+   "string"
+  ]
+ },
+ "/v1/listings": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].available": [
+   "boolean"
+  ],
+  "[].capacity": [
+   "null"
+  ],
+  "[].capacity_unit": [
+   "null"
+  ],
+  "[].country": [
+   "null",
+   "string"
+  ],
+  "[].currency": [
+   "string"
+  ],
+  "[].first_seen_at": [
+   "string"
+  ],
+  "[].gpu": [
+   "string"
+  ],
+  "[].gpu_count": [
+   "number"
+  ],
+  "[].gpu_name": [
+   "string"
+  ],
+  "[].interruptible": [
+   "boolean"
+  ],
+  "[].listing_id": [
+   "string"
+  ],
+  "[].market_type": [
+   "string"
+  ],
+  "[].observed_at": [
+   "string"
+  ],
+  "[].original": [
+   "null"
+  ],
+  "[].price_per_gpu_hour": [
+   "number"
+  ],
+  "[].price_per_instance_hour": [
+   "number"
+  ],
+  "[].provider": [
+   "string"
+  ],
+  "[].provider_name": [
+   "string"
+  ],
+  "[].provider_tier": [
+   "null"
+  ],
+  "[].ram_gb": [
+   "null"
+  ],
+  "[].raw_gpu_name": [
+   "string"
+  ],
+  "[].region": [
+   "null",
+   "string"
+  ],
+  "[].region_group": [
+   "string"
+  ],
+  "[].sku": [
+   "string"
+  ],
+  "[].storage_gb": [
+   "null"
+  ],
+  "[].trust": [
+   "object"
+  ],
+  "[].trust.age_seconds": [
+   "number"
+  ],
+  "[].trust.availability_basis": [
+   "string"
+  ],
+  "[].trust.confidence": [
+   "string"
+  ],
+  "[].trust.confidence_reasons": [
+   "array"
+  ],
+  "[].trust.confidence_reasons[]": [
+   "string"
+  ],
+  "[].trust.flags": [
+   "array"
+  ],
+  "[].trust.freshness": [
+   "string"
+  ],
+  "[].trust.held": [
+   "array"
+  ],
+  "[].trust.last_changed": [
+   "string"
+  ],
+  "[].trust.last_fetched": [
+   "string"
+  ],
+  "[].trust.last_seen": [
+   "string"
+  ],
+  "[].trust.polling_interval_seconds": [
+   "number"
+  ],
+  "[].trust.provider_status": [
+   "string"
+  ],
+  "[].trust.source": [
+   "null"
+  ],
+  "[].trust.source_detail": [
+   "string"
+  ],
+  "[].trust.source_type": [
+   "string"
+  ],
+  "[].vcpu": [
+   "null"
+  ]
+ },
+ "/v1/listings/history": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].available": [
+   "boolean"
+  ],
+  "[].capacity": [
+   "null"
+  ],
+  "[].capacity_unit": [
+   "null"
+  ],
+  "[].gpu": [
+   "string"
+  ],
+  "[].gpu_count": [
+   "number"
+  ],
+  "[].gpu_name": [
+   "string"
+  ],
+  "[].listing_id": [
+   "string"
+  ],
+  "[].market_type": [
+   "string"
+  ],
+  "[].observed_at": [
+   "string"
+  ],
+  "[].price_per_gpu_hour": [
+   "number"
+  ],
+  "[].price_per_instance_hour": [
+   "number"
+  ],
+  "[].provider": [
+   "string"
+  ],
+  "[].provider_name": [
+   "string"
+  ],
+  "[].region": [
+   "null",
+   "string"
+  ]
+ },
+ "/v1/macro/power": {
+  "$": [
+   "array"
+  ]
+ },
+ "/v1/macro/series": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].attribution": [
+   "string"
+  ],
+  "[].enabled": [
+   "boolean"
+  ],
+  "[].entity": [
+   "null"
+  ],
+  "[].frequency": [
+   "string"
+  ],
+  "[].geo": [
+   "string"
+  ],
+  "[].latest": [
+   "null"
+  ],
+  "[].market_area": [
+   "null",
+   "string"
+  ],
+  "[].name": [
+   "string"
+  ],
+  "[].points": [
+   "number"
+  ],
+  "[].series_id": [
+   "string"
+  ],
+  "[].source": [
+   "string"
+  ],
+  "[].unit": [
+   "string"
+  ]
+ },
+ "/v1/markets": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].gpu": [
+   "string"
+  ],
+  "[].gpu_name": [
+   "string"
+  ],
+  "[].listings": [
+   "object"
+  ],
+  "[].listings.availability_unknown": [
+   "number"
+  ],
+  "[].listings.available": [
+   "number"
+  ],
+  "[].listings.live": [
+   "number"
+  ],
+  "[].listings.priced": [
+   "number"
+  ],
+  "[].listings.sold_out": [
+   "number"
+  ],
+  "[].price": [
+   "object"
+  ],
+  "[].price.currency": [
+   "string"
+  ],
+  "[].price.high": [
+   "number"
+  ],
+  "[].price.low": [
+   "number"
+  ],
+  "[].price.median": [
+   "number"
+  ],
+  "[].price.unit": [
+   "string"
+  ],
+  "[].providers": [
+   "number"
+  ],
+  "[].score": [
+   "object"
+  ],
+  "[].score.confidence": [
+   "null",
+   "string"
+  ],
+  "[].score.efficiency": [
+   "null",
+   "number"
+  ],
+  "[].score.fragmentation": [
+   "null",
+   "number"
+  ],
+  "[].score.label": [
+   "null",
+   "string"
+  ],
+  "[].score.reason": [
+   "null",
+   "string"
+  ],
+  "[].spread": [
+   "object"
+  ],
+  "[].spread.abs": [
+   "number"
+  ],
+  "[].spread.pct_of_low": [
+   "number"
+  ],
+  "[].spread.pct_of_median": [
+   "number"
+  ]
+ },
+ "/v1/markets/h100-80gb-sxm5": {
+  "$": [
+   "object"
+  ],
+  ".alternatives": [
+   "object"
+  ],
+  ".alternatives.alternatives": [
+   "array"
+  ],
+  ".alternatives.alternatives[]": [
+   "object"
+  ],
+  ".alternatives.alternatives[].architecture": [
+   "string"
+  ],
+  ".alternatives.alternatives[].available_listings": [
+   "number"
+  ],
+  ".alternatives.alternatives[].delta": [
+   "object"
+  ],
+  ".alternatives.alternatives[].delta.bf16_tflops": [
+   "number"
+  ],
+  ".alternatives.alternatives[].delta.low_price": [
+   "number"
+  ],
+  ".alternatives.alternatives[].delta.median_price": [
+   "number"
+  ],
+  ".alternatives.alternatives[].delta.memory_bandwidth": [
+   "number"
+  ],
+  ".alternatives.alternatives[].delta.vram": [
+   "number"
+  ],
+  ".alternatives.alternatives[].gpu": [
+   "string"
+  ],
+  ".alternatives.alternatives[].gpu_name": [
+   "string"
+  ],
+  ".alternatives.alternatives[].low": [
+   "number"
+  ],
+  ".alternatives.alternatives[].median": [
+   "number"
+  ],
+  ".alternatives.alternatives[].providers": [
+   "number"
+  ],
+  ".alternatives.alternatives[].shares": [
+   "array"
+  ],
+  ".alternatives.alternatives[].shares[]": [
+   "string"
+  ],
+  ".alternatives.alternatives[].vram_gb": [
+   "number"
+  ],
+  ".alternatives.alternatives[].workload_class": [
+   "string"
+  ],
+  ".alternatives.gpu": [
+   "string"
+  ],
+  ".alternatives.gpu_name": [
+   "string"
+  ],
+  ".alternatives.note": [
+   "string"
+  ],
+  ".alternatives.target": [
+   "object"
+  ],
+  ".alternatives.target.available_listings": [
+   "number"
+  ],
+  ".alternatives.target.low": [
+   "number"
+  ],
+  ".alternatives.target.median": [
+   "number"
+  ],
+  ".alternatives.target.providers": [
+   "number"
+  ],
+  ".by_provider": [
+   "array"
+  ],
+  ".by_provider[]": [
+   "object"
+  ],
+  ".by_provider[].available": [
+   "boolean"
+  ],
+  ".by_provider[].change_24h": [
+   "object"
+  ],
+  ".by_provider[].change_24h.basis": [
+   "string"
+  ],
+  ".by_provider[].change_24h.from": [
+   "null",
+   "number"
+  ],
+  ".by_provider[].change_24h.pct": [
+   "null",
+   "number"
+  ],
+  ".by_provider[].change_24h.reason": [
+   "null",
+   "string"
+  ],
+  ".by_provider[].change_24h.since": [
+   "string"
+  ],
+  ".by_provider[].change_24h.status": [
+   "string"
+  ],
+  ".by_provider[].change_24h.to": [
+   "number"
+  ],
+  ".by_provider[].listing_id": [
+   "string"
+  ],
+  ".by_provider[].listings": [
+   "number"
+  ],
+  ".by_provider[].premium_vs_others_median": [
+   "number"
+  ],
+  ".by_provider[].price": [
+   "number"
+  ],
+  ".by_provider[].provider": [
+   "string"
+  ],
+  ".by_provider[].provider_name": [
+   "string"
+  ],
+  ".by_provider[].rank": [
+   "number"
+  ],
+  ".by_provider[].region": [
+   "null",
+   "string"
+  ],
+  ".by_provider[].sku": [
+   "string"
+  ],
+  ".capability": [
+   "object"
+  ],
+  ".capability.gpu": [
+   "string"
+  ],
+  ".capability.gpu_name": [
+   "string"
+  ],
+  ".capability.label": [
+   "string"
+  ],
+  ".capability.metrics": [
+   "object"
+  ],
+  ".capability.metrics.per_bf16_tflop_hour": [
+   "object"
+  ],
+  ".capability.metrics.per_bf16_tflop_hour.low": [
+   "number"
+  ],
+  ".capability.metrics.per_bf16_tflop_hour.median": [
+   "number"
+  ],
+  ".capability.metrics.per_bf16_tflop_hour.reason": [
+   "null"
+  ],
+  ".capability.metrics.per_bf16_tflop_hour.spec_field": [
+   "string"
+  ],
+  ".capability.metrics.per_bf16_tflop_hour.spec_value": [
+   "number"
+  ],
+  ".capability.metrics.per_bf16_tflop_hour.unit": [
+   "string"
+  ],
+  ".capability.metrics.per_fp16_tflop_hour": [
+   "object"
+  ],
+  ".capability.metrics.per_fp16_tflop_hour.low": [
+   "number"
+  ],
+  ".capability.metrics.per_fp16_tflop_hour.median": [
+   "number"
+  ],
+  ".capability.metrics.per_fp16_tflop_hour.reason": [
+   "null"
+  ],
+  ".capability.metrics.per_fp16_tflop_hour.spec_field": [
+   "string"
+  ],
+  ".capability.metrics.per_fp16_tflop_hour.spec_value": [
+   "number"
+  ],
+  ".capability.metrics.per_fp16_tflop_hour.unit": [
+   "string"
+  ],
+  ".capability.metrics.per_fp8_tflop_hour": [
+   "object"
+  ],
+  ".capability.metrics.per_fp8_tflop_hour.low": [
+   "number"
+  ],
+  ".capability.metrics.per_fp8_tflop_hour.median": [
+   "number"
+  ],
+  ".capability.metrics.per_fp8_tflop_hour.reason": [
+   "null"
+  ],
+  ".capability.metrics.per_fp8_tflop_hour.spec_field": [
+   "string"
+  ],
+  ".capability.metrics.per_fp8_tflop_hour.spec_value": [
+   "number"
+  ],
+  ".capability.metrics.per_fp8_tflop_hour.unit": [
+   "string"
+  ],
+  ".capability.metrics.per_gb_vram_hour": [
+   "object"
+  ],
+  ".capability.metrics.per_gb_vram_hour.low": [
+   "number"
+  ],
+  ".capability.metrics.per_gb_vram_hour.median": [
+   "number"
+  ],
+  ".capability.metrics.per_gb_vram_hour.reason": [
+   "null"
+  ],
+  ".capability.metrics.per_gb_vram_hour.spec_field": [
+   "string"
+  ],
+  ".capability.metrics.per_gb_vram_hour.spec_value": [
+   "number"
+  ],
+  ".capability.metrics.per_gb_vram_hour.unit": [
+   "string"
+  ],
+  ".capability.metrics.per_tbps_bandwidth_hour": [
+   "object"
+  ],
+  ".capability.metrics.per_tbps_bandwidth_hour.low": [
+   "number"
+  ],
+  ".capability.metrics.per_tbps_bandwidth_hour.median": [
+   "number"
+  ],
+  ".capability.metrics.per_tbps_bandwidth_hour.reason": [
+   "null"
+  ],
+  ".capability.metrics.per_tbps_bandwidth_hour.spec_field": [
+   "string"
+  ],
+  ".capability.metrics.per_tbps_bandwidth_hour.spec_value": [
+   "number"
+  ],
+  ".capability.metrics.per_tbps_bandwidth_hour.unit": [
+   "string"
+  ],
+  ".context": [
+   "object"
+  ],
+  ".context.current": [
+   "object"
+  ],
+  ".context.current.highest": [
+   "number"
+  ],
+  ".context.current.lowest": [
+   "number"
+  ],
+  ".context.current.median": [
+   "number"
+  ],
+  ".context.current.providers": [
+   "number"
+  ],
+  ".context.gpu": [
+   "string"
+  ],
+  ".context.gpu_name": [
+   "string"
+  ],
+  ".context.hour": [
+   "string"
+  ],
+  ".context.interruptible": [
+   "boolean"
+  ],
+  ".context.label": [
+   "null"
+  ],
+  ".context.label_reason": [
+   "string"
+  ],
+  ".context.label_window": [
+   "null"
+  ],
+  ".context.metrics": [
+   "object"
+  ],
+  ".context.metrics.lowest": [
+   "object"
+  ],
+  ".context.metrics.lowest.current": [
+   "number"
+  ],
+  ".context.metrics.lowest.historical": [
+   "object"
+  ],
+  ".context.metrics.lowest.historical.from_high_pct": [
+   "number"
+  ],
+  ".context.metrics.lowest.historical.from_low_pct": [
+   "number"
+  ],
+  ".context.metrics.lowest.historical.high": [
+   "object"
+  ],
+  ".context.metrics.lowest.historical.high.hour": [
+   "string"
+  ],
+  ".context.metrics.lowest.historical.high.value": [
+   "number"
+  ],
+  ".context.metrics.lowest.historical.low": [
+   "object"
+  ],
+  ".context.metrics.lowest.historical.low.hour": [
+   "string"
+  ],
+  ".context.metrics.lowest.historical.low.value": [
+   "number"
+  ],
+  ".context.metrics.lowest.historical.samples": [
+   "number"
+  ],
+  ".context.metrics.lowest.historical.since": [
+   "string"
+  ],
+  ".context.metrics.lowest.summaries": [
+   "array"
+  ],
+  ".context.metrics.lowest.summaries[]": [
+   "string"
+  ],
+  ".context.metrics.lowest.windows": [
+   "object"
+  ],
+  ".context.metrics.lowest.windows.*": [
+   "object"
+  ],
+  ".context.metrics.lowest.windows.*.coverage": [
+   "number"
+  ],
+  ".context.metrics.lowest.windows.*.current": [
+   "null"
+  ],
+  ".context.metrics.lowest.windows.*.distance_from_median_pct": [
+   "null"
+  ],
+  ".context.metrics.lowest.windows.*.excluded_recent_providers": [
+   "array"
+  ],
+  ".context.metrics.lowest.windows.*.excluded_recent_providers[]": [
+   "string"
+  ],
+  ".context.metrics.lowest.windows.*.first_sample": [
+   "null"
+  ],
+  ".context.metrics.lowest.windows.*.label": [
+   "null"
+  ],
+  ".context.metrics.lowest.windows.*.max": [
+   "null"
+  ],
+  ".context.metrics.lowest.windows.*.median": [
+   "null"
+  ],
+  ".context.metrics.lowest.windows.*.min": [
+   "null"
+  ],
+  ".context.metrics.lowest.windows.*.panel": [
+   "array"
+  ],
+  ".context.metrics.lowest.windows.*.percentile": [
+   "null"
+  ],
+  ".context.metrics.lowest.windows.*.reason": [
+   "string"
+  ],
+  ".context.metrics.lowest.windows.*.samples": [
+   "number"
+  ],
+  ".context.metrics.lowest.windows.*.window": [
+   "string"
+  ],
+  ".context.metrics.lowest.windows.*.window_hours": [
+   "number"
+  ],
+  ".context.metrics.median": [
+   "object"
+  ],
+  ".context.metrics.median.current": [
+   "number"
+  ],
+  ".context.metrics.median.historical": [
+   "object"
+  ],
+  ".context.metrics.median.historical.from_high_pct": [
+   "number"
+  ],
+  ".context.metrics.median.historical.from_low_pct": [
+   "number"
+  ],
+  ".context.metrics.median.historical.high": [
+   "object"
+  ],
+  ".context.metrics.median.historical.high.hour": [
+   "string"
+  ],
+  ".context.metrics.median.historical.high.value": [
+   "number"
+  ],
+  ".context.metrics.median.historical.low": [
+   "object"
+  ],
+  ".context.metrics.median.historical.low.hour": [
+   "string"
+  ],
+  ".context.metrics.median.historical.low.value": [
+   "number"
+  ],
+  ".context.metrics.median.historical.samples": [
+   "number"
+  ],
+  ".context.metrics.median.historical.since": [
+   "string"
+  ],
+  ".context.metrics.median.summaries": [
+   "array"
+  ],
+  ".context.metrics.median.summaries[]": [
+   "string"
+  ],
+  ".context.metrics.median.windows": [
+   "object"
+  ],
+  ".context.metrics.median.windows.*": [
+   "object"
+  ],
+  ".context.metrics.median.windows.*.coverage": [
+   "number"
+  ],
+  ".context.metrics.median.windows.*.current": [
+   "null"
+  ],
+  ".context.metrics.median.windows.*.distance_from_median_pct": [
+   "null"
+  ],
+  ".context.metrics.median.windows.*.excluded_recent_providers": [
+   "array"
+  ],
+  ".context.metrics.median.windows.*.excluded_recent_providers[]": [
+   "string"
+  ],
+  ".context.metrics.median.windows.*.first_sample": [
+   "null"
+  ],
+  ".context.metrics.median.windows.*.label": [
+   "null"
+  ],
+  ".context.metrics.median.windows.*.max": [
+   "null"
+  ],
+  ".context.metrics.median.windows.*.median": [
+   "null"
+  ],
+  ".context.metrics.median.windows.*.min": [
+   "null"
+  ],
+  ".context.metrics.median.windows.*.panel": [
+   "array"
+  ],
+  ".context.metrics.median.windows.*.percentile": [
+   "null"
+  ],
+  ".context.metrics.median.windows.*.reason": [
+   "string"
+  ],
+  ".context.metrics.median.windows.*.samples": [
+   "number"
+  ],
+  ".context.metrics.median.windows.*.window": [
+   "string"
+  ],
+  ".context.metrics.median.windows.*.window_hours": [
+   "number"
+  ],
+  ".context.price_concept": [
+   "string"
+  ],
+  ".context.reason": [
+   "null"
+  ],
+  ".context.segment": [
+   "string"
+  ],
+  ".context.summaries": [
+   "array"
+  ],
+  ".context.summaries[]": [
+   "string"
+  ],
+  ".gpu": [
+   "string"
+  ],
+  ".gpu_name": [
+   "string"
+  ],
+  ".listings": [
+   "object"
+  ],
+  ".listings.availability_unknown": [
+   "number"
+  ],
+  ".listings.available": [
+   "number"
+  ],
+  ".listings.live": [
+   "number"
+  ],
+  ".listings.priced": [
+   "number"
+  ],
+  ".listings.sold_out": [
+   "number"
+  ],
+  ".listings.stats": [
+   "object"
+  ],
+  ".listings.stats.high": [
+   "number"
+  ],
+  ".listings.stats.low": [
+   "number"
+  ],
+  ".listings.stats.median": [
+   "number"
+  ],
+  ".listings.stats.n": [
+   "number"
+  ],
+  ".listings.stats.q1": [
+   "number"
+  ],
+  ".listings.stats.q3": [
+   "number"
+  ],
+  ".listings.stats.stdev": [
+   "number"
+  ],
+  ".price": [
+   "object"
+  ],
+  ".price.currency": [
+   "string"
+  ],
+  ".price.high": [
+   "number"
+  ],
+  ".price.low": [
+   "number"
+  ],
+  ".price.median": [
+   "number"
+  ],
+  ".price.unit": [
+   "string"
+  ],
+  ".providers": [
+   "number"
+  ],
+  ".score": [
+   "object"
+  ],
+  ".score.components": [
+   "object"
+  ],
+  ".score.components.c_cv": [
+   "number"
+  ],
+  ".score.components.c_iqr": [
+   "number"
+  ],
+  ".score.components.c_range": [
+   "number"
+  ],
+  ".score.components.cv_adj": [
+   "number"
+  ],
+  ".score.components.iqr_rel": [
+   "number"
+  ],
+  ".score.components.range": [
+   "number"
+  ],
+  ".score.confidence": [
+   "string"
+  ],
+  ".score.efficiency": [
+   "number"
+  ],
+  ".score.fragmentation": [
+   "number"
+  ],
+  ".score.label": [
+   "string"
+  ],
+  ".score.reason": [
+   "null"
+  ],
+  ".score.saturation": [
+   "object"
+  ],
+  ".score.saturation.cv": [
+   "number"
+  ],
+  ".score.saturation.iqr_rel": [
+   "number"
+  ],
+  ".score.saturation.range": [
+   "number"
+  ],
+  ".score.weights": [
+   "object"
+  ],
+  ".score.weights.cv": [
+   "number"
+  ],
+  ".score.weights.iqr": [
+   "number"
+  ],
+  ".score.weights.range": [
+   "number"
+  ],
+  ".stats": [
+   "object"
+  ],
+  ".stats.cv": [
+   "number"
+  ],
+  ".stats.high": [
+   "number"
+  ],
+  ".stats.iqr": [
+   "number"
+  ],
+  ".stats.iqr_rel": [
+   "number"
+  ],
+  ".stats.low": [
+   "number"
+  ],
+  ".stats.mean": [
+   "number"
+  ],
+  ".stats.median": [
+   "number"
+  ],
+  ".stats.n": [
+   "number"
+  ],
+  ".stats.q1": [
+   "number"
+  ],
+  ".stats.q3": [
+   "number"
+  ],
+  ".stats.reasons": [
+   "object"
+  ],
+  ".stats.spread_abs": [
+   "number"
+  ],
+  ".stats.spread_pct_of_low": [
+   "number"
+  ],
+  ".stats.spread_pct_of_median": [
+   "number"
+  ],
+  ".stats.stdev": [
+   "number"
+  ]
+ },
+ "/v1/markets/h100-80gb-sxm5/history": {
+  "$": [
+   "object"
+  ],
+  ".coherent_from": [
+   "string"
+  ],
+  ".currency": [
+   "string"
+  ],
+  ".gpu": [
+   "string"
+  ],
+  ".gpu_name": [
+   "string"
+  ],
+  ".index": [
+   "object"
+  ],
+  ".index.index": [
+   "string"
+  ],
+  ".index.points": [
+   "array"
+  ],
+  ".index.points[]": [
+   "object"
+  ],
+  ".index.points[].constituents": [
+   "number"
+  ],
+  ".index.points[].level": [
+   "null",
+   "number"
+  ],
+  ".index.points[].link_constituents": [
+   "null",
+   "number"
+  ],
+  ".index.points[].published": [
+   "boolean"
+  ],
+  ".index.points[].raw_level": [
+   "number"
+  ],
+  ".index.points[].reason": [
+   "null",
+   "string"
+  ],
+  ".index.points[].segment_no": [
+   "null",
+   "number"
+  ],
+  ".index.points[].t": [
+   "string"
+  ],
+  ".interval": [
+   "string"
+  ],
+  ".latest_hour": [
+   "string"
+  ],
+  ".providers_joined": [
+   "array"
+  ],
+  ".providers_joined[]": [
+   "object"
+  ],
+  ".providers_joined[].first_hour": [
+   "string"
+  ],
+  ".providers_joined[].provider": [
+   "string"
+  ],
+  ".providers_joined[].provider_name": [
+   "string"
+  ],
+  ".segment": [
+   "string"
+  ],
+  ".series": [
+   "array"
+  ],
+  ".series[]": [
+   "object"
+  ],
+  ".series[].high": [
+   "number"
+  ],
+  ".series[].low": [
+   "number"
+  ],
+  ".series[].median": [
+   "number"
+  ],
+  ".series[].providers": [
+   "number"
+  ],
+  ".series[].t": [
+   "string"
+  ],
+  ".unit": [
+   "string"
+  ],
+  ".window": [
+   "string"
+  ]
+ },
+ "/v1/markets/h100-80gb-sxm5/history/archived": {
+  "$": [
+   "object"
+  ],
+  ".gpu": [
+   "string"
+  ],
+  ".gpu_name": [
+   "string"
+  ],
+  ".kind": [
+   "string"
+  ],
+  ".monthly": [
+   "array"
+  ],
+  ".observed_from": [
+   "string"
+  ],
+  ".points": [
+   "array"
+  ],
+  ".providers": [
+   "array"
+  ],
+  ".segment": [
+   "string"
+  ]
+ },
+ "/v1/markets/h100-80gb-sxm5/history/daily": {
+  "$": [
+   "object"
+  ],
+  ".archived_until": [
+   "string"
+  ],
+  ".days": [
+   "array"
+  ],
+  ".days[]": [
+   "string"
+  ],
+  ".gpu": [
+   "string"
+  ],
+  ".gpu_name": [
+   "string"
+  ],
+  ".hold_days": [
+   "number"
+  ],
+  ".kind": [
+   "array"
+  ],
+  ".kind[]": [
+   "string"
+  ],
+  ".market": [
+   "object"
+  ],
+  ".market.high": [
+   "array"
+  ],
+  ".market.high[]": [
+   "null",
+   "number"
+  ],
+  ".market.low": [
+   "array"
+  ],
+  ".market.low[]": [
+   "null",
+   "number"
+  ],
+  ".market.median": [
+   "array"
+  ],
+  ".market.median[]": [
+   "null",
+   "number"
+  ],
+  ".market.providers": [
+   "array"
+  ],
+  ".market.providers[]": [
+   "number"
+  ],
+  ".providers": [
+   "array"
+  ],
+  ".providers[]": [
+   "object"
+  ],
+  ".providers[].capture": [
+   "array"
+  ],
+  ".providers[].capture[]": [
+   "null"
+  ],
+  ".providers[].captures": [
+   "array"
+  ],
+  ".providers[].provider": [
+   "string"
+  ],
+  ".providers[].provider_name": [
+   "string"
+  ],
+  ".providers[].values": [
+   "array"
+  ],
+  ".providers[].values[]": [
+   "null",
+   "number"
+  ],
+  ".resolution": [
+   "string"
+  ],
+  ".segment": [
+   "string"
+  ]
+ },
+ "/v1/markets/h100-80gb-sxm5/history/dispersion": {
+  "$": [
+   "object"
+  ],
+  ".days": [
+   "number"
+  ],
+  ".gpu": [
+   "string"
+  ],
+  ".gpu_name": [
+   "string"
+  ],
+  ".interval": [
+   "string"
+  ],
+  ".note": [
+   "string"
+  ],
+  ".points": [
+   "array"
+  ],
+  ".points[]": [
+   "object"
+  ],
+  ".points[].close_high": [
+   "number"
+  ],
+  ".points[].close_low": [
+   "number"
+  ],
+  ".points[].close_median": [
+   "number"
+  ],
+  ".points[].close_providers": [
+   "number"
+  ],
+  ".points[].cv_hours": [
+   "number"
+  ],
+  ".points[].cv_mean": [
+   "null",
+   "number"
+  ],
+  ".points[].hours_market": [
+   "number"
+  ],
+  ".points[].iqr_rel_mean": [
+   "null",
+   "number"
+  ],
+  ".points[].providers_max": [
+   "number"
+  ],
+  ".points[].spread_pct_of_low_mean": [
+   "null",
+   "number"
+  ],
+  ".points[].t": [
+   "string"
+  ]
+ },
+ "/v1/markets/h100-80gb-sxm5/regions": {
+  "$": [
+   "object"
+  ],
+  ".global": [
+   "object"
+  ],
+  ".global.price": [
+   "object"
+  ],
+  ".global.price.currency": [
+   "string"
+  ],
+  ".global.price.high": [
+   "number"
+  ],
+  ".global.price.low": [
+   "number"
+  ],
+  ".global.price.median": [
+   "number"
+  ],
+  ".global.price.unit": [
+   "string"
+  ],
+  ".global.providers": [
+   "number"
+  ],
+  ".gpu": [
+   "string"
+  ],
+  ".gpu_name": [
+   "string"
+  ],
+  ".regions": [
+   "array"
+  ],
+  ".regions[]": [
+   "object"
+  ],
+  ".regions[].listings": [
+   "object"
+  ],
+  ".regions[].listings.available": [
+   "number"
+  ],
+  ".regions[].listings.live": [
+   "number"
+  ],
+  ".regions[].low_provider": [
+   "null",
+   "string"
+  ],
+  ".regions[].premium_vs_global_median": [
+   "null",
+   "number"
+  ],
+  ".regions[].price": [
+   "object"
+  ],
+  ".regions[].price.currency": [
+   "string"
+  ],
+  ".regions[].price.high": [
+   "null",
+   "number"
+  ],
+  ".regions[].price.low": [
+   "null",
+   "number"
+  ],
+  ".regions[].price.median": [
+   "null",
+   "number"
+  ],
+  ".regions[].price.unit": [
+   "string"
+  ],
+  ".regions[].provider_ids": [
+   "array"
+  ],
+  ".regions[].provider_ids[]": [
+   "string"
+  ],
+  ".regions[].providers": [
+   "number"
+  ],
+  ".regions[].reason": [
+   "null",
+   "string"
+  ],
+  ".regions[].region_group": [
+   "string"
+  ]
+ },
+ "/v1/methodology": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].html": [
+   "string"
+  ],
+  "[].markdown": [
+   "string"
+  ],
+  "[].name": [
+   "string"
+  ],
+  "[].summary": [
+   "string"
+  ],
+  "[].title": [
+   "string"
+  ]
+ },
+ "/v1/news": {
+  "$": [
+   "array"
+  ]
+ },
+ "/v1/news/families": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].architecture": [
+   "null",
+   "string"
+  ],
+  "[].id": [
+   "string"
+  ],
+  "[].kind": [
+   "string"
+  ],
+  "[].member_families": [
+   "array",
+   "null"
+  ],
+  "[].member_families[]": [
+   "string"
+  ],
+  "[].name": [
+   "string"
+  ],
+  "[].slug": [
+   "string"
+  ],
+  "[].tracked": [
+   "boolean"
+  ],
+  "[].variants": [
+   "array"
+  ],
+  "[].variants[]": [
+   "string"
+  ]
+ },
+ "/v1/news/sources": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].avg_fetch_ms_24h": [
+   "null"
+  ],
+  "[].backfilled_items": [
+   "number"
+  ],
+  "[].category": [
+   "string"
+  ],
+  "[].conditional_get": [
+   "boolean"
+  ],
+  "[].consecutive_failures": [
+   "number"
+  ],
+  "[].day_dates": [
+   "boolean"
+  ],
+  "[].enabled": [
+   "boolean"
+  ],
+  "[].entity_hints": [
+   "object"
+  ],
+  "[].entity_hints.provider": [
+   "string"
+  ],
+  "[].entity_hints.provider_name": [
+   "string"
+  ],
+  "[].entity_hints.vendor": [
+   "string"
+  ],
+  "[].fetches_24h": [
+   "number"
+  ],
+  "[].health": [
+   "string"
+  ],
+  "[].id": [
+   "string"
+  ],
+  "[].items_stored": [
+   "number"
+  ],
+  "[].key": [
+   "string"
+  ],
+  "[].kind": [
+   "string"
+  ],
+  "[].last_error": [
+   "null"
+  ],
+  "[].last_fetched_at": [
+   "null"
+  ],
+  "[].last_ok_at": [
+   "null"
+  ],
+  "[].name": [
+   "string"
+  ],
+  "[].new_items_24h": [
+   "number"
+  ],
+  "[].newest_item_at": [
+   "null"
+  ],
+  "[].note": [
+   "string"
+  ],
+  "[].ok_fetches_24h": [
+   "number"
+  ],
+  "[].oldest_dated_item_at": [
+   "null"
+  ],
+  "[].poll_seconds": [
+   "number"
+  ],
+  "[].topics": [
+   "array"
+  ],
+  "[].topics[]": [
+   "string"
+  ],
+  "[].trust_tier": [
+   "string"
+  ],
+  "[].url": [
+   "string"
+  ]
+ },
+ "/v1/news/topics": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].description": [
+   "string"
+  ],
+  "[].id": [
+   "string"
+  ],
+  "[].items_30d": [
+   "number"
+  ],
+  "[].weight": [
+   "number"
+  ]
+ },
+ "/v1/providers": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].coverage": [
+   "object"
+  ],
+  "[].coverage.architectures": [
+   "array"
+  ],
+  "[].coverage.architectures[]": [
+   "string"
+  ],
+  "[].coverage.gpu_ids": [
+   "array"
+  ],
+  "[].coverage.gpu_ids[]": [
+   "string"
+  ],
+  "[].coverage.gpus": [
+   "number"
+  ],
+  "[].coverage.listings": [
+   "object"
+  ],
+  "[].coverage.listings.live": [
+   "number"
+  ],
+  "[].coverage.listings.priced": [
+   "number"
+  ],
+  "[].coverage.region_groups": [
+   "array"
+  ],
+  "[].coverage.region_groups[]": [
+   "string"
+  ],
+  "[].facts": [
+   "array"
+  ],
+  "[].facts[]": [
+   "string"
+  ],
+  "[].feed_health": [
+   "null",
+   "object"
+  ],
+  "[].feed_health.avg_latency_ms_24h": [
+   "null"
+  ],
+  "[].feed_health.failure_rate_24h": [
+   "number"
+  ],
+  "[].feed_health.fetches_24h": [
+   "number"
+  ],
+  "[].feed_health.last_fetch": [
+   "string"
+  ],
+  "[].feed_health.last_ok_fetch": [
+   "string"
+  ],
+  "[].feed_health.reason": [
+   "null"
+  ],
+  "[].listing_lifetime": [
+   "null",
+   "object"
+  ],
+  "[].listing_lifetime.label": [
+   "string"
+  ],
+  "[].listing_lifetime.listings": [
+   "number"
+  ],
+  "[].listing_lifetime.median_hours": [
+   "null",
+   "number"
+  ],
+  "[].listing_lifetime.reason": [
+   "null",
+   "string"
+  ],
+  "[].note": [
+   "string"
+  ],
+  "[].provider": [
+   "string"
+  ],
+  "[].provider_class": [
+   "string"
+  ],
+  "[].provider_name": [
+   "string"
+  ],
+  "[].relative_value": [
+   "null",
+   "object"
+  ],
+  "[].relative_value.availability": [
+   "number"
+  ],
+  "[].relative_value.cheapest_share": [
+   "number"
+  ],
+  "[].relative_value.premium_avg": [
+   "number"
+  ],
+  "[].relative_value.reasons": [
+   "object"
+  ],
+  "[].relative_value.reasons.volatility_daily": [
+   "string"
+  ],
+  "[].relative_value.samples": [
+   "object"
+  ],
+  "[].relative_value.samples.days": [
+   "number"
+  ],
+  "[].relative_value.samples.hours_compared": [
+   "number"
+  ],
+  "[].relative_value.samples.hours_market": [
+   "number"
+  ],
+  "[].relative_value.samples.hours_priced": [
+   "number"
+  ],
+  "[].relative_value.samples.hours_tracked": [
+   "number"
+  ],
+  "[].relative_value.top3_share": [
+   "number"
+  ],
+  "[].relative_value.volatility_daily": [
+   "null",
+   "number"
+  ],
+  "[].source": [
+   "string"
+  ],
+  "[].source_type": [
+   "string"
+  ],
+  "[].website": [
+   "string"
+  ]
+ },
+ "/v1/providers/syn_alpha": {
+  "$": [
+   "object"
+  ],
+  ".beats_the_market": [
+   "array"
+  ],
+  ".beats_the_market[]": [
+   "object"
+  ],
+  ".beats_the_market[].basis": [
+   "string"
+  ],
+  ".beats_the_market[].gpu": [
+   "string"
+  ],
+  ".beats_the_market[].gpu_name": [
+   "string"
+  ],
+  ".beats_the_market[].premium": [
+   "number"
+  ],
+  ".catalog": [
+   "array"
+  ],
+  ".catalog[]": [
+   "object"
+  ],
+  ".catalog[].gpu": [
+   "string"
+  ],
+  ".catalog[].gpu_name": [
+   "string"
+  ],
+  ".catalog[].listings": [
+   "object"
+  ],
+  ".catalog[].listings.available": [
+   "number"
+  ],
+  ".catalog[].listings.live": [
+   "number"
+  ],
+  ".catalog[].listings.priced": [
+   "number"
+  ],
+  ".catalog[].market": [
+   "object"
+  ],
+  ".catalog[].market.median": [
+   "number"
+  ],
+  ".catalog[].market.providers": [
+   "number"
+  ],
+  ".catalog[].premium_now": [
+   "null",
+   "number"
+  ],
+  ".catalog[].price_per_gpu_hour": [
+   "null",
+   "number"
+  ],
+  ".catalog[].rank_now": [
+   "null",
+   "number"
+  ],
+  ".catalog[].region_groups": [
+   "array"
+  ],
+  ".catalog[].region_groups[]": [
+   "string"
+  ],
+  ".catalog[].window": [
+   "object"
+  ],
+  ".catalog[].window.availability": [
+   "number"
+  ],
+  ".catalog[].window.cheapest_share": [
+   "number"
+  ],
+  ".catalog[].window.premium_avg": [
+   "null",
+   "number"
+  ],
+  ".catalog[].window.reasons": [
+   "object"
+  ],
+  ".catalog[].window.reasons.premium_avg": [
+   "string"
+  ],
+  ".catalog[].window.reasons.rank_distribution": [
+   "string"
+  ],
+  ".catalog[].window.reasons.volatility_daily": [
+   "string"
+  ],
+  ".catalog[].window.samples": [
+   "object"
+  ],
+  ".catalog[].window.samples.days": [
+   "number"
+  ],
+  ".catalog[].window.samples.hours_compared": [
+   "number"
+  ],
+  ".catalog[].window.samples.hours_market": [
+   "number"
+  ],
+  ".catalog[].window.samples.hours_priced": [
+   "number"
+  ],
+  ".catalog[].window.samples.hours_tracked": [
+   "number"
+  ],
+  ".catalog[].window.top3_share": [
+   "number"
+  ],
+  ".catalog[].window.volatility_daily": [
+   "null",
+   "number"
+  ],
+  ".coverage": [
+   "object"
+  ],
+  ".coverage.architectures": [
+   "array"
+  ],
+  ".coverage.architectures[]": [
+   "string"
+  ],
+  ".coverage.gpu_ids": [
+   "array"
+  ],
+  ".coverage.gpu_ids[]": [
+   "string"
+  ],
+  ".coverage.gpus": [
+   "number"
+  ],
+  ".coverage.listings": [
+   "object"
+  ],
+  ".coverage.listings.live": [
+   "number"
+  ],
+  ".coverage.listings.priced": [
+   "number"
+  ],
+  ".coverage.region_groups": [
+   "array"
+  ],
+  ".coverage.region_groups[]": [
+   "string"
+  ],
+  ".expensive": [
+   "array"
+  ],
+  ".expensive[]": [
+   "object"
+  ],
+  ".expensive[].basis": [
+   "string"
+  ],
+  ".expensive[].gpu": [
+   "string"
+  ],
+  ".expensive[].gpu_name": [
+   "string"
+  ],
+  ".expensive[].premium": [
+   "number"
+  ],
+  ".facts": [
+   "array"
+  ],
+  ".facts[]": [
+   "string"
+  ],
+  ".feed_health": [
+   "object"
+  ],
+  ".feed_health.avg_latency_ms_24h": [
+   "null"
+  ],
+  ".feed_health.failure_rate_24h": [
+   "number"
+  ],
+  ".feed_health.fetches_24h": [
+   "number"
+  ],
+  ".feed_health.last_fetch": [
+   "string"
+  ],
+  ".feed_health.last_ok_fetch": [
+   "string"
+  ],
+  ".feed_health.reason": [
+   "null"
+  ],
+  ".listing_lifetime": [
+   "object"
+  ],
+  ".listing_lifetime.label": [
+   "string"
+  ],
+  ".listing_lifetime.listings": [
+   "number"
+  ],
+  ".listing_lifetime.median_hours": [
+   "number"
+  ],
+  ".listing_lifetime.reason": [
+   "null"
+  ],
+  ".note": [
+   "string"
+  ],
+  ".provider": [
+   "string"
+  ],
+  ".provider_class": [
+   "string"
+  ],
+  ".provider_name": [
+   "string"
+  ],
+  ".rank_distribution": [
+   "object"
+  ],
+  ".rank_distribution.*": [
+   "number"
+  ],
+  ".rank_history": [
+   "array"
+  ],
+  ".rank_history[]": [
+   "object"
+  ],
+  ".rank_history[].availability": [
+   "number"
+  ],
+  ".rank_history[].cheapest_share": [
+   "null",
+   "number"
+  ],
+  ".rank_history[].day": [
+   "string"
+  ],
+  ".rank_history[].hours_compared": [
+   "number"
+  ],
+  ".rank_history[].hours_market": [
+   "number"
+  ],
+  ".rank_history[].mean_rank": [
+   "null",
+   "number"
+  ],
+  ".rank_history[].premium_avg": [
+   "null",
+   "number"
+  ],
+  ".rank_history[].top3_share": [
+   "null",
+   "number"
+  ],
+  ".relative_value": [
+   "object"
+  ],
+  ".relative_value.availability": [
+   "number"
+  ],
+  ".relative_value.cheapest_share": [
+   "number"
+  ],
+  ".relative_value.premium_avg": [
+   "number"
+  ],
+  ".relative_value.reasons": [
+   "object"
+  ],
+  ".relative_value.samples": [
+   "object"
+  ],
+  ".relative_value.samples.days": [
+   "number"
+  ],
+  ".relative_value.samples.hours_compared": [
+   "number"
+  ],
+  ".relative_value.samples.hours_market": [
+   "number"
+  ],
+  ".relative_value.samples.hours_priced": [
+   "number"
+  ],
+  ".relative_value.samples.hours_tracked": [
+   "number"
+  ],
+  ".relative_value.top3_share": [
+   "number"
+  ],
+  ".relative_value.volatility_daily": [
+   "number"
+  ],
+  ".source": [
+   "string"
+  ],
+  ".source_type": [
+   "string"
+  ],
+  ".website": [
+   "string"
+  ]
+ },
+ "/v1/providers/syn_alpha/gpus/h100-80gb-sxm5/context": {
+  "$": [
+   "object"
+  ],
+  ".current": [
+   "number"
+  ],
+  ".gpu": [
+   "string"
+  ],
+  ".gpu_name": [
+   "string"
+  ],
+  ".historical": [
+   "object"
+  ],
+  ".historical.from_high_pct": [
+   "number"
+  ],
+  ".historical.from_low_pct": [
+   "number"
+  ],
+  ".historical.high": [
+   "object"
+  ],
+  ".historical.high.hour": [
+   "string"
+  ],
+  ".historical.high.value": [
+   "number"
+  ],
+  ".historical.low": [
+   "object"
+  ],
+  ".historical.low.hour": [
+   "string"
+  ],
+  ".historical.low.value": [
+   "number"
+  ],
+  ".historical.samples": [
+   "number"
+  ],
+  ".historical.since": [
+   "string"
+  ],
+  ".hour": [
+   "string"
+  ],
+  ".interruptible": [
+   "boolean"
+  ],
+  ".label": [
+   "null"
+  ],
+  ".label_reason": [
+   "string"
+  ],
+  ".label_window": [
+   "null"
+  ],
+  ".price_concept": [
+   "string"
+  ],
+  ".provider": [
+   "string"
+  ],
+  ".provider_name": [
+   "string"
+  ],
+  ".reason": [
+   "null"
+  ],
+  ".recorded_since": [
+   "string"
+  ],
+  ".segment": [
+   "string"
+  ],
+  ".summaries": [
+   "array"
+  ],
+  ".summaries[]": [
+   "string"
+  ],
+  ".vs_market_median_pct": [
+   "number"
+  ],
+  ".windows": [
+   "object"
+  ],
+  ".windows.*": [
+   "object"
+  ],
+  ".windows.*.coverage": [
+   "number"
+  ],
+  ".windows.*.distance_from_median_pct": [
+   "null"
+  ],
+  ".windows.*.first_sample": [
+   "string"
+  ],
+  ".windows.*.label": [
+   "null"
+  ],
+  ".windows.*.max": [
+   "null"
+  ],
+  ".windows.*.median": [
+   "null"
+  ],
+  ".windows.*.min": [
+   "null"
+  ],
+  ".windows.*.percentile": [
+   "null"
+  ],
+  ".windows.*.reason": [
+   "string"
+  ],
+  ".windows.*.samples": [
+   "number"
+  ],
+  ".windows.*.window": [
+   "string"
+  ],
+  ".windows.*.window_hours": [
+   "number"
+  ]
+ },
+ "/v1/regions": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].gpus": [
+   "number"
+  ],
+  "[].listings": [
+   "object"
+  ],
+  "[].listings.live": [
+   "number"
+  ],
+  "[].listings.priced": [
+   "number"
+  ],
+  "[].provider_ids": [
+   "array"
+  ],
+  "[].provider_ids[]": [
+   "string"
+  ],
+  "[].providers": [
+   "number"
+  ],
+  "[].region_group": [
+   "string"
+  ]
+ },
+ "/v1/reliability/agents": {
+  "$": [
+   "array"
+  ]
+ },
+ "/v1/reliability/incidents": {
+  "$": [
+   "array"
+  ]
+ },
+ "/v1/reliability/providers": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].feed_health": [
+   "null",
+   "object"
+  ],
+  "[].feed_health.consecutive_failures": [
+   "number"
+  ],
+  "[].feed_health.display_name": [
+   "string"
+  ],
+  "[].feed_health.failure_rate_24h": [
+   "number"
+  ],
+  "[].feed_health.failures_24h": [
+   "number"
+  ],
+  "[].feed_health.fetches_24h": [
+   "number"
+  ],
+  "[].feed_health.last_failure_at": [
+   "null"
+  ],
+  "[].feed_health.last_ok_fetch": [
+   "string"
+  ],
+  "[].feed_health.latency_ms_p50_24h": [
+   "null"
+  ],
+  "[].feed_health.latency_ms_p95_24h": [
+   "null"
+  ],
+  "[].feed_health.listings_24h_ago": [
+   "null"
+  ],
+  "[].feed_health.listings_24h_ago_at": [
+   "null"
+  ],
+  "[].feed_health.listings_24h_ago_note": [
+   "string"
+  ],
+  "[].feed_health.listings_now": [
+   "number"
+  ],
+  "[].feed_health.listings_total": [
+   "number"
+  ],
+  "[].feed_health.polling_interval_seconds": [
+   "number"
+  ],
+  "[].feed_health.quarantined": [
+   "number"
+  ],
+  "[].feed_health.schema_changes_24h": [
+   "number"
+  ],
+  "[].feed_health.schema_changes_7d": [
+   "number"
+  ],
+  "[].feed_health.source": [
+   "string"
+  ],
+  "[].feed_health.source_type": [
+   "string"
+  ],
+  "[].feed_health.status": [
+   "string"
+  ],
+  "[].feed_health.status_reasons": [
+   "array"
+  ],
+  "[].feed_health.throttled_24h": [
+   "number"
+  ],
+  "[].freshness": [
+   "array"
+  ],
+  "[].probes": [
+   "null",
+   "object"
+  ],
+  "[].probes.availability": [
+   "null"
+  ],
+  "[].probes.kinds": [
+   "array"
+  ],
+  "[].probes.kinds[]": [
+   "string"
+  ],
+  "[].probes.latency_p50_ms": [
+   "null"
+  ],
+  "[].probes.locations": [
+   "array"
+  ],
+  "[].probes.source": [
+   "string"
+  ],
+  "[].probes.status": [
+   "string"
+  ],
+  "[].probes.targets": [
+   "array"
+  ],
+  "[].probes.targets[]": [
+   "object"
+  ],
+  "[].probes.targets[].accept": [
+   "array"
+  ],
+  "[].probes.targets[].accept[]": [
+   "number"
+  ],
+  "[].probes.targets[].availability": [
+   "null"
+  ],
+  "[].probes.targets[].checks": [
+   "number"
+  ],
+  "[].probes.targets[].error_classes": [
+   "object"
+  ],
+  "[].probes.targets[].id": [
+   "string"
+  ],
+  "[].probes.targets[].interval_s": [
+   "number"
+  ],
+  "[].probes.targets[].kind": [
+   "string"
+  ],
+  "[].probes.targets[].latency_p50_ms": [
+   "null"
+  ],
+  "[].probes.targets[].locations": [
+   "array"
+  ],
+  "[].probes.targets[].name": [
+   "string"
+  ],
+  "[].probes.targets[].note": [
+   "string"
+  ],
+  "[].probes.targets[].provider": [
+   "string"
+  ],
+  "[].probes.targets[].provider_name": [
+   "string"
+  ],
+  "[].probes.targets[].region": [
+   "null",
+   "string"
+  ],
+  "[].probes.targets[].slots": [
+   "object"
+  ],
+  "[].probes.targets[].slots.global": [
+   "number"
+  ],
+  "[].probes.targets[].slots.regional": [
+   "number"
+  ],
+  "[].probes.targets[].slots.single": [
+   "number"
+  ],
+  "[].probes.targets[].status": [
+   "string"
+  ],
+  "[].probes.targets[].url": [
+   "string"
+  ],
+  "[].provider": [
+   "string"
+  ],
+  "[].provider_name": [
+   "string"
+  ]
+ },
+ "/v1/reliability/providers/syn_alpha": {
+  "$": [
+   "object"
+  ],
+  ".feed_health": [
+   "object"
+  ],
+  ".feed_health.consecutive_failures": [
+   "number"
+  ],
+  ".feed_health.display_name": [
+   "string"
+  ],
+  ".feed_health.failure_rate_24h": [
+   "number"
+  ],
+  ".feed_health.failures_24h": [
+   "number"
+  ],
+  ".feed_health.fetches_24h": [
+   "number"
+  ],
+  ".feed_health.last_failure_at": [
+   "null"
+  ],
+  ".feed_health.last_ok_fetch": [
+   "string"
+  ],
+  ".feed_health.latency_ms_p50_24h": [
+   "null"
+  ],
+  ".feed_health.latency_ms_p95_24h": [
+   "null"
+  ],
+  ".feed_health.listings_24h_ago": [
+   "null"
+  ],
+  ".feed_health.listings_24h_ago_at": [
+   "null"
+  ],
+  ".feed_health.listings_24h_ago_note": [
+   "string"
+  ],
+  ".feed_health.listings_now": [
+   "number"
+  ],
+  ".feed_health.listings_total": [
+   "number"
+  ],
+  ".feed_health.polling_interval_seconds": [
+   "number"
+  ],
+  ".feed_health.quarantined": [
+   "number"
+  ],
+  ".feed_health.schema_changes_24h": [
+   "number"
+  ],
+  ".feed_health.schema_changes_7d": [
+   "number"
+  ],
+  ".feed_health.source": [
+   "string"
+  ],
+  ".feed_health.source_type": [
+   "string"
+  ],
+  ".feed_health.status": [
+   "string"
+  ],
+  ".feed_health.status_reasons": [
+   "array"
+  ],
+  ".feed_health.throttled_24h": [
+   "number"
+  ],
+  ".freshness": [
+   "array"
+  ],
+  ".probes": [
+   "null"
+  ],
+  ".provider": [
+   "string"
+  ],
+  ".provider_name": [
+   "string"
+  ],
+  ".targets": [
+   "array"
+  ]
+ },
+ "/v1/reliability/targets": {
+  "$": [
+   "array"
+  ],
+  "[]": [
+   "object"
+  ],
+  "[].accept": [
+   "array"
+  ],
+  "[].accept[]": [
+   "number"
+  ],
+  "[].id": [
+   "string"
+  ],
+  "[].interval_s": [
+   "number"
+  ],
+  "[].kind": [
+   "string"
+  ],
+  "[].name": [
+   "string"
+  ],
+  "[].note": [
+   "string"
+  ],
+  "[].provider": [
+   "string"
+  ],
+  "[].provider_name": [
+   "string"
+  ],
+  "[].region": [
+   "null",
+   "string"
+  ],
+  "[].url": [
+   "string"
+  ]
+ },
+ "/v1/reserved": {
+  "$": [
+   "array"
+  ]
+ },
+ "/v1/reserved/summary": {
+  "$": [
+   "array"
+  ]
+ }
+}

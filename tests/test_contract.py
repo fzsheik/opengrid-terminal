@@ -273,6 +273,29 @@ def test_exports():
     assert client.get("/v1/exports/nope", params={"date": day.isoformat()}).status_code == 422
 
 
+def test_version_downgrade_steps():
+    # A fake breaking change on 2027-01-01: /v1/markets rows rename providers -> provider_count. A key pinned to
+    # the current version (or a request asking for it) gets the old field back; the new version gets the new one.
+    def rename(rows):
+        return [{**{k: v for k, v in r.items() if k != "providers"}, "provider_count": r["providers"]} for r in rows]
+
+    def back(data, path):
+        return [{**{k: v for k, v in r.items() if k != "provider_count"}, "providers": r["provider_count"]}
+                for r in data] if path == "/v1/markets" else data
+
+    old_versions, old_steps, real = contract.VERSIONS, list(contract.STEPS), contract.public_shape
+    contract.VERSIONS = old_versions + ("2027-01-01",)
+    contract.STEPS.append(("2027-01-01", back))
+    contract.public_shape = lambda v: rename(real(v)) if isinstance(v, list) and v and "spread" in v[0] else real(v)
+    try:
+        new = client.get("/v1/markets", headers={"OpenGrid-Version": "2027-01-01"}).json()["data"]
+        old = client.get("/v1/markets", headers={"OpenGrid-Version": old_versions[-1]}).json()["data"]
+        assert "provider_count" in new[0] and "providers" not in new[0]
+        assert "providers" in old[0] and "provider_count" not in old[0] and old[0]["providers"] == new[0]["provider_count"]
+    finally:
+        contract.VERSIONS, contract.STEPS[:], contract.public_shape = old_versions, old_steps, real
+
+
 def test_etag_and_cache_headers():
     r = client.get("/v1/gpus")
     tag = r.headers["etag"]

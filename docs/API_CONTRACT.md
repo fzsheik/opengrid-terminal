@@ -186,6 +186,13 @@ carries a `source` field so a second source can be added later without a breakin
 - `tests/smoke/compare.sh [ref]` loads all 28 website pages in headless Chrome on this checkout and on `ref`
   (default `origin/main`), each on a seeded scratch database, and prints only differences: new JS errors,
   failed requests, changed price / row counts. Run it after every area moves (needs Chrome; not in CI).
+- `tests/test_contract_shapes.py` is the contract test: every Data API GET route's field paths and JSON types at
+  each version, saved in `tests/contracts/<version>.json` from a seeded scratch database. A removed field or a
+  changed type fails it; a new field passes. Recording is deliberate (`UPDATE_CONTRACTS=1`), and a breaking change
+  gets a new dated version plus a downgrade step, never an edit of the old snapshot. Frozen 2026-11-05.
+- **Breaking change, step by step:** add the date to `api/contract.VERSIONS`; write `downgrade(data, path)` in
+  `api/versions/<date>.py` turning the new shape back into the previous one; register it in `contract.STEPS`;
+  record `tests/contracts/<date>.json`; add a changelog entry. Keys pinned to older versions keep their shape.
 - `tests/test_contract.py` sweeps every Data API route (no 500s, version header, meta, error shape) and covers
   the version header, key pin and data host.
 - Still to come, in order: old-vs-new equivalence for every moved route (before any old route is deleted);
