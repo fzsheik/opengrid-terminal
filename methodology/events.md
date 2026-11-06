@@ -3,7 +3,7 @@
 OpenGrid turns its hourly market record into **structured events** ("Lambda cut NVIDIA H100 80GB SXM5
 by 12.4% to $2.49/hr") and a homepage **overview** (movers, scarcity, unusual moves). Code:
 `analytics/events.py`, `analytics/movers.py`. Endpoints: `GET /v1/events`, `/v1/events/types`,
-`/v1/overview`, `/v1/tape`.
+`/internal/overview`, `/internal/tape`.
 
 All prices are **observed market prices**: providers' list prices as normalized, per GPU-hour,
 on-demand segment (market eligibility as in `market.py`: canonical GPU, on-demand, not interruptible,
@@ -105,7 +105,7 @@ medians across providers).
 - Only the on-demand segment is scanned for events.
 
 <a id="overview"></a>
-## Market overview (`GET /v1/overview`)
+## Market overview (`GET /internal/overview`)
 
 One payload for the homepage, cached 60 seconds; every section is `{available, reason, kind, items}`.
 An unavailable section carries the reason (e.g. "needs 24h of history; 6h recorded"), never zeros.
@@ -123,4 +123,4 @@ An unavailable section carries the reason (e.g. "needs 24h of history; 6h record
 | `unusual` | z = (today's matched 24h median change - mean) / stdev of the same statistic on each of the previous 30 days (same hour); needs >= 14 daily samples; flagged at abs(z) >= 2 |
 | `price_changes` | Per-listing price changes in the last 24h from `listing_observations`, above `normalize.classify_change`'s noise floor (0.5% and $0.001) |
 | `capacity` | Live markets, sold-out markets now, GPUs sold out everywhere, sold-out / returned events in 24h, available listings and their 24h change |
-| `tape` | Latest price moves and notable / major events (same as `GET /v1/tape`) |
+| `tape` | Latest price moves and notable / major events (same as `GET /internal/tape`) |

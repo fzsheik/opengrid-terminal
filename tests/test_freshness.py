@@ -115,20 +115,22 @@ def test_report_and_endpoint():
         import main
         from api import pages
 
-        req = Request({"type": "http", "method": "GET", "path": "/v1/freshness", "headers": [], "query_string": b""})
+        req = Request({"type": "http", "method": "GET", "path": "/v1/reliability/providers", "headers": [], "query_string": b""})
         assert pages.is_public(req)
         import config
         config.settings.app_password = None
         freshness.report.cache_clear()
         c = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})
         if True:
-            body = c.get("/v1/freshness").json()
-            assert body["meta"]["methodology"] == "/methodology/freshness" and body["meta"]["kind"] == "observed"
-            assert {(r["provider"], r["stream"]) for r in body["data"]} >= {("aws", "price"), ("lium", "capacity")}
-            only = c.get("/v1/freshness", params={"provider": "lium", "stream": "capacity"}).json()["data"]
-            assert [(r["provider"], r["stream"]) for r in only] == [("lium", "capacity")]
-            assert c.get("/v1/freshness", params={"stream": "speed"}).status_code == 422
-            assert c.get("/v1/freshness", params={"provider": "nobody"}).status_code == 404
+            # freshness is part of each provider's reliability row (GET /v1/reliability/providers)
+            body = c.get("/v1/reliability/providers").json()
+            assert body["meta"]["kind"] == "observed" and "p95 age" in body["meta"]["sla"]
+            got = {(r["provider"], f["stream"]) for r in body["data"] for f in r["freshness"]}
+            assert got >= {("aws", "price"), ("lium", "capacity")}
+            assert all(f["source"] == "opengrid_feeds" for r in body["data"] for f in r["freshness"])
+            lium = c.get("/v1/reliability/providers/lium").json()["data"]
+            assert {f["stream"] for f in lium["freshness"]} >= {"capacity"}
+            assert c.get("/v1/reliability/providers/nobody").status_code == 404
             assert c.get("/methodology/freshness").status_code == 200
     finally:
         normalize.SessionLocal = saved

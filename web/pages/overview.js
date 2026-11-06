@@ -1,5 +1,5 @@
-/* /markets: the on-demand GPU market at a glance. One /v1/overview request for the market sections, plus
-   /v1/indices (soft), /v1/spreads, /v1/events?min_severity=notable, /v1/news (soft) and /market (sparklines only).
+/* /markets: the on-demand GPU market at a glance. One /internal/overview request for the market sections, plus
+   /v1/indices (soft), /v1/markets, /v1/events?min_severity=notable, /v1/news (soft) and /market (sparklines only).
    First screen: benchmark indices, a one-line summary, the biggest movers and latest price changes, then the full
    board with events and headlines. The secondary signals (unusual moves, volatility, spreads, coverage,
    availability, new and sold-out GPUs) sit under "More market signals". A section the API marks unavailable shows
@@ -21,7 +21,7 @@
   // A section the API could not compute: its reason in plain words. A failed request: one calm line, detail on hover.
   const unavail = reason => h("div", { class: "ov-un" }, "Not available yet: " + (reason || "no reason given"));
   const failed = err => h("div", { class: "ov-un", title: err && err.message ? String(err.message) : "" }, "Could not load this. It retries every minute.");
-  // Panel: header (title, kind badge, rule tooltip, optional link) + body that renders a /v1/overview section.
+  // Panel: header (title, kind badge, rule tooltip, optional link) + body that renders a /internal/overview section.
   function panel(title, opts) {
     opts = opts || {};
     const meta = h("span", { class: "ov-pm" });
@@ -213,7 +213,7 @@
 
       async function loadOverview() {
         let o;
-        try { o = await ctx.api("/v1/overview", { nocache: true }); }
+        try { o = await ctx.api("/internal/overview", { nocache: true }); }
         catch (e) {
           for (const p of [...Object.values(P), ...Object.values(M)]) p.fail(e);
           sumBox.replaceChildren(OG.error(e, loadOverview)); return;
@@ -236,9 +236,11 @@
       }
       async function loadSpreads() {
         let rows;
-        try { rows = await ctx.api("/v1/spreads", { params: { min_providers: 2 }, nocache: true }); }
+        try { rows = await ctx.api("/v1/markets", { params: { min_providers: 2, limit: 1000 }, nocache: true }); }
         catch (e) { M.spreads.fail(e); return; }
-        const list = (Array.isArray(rows) ? rows : []).filter(r => r.spread_pct_of_low != null).sort((a, b) => b.spread_pct_of_low - a.spread_pct_of_low);
+        const list = (Array.isArray(rows) ? rows : []).filter(r => r.spread.pct_of_low != null)
+          .map(r => ({ gpu: r.gpu, low: r.price.low, high: r.price.high, spread_pct_of_low: r.spread.pct_of_low, label: r.score.label }))
+          .sort((a, b) => b.spread_pct_of_low - a.spread_pct_of_low);
         M.spreads.set({ available: true, items: list }, R.spreads, "No GPU has 2 or more priced providers.");
       }
       async function loadEvents() {
@@ -259,7 +261,7 @@
           h("span", { class: "ov-nw-s dim" }, s.source_name + (s.source_count > 1 ? ` +${s.source_count - 1}` : "")))));
       }
       async function loadIndices() {
-        const list = await OG.api.soft("/v1/indices", { nocache: true });
+        const list = await OG.all(OG.api.soft, "/v1/indices", { nocache: true });
         if (ctx.alive()) drawIndices(ixBox, list);
       }
       async function loadSpark() {

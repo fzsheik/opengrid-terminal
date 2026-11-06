@@ -1,4 +1,4 @@
-/* /heatmaps: every /v1/heatmaps kind as a matrix. Null cells (no data, never zero) are hatched.
+/* /heatmaps: every /internal/heatmaps kind as a matrix. Null cells (no data, never zero) are hatched.
    Diverging scale (blue = below, red = above) for premiums and changes; sequential for availability,
    prices, counts and volatility. Kind and window are in the URL (?kind=…&days=…). */
 (() => {
@@ -52,7 +52,7 @@
         const key = st.kind + "|" + (st.days || "");
         if (!res || shownKey !== key) { res = null; chartEl.replaceChildren(OG.loading("Loading matrix…")); if (chart) { chart.destroy(); chart = null; } }
         let r;
-        try { r = await ctx.api("/v1/heatmaps/" + st.kind, { params: K[st.kind].days && st.days ? { days: st.days } : null, full: true, slot: "hm" }); }
+        try { r = await ctx.api("/internal/heatmaps/" + st.kind, { params: K[st.kind].days && st.days ? { days: st.days } : null, full: true, slot: "hm" }); }
         catch (e) { if (!e.stale && shownKey !== key) chartEl.replaceChildren(OG.error(e, load)); return; }
         res = r; shownKey = key;
         OG.status.asOf(res.meta && res.meta.as_of);

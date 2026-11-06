@@ -288,15 +288,17 @@ def test_scaleway_end_to_end_with_provenance_and_no_double_count():
 
         # the API exposes the provenance, and the converted listing stays a plain USD listing for statistics
         client = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})
-        cur = client.get("/v1/fx").json()
-        assert cur["data"]["state"] == "ok" and cur["data"]["rate"] == 1.1172 and cur["meta"]["methodology"] == "/methodology/fx"
-        conv = client.get("/v1/fx/listings", params={"provider": "scaleway"}).json()["data"]
-        assert {r["listing_id"] for r in conv} == set(rows) and all(r["original_currency"] == "EUR" for r in conv)
+        cur = client.get("/v1/fx/rates").json()
+        assert cur["data"]["eur_usd"]["state"] == "ok" and cur["data"]["eur_usd"]["rate"] == 1.1172
+        assert cur["meta"]["methodology"] == "/methodology/fx"
+        conv = client.get("/v1/listings", params={"provider": "scaleway"}).json()["data"]  # FX provenance per row
+        assert {r["listing_id"] for r in conv} == set(rows) and all(r["original"]["currency"] == "EUR" for r in conv)
+        assert all(r["currency"] == "USD" and r["original"]["fx"]["rate"] for r in conv)
         listed = [r for r in client.get("/listings", params={"q": "scaleway"}).json() if r["provider"] == "scaleway"]
         assert len(listed) == 6 and all(r["currency"] == "USD" and r["fx_rate"] for r in listed)
         hist = client.get("/history", params={"q": "scaleway"}).json()
         assert hist and all(r["original_currency"] == "EUR" and r["fx_rate_date"] for r in hist)
-        assert client.get("/v1/fx/rates", params={"days": 30}).json()["data"][0]["rate"] == 1.1172
+        assert client.get("/v1/fx/rates/history", params={"days": 30}).json()["data"][0]["rate"] == 1.1172
 
         # Same raw, same rate: no new observation. A newer rate moves the USD price (one row each, provenance kept).
         before = len(obs)
@@ -323,7 +325,7 @@ def test_scaleway_end_to_end_with_provenance_and_no_double_count():
             seen = s.execute(sql("SELECT max(observed_at), count(*) FROM compute_listings WHERE provider='scaleway'")).one()
         assert seen[0] < later and seen[1] == 6, "no converted listing from the stale poll: the previous state ages out"
         assert any("6 days old" in m and "fail closed" in m for m in logs.lines), logs.lines
-        assert client.get("/v1/fx").json()["data"]["state"] == "stale"
+        assert client.get("/v1/fx/rates").json()["data"]["eur_usd"]["state"] == "stale"
     finally:
         scratchdb.drop(DB)
 

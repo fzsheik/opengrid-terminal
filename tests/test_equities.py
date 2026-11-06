@@ -251,12 +251,12 @@ def test_db_api_visibility():
                                                             scopes=frozenset({"data:read"}))
         try:
             for c in (anon, keyed, op):
-                cat = c.get("/v1/context/series")
+                cat = c.get("/v1/macro/series")
                 assert cat.status_code == 200 and "alpaca" not in cat.text.lower(), "catalogue never lists equities"
-                assert c.get("/v1/context/series?source=alpaca").json()["data"] == []
-                assert {r["source"] for r in c.get("/v1/context/series?entity=NVDA").json()["data"]} <= {"sec_edgar"}
-                assert c.get("/v1/context/series?id=alpaca.nvda.close.split").status_code == 404
-                pw = c.get("/v1/context/power")
+                assert c.get("/v1/macro/series?source=alpaca").json()["data"] == []
+                assert {r["source"] for r in c.get("/v1/macro/series?entity=NVDA").json()["data"]} <= {"sec_edgar"}
+                assert c.get("/v1/macro/series/alpaca.nvda.close.split/history").status_code == 404
+                pw = c.get("/v1/macro/power")
                 assert pw.status_code == 200 and "alpaca" not in pw.text.lower()
             for c in (anon, keyed):
                 for p in ("/v1/ops/context/equities", "/v1/ops/context/equities?symbol=NVDA",

@@ -47,6 +47,7 @@ class Principal:
     key_id: int | None = None
     scopes: frozenset = field(default_factory=frozenset)
     platform_admin: bool = False   # an API key the operator explicitly allowed to act cross-tenant
+    api_version: str | None = None  # the key's pinned Data API version (api/contract.py)
 
     def has(self, scope: str) -> bool:
         return ALL in self.scopes or scope in self.scopes

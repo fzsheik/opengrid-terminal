@@ -4,7 +4,7 @@
    signed-in operator goes straight to /jobs/new. Everything else (indices, the market dashboard, methodology)
    is one click away in the menu.
 
-   Data (all real, none invented): /v1/overview (board: lowest price, cheapest provider, provider count, matched
+   Data (all real, none invented): /internal/overview (board: lowest price, cheapest provider, provider count, matched
    24h change), /market?hours=24 (sparklines, shared with the tape), /polling (how many providers are read, via
    OG.data.intervals()). The status bar says when prices were last read. */
 (() => {
@@ -108,7 +108,7 @@
       }
       async function loadOverview() {
         let o;
-        try { o = await ctx.api("/v1/overview", { nocache: true }); }
+        try { o = await ctx.api("/internal/overview", { nocache: true }); }
         catch (e) { boardBox.replaceChildren(OG.error(e, loadOverview)); return; }
         last = o || {};
         if (last.board && last.board.available === false) { boardBox.replaceChildren(OG.insufficient(last.board.reason, "Prices unavailable")); return; }

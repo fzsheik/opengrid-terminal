@@ -3,7 +3,7 @@
 Provider reliability is measured only from deployments OpenGrid itself launched, and no score is shown
 until a provider has at least `RELIABILITY_MIN_SAMPLES` (default 10) real launches.
 
-Kind: **transaction**. Code: `routing/reliability.py`. API: `GET /v1/reliability` (customer view),
+Kind: **transaction**. Code: `routing/reliability.py`. API: `GET /v1/execution/reliability` (customer view, key only),
 `GET /v1/admin/reliability` (adds validation deployments and in-process provider-call counters).
 
 Nothing here uses market data, provider status pages, marketing claims, or synthetic data. A provider

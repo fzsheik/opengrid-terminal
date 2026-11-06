@@ -18,7 +18,9 @@ from sqlalchemy import (
     Index,
     Numeric,
     String,
+    Engine,
     Text,
+    event,
     func,
     select,
     text,
@@ -30,6 +32,15 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
     pass
+
+
+@event.listens_for(Engine, "connect")
+def _utc_session(dbapi_conn, _record):
+    # Every engine (app and tests): timestamps come back in UTC whatever the server's default zone.
+    # A local Homebrew Postgres runs in local time, which shifted dates by a day.
+    with dbapi_conn.cursor() as cur:
+        cur.execute("SET TIME ZONE 'UTC'")
+    dbapi_conn.commit()
 
 
 class RawPayload(Base):

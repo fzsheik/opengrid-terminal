@@ -44,7 +44,7 @@ different products. The indices module's equal-weight composite over the same va
 
 ## Family names in GPU paths
 
-`/v1/markets/{gpu}`, `/v1/history/{gpu}`, `/v1/gpus/{gpu}`, `/v1/markets/{gpu}/context` and
+`/v1/markets/{gpu}`, `/v1/markets/{gpu}/history`, `/v1/gpus/{gpu}`, `/v1/markets/{gpu} (`context`)` and
 `/v1/markets/{gpu}/regions` accept a family name: they answer HTTP 200 with the family payload above,
 `meta.kind = "family"`, `meta.resolved_as = "family"`, `meta.endpoint` (which per-variant link to
 follow), never a merged price. `/v1/best/{family}` ranks each variant separately and returns each

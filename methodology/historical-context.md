@@ -1,8 +1,8 @@
 # Historical context and percentiles: methodology
 
-Code: `analytics/stats.py`. API: `/v1/markets/{gpu}/context`,
+Code: `analytics/stats.py`. API: `/v1/markets/{gpu} (`context`)`,
 `/v1/providers/{provider}/gpus/{gpu}/context`, `/v1/providers/{provider}/listings/context`,
-`/v1/history/{gpu}`.
+`/v1/markets/{gpu}/history`.
 
 These statistics answer "is this price cheap or expensive **compared with its own recorded
 history**". They are descriptive: they say nothing about where prices will go. All inputs are
@@ -81,7 +81,7 @@ response, e.g. "H100 80GB SXM5 market median price is in the 18th percentile of 
 (cheap)." or "Lambda H100 80GB SXM5 is 12% below its own 30-day median ($2.49/GPU-hr)." When
 nothing passes the coverage gate the summary says so rather than characterising the price.
 
-## History series (`/v1/history/{gpu}`)
+## History series (`/v1/markets/{gpu}/history`)
 
 Hourly (or daily) lowest / median / highest provider price and provider count (the plain
 cross-section, one vote per provider), together with the chain-linked index for the same GPU.

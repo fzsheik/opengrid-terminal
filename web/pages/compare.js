@@ -1,10 +1,10 @@
 /* /compare/:a-vs-:b and /compare?a=&b=[&gpu=]: side by side.
 
 Each side resolves to a GPU (canonical slug), a provider, or a region group:
-  GPU vs GPU            /v1/compare + /v1/gpus/{a,b} (providers selling both) + /v1/history/{a,b} (overlay)
-  provider vs provider  /v1/compare (coverage, relative value, common GPUs) + /market/detail for one common GPU
+  GPU vs GPU            /internal/compare + /v1/markets/{a,b} (providers selling both) + /v1/markets/{a,b}/history (overlay)
+  provider vs provider  /internal/compare (coverage, relative value, common GPUs) + /market/detail for one common GPU
                         (?gpu= picks it: "the same GPU across providers")
-  region vs region      /v1/heatmaps/gpu-region-* ("the same GPU across regions"; ?gpu= highlights one)
+  region vs region      /internal/heatmaps/gpu-region-* ("the same GPU across regions"; ?gpu= highlights one)
 Mixed pairs: the API's 400 is shown as is. Different GPUs are different products: side by side, never "equivalent".
 */
 (() => {
@@ -64,7 +64,7 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
     return OG.charts.timeseries(el, { times: ts, series, height: opts.height || 280, label: opts.label, hatchBefore: opts.hatchBefore });
   }
   async function gpuLines(api, side, win) {
-    const hist = await api("/v1/history/" + side.id, { params: { window: win[0] } }).catch(() => null);
+    const hist = OG.legacyHistory(await api("/v1/markets/" + side.id + "/history", { params: { window: win[0] } }).catch(() => null));
     const pts = hist && hist.series ? hist.series.filter(p => p.median != null) : [];
     if (pts.length >= 6) return { hourly: true, coherent: hist.coherent_from, median: pts.map(p => ({ t: p.t, v: p.median })), low: pts.map(p => ({ t: p.t, v: p.lowest })) };
     const d = await api("/market/detail", { params: { gpu: side.name, hours: win[2] } }).catch(() => null);
@@ -78,7 +78,7 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
     const body = h("div", {}, OG.loading("Comparing…"));
     el.append(body);
     let c;
-    try { c = await ctx.api("/v1/compare", { params: { a: A.id, b: B.id }, full: true }); }
+    try { c = await ctx.api("/internal/compare", { params: { a: A.id, b: B.id }, full: true }); }
     catch (e) { body.replaceChildren(e.status === 400 ? OG.insufficient(e.message, "These two cannot be compared") : OG.error(e, () => { body.remove(); gpuVsGpu(el, A, B, ctx); })); return; }
     OG.status.asOf(c.meta && c.meta.as_of);
     const d = c.data, a = d.a, b = d.b;
@@ -138,8 +138,8 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
       })));
 
     // providers that sell both
-    const [ga, gb] = await Promise.all([ctx.api("/v1/gpus/" + a.slug).catch(() => null), ctx.api("/v1/gpus/" + b.slug).catch(() => null)]);
-    const pa = new Map((ga ? ga.market.by_provider : []).map(p => [p.provider, p])), pb = new Map((gb ? gb.market.by_provider : []).map(p => [p.provider, p]));
+    const [ga, gb] = await Promise.all([ctx.api("/v1/markets/" + a.slug).catch(() => null), ctx.api("/v1/markets/" + b.slug).catch(() => null)]);
+    const pa = new Map((ga ? ga.by_provider : []).map(p => [p.provider, p])), pb = new Map((gb ? gb.by_provider : []).map(p => [p.provider, p]));
     const provRows = [...new Set([...pa.keys(), ...pb.keys()])].map(p => ({ provider: p, a: pa.has(p) ? pa.get(p).price : null, b: pb.has(p) ? pb.get(p).price : null,
       ra: pa.has(p) ? pa.get(p).rank : null, rb: pb.has(p) ? pb.get(p).rank : null })).map(r => Object.assign(r, { d: rel(r.a, r.b), both: r.a != null && r.b != null }));
     const provT = OG.table({
@@ -192,7 +192,7 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
     const body = h("div", {}, OG.loading("Comparing…"));
     el.append(body);
     let c;
-    try { c = await ctx.api("/v1/compare", { params: { a: A.id, b: B.id }, full: true }); }
+    try { c = await ctx.api("/internal/compare", { params: { a: A.id, b: B.id }, full: true }); }
     catch (e) { body.replaceChildren(e.status === 400 ? OG.insufficient(e.message, "These two cannot be compared") : OG.error(e, () => { body.remove(); providerVsProvider(el, A, B, ctx, query); })); return; }
     OG.status.asOf(c.meta && c.meta.as_of);
     const d = c.data, a = d.a, b = d.b, na = OG.providerName(a.name), nb = OG.providerName(b.name);
@@ -279,7 +279,7 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
   async function regionVsRegion(el, A, B, ctx, query) {
     const body = h("div", {}, OG.loading("Comparing regions…"));
     el.append(body);
-    const [ch, pr, av] = await Promise.all(["gpu-region-cheapest", "gpu-region-premium", "gpu-region-availability"].map(k => ctx.api("/v1/heatmaps/" + k).catch(e => e)));
+    const [ch, pr, av] = await Promise.all(["gpu-region-cheapest", "gpu-region-premium", "gpu-region-availability"].map(k => ctx.api("/internal/heatmaps/" + k).catch(e => e)));
     if (ch instanceof Error) { body.replaceChildren(OG.insufficient(ch.message, "Regional data unavailable")); return; }
     const ia = ch.cols.indexOf(A.name), ib = ch.cols.indexOf(B.name);
     const val = (mx, i, j) => (mx instanceof Error || !mx || j < 0 ? null : (mx.cells[mx.rows.indexOf(ch.rows[i])] || [])[j] ?? null);
@@ -340,7 +340,7 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
     if (A.type === "region" && B.type === "region") return regionVsRegion(el, A, B, ctx, query);
     // mixed: ask the API so the message is the API's own (regions are not API compare targets)
     if (A.type !== "region" && B.type !== "region") {
-      try { await ctx.api("/v1/compare", { params: { a: A.id, b: B.id } }); }
+      try { await ctx.api("/internal/compare", { params: { a: A.id, b: B.id } }); }
       catch (e) { el.append(OG.insufficient(e.message, "These two cannot be compared")); }
     } else el.append(OG.insufficient(`${A.label} is a ${A.type} and ${B.label} is a ${B.type}: compare two GPUs, two providers or two region groups.`, "These two cannot be compared"));
     el.append(h("p", { class: "note" }, "Try ", h("a", { class: "lnk", href: pairHref(A.type === "gpu" ? A.id : "h100-80gb-sxm5", B.type === "gpu" ? B.id : "h200-141gb-sxm5") }, "two GPUs"),

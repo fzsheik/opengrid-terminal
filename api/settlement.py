@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from accounts.auth import Principal, require_scope
 from analytics import indices
 from analytics import settlement as S
-from api.common import OBSERVED, OBSERVED_MARKET_PRICE, envelope
+from api.common import OBSERVED, OBSERVED_MARKET_PRICE, cursor_offset, envelope, next_cursor
 from routing import control
 
 control.install_job_heartbeats(names=("index_fixings",))
@@ -49,6 +49,17 @@ def _actor(who: Principal) -> str:
     return "operator" if who.kind == "operator" else f"key:{who.key_id}"
 
 
+def _exact(v):
+    """Fixing numbers go out as exact decimal strings of the stored double (repr round-trips), never as JSON
+    floats: money may settle on them, and the API's float cleanup must not touch them."""
+    if isinstance(v, dict):
+        return {k: (repr(x) if k in ("value", "raw") and isinstance(x, float) else _exact(x))
+                for k, x in v.items()}
+    if isinstance(v, list):
+        return [_exact(x) for x in v]
+    return v
+
+
 def _refused(fn):
     try:
         return fn()
@@ -58,7 +69,7 @@ def _refused(fn):
 
 @router.get("/v1/fixings", summary="Latest official fixings of every settlement index")
 def fixings_latest(_: Principal = Depends(READ)):
-    return envelope(S.latest(), **_meta(),
+    return envelope(_exact(S.latest()), **_meta(),
                     note="Fixings are taken only after the hour is final and never change; corrections are new "
                          "'restated' rows. 'provisional' is the current index level, not a fixing.")
 
@@ -70,10 +81,11 @@ def fixings_methodology(_: Principal = Depends(READ)):
 
 
 @router.get("/v1/fixings/restatements", summary="Every restatement: what was corrected, by whom, why")
-def fixings_restatements(limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0),
+def fixings_restatements(limit: int = Query(100, ge=1, le=1000), cursor: str | None = None,
                          _: Principal = Depends(READ)):
+    offset = cursor_offset(cursor)
     items, total = S.restatements(limit, offset)
-    return envelope(items, **_meta(), pagination={"limit": limit, "offset": offset, "total": total})
+    return envelope(_exact(items), **_meta(), limit=limit, next_cursor=next_cursor(offset, limit, total), total=total)
 
 
 @router.get("/v1/fixings/chain/verify", summary="Check the hash chain over the whole fixings ledger (paged)")
@@ -89,7 +101,7 @@ def fixing_detail(fixing_id: str = Path(..., pattern=FIXING_ID), _: Principal = 
     f = S.get_fixing(fixing_id)
     if f is None:
         raise HTTPException(404, f"unknown fixing {fixing_id!r}")
-    return envelope(f, **_meta())
+    return envelope(_exact(f), **_meta())
 
 
 @router.get("/v1/fixings/{fixing_id}/verify", summary="Recompute a fixing from its stored inputs; check hashes and links")
@@ -97,23 +109,25 @@ def fixing_verify(fixing_id: str = Path(..., pattern=FIXING_ID), _: Principal = 
     v = S.verify_fixing(fixing_id)
     if v is None:
         raise HTTPException(404, f"unknown fixing {fixing_id!r}")
-    return envelope(v, **_meta())
+    return envelope(_exact(v), **_meta())
 
 
 @router.get("/v1/indices/{index_id}/fixings", summary="Official fixing history of one index")
 def index_fixings(index_id: str, type: Literal["hourly", "daily"] | None = None,
                   status: Literal["final", "restated", "not_published"] | None = None,
                   from_: datetime | None = Query(None, alias="from"), to: datetime | None = None,
-                  effective: bool = False, limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0),
+                  effective: bool = False, limit: int = Query(100, ge=1, le=1000), cursor: str | None = None,
                   _: Principal = Depends(READ)):
+    offset = cursor_offset(cursor)
     d = indices.definition(index_id)
     if d is None:
         raise HTTPException(404, f"unknown index {index_id!r}; see /v1/indices")
     settled = index_id in S.SETTLEMENT_INDICES
     items, total = S.list_fixings(index_id, type, status, _utc(from_), _utc(to), limit, offset, effective) \
         if settled else ([], 0)
-    return envelope({"index_id": index_id, "name": d.name, "unit": d.unit, "settlement_index": settled,
-                     "fixings": items}, **_meta(pagination={"limit": limit, "offset": offset, "total": total}),
+    return envelope({"index": index_id, "index_name": d.name, "unit": d.unit, "settlement_index": settled,
+                     "fixings": _exact(items)}, **_meta(limit=limit, next_cursor=next_cursor(offset, limit, total),
+                                                        total=total),
                     note=None if settled else "not a settlement index: no official fixings are taken for it; "
                                               f"settlement indices are {', '.join(S.SETTLEMENT_INDICES)}")
 

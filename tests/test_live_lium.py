@@ -396,11 +396,11 @@ def test_db_write_normalize_silence_and_reseed():
         import main
         from fastapi.testclient import TestClient
         client = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})
-        st = client.get("/v1/live/status").json()
+        st = client.get("/internal/live/status").json()
         assert st["data"][0]["stream"] == "lium_ws" and "fallback" in st["data"][0]
-        ev = client.get("/v1/live/events?limit=10").json()["data"]
+        ev = client.get("/internal/live/events?limit=10").json()["data"]
         assert len(ev) == 4 and "raw" not in ev[0]
-        assert "raw" in client.get("/v1/live/events?limit=1&raw=true").json()["data"][0]
+        assert "raw" in client.get("/internal/live/events?limit=1&raw=true").json()["data"][0]
         from api import pages
         assert "live" not in pages.PUBLIC_V1, "operator reads: never public"
     finally:

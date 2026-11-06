@@ -266,11 +266,21 @@ def test_endpoints():
         koy = client.get("/v1/capacity", params={"provider": "koyeb"}).json()["data"]
         assert koy and not any(r["stale"] for r in koy) and all(r["tier"] for r in koy)
         a100 = client.get("/v1/capacity", params={"gpu": "NVIDIA A100 80GB SXM4"}).json()["data"]
-        assert a100 and all(r["gpu"] == "NVIDIA A100 80GB SXM4" for r in a100)
+        assert a100 and all(r["gpu"] == "nvidia-a100-80gb-sxm4" and r["gpu_name"] == "NVIDIA A100 80GB SXM4" for r in a100)
         assert client.get("/v1/capacity", params={"provider": "nebius"}).status_code == 404
         assert client.get("/v1/capacity", params={"gpu": "not-a-gpu"}).status_code == 404
         h = client.get("/v1/capacity/history", params={"provider": "koyeb", "days": 90}).json()
         assert h["meta"]["count"] == 25 and h["data"][0]["observed_at"] >= h["data"][-1]["observed_at"]
+        # keyset cursor: small pages give back exactly the same 25 changes, in the same order
+        paged, cur = [], None
+        while True:
+            pg = client.get("/v1/capacity/history", params={"provider": "koyeb", "days": 90, "limit": 4,
+                                                            **({"cursor": cur} if cur else {})}).json()
+            paged += pg["data"]
+            cur = pg["meta"]["next_cursor"]
+            if not cur:
+                break
+        assert paged == h["data"], "paging changed the rows"
         assert client.get("/v1/capacity/history", params={"days": 91}).status_code == 422
     finally:
         scratchdb.drop(DB)

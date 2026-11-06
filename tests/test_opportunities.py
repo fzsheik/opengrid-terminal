@@ -23,6 +23,18 @@ RTX, MI300 = "NVIDIA RTX 4090 24GB", "AMD Instinct MI300X 192GB"
 rollups.AFTER_REFRESH.clear()
 
 
+
+def _pages(c, path, limit, **params):
+    """Every row of a cursor-paged Data API list, small pages at a time."""
+    rows, cur = [], None
+    for _ in range(500):
+        b = c.get(path, params={**params, "limit": limit, **({"cursor": cur} if cur else {})}).json()
+        rows += b["data"]
+        cur = b["meta"]["next_cursor"]
+        if not cur:
+            return rows
+    raise AssertionError("cursor never ended")
+
 def _clear():
     movers.overview.cache_clear()
     opportunities.monitor.cache_clear()
@@ -174,8 +186,10 @@ def _endpoints():
     r = c.get("/v1/events", params={"gpu": "h100-80gb-sxm5", "limit": 5})
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["meta"]["methodology"] == "/methodology/events" and body["meta"]["pagination"]["limit"] == 5
-    assert all(e["gpu"] == H100 for e in body["data"])
+    assert body["meta"]["methodology"] == "/methodology/events" and body["meta"]["limit"] == 5 and "next_cursor" in body["meta"]
+    assert all(e["gpu_name"] == H100 for e in body["data"])
+    every = c.get("/v1/events", params={"limit": 1000}).json()["data"]
+    assert len(every) > 3 and _pages(c, "/v1/events", 2) == every, "keyset paging: same events, same order"
     r = c.get("/v1/events", params={"type": "price_move,sold_out", "min_severity": "notable"})
     assert r.status_code == 200 and all(e["type"] in ("price_move", "sold_out") and e["severity"] != "info"
                                         for e in r.json()["data"])
@@ -183,11 +197,11 @@ def _endpoints():
     assert c.get("/v1/events", params={"gpu": "not-a-gpu"}).status_code == 404
     t = c.get("/v1/events/types").json()["data"]
     assert {x["type"] for x in t["events"]} == set(events.TYPES) and all(x["severity"] for x in t["events"])
-    o = c.get("/v1/overview").json()
+    o = c.get("/internal/overview").json()
     assert o["data"]["losers"]["items"][0]["gpu"] == H100 and o["meta"]["cache_seconds"] == 60
-    op = c.get("/v1/opportunities", params={"type": "price_cut", "gpu": "h100-80gb-sxm5"}).json()
+    op = c.get("/internal/opportunities", params={"type": "price_cut", "gpu": "h100-80gb-sxm5"}).json()
     assert op["data"]["total"] == 2 and op["meta"]["methodology"] == "/methodology/opportunities"
-    tp = c.get("/v1/tape", params={"limit": 3}).json()
+    tp = c.get("/internal/tape", params={"limit": 3}).json()
     assert len(tp["data"]) <= 3
 
 

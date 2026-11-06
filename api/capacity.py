@@ -12,13 +12,13 @@ Methodology: /methodology/capacity, /methodology/data-visibility.
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select, tuple_
 
 import capacity
 import normalize
 import regions
 from accounts.auth import Principal, require_scope
-from api.common import OBSERVED, envelope, resolve_gpu
+from api.common import OBSERVED, cursor_page, envelope, keyset_cursor, keyset_values, resolve_gpu
 from providers import PROVIDERS
 from store.capacity import CapacityChange, CapacityCurrent
 
@@ -48,7 +48,8 @@ def _row(r: CapacityCurrent, now: datetime) -> dict:
 
 @router.get("/v1/capacity", tags=["capacity"], summary="Provider-reported capacity, by SKU and region")
 def current(gpu: str | None = Query(None, description="GPU slug or canonical name"), provider: str | None = None,
-            in_stock: bool | None = None, who: Principal = Depends(READ)):
+            in_stock: bool | None = None, limit: int = Query(100, ge=1, le=1000), cursor: str | None = None,
+            who: Principal = Depends(READ)):
     q = (select(CapacityCurrent).where(CapacityCurrent.visibility == "public")
          .order_by(CapacityCurrent.provider, CapacityCurrent.sku, CapacityCurrent.region_key))
     if gpu:
@@ -60,12 +61,14 @@ def current(gpu: str | None = Query(None, description="GPU slug or canonical nam
     now = datetime.now(timezone.utc)
     with normalize.SessionLocal() as s:
         rows = [_row(r, now) for r in s.scalars(q)]
-    return envelope(rows, kind=OBSERVED, methodology=METHOD, count=len(rows), providers=capacity.supported())
+    items, pg = cursor_page(rows, limit, cursor)
+    return envelope(items, kind=OBSERVED, methodology=METHOD, count=len(rows), providers=capacity.supported(), **pg)
 
 
 @router.get("/v1/capacity/history", tags=["capacity"], summary="Capacity state changes, newest first")
 def history(gpu: str | None = None, provider: str | None = None, sku: str | None = None, region: str | None = None,
-            days: int = Query(7, ge=1, le=90), limit: int = Query(500, ge=1, le=5000), who: Principal = Depends(READ)):
+            days: int = Query(7, ge=1, le=90), limit: int = Query(500, ge=1, le=5000), cursor: str | None = None,
+            who: Principal = Depends(READ)):
     q = select(CapacityChange).where(CapacityChange.visibility == "public",
                                      CapacityChange.observed_at >= datetime.now(timezone.utc) - timedelta(days=days))
     if gpu:
@@ -76,9 +79,17 @@ def history(gpu: str | None = None, provider: str | None = None, sku: str | None
         q = q.where(CapacityChange.sku == sku)
     if region is not None:
         q = q.where(CapacityChange.region_key == region)
+    C = CapacityChange
+    if cursor:  # keyset: strictly after the previous page's last row in (observed_at desc, provider, sku, region)
+        t, p, k, rk = keyset_values(cursor, 4)
+        q = q.where(or_(C.observed_at < t, and_(C.observed_at == t, tuple_(C.provider, C.sku, C.region_key) > (p, k, rk))))
     with normalize.SessionLocal() as s:
-        rows = [{"provider": r.provider, "sku": r.sku, "region": r.region_key or None, "gpu": r.canonical_gpu_name,
-                 "observed_at": r.observed_at, "in_stock": r.in_stock, "tier": r.tier,
-                 "available_count": r.available_count, "total_count": r.total_count, "raw_value": r.raw_value}
-                for r in s.scalars(q.order_by(CapacityChange.observed_at.desc()).limit(limit))]
-    return envelope(rows, kind=OBSERVED, methodology=METHOD, days=days, count=len(rows))
+        got = list(s.scalars(q.order_by(C.observed_at.desc(), C.provider, C.sku, C.region_key).limit(limit + 1)))
+    more, got = len(got) > limit, got[:limit]
+    rows = [{"provider": r.provider, "sku": r.sku, "region": r.region_key or None, "gpu": r.canonical_gpu_name,
+             "observed_at": r.observed_at, "in_stock": r.in_stock, "tier": r.tier,
+             "available_count": r.available_count, "total_count": r.total_count, "raw_value": r.raw_value}
+            for r in got]
+    last = got[-1] if more and got else None
+    return envelope(rows, kind=OBSERVED, methodology=METHOD, days=days, count=len(rows), limit=limit,
+                    next_cursor=last and keyset_cursor(last.observed_at, last.provider, last.sku, last.region_key))

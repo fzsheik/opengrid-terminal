@@ -6,8 +6,8 @@ product (GPU link, node fabric, deployable on demand), and an estimator that add
 Unpublished components are named, never counted as $0.
 
 Kind: **estimated** for the estimate; components are **observed** (from a provider API or price file) or **manual**
-(a hand-maintained table with a source page and a verified-at date). Code: `cost/`. API: `POST /v1/cost/estimate`,
-`GET /v1/cost/components`, `/v1/cost/billing`, `/v1/cost/sources`, `/v1/cost/presets`.
+(a hand-maintained table with a source page and a verified-at date). Code: `cost/`. API: `POST /v1/costs/estimate`,
+`GET /v1/costs/components`, `/v1/costs/billing`, `/v1/costs/sources`, `/v1/costs/presets`.
 
 Nothing here enters listings, indices, spreads, percentiles, settlement or routing. Like
 [reserved prices](/methodology/reserved-prices), it is computed on read and a test checks that nothing statistical
@@ -23,7 +23,7 @@ imports it.
 
 A hand-table value is **checked** when it was read on the provider's own page, and **unverified** otherwise: a
 search snippet, a docs example, or a unit (GB or GiB) the page leaves open. **Only checked values are used in an
-estimate.** An unverified value is still listed in `/v1/cost/components`, but in an estimate its component is
+estimate.** An unverified value is still listed in `/v1/costs/components`, but in an estimate its component is
 unknown.
 
 ## Units
@@ -120,7 +120,7 @@ The extras add 26% to compute. At CoreWeave, egress is free, so the same extras 
 ## Freshness and failures
 
 - The machine-readable sources are fetched daily. Their lists change monthly at most.
-- `GET /v1/cost/sources` shows each source's last attempt, last success and last error.
+- `GET /v1/costs/sources` shows each source's last attempt, last success and last error.
 - A failed fetch is stored and changes nothing: the newest successful fetch is still used. A stored body that no
   longer parses produces no components and a note, never a guess.
 - Hand-table rows carry the day they were read. Re-check them monthly.

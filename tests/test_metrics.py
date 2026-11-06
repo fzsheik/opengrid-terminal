@@ -596,7 +596,7 @@ def test_admin_endpoints():
     q = c.get("/v1/admin/quality").json()["data"]
     assert q["summary"]["routes"] == 4
     assert c.get("/v1/economics").json()["data"]["totals"]["total_customer_savings_usd"] == 0.8
-    assert c.get("/v1/reliability").json()["meta"]["kind"] == "transaction"
+    assert c.get("/v1/execution/reliability").json()["meta"]["kind"] == "transaction"
     # a key sees only its own account, and never admin views
     from accounts import auth
 

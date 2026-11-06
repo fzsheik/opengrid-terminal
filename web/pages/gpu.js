@@ -1,21 +1,22 @@
 /* /gpu/:slug: one GPU market, laid out like a stock / commodity page.
 
 Data (all in parallel, each section renders as soon as its own request lands):
-  /v1/gpus/{slug}              hardware, current market (dispersion, score, by_provider), capability, alternatives
+  /v1/gpus/{slug}              reference data: vendor specs
+  /v1/markets/{slug}           current market (price, stats, score, by_provider + change_24h), capability,
+                               alternatives, historical context (percentile, label, sentence)
   /v1/indices/{slug}           OpenGrid index level, 24h/7d/30d/90d changes, volatility       (soft: reason shown)
-  /v1/markets/{slug}/context   historical percentile, label, the context sentence             (soft)
-  /v1/history/{slug}?window=   hourly lowest / median / highest + index line (chart, market view)
+  /v1/markets/{slug}/history?window=   hourly low / median / high + index line (chart, market view)
   /market/detail?gpu=&hours=   per-provider step lines (chart, providers view; fine grid for thin history)
   /v1/timeline?gpu=&window=    availability history, inferred price moves, events + news markers
   /v1/timeline/around          "related, not necessarily causal" panel when a move is clicked
-  /v1/history/{slug}/archived  ARCHIVED monthly prices per provider (Internet Archive captures, AWS price lists)
-  /v1/events?gpu=  /v1/news?gpu=  /v1/best/{slug}  /v1/trust/listings?gpu=  /v1/heatmaps/gpu-region-*
+  /v1/markets/{slug}/history/archived  ARCHIVED monthly prices per provider (Internet Archive captures, AWS price lists)
+  /v1/events?gpu=  /v1/news?gpu=  /v1/best/{slug}  /v1/listings?gpu=  /internal/heatmaps/gpu-region-*
 Nothing is computed here that the API does not state, except display arithmetic (spread, $ deltas).
 */
 (() => {
   const { h, fmt, Lib: L } = OG;
   const WINDOWS = [["24h", "24H", 24], ["7d", "7D", 168], ["30d", "30D", 720], ["90d", "90D", 2160], ["1y", "1Y", 8760], ["all", "ALL", 0]];
-  // these windows read /v1/history/{slug}/extended: daily, archived prices before recording joined to observed ones
+  // these windows read /v1/markets/{slug}/history/daily: daily, archived prices before recording joined to observed ones
   const LONG = { "1y": 365, all: 0 };
   const SEV_RANK = { info: 0, notable: 1, major: 2 };
   const DIM_LABEL = { similar_vram: "similar VRAM", same_architecture: "same architecture", same_generation: "same generation",
@@ -200,26 +201,21 @@ Nothing is computed here that the API does not state, except display arithmetic 
           : cx && cx.label_reason ? [h("span", { class: "gp-ctx-s dim", title: cx.label_reason }, "Historical context: " + cx.label_reason)] : []), histNote);
       }
 
-      /* ---------- market summary (+ everything that hangs off /v1/gpus/{slug}) ---------- */
+      /* ---------- market summary: /v1/gpus/{slug} (reference) + /v1/markets/{slug} (market, capability,
+         alternatives, historical context; by_provider carries each provider's 24h change) ---------- */
       async function loadSummary() {
         try {
-          const r = await ctx.api("/v1/gpus/" + slug, { full: true, slot: "gp-sum" });
-          st.g = r.data; OG.status.asOf(r.meta && r.meta.as_of);
+          const [ref, r] = await Promise.all([ctx.api("/v1/gpus/" + slug, { slot: "gp-ref" }),
+            ctx.api("/v1/markets/" + slug, { full: true, slot: "gp-sum" })]);
+          const mk = r.data;
+          st.g = { hardware: ref, capability: mk.capability, alternatives: mk.alternatives,
+            market: { ...mk, low: mk.price.low, median: mk.price.median, high: mk.price.high } };
+          st.ctxd = mk.context || null; OG.status.asOf(r.meta && r.meta.as_of);
           drawQuote(); drawProviders(); drawDispersion(); drawDistribution(); drawHardware(); drawCapability(); drawAlternatives();
         } catch (e) { if (!e.stale) quote.replaceChildren(OG.error(e, loadSummary)); }
       }
-      // /v1/markets/{gpu}: per-provider 24h change when the API carries it (soft; the column is hidden otherwise)
-      async function loadMarketChanges() {
-        const mk = await ctx.api("/v1/markets/" + slug).catch(() => null);
-        const rows = mk && (mk.by_provider || mk.providers || (mk.market && mk.market.by_provider)) || [];
-        const m = new Map();
-        for (const p of Array.isArray(rows) ? rows : []) { const x = p.change_24h ?? p.change_24h_pct; if (p.provider && x != null) m.set(p.provider, x); }
-        st.chg = m;
-        if (m.size && st.g) drawProviders();
-      }
       async function loadIndex() {
-        const [idx, cx] = await Promise.all([ctx.api("/v1/indices/" + slug).catch(() => null), ctx.api("/v1/markets/" + slug + "/context").catch(() => null)]);
-        st.idx = idx; st.ctxd = cx; drawQuote();
+        st.idx = await ctx.api("/v1/indices/" + slug).catch(() => null); drawQuote();
       }
 
       /* ---------- providers ---------- */
@@ -261,7 +257,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
         } else provTable.update(rows);
       }
       async function loadTrust() {
-        const [r] = await Promise.all([ctx.api("/v1/trust/listings", { params: { gpu: slug, limit: 1000 } }).catch(() => undefined), OG.data.intervals()]);
+        const [r] = await Promise.all([ctx.api("/v1/listings", { params: { gpu: slug, limit: 1000 } }).catch(() => undefined), OG.data.intervals()]);
         trust = r === undefined ? [] : list(r);
         if (r === undefined) trust.unavailable = true;
         if (st.g) { drawProviders(); drawDistribution(); }
@@ -376,8 +372,8 @@ Nothing is computed here that the API does not state, except display arithmetic 
         const rg = await ctx.api("/v1/markets/" + slug + "/regions", { full: true }).catch(() => null);
         const rl = rg && (Array.isArray(rg.data) ? rg.data : rg.data && (rg.data.regions || rg.data.items));
         if (Array.isArray(rl) && rl.length) { drawRegionRows(rl, rg.meta || {}); return; }
-        const [ch, pr, av] = await Promise.all(["gpu-region-cheapest", "gpu-region-premium", "gpu-region-availability"].map(k => ctx.api("/v1/heatmaps/" + k).catch(() => null)));
-        if (!ch) { regionBox.replaceChildren(OG.insufficient("Regional matrices unavailable on this server (/v1/heatmaps/gpu-region-*).", "No regional data")); return; }
+        const [ch, pr, av] = await Promise.all(["gpu-region-cheapest", "gpu-region-premium", "gpu-region-availability"].map(k => ctx.api("/internal/heatmaps/" + k).catch(() => null)));
+        if (!ch) { regionBox.replaceChildren(OG.insufficient("Regional matrices unavailable on this server (/internal/heatmaps/gpu-region-*).", "No regional data")); return; }
         const row = (mx) => { if (!mx) return null; const i = mx.rows.indexOf(name); return i < 0 ? null : mx.cells[i]; };
         const c = row(ch), p = row(pr), a = row(av);
         if (!c || c.every(v => v == null)) { regionBox.replaceChildren(OG.empty("No priced listing for this GPU in any region now.")); return; }
@@ -400,9 +396,10 @@ Nothing is computed here that the API does not state, except display arithmetic 
         const num = (...v) => { for (const x of v) if (x != null && isFinite(x)) return Number(x); return null; };
         const rows = rl.map(r => ({
           region: r.region_group || r.region || r.group || "Unassigned",
-          cheapest: num(r.cheapest, r.low, r.lowest, r.cheapest_price), provider: r.cheapest_provider || r.low_provider || null,
-          median: num(r.median), premium: num(r.premium_vs_global, r.premium, r.median_vs_global),
-          providers: num(r.providers, r.provider_count), listings: num(r.priced_listings, r.listings, r.listing_count), available: num(r.available_listings),
+          cheapest: num(r.price && r.price.low, r.cheapest, r.low), provider: r.low_provider || r.cheapest_provider || null,
+          median: num(r.price && r.price.median, r.median), premium: num(r.premium_vs_global_median, r.premium_vs_global),
+          providers: num(r.providers), listings: num(r.listings && r.listings.live, r.priced_listings),
+          available: num(r.listings && r.listings.available, r.available_listings),
           reason: OG.reasonOf(r),
         }));
         const fin = rows.map(r => r.cheapest).filter(v => v != null), lo = Math.min(...fin), hi = Math.max(...fin);
@@ -468,11 +465,11 @@ Nothing is computed here that the API does not state, except display arithmetic 
         let data = null;
         try {
           if (LONG[win] != null) {
-            const x = await ctx.api("/v1/history/" + slug + "/extended", { params: { days: LONG[win] }, slot: "gp-chart" }).catch(e => { if (e.stale) throw e; return null; });
+            const x = OG.legacyHistory(await ctx.api("/v1/markets/" + slug + "/history/daily", { params: { days: LONG[win] }, slot: "gp-chart" }).catch(e => { if (e.stale) throw e; return null; }));
             if (x && x.days && x.days.length && x.market.lowest.some(v => v != null)) data = { kind: "long", x };
           }
           if (!data && view === "market") {
-            const hist = await ctx.api("/v1/history/" + slug, { params: { window: w[0] }, slot: "gp-chart" }).catch(e => { if (e.stale) throw e; return null; });
+            const hist = OG.legacyHistory(await ctx.api("/v1/markets/" + slug + "/history", { params: { window: w[0] }, slot: "gp-chart" }).catch(e => { if (e.stale) throw e; return null; }));
             const pts = hist && hist.series ? hist.series.filter(p => p.lowest != null) : [];
             if (pts.length >= 6) data = { kind: "hourly", hist };
           }
@@ -647,7 +644,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
       const utcDay = iso => (iso ? iso.slice(0, 10) : "-");
       async function loadArchived() {
         let a;
-        try { a = await ctx.api("/v1/history/" + slug + "/archived", { slot: "gp-arch" }); }
+        try { a = OG.legacyHistory(await ctx.api("/v1/markets/" + slug + "/history/archived", { slot: "gp-arch" })); }
         catch (e) { if (!e.stale) archBox.replaceChildren(OG.error(e, loadArchived)); return; }
         const provs = a.providers || [];
         archBox.replaceChildren(
@@ -729,7 +726,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
       };
       if (scroller) { scroller.addEventListener("scroll", onScroll, { passive: true }); ctx.onCleanup(() => scroller.removeEventListener("scroll", onScroll)); }
 
-      loadSummary(); loadIndex(); loadMarketChanges(); loadChart(); loadTimeline(); loadTrust(); loadRegions(); loadBest(); loadEvents(); loadNews(); loadListings();
+      loadSummary(); loadIndex(); loadChart(); loadTimeline(); loadTrust(); loadRegions(); loadBest(); loadEvents(); loadNews(); loadListings();
       ctx.every(60000, () => { loadSummary(); loadBest(); });
       ctx.every(300000, () => { loadIndex(); loadChart(); loadTimeline(); loadTrust(); loadRegions(); loadEvents(); });
 

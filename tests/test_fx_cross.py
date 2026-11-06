@@ -1,7 +1,7 @@
 """ECB cross rates (fx.py) and the two providers they unlock: Yotta Shakti Cloud (INR) and Sakura Internet DOK (JPY).
 
 Cross: X->USD = (EUR->USD) / (EUR->X), both legs from one ECB date, 8 decimals, the same fail-closed staleness rule,
-source "ecb_cross", the legs kept (Rate.legs; GET /v1/fx/listings fx_legs; GET /v1/fx/cross). Rates come from the
+source "ecb_cross", the legs kept (Rate.legs; GET /v1/listings original.fx.legs; GET /v1/fx/rates to_usd). Rates come from the
 REAL ECB files in tests/fixtures_fx (daily 2026-10-30, history 19-30 Oct): JPY 175.68, INR 106.0840, IDR 20275.17,
 USD 1.1172 on Friday 30 Oct.
 
@@ -209,7 +209,7 @@ def test_db_cross_rates_reparse_api_and_legs():
         with Session() as s:
             quotes = s.execute(select(func.count(func.distinct(FxRate.quote)))).scalar()
         assert out["snapshots"] == 2 and quotes == 29 and fx.usd_rate("JPY", SUN).rate == JPY
-        # a Sakura listing converted at the cross rate carries both legs on /v1/fx/listings
+        # a Sakura listing converted at the cross rate carries both legs on /v1/listings
         body = sakura.extract((PROV / "sakura_koukaryoku_dok.html").read_text(encoding="utf-8"))
         normalize.save(sakura.SakuraProvider.normalize({sakura.ENDPOINT: [snap(body, datetime.now(timezone.utc).replace(year=2026, month=11, day=1, hour=10))]}))
         conv = [r for r in fx.converted_listings("sakura") if r["listing_id"] == "h100-8gpu-80gb"][0]
@@ -225,12 +225,13 @@ def test_db_cross_rates_reparse_api_and_legs():
         assert len(fx.rates(30, "JPY")) == 10 and fx.rates(30)[0]["quote"] == "USD"
         cr = {r["currency"]: r for r in fx.cross_rates(SUN)}
         assert cr["JPY"]["rate"] == JPY and cr["IDR"]["state"] == "too_small" and len(cr["INR"]["legs"]) == 2
-        r = c.get("/v1/fx/cross")
-        assert r.status_code == 200 and "EUR->USD" in r.json()["meta"]["method"]
-        assert c.get("/v1/fx/rates?quote=JPY&days=3650").json()["meta"]["quote"] == "JPY"
-        assert c.get("/v1/fx/rates?quote=jpy").status_code == 422
-        legs = c.get("/v1/fx/listings?provider=sakura").json()["data"]
-        assert all(len(x["fx_legs"]) == 2 for x in legs)
+        r = c.get("/v1/fx/rates")
+        assert r.status_code == 200 and "EUR->USD" in r.json()["meta"]["cross_method"]
+        assert {x["currency"] for x in r.json()["data"]["to_usd"]} >= {"JPY"}
+        assert c.get("/v1/fx/rates/history?quote=JPY&days=3650").json()["meta"]["quote"] == "JPY"
+        assert c.get("/v1/fx/rates/history?quote=jpy").status_code == 422
+        legs = c.get("/v1/listings?provider=sakura").json()["data"]
+        assert legs and all(len(x["original"]["fx"]["legs"]) == 2 for x in legs)
     finally:
         scratchdb.drop(DB)
     print("test_db_cross_rates_reparse_api_and_legs ok")

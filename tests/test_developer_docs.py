@@ -9,7 +9,7 @@
     - every example question on /assistant reaches a real intent of the deterministic engine;
     - the hosted MCP endpoint refuses an anonymous request, as /developers says.
 
-Run:  .venv/bin/python tests/test_developer_docs.py   (needs node; no database)
+Run:  .venv/bin/python tests/test_developer_docs.py   (needs node; uses an empty scratch database)
 """
 
 import json
@@ -23,6 +23,7 @@ from pathlib import Path
 os.environ["OPENGRID_NO_JOBS"] = "1"
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 
 from fastapi.testclient import TestClient  # noqa: E402
 from starlette.requests import Request  # noqa: E402
@@ -30,6 +31,12 @@ from starlette.requests import Request  # noqa: E402
 import main  # noqa: E402
 from api import pages  # noqa: E402
 from config import settings  # noqa: E402
+import fixtures  # noqa: E402
+import normalize  # noqa: E402
+import scratchdb  # noqa: E402
+
+DB = "og_test_developer_docs"
+normalize.SessionLocal = fixtures.session(scratchdb.create(DB))
 
 DUMP = json.loads(subprocess.run(["node", str(ROOT / "tests" / "test_web_developers.js"), "--dump"], check=True,
                                  capture_output=True, text=True).stdout)
@@ -117,8 +124,12 @@ def test_assistant_examples_are_understood():
 
 
 if __name__ == "__main__":
-    for name, fn in list(globals().items()):
-        if name.startswith("test_") and callable(fn):
-            fn()
-            print("ok ", name)
-    print("all passed")
+    try:
+        for name, fn in list(globals().items()):
+            if name.startswith("test_") and callable(fn):
+                fn()
+                print("ok ", name)
+        print("all passed")
+    finally:
+        normalize.SessionLocal.kw["bind"].dispose()
+        scratchdb.drop(DB)

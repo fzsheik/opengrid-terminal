@@ -190,6 +190,8 @@ def test_rate_limit_and_usage_through_app():
                          {"k": k["id"]}).all()
     assert [r.status for r in rows] == [200, 200, 200, 429, 200], rows
     assert all(r.path == "/v1/me" and r.method == "GET" and r.duration_ms is not None for r in rows)
+    # The bucket was last filled at fake t=1021; the real clock may be behind that (a fresh CI runner), so empty it.
+    ratelimit.reset()
     summ = client.get("/v1/usage", headers=bearer(k["secret"]))  # this request is itself the 6th
     assert summ.status_code == 200
     d = summ.json()["data"]

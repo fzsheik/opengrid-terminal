@@ -73,7 +73,7 @@
   function extra(id) {
     const hit = extras.get(id);
     if (hit && Date.now() - hit.t < 300000) return hit.p;
-    const p = Promise.all([OG.api.soft("/v1/indices/" + encodeURIComponent(id)), OG.api.soft(`/v1/indices/${encodeURIComponent(id)}/history`, { params: { window: "7d", resolution: "1h" } })])
+    const p = Promise.all([OG.api.soft("/v1/indices/" + encodeURIComponent(id)), OG.api.soft(`/v1/indices/${encodeURIComponent(id)}/history`, { params: { window: "7d", interval: "1h" } })])
       .then(([d, hst]) => ({ detail: d, spark: hst && hst.points ? hst.points.map(x => (x.published ? x.level : null)) : null }));
     extras.set(id, { t: Date.now(), p });
     return p;
@@ -118,7 +118,7 @@
       const tables = new Map();
       async function load() {
         let res;
-        try { res = await ctx.api("/v1/indices", { full: true, slot: "ix-list" }); }
+        try { res = await OG.allPages(ctx.api, "/v1/indices", { slot: "ix-list" }); }
         catch (e) { if (!e.stale && !st.rows) body.replaceChildren(OG.error(e, load)); return; }
         st.rows = res.data.map(r => Object.assign({}, r, (st.rows || []).find(o => o.id === r.id) && { _x: (st.rows || []).find(o => o.id === r.id)._x }));
         st.meta = res.meta;
@@ -263,7 +263,7 @@
         }
       }
       ctx.setTitle(d.name);
-      const def = d.definition || {};
+      const def = d.definition || d;  // the Data API merges the definition into the index
       const st = { win: OG.qs.get("window", "30d"), res: OG.qs.get("res", "auto"), raw: OG.qs.get("raw") === "1", pts: null };
       if (!WINDOWS.some(w => w[0] === st.win)) st.win = "30d";
       const isPts = d.unit === "points";
@@ -325,10 +325,10 @@
       async function loadHistory(quiet) {
         if (!quiet || !chart) { chartEl.replaceChildren(OG.loading("Loading history…")); if (chart) chart.destroy(); chart = null; }
         let hst;
-        try { hst = await ctx.api(`/v1/indices/${encodeURIComponent(id)}/history`, { params: { window: st.win, resolution: st.res === "auto" ? null : st.res }, slot: "ix-hist" }); }
+        try { hst = await ctx.api(`/v1/indices/${encodeURIComponent(id)}/history`, { params: { window: st.win, interval: st.res === "auto" ? null : st.res }, slot: "ix-hist" }); }
         catch (e) { if (!e.stale && !(quiet && chart)) chartEl.replaceChildren(OG.error(e, () => loadHistory())); return; }
-        st.resolved = hst.resolution;
-        st.pts = fillGrid(hst.points || [], hst.resolution);
+        st.resolved = hst.interval || hst.resolution;
+        st.pts = fillGrid(hst.points || [], st.resolved);
         drawChart();
       }
       // Stored rows only exist for hours with any data: fill the grid so missing hours are gaps, not joined lines.
@@ -463,7 +463,7 @@
         if (d.kind === "composite") for (const c of def.components || []) links.push(h("a", { class: "lnk", href: "/indices/" + encodeURIComponent(c.index_id) }, (c.name || c.index_id).replace(/^OpenGrid /, "")));
         relEl.replaceChildren(h("div", { class: "ix-rel-l" }, links.length ? links : h("span", { class: "dim" }, "-")));
         if (!d.gpu) return;
-        const all = await OG.api.soft("/v1/indices");
+        const all = await OG.all(OG.api.soft, "/v1/indices");
         if (!ctx.alive() || !all) return;
         const sib = all.filter(r => r.gpu === d.gpu && r.id !== d.id);
         if (sib.length) relEl.append(h("div", { class: "ix-rel-h" }, "Other indices on this GPU"), h("table", { class: "ix-kv ix-sib" }, h("tbody", {}, sib.map(r =>

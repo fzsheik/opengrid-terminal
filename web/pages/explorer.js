@@ -1,7 +1,7 @@
 /* /explorer: every current listing, filterable, sortable, shareable (all state lives in the URL), CSV export.
    Data: /listings (always). Extra columns appear when these answer (fail soft on 404):
      /v1/gpus            -> VRAM, architecture  (items: {name|gpu, vram_gb|spec.vram_gb, architecture|spec.architecture})
-     /v1/trust/listings  -> freshness, availability basis  (items: {provider, listing_id, freshness, availability_basis, source_type})
+     /v1/listings        -> freshness, availability basis  (items: {provider, listing_id, freshness, availability_basis, source_type})
    Source type always comes from provider_meta (embedded in the page). */
 (() => {
   const { h, fmt, Lib: L } = OG;
@@ -124,7 +124,7 @@
 
       // Optional enrichments (extra columns) are read alongside the first load, so the table is built once
       const listOf = r => (Array.isArray(r) ? r : r && Array.isArray(r.items) ? r.items : null);
-      const enrich = Promise.all([OG.api.soft("/v1/gpus", { params: { limit: 1000 } }), OG.api.soft("/v1/trust/listings", { params: { limit: 1000 } })]).then(([g, t]) => {
+      const enrich = Promise.all([OG.api.soft("/v1/gpus", { params: { limit: 1000 } }), OG.api.soft("/v1/listings", { params: { limit: 1000 } })]).then(([g, t]) => {
         const gl = listOf(g), tl = listOf(t);
         if (gl) {
           const m = new Map();

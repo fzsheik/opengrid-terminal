@@ -3,7 +3,7 @@
 One GET (or a few pages) per source, once every POLL_SECONDS. Each body is cut to the products cost/components.py
 reads, the same way providers/oracle.py keeps only GPU parts: the AWS Data Transfer offer file is 1.4 MB and the
 Oracle price list holds ~670 unrelated parts. Every fetch is stored, failures too, so a broken source is visible
-(GET /v1/cost/sources) and a parser fix re-reads stored history.
+(GET /v1/costs/sources) and a parser fix re-reads stored history.
 
 Sources (no keys; all public price APIs or files):
     aws_data_transfer   AWS Price List offer file AWSDataTransfer, us-east-1: internet egress tiers, inter-AZ

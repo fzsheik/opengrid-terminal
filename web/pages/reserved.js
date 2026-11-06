@@ -119,8 +119,8 @@
         let res, sum;
         try {
           [res, sum] = await Promise.all([
-            ctx.api("/v1/reserved", { params: { provider: st.provider || null, term: st.term || null, gpu: st.gpu || null }, full: true, slot: "reserved" }),
-            ctx.api("/v1/reserved/summary", { params: { gpu: st.gpu || null }, full: true, slot: "reserved-summary" })]);
+            OG.allPages(ctx.api, "/v1/reserved", { params: { provider: st.provider || null, term: st.term || null, gpu: st.gpu || null }, slot: "reserved" }),
+            OG.allPages(ctx.api, "/v1/reserved/summary", { params: { gpu: st.gpu || null }, slot: "reserved-summary" })]);
         } catch (e) { if (!e.stale) box.replaceChildren(OG.error(e, load)); return; }
         const meta = res.meta || {}, terms = meta.terms || [];
         OG.status.asOf(meta.as_of);

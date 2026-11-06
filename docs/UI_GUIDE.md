@@ -60,7 +60,7 @@ Vocabulary used below: "visitor" means signed out; "operator" means signed in wi
 3. **Status line** (hidden at 560px or less):
    - A coloured dot plus freshness text. Starts as "Connecting…". Then "Prices updated just now / 1 min ago / N min ago / 1 hour ago / N hours ago / N days ago" (green dot). Older than 10 minutes: "Prices may be out of date: last read N min ago" (stale tone). If the price service fails: "Can't reach OpenGrid" (red). Tooltip gives the exact local time ("Prices were last read from providers at ... (your time)"). The words are redrawn every 30 seconds.
    - "· N providers tracked" (from /polling). Hidden below 1600px wide. Tooltip: "OpenGrid reads prices from N cloud providers, the busiest every M min" plus "(price checks are paused on this server)" when polling is off.
-4. **Ticker tape** (hidden at 1080px or less). Built from /market (24 hours) and /v1/tape:
+4. **Ticker tape** (hidden at 1080px or less). Built from /market (24 hours) and /internal/tape:
    - Up to 16 price items: short GPU name in bold, lowest on-demand price per GPU-hour, and the 24-hour change as a green up or red down arrow with a percent (only GPUs with 2 or more providers). Each links to /gpu/{slug}. Tooltip explains "lowest on-demand price per GPU-hour across N providers, change over 24 hours".
    - Then up to 12 event items: provider name (or "Market"), short GPU name (or the event type), and a percent change. Each links to the GPU page, or /events.
    - Only whole items are shown; the rest collapse into a "+N more" link to /gpus ("See every GPU price"). Refits on window resize.
@@ -133,7 +133,7 @@ Dark by default, or the OS preference on first visit; the choice is saved in the
 - "Needs an account" is the label everywhere (nav locks, popover, 401 errors, command bar), but there is no customer account to sign into in the browser: the only sign-in is "operator sign-in". A non-staff visitor who clicks a locked page has no path forward except the Developers page's GitHub key request, and the error state never mentions API keys.
 - Three different words for the same gate: "Needs an account", "Needs sign-in" (assistant), "operator sign-in" / "Sign in" (assistant, Developers), "API key" (Developers, API).
 - No sign-out control: the operator is told to close the browser window.
-- Freshness is not always "last price read": Home and Markets feed the status bar with /v1/overview meta.as_of, which is the time the response was built (server now(), cached up to 60s), not when providers were last read. On those pages the bar can say "Prices updated just now" even if price polling has stalled. The shell itself uses /market t1 (true last read), so the meaning changes by page.
+- Freshness is not always "last price read": Home and Markets feed the status bar with /internal/overview meta.as_of, which is the time the response was built (server now(), cached up to 60s), not when providers were last read. On those pages the bar can say "Prices updated just now" even if price polling has stalled. The shell itself uses /market t1 (true last read), so the meaning changes by page.
 - The ticker has two formats. The shell draws price items plus event items "Provider GPU ±%"; /markets replaces the whole tape with its own items (event titles with a severity dot). Both reload every 60 seconds, so on /markets the tape can flip between the two formats. Shell event items for events without a percent (sold out, restock) show a bare "-".
 - Command bar shortcuts "d" (deployments) and "r <gpu>" (route preview) lead to locked pages but show no lock in suggestions or in the shortcuts dialog; the "Ask the assistant" fallback does not appear for multi-word text starting with a single letter and a space (for example "a cheap gpu").
 - Label drift between menu, page heading and browser tab: "Markets" / "Market overview" / tab "Markets"; "API docs" / "API reference"; "Ask the assistant" / "OpenGrid Assistant" / tab "Assistant"; "My Jobs" / "Jobs".
@@ -170,7 +170,7 @@ Dark by default, or the OS preference on first visit; the choice is saved in the
    - "03 Run safely" (badge "approved"): a price check is free; a real run needs OpenGrid approval, a spending cap and proof of shutdown; "Today the one supported job is a small training example." Link "How runs are kept safe →" (/methodology/execution-safety).
 7. **"Also" row**: links "Use OpenGrid from your AI assistant, CLI or API", "Compare two GPUs", "Market events", "How every number is computed".
 
-**States:** each block loads separately ("Loading live market…", "Loading prices…", "Loading indices…"). If /v1/overview fails, the board shows the standard error with "Try again" and the stat strip disappears; the status bar shows "Can't reach OpenGrid". If the API marks the board unavailable: "Market board unavailable" plus reason. Indices: "Indices did not load. Try again in a moment." or "No benchmark index has data yet.".
+**States:** each block loads separately ("Loading live market…", "Loading prices…", "Loading indices…"). If /internal/overview fails, the board shows the standard error with "Try again" and the stat strip disappears; the status bar shows "Can't reach OpenGrid". If the API marks the board unavailable: "Market board unavailable" plus reason. Indices: "Indices did not load. Try again in a moment." or "No benchmark index has data yet.".
 
 **Refresh:** overview, sparklines and indices reload every 60 seconds (paused while the tab is hidden).
 
@@ -209,7 +209,7 @@ Dark by default, or the OS preference on first visit; the choice is saved in the
 5. **Lower row, left: "Market board · on-demand"** full table (up to 24 rows) with a CSV download ("opengrid-board.csv"): GPU, Prov, Low, Cheapest at, Median, High, Spread, 24h, 24h low (sparkline). Sortable; row click opens the GPU.
 6. **Lower row, right**: "Latest notable events" (title links to /events?sev=notable, "all →") with up to 10 compact event rows; "Headlines" (links to /news, "all →") with up to 8 news items (age, headline opening the source in a new tab, source name plus "+N" other sources).
 
-**States:** panels show "…" while loading, indices "loading indices…", summary "loading…". A section the API marks unavailable shows "unavailable <reason>". If /v1/overview fails, every panel shows "unavailable overview request failed: <message>" and the summary line shows the standard error with "Try again". Events: "No notable or major events recorded yet."; news: "No headlines ingested yet." or "unavailable news service did not answer (/v1/news)".
+**States:** panels show "…" while loading, indices "loading indices…", summary "loading…". A section the API marks unavailable shows "unavailable <reason>". If /internal/overview fails, every panel shows "unavailable overview request failed: <message>" and the summary line shows the standard error with "Try again". Events: "No notable or major events recorded yet."; news: "No headlines ingested yet." or "unavailable news service did not answer (/v1/news)".
 
 **Refresh:** everything reloads every 60 seconds while the tab is visible. The page also rewrites the global ticker with its own items.
 
@@ -411,7 +411,7 @@ In the menu, "Explore" (marked "Free to use, no account needed") holds "GPUs" wi
 ### /gpus (GPU markets)
 
 - **URL**: /gpus. Filters and sort are kept in the URL (q, vendor, arch, vram, wl, ff, avail, all, sort, dir), so a filtered view can be shared.
-- **Who / sign-in**: anyone; no sign-in. Reads /v1/gpus, /market?hours=24 and /v1/spreads, all public.
+- **Who / sign-in**: anyone; no sign-in. Reads /v1/gpus, /market?hours=24 and /v1/markets, all public.
 - **Purpose**: one table of every canonical GPU with its current on-demand price per GPU-hour across providers.
 
 **Layout, top to bottom**
@@ -452,7 +452,7 @@ In the menu, "Explore" (marked "Free to use, no account needed") holds "GPUs" wi
    Clicking a row opens /gpu/{slug}. Unpriced rows are greyed out. On narrow screens the columns drop in this order: "24h trend", "Form", "Arch", "Class". Default sort is "Prov" descending.
 5. Note under the table: an observed badge, then "Observed list prices, on-demand, not interruptible, in stock or stock unknown; one vote per provider (its lowest). Spread, efficiency and 24h change are derived. $/GB and $/PFLOP ... are theoretical, not benchmarks." It ends with the links "Dispersion" and "Hardware" (methodology pages).
 
-**States**: loading shows "Loading GPU markets…". If no row matches the filters, the table says "No GPUs match these filters.". If /v1/gpus fails, the shared error box appears with "Try again". If /market or /v1/spreads fails, the page still loads: the 24h and efficiency cells show "-" or "n/a" with a reason ("24h board unavailable", "spreads unavailable").
+**States**: loading shows "Loading GPU markets…". If no row matches the filters, the table says "No GPUs match these filters.". If /v1/gpus fails, the shared error box appears with "Try again". If /market or /v1/markets fails, the page still loads: the 24h and efficiency cells show "-" or "n/a" with a reason ("24h board unavailable", "spreads unavailable").
 
 **Refresh**: reloads every 60 s, keeping filters and sort.
 
@@ -465,7 +465,7 @@ In the menu, "Explore" (marked "Free to use, no account needed") holds "GPUs" wi
 ### /gpu/{slug} (one GPU market)
 
 - **URL**: /gpu/{canonical-slug}, for example /gpu/h100-80gb-sxm5. URL state: w (window), view, ov (overlays), sev, count. If the slug is not a canonical GPU, the page tries to load it as a GPU family and shows the family page instead (next section). If that fails too, it shows the title "Unknown GPU" with the slug, "No canonical GPU or GPU family has this slug." and a link "All GPU markets →".
-- **Who / sign-in**: anyone. Every read is public: /v1/gpus/{slug}, /v1/indices/{slug}, /v1/markets/{slug}/context and /regions, /v1/history, /market/detail, /v1/timeline (and /around), /v1/events, /v1/news, /v1/best, /v1/trust/listings, /v1/heatmaps, /listings.
+- **Who / sign-in**: anyone. Every read is public: /v1/gpus/{slug}, /v1/indices/{slug}, /v1/markets/{slug}/context and /regions, /v1/history, /market/detail, /v1/timeline (and /around), /v1/events, /v1/news, /v1/best, /v1/listings, /internal/heatmaps, /listings.
 - **Purpose**: everything about one GPU's cloud market, laid out like a stock page: price, history, providers, regions, events, alternatives and specs.
 
 **Layout, top to bottom**
@@ -584,7 +584,7 @@ In the menu, "Explore" (marked "Free to use, no account needed") holds "GPUs" wi
 ### GPU family page (/gpu/{family-slug})
 
 - **URL**: the family page has no route of its own. It is drawn by /gpu/{slug} when the slug names a family or architecture rather than one canonical GPU, for example /gpu/h100 or /gpu/blackwell. URL state: w (chart window).
-- **Who / sign-in**: anyone. Reads /v1/families/{slug} (falling back to /v1/markets/{slug}), /v1/history/{variant} for each variant, and /v1/news?gpu=, all public.
+- **Who / sign-in**: anyone. Reads /v1/families/{slug}, /v1/markets/{variant}/history for each variant, and /v1/news?gpu=, all public.
 - **Purpose**: show each variant of a GPU family side by side with its own price, never merged into one family price.
 
 **Layout, top to bottom**
@@ -623,7 +623,7 @@ In the menu, "Explore" (marked "Free to use, no account needed") holds "GPUs" wi
 ### /providers (provider league table)
 
 - **URL**: /providers. URL state: days (7, 30, 90), class, sort, dir.
-- **Who / sign-in**: anyone. Reads /v1/providers, /v1/capabilities and /v1/trust/providers, all public.
+- **Who / sign-in**: anyone. Reads /v1/providers, /v1/capabilities and /internal/trust/providers, all public.
 - **Purpose**: every GPU cloud OpenGrid reads, compared on coverage, price versus the market, feed health and integration level.
 
 **Layout, top to bottom**
@@ -672,7 +672,7 @@ In the menu, "Explore" (marked "Free to use, no account needed") holds "GPUs" wi
 ### /provider/{name} (one provider)
 
 - **URL**: /provider/{provider-id}, for example /provider/runpod. URL state: days, gpu, window, hist.
-- **Who / sign-in**: anyone, except one section. Public reads: /v1/providers/{p}, /v1/capabilities/{p}, /v1/timeline, /v1/providers/{p}/gpus/{gpu}/context, /v1/trust/*, /v1/events, /v1/news and /listings. The "Source field map" section reads /mapping, which is private.
+- **Who / sign-in**: anyone, except one section. Public reads: /v1/providers/{p}, /v1/capabilities/{p}, /v1/timeline, /v1/providers/{p}/gpus/{gpu}/context, /internal/trust/*, /v1/events, /v1/news and /listings. The "Source field map" section reads /mapping, which is private.
 - **Purpose**: one provider in depth: its catalogue against the market, relative-value history, price history per GPU, integration level, feed health, regions, events, news and every listing.
 
 **Layout, top to bottom**
@@ -754,7 +754,7 @@ In the menu, "Explore" (marked "Free to use, no account needed") holds "GPUs" wi
 ### /compare and /compare/{a}-vs-{b}
 
 - **URL**: /compare (empty picker) and /compare?a=&b=. The pair form is /compare/{a}-vs-{b}, for example /compare/h100-80gb-sxm5-vs-h200-141gb-sxm5, /compare/runpod-vs-lambda or /compare/us-vs-europe. Extra query: ?gpu= (the focus GPU for provider or region pairs), ?w= (chart window).
-- **Who / sign-in**: anyone. Reads /v1/compare, /v1/gpus/{slug}, /v1/history, /market/detail and /v1/heatmaps, all public.
+- **Who / sign-in**: anyone. Reads /internal/compare, /v1/gpus/{slug}, /v1/history, /market/detail and /internal/heatmaps, all public.
 - **Purpose**: put two GPUs, two providers or two region groups side by side.
 
 **Common header and picker**: the title is "A vs B" (or "Compare"). The subtitle depends on the pair type, for example "GPU vs GPU: price, availability, capability pricing and specs, side by side". The picker bar has:
@@ -834,7 +834,7 @@ Empty states: "No common GPU to chart." and "These providers have no GPU in comm
 ### /explorer (listings explorer)
 
 - **URL**: /explorer. Every filter and the sort live in the URL: gpu, provider, region, min, max, avail, type, tier, count, q, sort, dir.
-- **Who / sign-in**: anyone. Reads /listings, plus /v1/gpus and /v1/trust/listings (optional extras), all public.
+- **Who / sign-in**: anyone. Reads /listings, plus /v1/gpus and /v1/listings (optional extras), all public.
 - **Purpose**: every current listing from every provider, raw, with filters and CSV export.
 
 **Layout, top to bottom**
@@ -876,14 +876,14 @@ Empty states: "No common GPU to chart." and "These providers have no GPU in comm
 
 **Observations**
 - If a refresh fails, the whole table is replaced by the error box, even though good data was on screen a moment before.
-- The table is rebuilt up to twice after the first draw, when the optional /v1/gpus and /v1/trust/listings answers arrive. Columns pop in and the layout jumps.
+- The table is rebuilt up to twice after the first draw, when the optional /v1/gpus and /v1/listings answers arrive. Columns pop in and the layout jumps.
 - "Reset" sits in the page header, while on /gpus, /opportunities and /events "Reset" sits at the end of the filter bar. On /news the same action is called "Clear".
 - Up to 24 columns, with terse labels: "Intr", "Ctry", "Tier", "Stock basis", "Last chg".
 
 ### /opportunities (opportunity monitor)
 
 - **URL**: /opportunities. URL state: type, gpu, provider, min.
-- **Who / sign-in**: anyone. Reads /v1/opportunities and /v1/events/types, both public.
+- **Who / sign-in**: anyone. Reads /internal/opportunities and /v1/events/types, both public.
 - **Purpose**: list places where listed prices or supply look unusual right now, ranked by score.
 
 **Layout, top to bottom**
@@ -1001,7 +1001,7 @@ Empty states: "No common GPU to chart." and "These providers have no GPU in comm
 ### /heatmaps
 
 - **URL**: /heatmaps. URL state: kind, days, order, empty.
-- **Who / sign-in**: anyone. Reads /v1/heatmaps/{kind}, public.
+- **Who / sign-in**: anyone. Reads /internal/heatmaps/{kind}, public.
 - **Purpose**: matrices of where each GPU is cheap, dear, available or moving, across providers, regions or days.
 
 **Layout, top to bottom**

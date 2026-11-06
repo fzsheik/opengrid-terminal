@@ -3,8 +3,9 @@
 Control-plane uptime and latency for the GPU cloud providers OpenGrid tracks, measured by a third party,
 [UptimeProject](https://uptimeproject.org), and republished under its CC BY 4.0 licence.
 
-Kind: **observed** (third-party). Code: `uptime/`. API: `GET /v1/uptime/providers`, `/v1/uptime/services`,
-`/v1/uptime/services/{id}`, `/v1/uptime/health`. Page: `/uptime`.
+Kind: **observed** (third-party). Code: `uptime/`. Shown on the `/uptime` page only:
+never served by the Data API (third-party data). Status-page incidents, which are the providers' own reports, are
+`GET /v1/reliability/incidents`.
 
 This is a separate dataset on purpose. It is not OpenGrid's own record, it does not feed
 [provider reliability](/methodology/reliability) or any routing score, and nothing here is blended into another
