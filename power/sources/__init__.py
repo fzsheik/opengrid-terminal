@@ -7,4 +7,8 @@ MODULES = (
     "caiso",
     "eia",        # EIA-930 hourly grid data (public)
     "eia_gas",    # EIA natural gas (internal by choice)
+    "spp",        # SPP Integrated Marketplace hub LMPs (no signup; internal)
+    "ercot",      # ERCOT MIS settlement point prices, hubs + load zones (no signup; public)
+    "pjm",        # PJM Data Miner 2 hub + zone LMPs (free key; internal)
+    "isone",      # ISO-NE ISO Express hub + zone LMPs (free account; internal)
 )
