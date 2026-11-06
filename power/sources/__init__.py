@@ -7,4 +7,6 @@ MODULES = (
     "caiso",
     "eia",        # EIA-930 hourly grid data (public)
     "eia_gas",    # EIA natural gas (internal by choice)
+    "nyiso",
+    "miso",
 )
