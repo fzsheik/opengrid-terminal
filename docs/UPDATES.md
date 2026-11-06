@@ -5,6 +5,46 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-06: OpenGrid Data API v1 (contract, new routes, API address)
+
+### What shipped
+- The market intelligence API follows one contract, written in `docs/API_CONTRACT.md`: one error format
+  (`{error: {type, code, message, param, request_id, docs_url}}`), `request_id` and `api_version` in every `meta`,
+  dated versions (`OpenGrid-Version` header, pinned per API key in the new `api_keys.api_version` column, migration
+  0034), cursor paging on every list, frozen vendor-prefixed GPU ids (`nvidia-h100-80gb-sxm5`, `gpu_ids.py`) with
+  `gpu_name` beside them, `provider_name` beside provider ids, exact decimal strings for fixings, ETag + 304 +
+  `Cache-Control`, `?as_of=` on `/v1/listings`, bulk export `/v1/exports`, the schema at `/v1/openapi.json`.
+- New route layout (old paths removed, no outside clients): `/v1/gpus` (reference), `/v1/markets`,
+  `/v1/markets/{gpu}` (+ `/history`, `/history/daily|archived|dispersion`, `/regions`), `/v1/listings` (+ `/history`),
+  `/v1/costs/*`, `/v1/fx/rates` (+ `/history`), `/v1/reliability/*`, `/v1/events/shifts`, `/v1/macro/*`.
+  UI-only reads moved to `/internal/*` (overview, tape, opportunities, heatmaps, compare, uptime, trust, live).
+  Launch reliability is `/v1/execution/reliability` (key only).
+- `DATA_API_HOST` (set to data.tryopengrid.com after this deploys): that host serves Data API routes only and needs
+  an API key. Unset, nothing changes.
+- Every DB connection is set to UTC (a non-UTC server shifted dates by a day). Tests: one runner
+  (`tests/run_all.py`), GitHub Actions on every push, 132 test files; contract shape snapshot
+  (`tests/contracts/2026-11-03.json`); website smoke compare (`tests/smoke/compare.sh`).
+
+### What did not ship
+- Python SDK package (planned, own repo). Customer sign-up / login (keys are still issued by the operator on
+  `/admin/partners`). Stored daily export files (exports are built per request). Rounding of published fixings
+  (full stored value is published; a rounding rule is a settlement methodology decision).
+
+### Known issues
+- A few website pages translate new field names back to the old ones (`OG.legacyHistory`, `gpu`/`index_id` shim in
+  `web/core.js`); cleanup before the next contract change.
+- `/v1/listings?as_of=` and the listings export scan `listing_observations`; untested at production size.
+- Whole-suite runs can hit a 10 minute timeout on `test_money_invariants` when the machine is busy (81 s alone).
+
+### Deploy notes
+- Migration 0034 only adds a column (and sets existing keys to 2026-11-03); old code ignores it, so a rollback is safe.
+- Rollback target: deployment 8862412c (2026-11-02).
+
+### Next
+- Set `DATA_API_HOST`, test account creation end to end, write the customer-facing docs, then customer login.
+
+---
+
 ## 2026-11-02 (fifth release) — Linode capacity: Retry-After on a 200 is not a request to wait
 
 ### What shipped
