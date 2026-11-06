@@ -6,9 +6,11 @@ site serves (`api/pages.py` reads `methodology/*.md` only) and nothing in the pu
 ## What and why
 
 OpenGrid tracks daily and hourly stock prices of GPU-relevant companies (NVDA, AMD, TSM, AVGO, MU, INTC, ARM, SMCI,
-DELL, CRWV, NBIS, ORCL, MSFT, GOOGL, AMZN, META, VRT, ANET) and two semiconductor ETFs (SMH, SOXX) for its own
-research and analysis: for example, to see whether GPU rental prices moved in a window when the chip and cloud
-stocks did. The list is `context/equities.TICKERS`, overridable with `EQUITY_TICKERS`.
+DELL, CRWV, NBIS, ORCL, MSFT, GOOGL, AMZN, META, VRT, ANET) and two semiconductor ETFs (SMH, SOXX), plus power
+companies: generators selling to datacenters (CEG, VST, TLN, NRG), utilities in the datacenter regions (D, AEP, SO,
+EXC, NEE, DUK, ETR, XEL), nuclear and fuel (OKLO, SMR, CCJ), grid and datacenter power equipment (GEV, ETN, PWR, BE)
+and the utilities ETF (XLU). It uses them for its own research and analysis: for example, to see whether GPU rental
+prices moved in a window when the chip, cloud or power stocks did. The list is `context/equities.TICKERS`, overridable with `EQUITY_TICKERS`.
 
 **The data is not displayed, not served by any public or keyed read, and not republished or resold.** It exists only
 for internal analysis. Like every market-context series it is context, never cause, and never an input to listings,
