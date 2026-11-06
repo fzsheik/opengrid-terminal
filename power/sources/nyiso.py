@@ -17,10 +17,10 @@ are dropped, except one at most SNAP_SECONDS past a boundary that has no on-time
 is stored at its native 5-minute granularity: 15 zones x 288 values a day as real[] (~1.2 KB per series-day).
 
 Fetching: the monthly zip for every month that is not recent (one request per month, held in memory, read member by
-member, never written to disk), the daily CSV for days within DAILY_DAYS of today (daily files are kept about 10
-days: measured 2026-11-05, 10-26 answered and 10-25 was a 404; the current month's zip also exists, partial). A
-backfill chunk is not month-aligned, so the last monthly zip is cached for a few minutes: the next chunk reuses it
-instead of downloading the same month twice.
+member, never written to disk), the daily CSV for days within DAILY_DAYS of the run's clock (daily files are kept
+about 10 days: measured 2026-11-05, 10-26 answered and 10-25 was a 404; the current month's zip also exists,
+partial). Chunks are month-aligned (align="month"), so each month's zip is downloaded once. A 404 is "not published"
+(empty_statuses): a daily file posted late is re-asked, not counted as a failure.
 
 Depth: the monthly zips go back to 1999-11 (DA) / 2000 (RT); the same CSV layout was verified for 2021-01, so the
 backfill starts there (EARLIEST). Measured sizes: DA one day 16.8 KB CSV (3.2 KB gzipped), one month 112 KB zipped;
@@ -31,9 +31,7 @@ RT one day 236 KB CSV (31 KB gzipped), one month 1.1 MB zipped. The forward job 
 from __future__ import annotations
 
 import csv
-import dataclasses
 import io
-import time as _time
 import zipfile
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -49,7 +47,6 @@ ET = ZoneInfo(TZ)
 EARLIEST = date(2021, 1, 1)
 DAILY_DAYS = 7              # days within this of today come from the daily CSVs (kept ~10 days), older from zips
 DA_PUBLISHED_HOUR = 12      # DAM results post around 11:00 ET; tomorrow is "complete" after 12:00
-CACHE_SECONDS = 600.0
 SNAP_SECONDS = 30         # an off-cycle RT stamp this late for a 5-minute boundary stands in for it
 
 TERMS = Terms(
@@ -114,10 +111,6 @@ def latest_rt(now: datetime) -> date:
     return now.astimezone(ET).date() - timedelta(days=1)
 
 
-def today() -> date:
-    return datetime.now(timezone.utc).astimezone(ET).date()
-
-
 def daily_url(market: str, d: date) -> str:
     folder, stem, _, _ = MARKETS[market]
     return f"{BASE}/{folder}/{d:%Y%m%d}{stem}.csv"
@@ -139,24 +132,11 @@ def months(start: date, end: date) -> list[tuple[date, date]]:
     return out
 
 
-_cache: dict[str, tuple[float, Fetched]] = {}   # the last monthly zip (one entry): chunks are not month-aligned
-
-
-async def _monthly(get, url: str) -> Fetched:
-    hit = _cache.get(url)
-    if hit and _time.monotonic() - hit[0] < CACHE_SECONDS:
-        return dataclasses.replace(hit[1], empty=False, start=None, end=None)
-    f = await get.get(url)
-    _cache.clear()
-    if f.ok:
-        _cache[url] = (_time.monotonic(), dataclasses.replace(f))
-    return f
-
 
 def _make_fetch(market: str):
-    async def fetch(get, start: date, end: date) -> list[Fetched]:
+    async def fetch(get, start: date, end: date, now: datetime | None = None) -> list[Fetched]:
         out: list[Fetched] = []
-        recent = today() - timedelta(days=DAILY_DAYS)
+        recent = (now or datetime.now(timezone.utc)).astimezone(ET).date() - timedelta(days=DAILY_DAYS)
         for a, b in months(start, end):
             if a >= recent:
                 d = a
@@ -166,7 +146,7 @@ def _make_fetch(market: str):
                     out.append(f)
                     d += timedelta(days=1)
             else:
-                f = await _monthly(get, monthly_url(market, a))
+                f = await get.get(monthly_url(market, a))
                 f.start, f.end = a, b
                 out.append(f)
         return out
@@ -242,10 +222,10 @@ def _make_parse(market: str):
 DATASETS = (
     Dataset(key="nyiso.da_lmp", source=SOURCE, series=_series("da"), interval_minutes=60, tz=TZ, chunk_days=31,
             earliest=earliest, latest=latest_da, fetch=_make_fetch("da"), parse=_make_parse("da"),
-            pace_seconds=2.0, overlap_days=2, keep_raw=True,
+            pace_seconds=2.0, overlap_days=2, keep_raw=True, empty_statuses=(404,), align="month",
             description="damlbmp zone, hourly LBMP; 15 zones; 16.8 KB CSV (3.2 KB gzipped) per day (bytes kept forward)"),
     Dataset(key="nyiso.rt_lmp", source=SOURCE, series=_series("rt"), interval_minutes=5, tz=TZ, chunk_days=31,
             earliest=earliest, latest=latest_rt, fetch=_make_fetch("rt"), parse=_make_parse("rt"),
-            pace_seconds=2.0, overlap_days=2, keep_raw=False,
+            pace_seconds=2.0, overlap_days=2, keep_raw=False, empty_statuses=(404,), align="month",
             description="realtime zone, 5-minute LBMP; 15 zones; 236 KB CSV (31 KB gzipped) per day (url + sha256 only)"),
 )

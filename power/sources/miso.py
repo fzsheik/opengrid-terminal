@@ -13,9 +13,10 @@ answer's bytes plus one line (a monthly zip member is streamed, never decompress
 no DST, every market day has 24 hours; HE h is the hour starting h-1 hours after midnight EST.
 
 Fetching: daily CSVs from DAILY_FROM (measured 2026-11-05: 2023-01-01 answered, 2022-12 days 404) and monthly zips
-before it (202212_..._csv.zip answered, 202301 404; zips go back to at least 2016-01, 2014 404). A backfill chunk is
-7 days (seven daily files are ~9 MB in memory), so a monthly zip spans several chunks: the last one is cached for a
-few minutes and reused instead of re-downloaded. The real-time FINAL file posts in batches on business days, 3 to 7
+before it (202212_..._csv.zip answered, 202301 404; zips go back to at least 2016-01, 2014 404). Chunks are one
+calendar month (align="month"), so each monthly zip is downloaded once; a daily-era chunk holds up to 31 day files,
+~40 MB in memory at most (one answer is never over ~1.3 MB). A 404 is "not published" (empty_statuses): a late
+file is re-asked, not counted as a failure. The real-time FINAL file posts in batches on business days, 3 to 7
 days after the market day (10-31 posted 11-05, 10-28 posted 11-04), so latest_rt is RT_FINAL_LAG_DAYS back; the
 preliminary file (rt_lmp_prelim, next day) is not read: it would be revised by the final one outside the overlap.
 Real-time 5-minute LMPs exist only as a 24 MB xlsx per day (5min_exante_lmp.xlsx): not read.
@@ -30,9 +31,7 @@ Historical depth beyond the public files (and the 5-minute prices) is in MISO's 
 
 from __future__ import annotations
 
-import dataclasses
 import io
-import time as _time
 import zipfile
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -52,7 +51,6 @@ EARLIEST = date(2021, 1, 1)
 DAILY_FROM = date(2023, 1, 1)
 DA_PUBLISHED_HOUR = 15      # DA ex-post results post early afternoon EST; tomorrow is "complete" after 15:00
 RT_FINAL_LAG_DAYS = 8
-CACHE_SECONDS = 600.0
 
 TERMS = Terms(
     operator="Midcontinent ISO",
@@ -127,22 +125,9 @@ def months(start: date, end: date) -> list[tuple[date, date]]:
     return out
 
 
-_cache: dict[str, tuple[float, Fetched]] = {}   # the last monthly zip (one entry, ~6-8 MB)
-
-
-async def _monthly(get, url: str) -> Fetched:
-    hit = _cache.get(url)
-    if hit and _time.monotonic() - hit[0] < CACHE_SECONDS:
-        return dataclasses.replace(hit[1], empty=False, start=None, end=None)
-    _cache.clear()
-    f = await get.get(url)
-    if f.ok:
-        _cache[url] = (_time.monotonic(), dataclasses.replace(f))
-    return f
-
 
 def _make_fetch(market: str):
-    async def fetch(get, start: date, end: date) -> list[Fetched]:
+    async def fetch(get, start: date, end: date, now: datetime | None = None) -> list[Fetched]:
         out: list[Fetched] = []
         for a, b in months(start, end):
             if a >= DAILY_FROM:
@@ -153,7 +138,7 @@ def _make_fetch(market: str):
                     out.append(f)
                     d += timedelta(days=1)
             else:
-                f = await _monthly(get, monthly_url(market, a))
+                f = await get.get(monthly_url(market, a))
                 f.start, f.end = a, b
                 out.append(f)
         return out
@@ -218,12 +203,12 @@ def _make_parse(market: str):
 
 
 DATASETS = (
-    Dataset(key="miso.da_lmp", source=SOURCE, series=_series("da"), interval_minutes=60, tz=TZ, chunk_days=7,
+    Dataset(key="miso.da_lmp", source=SOURCE, series=_series("da"), interval_minutes=60, tz=TZ, chunk_days=31,
             earliest=earliest, latest=latest_da, fetch=_make_fetch("da"), parse=_make_parse("da"),
-            pace_seconds=2.0, overlap_days=1, keep_raw=False,
+            pace_seconds=2.0, overlap_days=1, keep_raw=False, empty_statuses=(404,), align="month",
             description="da_expost_lmp, hourly LMP; 8 hubs from an all-node file of 1.24 MB per day (url + sha256)"),
-    Dataset(key="miso.rt_lmp", source=SOURCE, series=_series("rt"), interval_minutes=60, tz=TZ, chunk_days=7,
+    Dataset(key="miso.rt_lmp", source=SOURCE, series=_series("rt"), interval_minutes=60, tz=TZ, chunk_days=31,
             earliest=earliest, latest=latest_rt, fetch=_make_fetch("rt"), parse=_make_parse("rt"),
-            pace_seconds=2.0, overlap_days=1, keep_raw=False,
+            pace_seconds=2.0, overlap_days=1, keep_raw=False, empty_statuses=(404,), align="month",
             description="rt_lmp_final, hourly LMP; 8 hubs from an all-node file of 1.29 MB per day (url + sha256)"),
 )

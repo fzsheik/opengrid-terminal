@@ -1,7 +1,8 @@
 """NYISO and MISO power sources (power/sources/nyiso.py, miso.py): parsing over REAL saved answers (DST days for
 NYISO's unlabelled Eastern stamps, MISO's all-node files filtered to the hubs, monthly zips and daily CSVs), empty
-and malformed answers, the daily-vs-monthly fetch choice and the monthly-zip reuse across chunks, and end-to-end
-runner backfills / forwards on a scratch DB. No network: httpx.MockTransport.
+and malformed answers, the daily-vs-monthly fetch choice (by the run's clock, fetch(now=)), month-aligned chunks
+(one request per monthly zip), 404 = "not published", a source gap that becomes final, and end-to-end runner
+backfills / forwards on a scratch DB. No network: httpx.MockTransport.
 
 Fixtures (real answers, captured 2026-11-05; "trimmed" = rows of other zones / nodes removed, nothing else changed):
     nyiso_da_202511_01_03.zip          damlbmp monthly zip, members 2025-11-01..03 (11-02: DST end, 25 hours)
@@ -225,7 +226,6 @@ class Files:
 def _patched():
     for m in (nyiso, miso):
         m.DATASETS = tuple(dataclasses.replace(d, pace_seconds=0) for d in m.DATASETS)
-        m._cache.clear()
     phttp.BACKOFF_SECONDS = (0, 0, 0)
 
 
@@ -236,7 +236,6 @@ def test_db_runner():
 
     _patched()
     url = scratchdb.create(DB)
-    real_today = nyiso.today
     try:
         Session = fixtures.session(url)
         normalize.SessionLocal = Session
@@ -249,8 +248,7 @@ def test_db_runner():
             return next(d for d in out["sources"][0]["datasets"] if d["dataset"] == key)
 
         # ---------------- NYISO backfill from the monthly zips (2025-11 is not recent)
-        nyiso.today = lambda: date(2025, 11, 20)
-        now = datetime(2025, 11, 20, 18, tzinfo=UTC)
+        now = datetime(2025, 11, 20, 18, tzinfo=UTC)          # fetch(now=): 2025-11 is not recent, monthly zips
         files = Files({"/public/csv/damlbmp/20251101damlbmp_zone_csv.zip": _b("nyiso_da_202511_01_03.zip"),
                        "/public/csv/realtime/20251101realtime_zone_csv.zip": _b("nyiso_rt_202511_02.zip")})
         out = run("backfill", "nyiso", files, now, since=date(2025, 11, 1), until=date(2025, 11, 3))
@@ -273,30 +271,23 @@ def test_db_runner():
         out = run("backfill", "nyiso", files, now, since=date(2025, 11, 1), until=date(2025, 11, 3),
                   datasets=["nyiso.da_lmp"])
         assert ds_out(out, "nyiso.da_lmp")["chunks"] == 0 and len(files.seen) == n0
-        # chunks that straddle a month: each month's zip is downloaded once, the second chunk reuses it
-        nyiso.DATASETS = (dataclasses.replace(nyiso.DATASETS[0], chunk_days=2), nyiso.DATASETS[1])
-        nyiso._cache.clear()
+        # chunks never cross a month (align="month"): one request per month's zip; a 404 month is "not published"
         files.seen.clear()
         out = run("backfill", "nyiso", files, now, since=date(2025, 10, 30), until=date(2025, 11, 5),
                   datasets=["nyiso.da_lmp"])
         d0 = ds_out(out, "nyiso.da_lmp")
-        assert d0["chunks"] == 2 and d0["failed"] == 1, d0        # 10-30..31 (Oct zip: 404), 11-04..05 (Nov zip)
-        assert files.seen.count("/public/csv/damlbmp/20251101damlbmp_zone_csv.zip") == 1, files.seen
-        nyiso._cache.clear()
-        files.seen.clear()
-        run("backfill", "nyiso", files, now, since=date(2025, 10, 31), until=date(2025, 11, 6), datasets=["nyiso.da_lmp"])
-        assert files.seen.count("/public/csv/damlbmp/20251101damlbmp_zone_csv.zip") == 1, files.seen
-        nyiso.DATASETS = (dataclasses.replace(nyiso.DATASETS[0], chunk_days=31), nyiso.DATASETS[1])
+        assert d0["chunks"] == 2 and d0["failed"] == 0 and d0["empty"] == 1, d0   # 10-30..31 (404), 11-04..05
+        assert files.seen == ["/public/csv/damlbmp/20251001damlbmp_zone_csv.zip",
+                              "/public/csv/damlbmp/20251101damlbmp_zone_csv.zip"], files.seen
 
         # ---------------- NYISO forward from the daily CSVs (recent days)
-        nyiso.today = lambda: date(2026, 11, 5)
         now = datetime(2026, 11, 5, 18, tzinfo=UTC)          # 13:00 ET: DA through 11-06, RT through 11-04
         files = Files({"/public/csv/damlbmp/20261103damlbmp_zone.csv": _b("nyiso_da_20261103.csv"),
                        "/public/csv/realtime/20261104realtime_zone.csv": _b("nyiso_rt_20261104_capitl_nyc.csv")})
         out = run("forward", "nyiso", files, now, since=date(2026, 11, 3))
         da, rt = ds_out(out, "nyiso.da_lmp"), ds_out(out, "nyiso.rt_lmp")
-        assert da["new"] == 15 and da["failed"] == 3, da       # 11-04 / 05 / 06 not served here: recorded failures
-        assert rt["new"] == 2 and rt["failed"] == 1, rt        # 11-03 not served
+        assert da["new"] == 15 and da["failed"] == 0 and da["empty"] == 3, da   # 11-04 / 05 / 06: 404, not posted
+        assert rt["new"] == 2 and rt["failed"] == 0 and rt["empty"] == 1, rt    # 11-03: 404
         assert all(p.startswith("/public/csv/") and p.endswith(".csv") for p in files.seen), files.seen
         with Session() as s:
             kept = s.execute(text("""SELECT dataset, mode, encoding, bytes FROM power_fetches
@@ -312,12 +303,12 @@ def test_db_runner():
         now = datetime(2026, 11, 10, 12, tzinfo=UTC)
         out = run("backfill", "miso", files, now, since=date(2021, 1, 1), until=date(2021, 1, 10))
         da, rt = ds_out(out, "miso.da_lmp"), ds_out(out, "miso.rt_lmp")
-        assert da["chunks"] == 2 and da["new"] == 16 and da["failed"] == 0, da   # 01-01..07, 01-08..10
+        assert da["chunks"] == 1 and da["new"] == 16 and da["failed"] == 0, da   # 01-01..10: one month, one zip
         assert rt["new"] == 16, rt
         assert files.seen.count("/marketreports/202101_da_expost_lmp_csv.zip") == 1, files.seen
         out = run("backfill", "miso", files, now, since=date(2026, 11, 2), until=date(2026, 11, 3))
         da = ds_out(out, "miso.da_lmp")
-        assert da["new"] == 8 and da["failed"] == 1 and da["fetches"] == 2, da   # one request per day; 11-02 404
+        assert da["new"] == 8 and da["empty"] == 1 and da["failed"] == 0 and da["fetches"] == 2, da   # 11-02: 404
         assert "/marketreports/20261102_da_expost_lmp.csv" in files.seen
         out = run("backfill", "miso", files, now, since=date(2026, 10, 30), until=date(2026, 10, 31),
                   datasets=["miso.rt_lmp"])
@@ -337,9 +328,54 @@ def test_db_runner():
             print(f"  {k}: {d['series_days']} series-days, vals {d['vals_bytes'] / max(d['series_days'], 1):.0f} B each")
         assert st["nyiso.rt_lmp"]["vals_bytes"] / st["nyiso.rt_lmp"]["series_days"] < 1300
     finally:
-        nyiso.today = real_today
         scratchdb.drop(DB)
     print("test_db_runner ok")
+
+
+def _without(member: bytes, label: str) -> bytes:
+    return b"".join(l for l in member.splitlines(keepends=True) if f'"{label}"'.encode() not in l)
+
+
+def test_real_gap_is_final():
+    """A source gap (NYISO 2025-11-12 has no 10:20 interval at all) is NULL, not a failure: re-read while recent,
+    final once older than latest - overlap, so a backfill re-run does not download the month again."""
+    import fixtures
+    import normalize
+    from sqlalchemy import text
+
+    _patched()
+    url = scratchdb.create(DB)
+    try:
+        normalize.SessionLocal = Session = fixtures.session(url)
+        with zipfile.ZipFile(io.BytesIO(_b("nyiso_rt_202511_02.zip"))) as z:
+            member = _without(z.read("20251102realtime_zone.csv"), "11/02/2025 10:20:00")
+        files = Files({"/public/csv/realtime/20251101realtime_zone_csv.zip": _zip({"20251102realtime_zone.csv": member}),
+                       "/public/csv/realtime/20251102realtime_zone.csv": member})
+
+        def run(now):
+            client = httpx.AsyncClient(transport=httpx.MockTransport(files))
+            out = asyncio.run(runner.run("backfill", sources=["nyiso"], client=client, now=now,
+                                         since=date(2025, 11, 2), until=date(2025, 11, 2), datasets=["nyiso.rt_lmp"]))
+            return out["sources"][0]["datasets"][0]
+
+        recent = datetime(2025, 11, 3, 18, tzinfo=UTC)       # latest RT 11-02: the gap day is recent (daily CSV)
+        d0 = run(recent)
+        assert d0["new"] == 15 and d0["failed"] == 0, d0
+        assert files.seen == ["/public/csv/realtime/20251102realtime_zone.csv"], files.seen
+        with Session() as s:
+            n, complete, slots = s.execute(text("""SELECT n, complete, array_length(vals, 1) FROM power_days d
+                JOIN power_series p ON p.id = d.series_id WHERE p.key = 'nyiso.rt.lmp.capitl'""")).one()
+            assert (n, complete, slots) == (299, False, 300), (n, complete, slots)
+        run(recent)
+        assert len(files.seen) == 2, "a recent incomplete day is re-read (it may still fill)"
+        later = datetime(2025, 12, 20, 18, tzinfo=UTC)       # 11-02 is now older than latest - overlap
+        d0 = run(later)
+        assert d0["chunks"] == 0 and d0["days_skipped"] == 1 and len(files.seen) == 2, (d0, files.seen)
+        d0 = run(later)
+        assert d0["chunks"] == 0 and len(files.seen) == 2, "the month is not downloaded again"
+    finally:
+        scratchdb.drop(DB)
+    print("test_real_gap_is_final ok")
 
 
 if __name__ == "__main__":
@@ -347,4 +383,5 @@ if __name__ == "__main__":
     test_parse_nyiso()
     test_parse_miso()
     test_db_runner()
+    test_real_gap_is_final()
     print("all passed")
