@@ -5,4 +5,6 @@ Adding a source: write power/sources/<name>.py and add its name to MODULES (one 
 
 MODULES = (
     "caiso",
+    "eia",        # EIA-930 hourly grid data (public)
+    "eia_gas",    # EIA natural gas (internal by choice)
 )

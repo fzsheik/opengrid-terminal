@@ -209,8 +209,10 @@ def upsert_days(rows: dict[tuple[str, date], list[float | None]], ids: dict[str,
 
 
 def done_days(ds: Dataset, start: date, end: date, empty_before: date | None = None) -> set[date]:
-    """Days with at least one stored row for the dataset and no incomplete one; plus days a successful fetch said
-    the source has NO data for (only before `empty_before`: an empty recent day may still fill)."""
+    """Days with at least one stored row for the dataset and no incomplete one; plus, before `empty_before`, every
+    day a wholly successful chunk covered (days_stored > 0) or the source answered "no data" for: the source's
+    own gaps (an EIA hour never reported) are final there and not re-asked on every run. Days from `empty_before`
+    on are re-read until complete (a recent day may still fill)."""
     from sqlalchemy import text
 
     with _session()() as s:
@@ -221,7 +223,8 @@ def done_days(ds: Dataset, start: date, end: date, empty_before: date | None = N
         out = {r[0] for r in rows if r[1]}
         if empty_before:
             for a, b in s.execute(text("""SELECT period_start, period_end FROM power_fetches
-                                          WHERE dataset = :ds AND ok AND empty AND period_start IS NOT NULL
+                                          WHERE dataset = :ds AND ok AND (empty OR days_stored > 0)
+                                          AND period_start IS NOT NULL
                                           AND period_end >= :a AND period_start <= :b"""),
                                   {"ds": ds.key, "a": start, "b": end}).all():
                 out.update(d for d in days(max(a, start), min(b, end)) if d < empty_before)

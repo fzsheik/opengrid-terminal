@@ -68,41 +68,51 @@ def plan(ds: Dataset, mode: str, now: datetime, since: date | None = None, until
         if since:
             first = max(first, since)
         keep_from = latest - timedelta(days=ds.overlap_days)
-        skip = {d for d in storage.done_days(ds, first, latest) if d < keep_from}
+        # periodic series (one row per week / month): one request re-reads the whole window, nothing skipped
+        skip = set() if ds.interval_minutes >= registry.DAILY else {
+            d for d in storage.done_days(ds, first, latest) if d < keep_from}
     missing = [d for d in storage.days(first, latest) if d not in skip] if first <= latest else []
     return {"dataset": ds.key, "first": first, "latest": latest, "skipped": len(skip),
             "missing": len(missing), "chunks": chunks(missing, ds.chunk_days)}
 
 
 async def run_chunk(ds: Dataset, get: Client, a: date, b: date, ids: dict[str, int], keep: bool) -> dict:
+    """Fetch a chunk (one or more answers: pages, per-day files), record every answer raw-first, merge what parsed
+    and upsert it once, so answers that each carry part of a day (EIA pages) never overwrite each other. Only a
+    chunk whose every answer succeeded is marked stored (days_stored on its last fetch row): a partial chunk is
+    re-asked on the next run, its partial days kept meanwhile (never replacing more complete ones)."""
     out = {"fetches": 0, "failed": 0, "empty": 0, "new": 0, "revised": 0, "unchanged": 0}
     try:
         answers = await ds.fetch(get, a, b)
     except Exception as exc:  # noqa: BLE001 - a fetch() bug is a failed fetch, recorded
         answers = [Fetched(f"{ds.key}:{a}..{b}", None, None, None, error=get.redact(f"{type(exc).__name__}: {exc}")[:500])]
+    merged: dict[str, dict] = {}
+    last_id, all_ok, any_data = None, bool(answers), False
     for f in answers:
         f.start, f.end = f.start or a, f.end or b
         out["fetches"] += 1
-        parsed, err = {}, None
         if f.ok:
             try:
-                parsed = storage.to_days(ds, ds.parse(f), f.start, f.end)
+                for key, pts in ds.parse(f).items():
+                    merged.setdefault(key, {}).update(pts)
             except Exception as exc:  # noqa: BLE001 - stored as a failed parse, never silently
-                err = f"parse: {type(exc).__name__}: {exc}"[:500]
-        if err:
-            f.error = err
-        fid = await asyncio.to_thread(storage.record_fetch, ds, f, keep)   # raw first
+                f.error = f"parse: {type(exc).__name__}: {exc}"[:500]
+        last_id = await asyncio.to_thread(storage.record_fetch, ds, f, keep)   # raw first
         if not f.ok:
+            all_ok = False
             out["failed"] += 1
             log.warning("power %s %s..%s: %s", ds.key, f.start, f.end, f.error or f.status)
-            continue
-        if f.empty:
+        elif f.empty:
             out["empty"] += 1
-            continue
-        res = await asyncio.to_thread(storage.upsert_days, parsed, ids, fid)
-        await asyncio.to_thread(storage.set_days_stored, fid, len({d for _, d in parsed}))
+        else:
+            any_data = True
+    parsed = storage.to_days(ds, merged, a, b) if merged else {}
+    if parsed:
+        res = await asyncio.to_thread(storage.upsert_days, parsed, ids, last_id)
         for k in ("new", "revised", "unchanged"):
             out[k] += res[k]
+    if all_ok and any_data and last_id:
+        await asyncio.to_thread(storage.set_days_stored, last_id, max(1, len({d for _, d in parsed})))
     return out
 
 
