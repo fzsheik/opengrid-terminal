@@ -405,6 +405,9 @@ app.include_router(recommend_api.router)
 from api import assistant as assistant_api  # noqa: E402  (POST /v1/assistant: read-only, grounded)
 
 app.include_router(assistant_api.router)
+from api import power as power_api  # noqa: E402  (power markets; registers power_forward when POWER_ENABLED)
+
+app.include_router(power_api.router)
 
 # The hosted MCP endpoint (/mcp; Bearer API key only). Before the page router; never fails startup (503 instead).
 mcp_gate = mcp_remote.install(app)

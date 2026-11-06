@@ -53,7 +53,8 @@ _SECRET_FIELDS = ("salad_api_key", "salad_org", "hyperstack_api_key", "lambda_ap
                   "job_artifact_s3_secret_access_key", "ops_alert_webhook_url", "deployments_webhook_url",
                   "market_webhook_url", "news_webhook_url", "jarvis_api_key", "gcp_api_key",
                   "massedcompute_api_key", "crusoe_access_key_id", "crusoe_secret_key", "eia_api_key", "sec_user_agent",
-                  "alpaca_data_key_id", "alpaca_data_secret_key")
+                  "alpaca_data_key_id", "alpaca_data_secret_key", "ercot_api_subscription_key",
+                  "ercot_api_username", "ercot_api_password", "pjm_api_key", "isone_username", "isone_password")
 _LOOPBACK = ("127.0.0.1", "localhost", "::1", "[::1]")
 BLOCKED: list[str] = []
 

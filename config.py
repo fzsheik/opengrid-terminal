@@ -94,6 +94,19 @@ class Settings(BaseSettings):
     alpaca_data_key_id: str | None = None
     alpaca_data_secret_key: str | None = None
     equity_tickers: str | None = None            # comma-separated override of context/equities.TICKERS
+    # Wholesale power markets (power/; methodology/power-markets.md). Own tables only, never GPU statistics.
+    # power_enabled turns on the daily power_forward job (and power_cross after it); the backfill is the CLI
+    # (`python -m power backfill`), run detached. power_sources lists the sources to read (comma-separated; empty =
+    # each source module's default: the no-signup ones). A source that needs a key stays off until its key is set.
+    power_enabled: bool = False
+    power_sources: str | None = None
+    power_pue: float = 1.3                       # power/cross.py: facility overhead on GPU board power (documented)
+    ercot_api_subscription_key: str | None = None   # https://apiexplorer.ercot.com (free account, "Public API")
+    ercot_api_username: str | None = None
+    ercot_api_password: str | None = None
+    pjm_api_key: str | None = None               # https://apiportal.pjm.com (free Data Miner 2 API subscription)
+    isone_username: str | None = None            # https://www.iso-ne.com ISO Express account (web services)
+    isone_password: str | None = None
     # Ops alerts (alerts/ops.py): orphans, termination failures, ambiguous launches, kill switches.
     # Any HTTPS webhook (Slack/PagerDuty incoming webhooks work); signed with the secret.
     ops_alert_webhook_url: str | None = None
