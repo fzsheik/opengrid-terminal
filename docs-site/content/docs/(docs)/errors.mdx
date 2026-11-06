@@ -1,0 +1,116 @@
+---
+title: Errors
+description: Every error code the Data API returns, and what to do about it.
+icon: TriangleExclamationPoint
+---
+
+Errors use standard HTTP status codes and one body shape (see [Responses](/responses#errors)). `error.code` is part
+of the contract: it never changes meaning within a version. `error.message` is for humans and may change.
+
+`error.type` groups codes:
+
+| `type` | Status | Retry? |
+| --- | --- | --- |
+| `invalid_request` | 400, 404, 405, 409, 413, 415, 422 | No. Fix the request. |
+| `authentication` | 401 | No. Check the key. |
+| `permission` | 403 | No. Ask us about access. |
+| `rate_limit` | 429 | Yes, after `Retry-After` seconds. |
+| `api_error` | 5xx | Yes, with backoff. Quote `request_id` if it persists. |
+
+## 400
+
+### bad_request
+
+The request is malformed in a way not covered by a more specific code.
+
+### unknown_api_version
+
+The `OpenGrid-Version` header is not a supported date. The message lists the supported ones. See
+[Versioning](/versioning).
+
+### invalid_cursor
+
+The `cursor` was not issued by this API for this list. Pass back `meta.next_cursor` exactly as you received it.
+
+## 401
+
+### authentication_required
+
+No `Authorization: Bearer` header, or the key is malformed, unknown, revoked or expired. The message says which.
+
+## 403
+
+### permission_denied
+
+The key lacks the `data:read` scope, or the account is suspended.
+
+## 404
+
+### not_found
+
+No such resource or route: an unknown GPU, provider, index, fixing, story, or a typo in the path. GPU and
+provider ids are listed by `GET /v1/gpus` and `GET /v1/providers`.
+
+### unknown_series
+
+The macro series id is not in `GET /v1/macro/series`.
+
+## 405
+
+### method_not_allowed
+
+The route exists but not for this method. Almost every Data API route is `GET`.
+
+## 409
+
+### conflict
+
+The request conflicts with the current state of a resource. Data API reads don't return it.
+
+## 413
+
+### payload_too_large
+
+The request body is too large. `POST /v1/costs/estimate` returns `body_too_large` (at most 16,384 bytes).
+
+## 415
+
+### unsupported_media_type
+
+The body's media type isn't accepted. `POST /v1/costs/estimate` returns `json_required`: send
+`Content-Type: application/json`.
+
+## 422
+
+### invalid_parameter
+
+A query or path parameter failed validation. `error.param` names it and `error.message` says what is allowed.
+
+`POST /v1/costs/estimate` returns specific codes for its body: `invalid_json`, `unknown_field`, `invalid_preset`,
+`invalid_gpu`, `invalid_storage_class`, `missing_count` and `missing_hours`, plus `invalid_<field>` for an
+out-of-range number.
+
+## 429
+
+### rate_limited
+
+Over your key's or your account's budget for this request class. Wait `Retry-After` seconds and retry. See
+[Rate limits](/rate-limits).
+
+## 5xx
+
+### internal_error
+
+Something failed on our side. Retry with exponential backoff, and contact us with the `request_id` if it persists.
+
+### bad_gateway
+
+An upstream component did not answer correctly. Retry with backoff.
+
+### unavailable
+
+The service is temporarily unavailable, for example during a deploy. Retry with backoff.
+
+### timeout
+
+The request took too long. Retry, or narrow it (a shorter `window`, a smaller `limit`).

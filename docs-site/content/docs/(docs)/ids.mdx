@@ -1,0 +1,44 @@
+---
+title: IDs
+description: Stable identifiers for GPUs, providers and indices.
+icon: FingerprintPattern
+---
+
+IDs are frozen. Once published, an ID always means the same thing and is never renamed. IDs are never derived from
+display names, so a provider renaming a product doesn't change anything you store.
+
+| Thing | Format | Examples | Listed by |
+| --- | --- | --- | --- |
+| GPU | `vendor-model-memory-variant` | `nvidia-h100-80gb-sxm5`, `amd-mi300x-192gb`, `google-tpu-v5e` | `GET /v1/gpus` |
+| GPU family | short name | `h100`, `hopper` | `GET /v1/families` |
+| Provider | provider name | `lambda`, `runpod`, `aws` | `GET /v1/providers` |
+| Index | GPU, then segment | `h100-80gb-sxm5`, `h100-80gb-sxm5.spot` | `GET /v1/indices` |
+| Region group | name | `US`, `Europe`, `APAC` | `GET /v1/regions` |
+
+## Names beside IDs
+
+Every `gpu` field holds the ID, with the display name beside it in `gpu_name`. Every `provider` field holds the ID,
+with `provider_name` beside it:
+
+```json
+{ "gpu": "nvidia-h100-80gb-sxm5", "gpu_name": "NVIDIA H100 80GB SXM5", "provider": "lambda", "provider_name": "Lambda" }
+```
+
+Store the ID and display the name.
+
+## Aliases
+
+As input, older short names and full names are accepted. `h100-80gb-sxm5` and `NVIDIA H100 80GB SXM5` both resolve
+to `nvidia-h100-80gb-sxm5`. Responses always return the ID.
+
+A family id where a GPU is expected, such as `GET /v1/gpus/h100`, is a `404` that points you to
+`/v1/families/{family}`, because a family has several variants with different prices.
+
+## Index IDs
+
+Index IDs keep their original form (`h100-80gb-sxm5`) and are not prefixed with the vendor. They are part of the
+fixings hash chain, so renaming them would break verification. Each index names its GPU in its `gpu` field.
+
+## Unmapped offers
+
+A listing whose GPU OpenGrid couldn't identify has `gpu: null` and keeps the provider's own `raw_gpu_name`.

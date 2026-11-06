@@ -1,0 +1,14 @@
+{
+ "title": "Reference",
+ "pages": [
+  "list-gpu-families",
+  "get-a-gpu-family",
+  "list-gpus",
+  "get-a-gpu",
+  "list-providers",
+  "get-a-provider",
+  "provider-price-in-context",
+  "listing-price-in-context",
+  "list-region-groups"
+ ]
+}

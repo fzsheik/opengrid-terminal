@@ -411,3 +411,5 @@ from api import contract  # noqa: E402
 # Data API edge (version header, one error shape): inside the request-id middleware, outside the rest.
 app.add_middleware(contract.ContractMiddleware)
 observability.install(app)
+# CORS for the docs playground (data host and docs origin only): outermost, so preflights skip the key gate.
+app.add_middleware(contract.DocsCorsMiddleware)

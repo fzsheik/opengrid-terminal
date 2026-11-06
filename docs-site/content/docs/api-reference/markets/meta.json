@@ -1,0 +1,13 @@
+{
+ "title": "Markets",
+ "pages": [
+  "list-markets",
+  "get-a-market",
+  "market-history",
+  "archived-price-history",
+  "daily-market-history",
+  "price-dispersion-history",
+  "price-history-by-provider",
+  "market-by-region"
+ ]
+}

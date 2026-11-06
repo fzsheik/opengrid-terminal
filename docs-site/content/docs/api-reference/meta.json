@@ -1,0 +1,25 @@
+{
+ "title": "API reference",
+ "description": "Every Data API endpoint, with a playground",
+ "root": true,
+ "icon": "SquareTerminal",
+ "pages": [
+  "index",
+  "---Endpoints---",
+  "reference",
+  "markets",
+  "listings",
+  "reserved",
+  "indices",
+  "fixings",
+  "capacity",
+  "costs",
+  "fx",
+  "reliability",
+  "events",
+  "news",
+  "macro",
+  "methodology",
+  "bulk-exports"
+ ]
+}

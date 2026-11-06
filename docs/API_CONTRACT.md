@@ -14,10 +14,16 @@ The routing / workloads API is a separate product (OpenGrid Compute API) and is 
 | OpenGrid Data API | `data.tryopengrid.com/v1` | Market intelligence: prices, indices, fixings, capacity, costs, reliability, events, news |
 | OpenGrid Compute API | `compute.tryopengrid.com/v1` | Routing, jobs, reservations (not covered here) |
 | Website | `tryopengrid.com` | Behind site login; reads `tryopengrid.com/internal/*`, never the public hosts |
+| Customer docs | `docs.tryopengrid.com` | Public. Separate Next.js (Fumadocs) site in `docs-site/`, on Vercel |
 
 - One account and one key work for both APIs; scopes decide what a key reaches (`data:read` for this API).
 - At first both hosts are served by the same app, routed by hostname. Either can move to its own service later
   without a URL change.
+- Customer docs: the API reference is generated from the app's schema by `python -m api.docs_openapi` (customer
+  routes only; internal and write-side routes are left out). Its playground sends requests from the reader's
+  browser straight to the Data API with the reader's own key: no proxy, no shared key, nothing anonymous.
+- CORS: only the Data API host answers CORS, and only for the origin `https://docs.tryopengrid.com` (GET and
+  POST, no cookies or credentials). Preflights are answered before the key check; real requests still need a key.
 
 ## 2. Access and license
 
@@ -52,9 +58,10 @@ Success:
 Error (every `/v1` error, including auth and rate limits):
 ```json
 {"error": {"type": "invalid_request", "code": "unknown_gpu", "message": "...", "param": "gpu",
-           "request_id": "req_...", "docs_url": "https://tryopengrid.com/api/errors#unknown_gpu"}}
+           "request_id": "req_...", "docs_url": "https://docs.tryopengrid.com/errors#unknown_gpu"}}
 ```
-- `code` values are part of the contract, like fields.
+- `code` values are part of the contract, like fields. Every code has an anchor on the docs Errors page
+  (`docs.tryopengrid.com/errors#<code>`); `tests/test_docs_site.py` fails if one is missing.
 - Every response carries `request_id` (also in the `X-Request-Id` header and the logs).
 - Rate-limit headers on every response (`X-RateLimit-Limit`, `-Remaining`, `-Reset`).
 

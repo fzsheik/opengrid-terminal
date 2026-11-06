@@ -1,0 +1,10 @@
+{
+ "title": "Events",
+ "pages": [
+  "list-events",
+  "list-shifts",
+  "shift-definition",
+  "get-a-shift",
+  "event-types"
+ ]
+}

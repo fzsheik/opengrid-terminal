@@ -112,7 +112,7 @@ def test_error_shapes():
     assert err["code"] == "not_found" and "not-a-gpu" in err["message"] and err["type"] == "invalid_request"
     err = assert_error(client.get("/v1/gpus?limit=0"), 422)
     assert err["code"] == "invalid_parameter" and err["param"] == "limit", err
-    assert err["docs_url"].endswith("/api#error-invalid_parameter")
+    assert err["docs_url"] == "https://docs.tryopengrid.com/errors#invalid_parameter"
 
 
 def test_site_gate_401_is_shaped():

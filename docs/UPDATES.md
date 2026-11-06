@@ -5,6 +5,47 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-06 (third release): public customer docs at docs.tryopengrid.com
+
+### What shipped
+- A separate, public docs site in `docs-site/` (Next.js + Fumadocs, Mintlify-style layout), on Vercel project
+  `opengrid-docs`, domain `docs.tryopengrid.com`. Pages: introduction, quickstart (curl / Python / JavaScript),
+  authentication, versioning, responses, errors (one anchor per code), pagination, rate limits, caching, ids, data
+  rules, point in time, bulk exports, three guides, for-agents, changelog, terms.
+- API reference: one page per customer endpoint (67), grouped by tag, generated from the app by
+  `python -m api.docs_openapi` into `docs-site/openapi.json`. Internal, website-only and write-side routes
+  (`/v1/events/track`, `/v1/news/refresh`, `/v1/news/reclassify`) are left out. Response fields come from the
+  frozen contract snapshot; the estimate body from the limits in `api/cost.py`.
+- Playground, deliberately limited: only for key holders. The reader pastes their own key, the browser calls
+  `data.tryopengrid.com` directly, nothing goes through the docs site, there is no shared or demo key. The docs
+  CSP allows requests only to itself and the Data API.
+- For agents: `/llms.txt`, `/llms-full.txt`, `.md` on any page URL, `Accept: text/markdown`, `/openapi.json`,
+  copy-as-markdown and open-in-ChatGPT / Claude / Cursor on every page.
+- App: CORS on the Data API host for the docs origin only (no credentials); error `docs_url` now points to
+  `docs.tryopengrid.com/errors#<code>`. `tests/test_docs_site.py` checks the generated files are current, only
+  customer routes are published, every route and link named in the docs exists, every error code has an anchor,
+  and the CORS rules.
+- Keys: the docs say to contact `hello@tryopengrid.com`; there is no self-serve sign-up.
+
+### What did not ship
+- Self-serve keys and a sandbox / anonymous playground (by decision: the docs are public, so nothing runs without
+  a key).
+- Field-level response schemas for 11 routes without a contract snapshot; their pages say so.
+
+### Known issues
+- The playground keeps the pasted key in the browser's localStorage (Fumadocs default), on that reader's machine only.
+- The playground works only after the app release (CORS) is deployed and the docs DNS record exists.
+
+### Deploy notes
+- Docs: `cd docs-site && vercel deploy --prod`. DNS: Cloudflare `A docs 76.76.21.21`, DNS only (not proxied).
+- App: no migration; needs a `railway up` for CORS and the new `docs_url`. Rollback: the previous deployment.
+- After changing routes, rerun `python -m api.docs_openapi` and commit the output (the test fails otherwise).
+
+### Next
+- Account-creation test on the real address, customer login, self-serve keys.
+
+---
+
 ## 2026-11-06 (second release): the website runs on the Data API; first-UI routes retired
 
 ### What shipped

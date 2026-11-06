@@ -1,0 +1,25 @@
+---
+title: Changelog
+description: Every change to the Data API, newest first.
+icon: Newspaper
+---
+
+Additive changes ship without a new version. Breaking changes get a new dated version. See [Versioning](/versioning).
+
+## 2026-11-06
+
+Additive, in version `2026-11-03`:
+
+- `GET /v1/markets?trend=true` adds `change` (the lowest price's move over `hours`) and `trend` (that price on a
+  shared time grid, times in `meta.trend_times`). Every market row now names `low_provider` and `high_provider`.
+- New `GET /v1/markets/{gpu}/history/providers`: each provider's price line for a GPU on one time grid, with the
+  market low, median and high.
+- `GET /v1/listings?previous=true` adds `price_change`: the price before the listing's latest change, and when it
+  changed.
+- Error `docs_url` now links to the [Errors](/errors) page on this site.
+- The API answers CORS requests from this site, so the playground can call it with your key.
+
+## 2026-11-03
+
+First version of the Data API: `data.tryopengrid.com/v1`, dated versioning, one error shape, stable ids, cursor
+pagination, ETags, point-in-time listings and bulk exports.

@@ -1,0 +1,52 @@
+---
+title: Rate limits
+description: Per-key and per-account budgets, and the headers that report them.
+icon: Gauge
+---
+
+Each key has a per-minute budget per request class. Each account also has a shared budget, so adding keys doesn't
+multiply what an account can send. A request must fit both budgets.
+
+| Class | Requests | Default per key | Default per account |
+| --- | --- | --- | --- |
+| `read` | `GET`, `HEAD` | 120 / min | 600 / min |
+| `write` | other methods, such as `POST /v1/costs/estimate` | 30 / min | 120 / min |
+
+Your agreement may set different limits. The headers are the source of truth for your key.
+
+Budgets are token buckets. A full minute's budget can be spent in a burst, and it refills continuously.
+
+## Headers
+
+Every authenticated response carries:
+
+| Header | Meaning |
+| --- | --- |
+| `X-RateLimit-Limit` | Your budget per minute for this request class. |
+| `X-RateLimit-Remaining` | Requests left in the bucket right now. |
+| `X-RateLimit-Reset` | Seconds until the bucket is full again. |
+| `X-RateLimit-Class` | `read` or `write`. |
+
+## When you hit the limit
+
+You get `429` with code `rate_limited` and a `Retry-After` header in seconds. Wait that long and retry.
+
+```python
+import time
+import requests
+
+def get(session, url, **kw):
+    for _ in range(5):
+        r = session.get(url, **kw)
+        if r.status_code != 429:
+            return r
+        time.sleep(int(r.headers.get("Retry-After", "1")))
+    return r
+```
+
+## Spending less
+
+- Use [conditional requests](/caching). A `304` still counts, but it carries no body.
+- Use [bulk exports](/bulk-exports) for whole days of history instead of paging through feeds.
+- Most data changes at the provider's polling interval (15 to 60 minutes). Polling the same route more often than
+  once a minute gets you the same data.

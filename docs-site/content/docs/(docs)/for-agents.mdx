@@ -1,0 +1,49 @@
+---
+title: For AI agents
+description: Machine-readable docs for coding assistants and agents.
+icon: Bot
+---
+
+These docs are built to be read by tools as well as people.
+
+| Resource | URL | What it is |
+| --- | --- | --- |
+| `llms.txt` | [`/llms.txt`](/llms.txt) | Index of every page, with a one-line description each. |
+| `llms-full.txt` | [`/llms-full.txt`](/llms-full.txt) | Every page, guides and API reference, as one markdown file. |
+| Markdown per page | add `.md` to any URL, such as [`/quickstart.md`](/quickstart.md) | One page as markdown. |
+| Content negotiation | any page with `Accept: text/markdown` | The same markdown, at the page's own URL. |
+| OpenAPI | [`/openapi.json`](/openapi.json) | The Data API's OpenAPI 3.1 schema, generated from the API's code. |
+
+Every page also has **Copy Markdown** and **Open in ChatGPT, Claude or Cursor** buttons under its title.
+
+## Give your assistant the docs
+
+<Tabs items={['Cursor', 'Claude Code', 'Any agent']}>
+<Tab value="Cursor">
+
+Add `https://docs.tryopengrid.com/llms-full.txt` under **Settings, Indexing & Docs, Add Doc**, then reference it
+with `@OpenGrid` in chat.
+
+</Tab>
+<Tab value="Claude Code">
+
+```text
+Read https://docs.tryopengrid.com/llms-full.txt, then write a script that prints the cheapest
+available H100 SXM5 listing from the OpenGrid Data API. My key is in OPENGRID_API_KEY.
+```
+
+</Tab>
+<Tab value="Any agent">
+
+Point it at `https://docs.tryopengrid.com/llms.txt` and let it fetch the pages it needs as `.md`, or give it
+`https://docs.tryopengrid.com/openapi.json` to generate a typed client.
+
+</Tab>
+</Tabs>
+
+## Tips for generated code
+
+- Send `OpenGrid-Version: 2026-11-03` on every request, so generated code doesn't change shape under you.
+- Read the key from an environment variable. Never paste it into a prompt.
+- Branch on `error.code`, not on `error.message`.
+- Page with `meta.next_cursor` until it is `null`.

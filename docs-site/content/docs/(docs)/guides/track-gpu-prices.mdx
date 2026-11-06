@@ -1,0 +1,87 @@
+---
+title: Track GPU prices
+description: Current price, 24-hour change, history and the cheapest offer for a GPU.
+icon: ChartLine
+---
+
+This guide builds a small price tracker for the H100 SXM5. Every step is one request.
+
+## 1. Find the GPU's id
+
+```bash
+curl "https://data.tryopengrid.com/v1/gpus?family=h100" -H "Authorization: Bearer $OPENGRID_API_KEY"
+```
+
+Each row's `id` (here `nvidia-h100-80gb-sxm5`) is what every other route takes. See [IDs](/ids).
+
+## 2. The market now, with its 24-hour move
+
+`trend=true` adds `change` (the lowest price's move over `hours`) and `trend` (that price on a time grid, for a
+sparkline):
+
+```bash
+curl "https://data.tryopengrid.com/v1/markets?trend=true&hours=24&points=48" \
+  -H "Authorization: Bearer $OPENGRID_API_KEY"
+```
+
+```json
+{
+  "gpu": "nvidia-h100-80gb-sxm5",
+  "price": { "low": 1.6168, "median": 2.4216, "high": 2.9269, "currency": "USD", "unit": "gpu_hour" },
+  "low_provider": "vast",
+  "change": { "pct": -0.032, "since": "2026-11-05T14:00:00Z", "hours": 24 },
+  "trend": [1.67, 1.67, 1.65, "..."]
+}
+```
+
+`change.pct` is a fraction: `-0.032` is a 3.2% drop. It is `null` when there isn't enough history to compare.
+The grid's times are in `meta.trend_times`.
+
+## 3. History
+
+```bash
+curl "https://data.tryopengrid.com/v1/markets/nvidia-h100-80gb-sxm5/history?window=30d&segment=on_demand" \
+  -H "Authorization: Bearer $OPENGRID_API_KEY"
+```
+
+`data.series` holds points `{t, low, median, high, providers}`, and `data.index` holds the GPU's index line on the
+same window. Windows are `24h`, `7d`, `30d`, `90d`, `ytd` and `all`. Use `segment=spot` for interruptible capacity.
+
+For one line per provider, call `GET /v1/markets/nvidia-h100-80gb-sxm5/history/providers?hours=168`.
+
+## 4. The cheapest available offer
+
+```bash
+curl "https://data.tryopengrid.com/v1/listings?gpu=nvidia-h100-80gb-sxm5&available=true&market_type=on_demand&limit=5" \
+  -H "Authorization: Bearer $OPENGRID_API_KEY"
+```
+
+Listings come cheapest first. Each row has `provider`, `region`, `gpu_count`, `price_per_gpu_hour`,
+`price_per_instance_hour`, `observed_at` and a `trust` block. Add `previous=true` to get each listing's
+`price_change` (the price before its latest change, and when it changed).
+
+## 5. Poll politely
+
+Prices move at each provider's polling interval (15 to 60 minutes). Poll `GET /v1/markets` once a minute at most,
+with [`If-None-Match`](/caching), and you'll stay well inside your [rate limit](/rate-limits).
+
+## Put together
+
+```python
+import os
+import requests
+
+API = "https://data.tryopengrid.com/v1"
+s = requests.Session()
+s.headers.update({"Authorization": f"Bearer {os.environ['OPENGRID_API_KEY']}", "OpenGrid-Version": "2026-11-03"})
+
+gpu = "nvidia-h100-80gb-sxm5"
+markets = s.get(f"{API}/markets", params={"trend": "true", "hours": 24}).json()["data"]
+row = next(m for m in markets if m["gpu"] == gpu)
+cheapest = s.get(f"{API}/listings", params={"gpu": gpu, "available": "true", "limit": 1}).json()["data"][0]
+
+print(f"{row['gpu_name']}: low ${row['price']['low']:.2f}/GPU-h, median ${row['price']['median']:.2f}")
+if row.get("change") and row["change"]["pct"] is not None:
+    print(f"24h change: {row['change']['pct'] * 100:+.1f}%")
+print(f"cheapest now: {cheapest['provider_name']} {cheapest['region']} at ${cheapest['price_per_gpu_hour']:.2f}")
+```

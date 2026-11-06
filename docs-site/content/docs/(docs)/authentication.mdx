@@ -1,0 +1,50 @@
+---
+title: Authentication
+description: Every request carries an API key as a Bearer token.
+icon: KeyRound
+---
+
+Send your key in the `Authorization` header of every request:
+
+```bash
+curl https://data.tryopengrid.com/v1/gpus \
+  -H "Authorization: Bearer opg_live_..."
+```
+
+Nothing on `data.tryopengrid.com` is anonymous. A request without a valid key gets a `401` in the standard
+[error shape](/errors).
+
+## Getting a key
+
+The Data API is offered to companies under an enterprise agreement, and the OpenGrid team issues every key. Email
+<Contact /> with:
+
+- your company and a contact,
+- what you plan to build,
+- how many requests per minute you expect.
+
+You will receive a key that starts with `opg_live_`, followed by 43 random characters. OpenGrid stores only a keyed
+hash of it, so a lost key cannot be recovered, only replaced.
+
+## Scopes
+
+A key carries scopes. The Data API needs `data:read`. A key without it gets `403 permission_denied`.
+
+## Keeping keys safe
+
+- Keep keys in environment variables or a secret manager, never in source code or a client-side app.
+- Use one key per application, so you can replace one without touching the others.
+- If a key may have leaked, ask us to revoke it. Revocation takes effect on the next request.
+
+<Callout type="warn" title="Browsers">
+  Do not ship your key in a web page or mobile app. Call the API from your server. The docs playground is the one
+  exception: it runs in your own browser, and the key you paste never leaves it except to `data.tryopengrid.com`.
+</Callout>
+
+## Errors
+
+| Status | `code` | When |
+| --- | --- | --- |
+| `401` | `authentication_required` | No `Authorization` header, or the key is malformed, unknown, revoked or expired. |
+| `403` | `permission_denied` | The key lacks `data:read`, or the account is suspended. |
+| `429` | `rate_limited` | Over the key's or the account's rate limit. See [Rate limits](/rate-limits). |

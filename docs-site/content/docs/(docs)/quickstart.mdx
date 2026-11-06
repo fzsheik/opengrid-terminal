@@ -1,0 +1,126 @@
+---
+title: Quickstart
+description: From API key to your first GPU prices in two minutes.
+icon: Rocket
+---
+
+<Steps>
+<Step>
+
+### Get an API key
+
+Keys are issued by the OpenGrid team. Email <Contact /> with your company and what you want to build, and you will
+get a key that starts with `opg_live_`.
+
+Keep it out of source code. Store it in an environment variable:
+
+```bash
+export OPENGRID_API_KEY="opg_live_..."
+```
+
+</Step>
+<Step>
+
+### Make your first request
+
+Ask for the current market of three GPUs:
+
+<Tabs items={['curl', 'Python', 'JavaScript']}>
+<Tab value="curl">
+
+```bash
+curl "https://data.tryopengrid.com/v1/markets?limit=3" \
+  -H "Authorization: Bearer $OPENGRID_API_KEY" \
+  -H "OpenGrid-Version: 2026-11-03"
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+import os
+import requests
+
+r = requests.get(
+    "https://data.tryopengrid.com/v1/markets",
+    params={"limit": 3},
+    headers={
+        "Authorization": f"Bearer {os.environ['OPENGRID_API_KEY']}",
+        "OpenGrid-Version": "2026-11-03",
+    },
+    timeout=30,
+)
+r.raise_for_status()
+for row in r.json()["data"]:
+    print(row["gpu"], row["price"]["low"], row["price"]["median"])
+```
+
+</Tab>
+<Tab value="JavaScript">
+
+```js
+const r = await fetch('https://data.tryopengrid.com/v1/markets?limit=3', {
+  headers: {
+    Authorization: `Bearer ${process.env.OPENGRID_API_KEY}`,
+    'OpenGrid-Version': '2026-11-03',
+  },
+});
+if (!r.ok) throw new Error((await r.json()).error.message);
+const { data } = await r.json();
+for (const row of data) console.log(row.gpu, row.price.low, row.price.median);
+```
+
+</Tab>
+</Tabs>
+
+</Step>
+<Step>
+
+### Read the response
+
+Every success has the same envelope: your data in `data`, and request facts in `meta`.
+
+```json
+{
+  "data": [
+    {
+      "gpu": "nvidia-h100-80gb-sxm5",
+      "gpu_name": "NVIDIA H100 80GB SXM5",
+      "price": { "low": 1.6168, "median": 2.4216, "high": 2.9269, "currency": "USD", "unit": "gpu_hour" },
+      "low_provider": "vast",
+      "high_provider": "lambda",
+      "providers": 4,
+      "listings": { "live": 5, "priced": 4, "available": 4, "sold_out": 1, "availability_unknown": 0 },
+      "spread": { "abs": 1.3101, "pct_of_low": 0.810304, "pct_of_median": 0.541006 },
+      "score": { "efficiency": 69.1, "fragmentation": 30.9, "label": "moderately fragmented", "confidence": "low", "reason": null }
+    }
+  ],
+  "meta": {
+    "as_of": "2026-11-06T14:00:00Z",
+    "api_version": "2026-11-03",
+    "request_id": "req_5bd092f30d380c07d2f32f8f",
+    "limit": 3,
+    "next_cursor": "eyJvIjozfQ",
+    "total": 41
+  }
+}
+```
+
+Values above are illustrative. Prices are USD per GPU-hour, so you can compare across providers directly.
+
+</Step>
+<Step>
+
+### Go further
+
+- Get one GPU's price over time: `GET /v1/markets/nvidia-h100-80gb-sxm5/history?window=7d`.
+- See every individual offer: `GET /v1/listings?gpu=nvidia-h100-80gb-sxm5`.
+- Page through long lists with `cursor`. See [Pagination](/pagination).
+
+</Step>
+</Steps>
+
+## Try it in the browser
+
+Every page in the [API reference](/api-reference) has a playground. Paste your key into it, and requests go straight
+from your browser to `data.tryopengrid.com`. Your key is stored only in your browser.

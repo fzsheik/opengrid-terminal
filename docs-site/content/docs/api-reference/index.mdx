@@ -1,0 +1,38 @@
+---
+title: API reference
+description: Every Data API endpoint, generated from the API's own code.
+icon: SquareTerminal
+---
+
+```txt title="Base URL"
+https://data.tryopengrid.com/v1
+```
+
+Each endpoint page lists its parameters and response fields, shows request examples in several languages, and has
+a playground.
+
+## The playground
+
+<Callout title="Bring your own key">
+  The playground calls the real API with **your** key. Paste it into the authorization field of any endpoint and
+  press **Send**. Requests go straight from your browser to `data.tryopengrid.com`, never through this site. Without
+  a key, every request returns `401`. Don't have a key? Email <Contact />.
+</Callout>
+
+- Your key is stored only in this browser's local storage, so you don't need to paste it again on the next page.
+  Clear it from the authorization field when you're done on a shared machine.
+- Requests count against your key's [rate limit](/rate-limits) like any other.
+- This site may only send requests to `data.tryopengrid.com`. Its content security policy blocks every other
+  destination.
+
+## Conventions
+
+- Send `Authorization: Bearer opg_live_...` and, ideally, `OpenGrid-Version: 2026-11-03`. See
+  [Authentication](/authentication) and [Versioning](/versioning).
+- Successes are `{"data": ..., "meta": ...}`, and errors are `{"error": {...}}`. See [Responses](/responses).
+- Lists page by `cursor`. See [Pagination](/pagination).
+
+## Machine-readable
+
+The full schema is at [`/openapi.json`](/openapi.json). Generate a client from it, or give it to your agent. See
+[For AI agents](/for-agents).

@@ -65,7 +65,7 @@ def error_body(status: int, *, code: str | None = None, message: str | None = No
                request_id: str | None = None, **extra) -> dict:
     code = code or _CODE.get(status) or ("internal_error" if status >= 500 else "bad_request")
     err = {"type": error_type(status), "code": code, "message": message or f"HTTP {status}", "param": param,
-           "request_id": request_id, "docs_url": f"{settings.public_base_url.rstrip('/')}/api#error-{code}"}
+           "request_id": request_id, "docs_url": f"{settings.docs_base_url.rstrip('/')}/errors#{code}"}
     err.update({k: v for k, v in extra.items() if k not in _STD})
     return {"error": err}
 
@@ -251,6 +251,32 @@ class ContractMiddleware:
             log.exception("unhandled error on %s", scope.get("path"))
             await _send_json(send, 500, error_body(500, message="Internal error; quote the request_id when reporting it",
                                                    request_id=rid), {HEADER: resolve(state)})
+
+
+class DocsCorsMiddleware:
+    """CORS for the public docs' API playground: on the Data API host only, for the docs origin only.
+
+    Outermost, so a preflight (OPTIONS, which carries no key) is answered before the key-only gate refuses it.
+    No credentials: the playground sends the visitor's own key as a Bearer header, never a cookie, so a page on the
+    docs origin can do nothing a key holder could not already do with curl. Every other host is untouched."""
+
+    def __init__(self, app):
+        from starlette.middleware.cors import CORSMiddleware
+
+        self.app = app
+        self.cors = CORSMiddleware(
+            app, allow_origins=[settings.docs_base_url.rstrip("/")], allow_methods=["GET", "POST"],
+            allow_headers=["Authorization", "Content-Type", HEADER, "If-None-Match"],
+            expose_headers=["X-Request-Id", HEADER, "ETag", "Retry-After", "X-RateLimit-Limit",
+                            "X-RateLimit-Remaining", "X-RateLimit-Reset"],
+            allow_credentials=False, max_age=600)
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            host = next((v.decode("latin-1") for k, v in scope.get("headers") or () if k == b"host"), "")
+            if on_data_host(host):
+                return await self.cors(scope, receive, send)
+        return await self.app(scope, receive, send)
 
 
 async def _send_json(send, status: int, body: dict, headers: dict) -> None:

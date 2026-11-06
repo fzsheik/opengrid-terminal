@@ -1,0 +1,57 @@
+---
+title: Data rules
+description: How prices, numbers, timestamps and missing values are represented.
+icon: Ruler
+---
+
+These rules hold on every Data API response.
+
+## Prices
+
+- Every price row has `price_per_gpu_hour` in **USD**. Beside it are the instance price, the currency and the
+  `gpu_count`, so you can rebuild the provider's own number.
+- If the GPU count of an offer is unknown, `price_per_gpu_hour` is `null`. It is never guessed.
+- A provider that prices in another currency keeps its original price in `original`, with the exchange rate used
+  (`fx.rate`, `fx.date`, `fx.source`). See `GET /v1/fx/rates`.
+- Aggregates across providers are named `price: {low, median, high, currency, unit}`.
+
+## Numbers
+
+- Stored values are returned exactly as stored, never rounded.
+- Computed statistics (medians, spreads, ratios) are cleaned of floating-point noise to 12 significant digits, so
+  `2.4215999999999998` is returned as `2.4216`.
+- **Fixing values are decimal strings**, such as `"2.2494934019"`, not JSON numbers, because contracts may settle on
+  them. Parse them with a decimal type, not a float.
+
+## Timestamps
+
+ISO 8601 in UTC, always ending in `Z`: `2026-11-06T14:00:00Z`.
+
+Rows carry their own times. `observed_at` is when OpenGrid last saw the value, and `first_seen_at` is when the
+offer first appeared. Use these, not `meta.as_of`, to judge freshness.
+
+## Missing values
+
+A field is always present. When a value is unknown it is `null`, never omitted, so `"capacity": null` means the
+provider doesn't report it.
+
+## Names and enums
+
+- Field names are `snake_case`.
+- Enum values are lowercase strings, such as `on_demand` and `spot`. New values can appear at any time: treat unknown
+  values as "other".
+
+## Corrections
+
+Nothing is corrected silently.
+
+- **Listing history is append-only.** A past observation is never rewritten.
+- **Suspicious values are held before publishing.** A price that fails checks is quarantined, and its `trust` block
+  says `held`, so a published price doesn't get quietly edited later.
+- **Fixings are corrected by restatement.** The original stays, and the correction is listed with its reason in
+  `GET /v1/fixings/restatements`.
+
+## Licence
+
+Data is licensed for your internal use under your agreement. It may not be republished or resold. See
+[Terms](/terms).

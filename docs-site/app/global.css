@@ -1,0 +1,24 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+@import 'fumadocs-openapi/css/preset.css';
+
+/* OpenGrid's accent, as on the terminal (web/app.css). */
+:root {
+  --color-fd-primary: #1a64cc;
+  --fd-layout-width: 1600px;
+}
+
+.dark {
+  --color-fd-primary: #4d94ff;
+  --color-fd-background: #090b0e;
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}

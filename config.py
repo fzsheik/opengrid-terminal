@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # Host name of the OpenGrid Data API (e.g. data.tryopengrid.com). Requests to it reach only Data API routes
     # and need an API key: no site login, no anonymous reads (api/contract.py). Unset: no such host.
     data_api_host: str | None = None
+    # The public customer docs (docs-site/). Error bodies link here (`docs_url`), and it is the only browser origin
+    # the Data API host answers CORS for, so the docs' API playground can call it with the visitor's own key.
+    docs_base_url: str = "https://docs.tryopengrid.com"
     # Poll public news / regulatory feeds (news/sources.py) in the background.
     news_enabled: bool = True
     # SEC EDGAR asks automated clients to declare who they are ("Company contact@domain"); set this to the

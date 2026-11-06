@@ -1,0 +1,51 @@
+---
+title: Use and verify fixings
+description: Official reference prices you can recompute and check.
+icon: ShieldCheck
+---
+
+A **fixing** is an index level taken at a scheduled time and published as an official value. Fixings are recorded in
+an append-only ledger where each entry is hash-linked to the one before. A fixing can't be changed without the
+change showing up.
+
+## Latest fixings
+
+```bash
+curl https://data.tryopengrid.com/v1/fixings -H "Authorization: Bearer $OPENGRID_API_KEY"
+```
+
+`data.indices` holds each settlement index with its latest hourly and daily fixings, and any provisional value still
+waiting to be finalised. `data.ledger_head` is the newest ledger entry.
+
+<Callout type="warn" title="Decimal strings">
+  Fixing values are strings such as `"2.2494934019"`. Parse them with a decimal type (`decimal.Decimal`,
+  `BigDecimal`), never a float, so no rounding creeps in before settlement.
+</Callout>
+
+## One index's fixings
+
+```bash
+curl "https://data.tryopengrid.com/v1/indices/h100-80gb-sxm5/fixings" -H "Authorization: Bearer $OPENGRID_API_KEY"
+```
+
+## Verify a fixing
+
+`GET /v1/fixings/{fixing}/verify` recomputes the fixing from its stored inputs and checks its hashes and its links
+to its neighbours. `GET /v1/fixings/chain/verify` checks the whole ledger:
+
+```json
+{ "ok": true, "checked": 18240, "break_count": 0, "breaks": [], "head_seq": 18240, "head_hash": "9c1e..." }
+```
+
+Store `head_hash` alongside the fixings you settle on. If you call `chain/verify` later and it still passes with the
+same history, nothing you relied on was altered.
+
+## Corrections
+
+A wrong fixing is never edited. It is **restated**: a new ledger entry carries the corrected value and the reason,
+and the original stays. `GET /v1/fixings/restatements` lists every restatement.
+
+## Methodology
+
+`GET /v1/fixings/methodology` gives the schedule, thresholds and correction rules as data. The full method of every
+index is in `GET /v1/methodology/indices`.
