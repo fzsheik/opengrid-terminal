@@ -41,7 +41,7 @@ Components   OG.head(title, sub, ...right) · OG.section(title, ...kids) · OG.s
              OG.tabs(options, value, onChange) · OG.table(spec) · OG.csv(rows, columns, filename) · OG.logo(p, size)
              OG.gpuLink(nameOrSlug) · OG.providerLink(name) · OG.stub(el, {title, line, links})
 Data         OG.slug(gpuName) (== api.common.gpu_slug) · OG.data.gpuName(slug) · OG.data.gpus() · OG.data.providers()
-             OG.data.market(hours) (cached /market)
+             OG.data.market(hours) (cached /v1/markets?trend=true)
 Commands     OG.command(/^g\s+(.+)$/i, (match, text) => ..., "g <gpu>  open a GPU market")
 Status bar   OG.status.asOf(iso) · OG.status.live(ok, text)
 Charts       OG.charts.* (web/charts.js)
@@ -716,11 +716,18 @@ Full docs: web/README.md.
       if (!familiesP) familiesP = OG.all(api.soft, "/v1/families").then(r => (Array.isArray(r) ? r : r && Array.isArray(r.items) ? r.items : r && Array.isArray(r.families) ? r.families : []));
       return familiesP;
     },
-    // /market overview, shared by every page for 20 s
+    // market overview (/v1/markets?trend=true), shared by every page for 20 s
     market(hours) {
       const k = String(hours == null ? 24 : hours), hit = marketCache.get(k);
       if (hit && Date.now() - hit.t < 20000) return hit.p;
-      const p = api("/market", { params: { hours: k } });
+      // one /v1/markets read (trend=true), returned in the shape the pages already use: gpus[] with lowest, change_pct, spark
+      const p = api("/v1/markets", { params: { trend: true, hours: k, limit: 1000 }, full: true }).then(r => {
+        const times = (r.meta && r.meta.trend_times) || [];
+        return { hours: Number(k), t0: times[0] || null, t1: times[times.length - 1] || null, times,
+          gpus: r.data.map(g => ({ gpu: g.gpu, providers: g.providers, lowest: g.price.low, lowest_provider: g.low_provider,
+            median: g.price.median, highest: g.price.high, highest_provider: g.high_provider,
+            change_pct: g.change ? g.change.pct : null, change_since: g.change ? g.change.since : null, spark: g.trend || null })) };
+      });
       marketCache.set(k, { t: Date.now(), p });
       p.catch(() => marketCache.delete(k));
       return p;
@@ -847,7 +854,7 @@ Full docs: web/README.md.
   };
   // "inferred" is a data kind in the API but is not shown as a badge in the UI
   OG.kindBadge = kind => kind === "inferred" ? null : h("a", { class: "badge kind k-" + kind, href: "/methodology/data-kinds", title: KIND_HELP[kind] || kind }, kind);
-  // Poll interval per provider (seconds), from /polling, loaded at start: freshBadge(..., {provider}) uses it.
+  // Poll interval per provider (seconds), from /internal/polling, loaded at start: freshBadge(..., {provider}) uses it.
   const INTERVALS = new Map();
   OG.data_intervals = INTERVALS;
   OG.pollInterval = p => INTERVALS.get(p) || null;
@@ -1436,7 +1443,7 @@ Full docs: web/README.md.
   let pollingP = null;
   // Poll intervals per provider: resolves to the Map used by freshBadge({provider}). Never rejects.
   OG.data.intervals = () => {
-    if (!pollingP) pollingP = api.soft("/polling").then(p => {
+    if (!pollingP) pollingP = api.soft("/internal/polling").then(p => {
       for (const x of (p && p.providers) || []) if (x.provider && x.interval_seconds) INTERVALS.set(x.provider, x.interval_seconds);
       return p;
     });

@@ -268,7 +268,7 @@ def _required_query(route) -> list[str]:
 
 
 # Operator-only JSON reads of the first UI that still serve market data: public tier too.
-LEGACY_OPERATOR = ("/history", "/reference-prices")
+LEGACY_OPERATOR = ()
 # Public GETs that serve no market data and need no check (docs).
 SKIP = ("/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json")
 
@@ -411,8 +411,8 @@ def test_every_public_route_is_clean():
     templates = {t for t, _, _ in reqs}
     assert len(templates) >= 80, f"route enumeration found only {len(templates)} public GET routes"
     for must in ("/v1/gpus", "/v1/markets/{gpu}", "/v1/indices/{index_id}", "/v1/fixings", "/v1/capacity",
-                 "/v1/listings", "/v1/reserved", "/v1/markets/{gpu}/history/archived", "/v1/best/{gpu}", "/listings",
-                 "/history", "/market", "/gpu/{slug}", "/v1/listings/history", "/v1/markets",
+                 "/v1/listings", "/v1/reserved", "/v1/markets/{gpu}/history/archived", "/v1/best/{gpu}", "/internal/polling",
+                 "/gpu/{slug}", "/v1/listings/history", "/v1/markets",
                  # 2026-11-02 release: freshness, full cost (API and page)
                  "/v1/reliability/providers", "/v1/costs/components", "/v1/costs/billing", "/v1/costs/sources",
                  "/v1/costs/presets", "/cost", "/v1/macro/power", "/v1/macro/series"):
@@ -588,8 +588,8 @@ def test_deepinfra_internal_listings_route():
     assert any(c["listing_id"] == "nvidia-b200:8x:api" and c["visibility"] == "internal" for c in allt["candidates"])
     c = _client()
     for url in ("/v1/gpus/b200-180gb-sxm", "/v1/markets/b200-180gb-sxm", "/v1/best/b200-180gb-sxm?count=8",
-                "/listings?q=deepinfra", "/v1/listings?provider=deepinfra"):
-        r = c.get(url, headers=BASIC if url.startswith("/listings") else {})
+                "/v1/listings?provider=deepinfra", "/v1/listings?provider=deepinfra&previous=true"):
+        r = c.get(url)
         assert r.status_code == 200, (url, r.status_code)
         assert ":api" not in r.text and f"{api_price:g}" not in r.text, url
 
@@ -624,8 +624,8 @@ def test_fireworks_is_wholly_internal():
     c = _client()
     slug = gpu_slug(gpu)
     for url in (f"/v1/gpus/{slug}", f"/v1/markets/{slug}", f"/v1/best/{slug}", "/v1/listings?provider=fireworks",
-                "/v1/providers", "/v1/reliability/providers", "/listings?q=fireworks", "/history?q=fireworks", "/market"):
-        r = c.get(url, headers=BASIC if url.startswith(("/listings", "/history", "/market")) else {})
+                "/v1/providers", "/v1/reliability/providers", "/v1/markets?trend=true", f"/v1/markets/{slug}/history/providers"):
+        r = c.get(url)
         assert r.status_code in (200, 404), (url, r.status_code)
         body = r.text.lower()
         assert not any(lid in body for lid in rows), (url, "fireworks listing id in a public answer")

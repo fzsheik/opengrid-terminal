@@ -90,9 +90,7 @@ LOGOUT_PATH = "/logout"
 
 # Paths that are never a web page: API, assets, the hosted MCP endpoint, the login, health and the first UI's
 # JSON reads (some of them private). An unknown path under these keeps its normal answer (401 / 404 JSON).
-_NOT_PAGES = ("/v1", "/internal", "/static", "/mcp", LOGIN_PATH, LOGOUT_PATH, "/health", "/docs", "/redoc", "/openapi", "/classic", "/market",
-              "/listings", "/changes", "/history", "/reference-prices", "/polling", "/mapping", "/unmapped", "/raw",
-              "/fetch", "/normalize", "/robots.txt", "/sitemap.xml")
+_NOT_PAGES = ("/v1", "/internal", "/static", "/mcp", LOGIN_PATH, LOGOUT_PATH, "/health", "/docs", "/redoc", "/openapi", "/classic", "/unmapped", "/raw", "/fetch", "/normalize", "/robots.txt", "/sitemap.xml")
 
 
 def _unknown_page(request) -> bool:
@@ -205,8 +203,8 @@ app.mount("/static", StaticFiles(directory=WEB), name="static")  # the page's cs
 
 @app.get("/classic", include_in_schema=False)
 def classic():
-    """The earlier plain page: leaderboard, listings table, change arrows."""
-    return FileResponse(WEB / "classic.html")
+    """The first UI is retired (the site covers it): old links go to the GPU table."""
+    return RedirectResponse("/gpus", status_code=308)
 
 
 _SAFE_NEXT = re.compile(r"/[A-Za-z0-9/_.~?=&%+-]*")
@@ -256,17 +254,6 @@ def logout():
     return resp
 
 
-@app.get("/market", summary="Every canonical GPU: current price, change, sparkline")
-def market_overview(hours: float = Query(24, ge=0, le=24 * 90)):
-    """`hours=0` means all the history we have."""
-    return market.overview(hours)
-
-
-@app.get("/market/detail", summary="One canonical GPU: every provider's price over time")
-def market_detail(gpu: str, hours: float = Query(24, ge=0, le=24 * 90)):
-    return market.detail(gpu, hours)
-
-
 @app.get("/v1/openapi.json", include_in_schema=False)
 def data_api_openapi(who=Depends(require_scope("data:read"))):
     """The OpenGrid Data API's own OpenAPI schema: market intelligence routes only (no Compute, ops, admin or website
@@ -289,31 +276,7 @@ def health(db: Session = Depends(get_db)):
     return {"status": "ok", "db": "up"}
 
 
-@app.get("/listings")
-def listings(q: str | None = None, available: bool = False, limit: int | None = None):
-    """Normalized ComputeListing rows, cheapest first."""
-    return normalize.listings(q=q, only_available=available, limit=limit)
-
-
-@app.get("/changes")
-def changes(hours: float = Query(24, gt=0, le=24 * 90)):
-    """Each listing's per-GPU price now against its price `hours` ago."""
-    return normalize.price_changes(hours)
-
-
-@app.get("/history")
-def history(q: str | None = None, limit: int = 200):
-    """Recorded changes, newest first. A gap means nothing moved."""
-    return normalize.history(q=q, limit=limit)
-
-
-@app.get("/reference-prices")
-def reference_prices(q: str | None = None, limit: int = 300):
-    """Priced entries a provider publishes that are not purchasable listings."""
-    return normalize.reference_prices(q=q, limit=limit)
-
-
-@app.get("/polling")
+@app.get("/internal/polling")
 def polling():
     """What is being polled and how often."""
     return {
@@ -332,7 +295,7 @@ def polling():
     }
 
 
-@app.get("/mapping")
+@app.get("/internal/mapping")
 def provider_mapping():
     """How each provider's API fills in ComputeListing, plus its quirks."""
     return {"providers": mapping.as_dicts(), "coverage_problems": mapping.check_mapping_coverage()}

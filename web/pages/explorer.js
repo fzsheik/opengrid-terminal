@@ -1,7 +1,7 @@
 /* /explorer: every current listing, filterable, sortable, shareable (all state lives in the URL), CSV export.
    Data: /listings (always). Extra columns appear when these answer (fail soft on 404):
      /v1/gpus            -> VRAM, architecture  (items: {name|gpu, vram_gb|spec.vram_gb, architecture|spec.architecture})
-     /v1/listings        -> freshness, availability basis  (items: {provider, listing_id, freshness, availability_basis, source_type})
+     /v1/listings (rows)  -> freshness, availability basis  (items: {provider, listing_id, freshness, availability_basis, source_type})
    Source type always comes from provider_meta (embedded in the page). */
 (() => {
   const { h, fmt, Lib: L } = OG;
@@ -124,8 +124,8 @@
 
       // Optional enrichments (extra columns) are read alongside the first load, so the table is built once
       const listOf = r => (Array.isArray(r) ? r : r && Array.isArray(r.items) ? r.items : null);
-      const enrich = Promise.all([OG.api.soft("/v1/gpus", { params: { limit: 1000 } }), OG.api.soft("/v1/listings", { params: { limit: 1000 } })]).then(([g, t]) => {
-        const gl = listOf(g), tl = listOf(t);
+      const enrich = OG.api.soft("/v1/gpus", { params: { limit: 1000 } }).then(g => {
+        const gl = listOf(g);
         if (gl) {
           const m = new Map();
           for (const x of gl) {
@@ -134,13 +134,14 @@
           }
           if (m.size) specs = m;
         }
-        if (tl && tl.length) trust = new Map(tl.map(x => [x.provider + "\u0000" + x.listing_id, x]));
       });
       // a failed refresh keeps the rows already on screen
       async function load() {
         try {
-          const next = await ctx.api("/listings");
+          // /v1/listings with previous: each row carries its trust block and price_change; flatten what the table reads
+          const next = (await OG.all(ctx.api, "/v1/listings", { params: { previous: true } })).map(r => ({ ...r, canonical_gpu_name: r.gpu, ...(r.price_change || {}) }));
           await enrich;
+          trust = new Map(next.map(x => [x.provider + "\u0000" + x.listing_id, x]));
           rows = next;
           const newest = rows.reduce((m, r) => (r.observed_at && r.observed_at > m ? r.observed_at : m), "");
           if (newest) OG.status.asOf(newest);

@@ -6,7 +6,7 @@ Data (all in parallel, each section renders as soon as its own request lands):
                                alternatives, historical context (percentile, label, sentence)
   /v1/indices/{slug}           OpenGrid index level, 24h/7d/30d/90d changes, volatility       (soft: reason shown)
   /v1/markets/{slug}/history?window=   hourly low / median / high + index line (chart, market view)
-  /market/detail?gpu=&hours=   per-provider step lines (chart, providers view; fine grid for thin history)
+  /v1/markets/{slug}/history/providers?hours=   per-provider step lines (chart, providers view; fine grid for thin history)
   /v1/timeline?gpu=&window=    availability history, inferred price moves, events + news markers
   /v1/timeline/around          "related, not necessarily causal" panel when a move is clicked
   /v1/markets/{slug}/history/archived  ARCHIVED monthly prices per provider (Internet Archive captures, AWS price lists)
@@ -474,7 +474,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
             if (pts.length >= 6) data = { kind: "hourly", hist };
           }
           if (!data) {
-            const d = await ctx.api("/market/detail", { params: { gpu: name, hours: LONG[win] != null ? 0 : w[2] }, slot: "gp-chart" });
+            const d = OG.legacyHistory(await ctx.api("/v1/markets/" + slug + "/history/providers", { params: { hours: LONG[win] != null ? 0 : w[2] }, slot: "gp-chart" }));
             data = { kind: "detail", d, thin: view === "market" };
           }
         } catch (e) { if (!e.stale) { chartEl.replaceChildren(OG.error(e, loadChart)); chart = null; } return; }
@@ -696,7 +696,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
       }
       async function loadListings() {
         try {
-          const rows = (await ctx.api("/listings", { params: { q: name } })).filter(r => r.canonical_gpu_name === name);
+          const rows = await OG.all(ctx.api, "/v1/listings", { params: { gpu: slug } });
           listingsBox.replaceChildren(OG.table({
             columns: [
               { key: "provider", label: "Provider", fmt: v => OG.providerLink(v), value: r => OG.providerName(r.provider) },

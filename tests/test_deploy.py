@@ -32,14 +32,14 @@ def test_database_url():
 def test_gate():
     settings.app_user, settings.app_password = "opengrid", "s3cret-pass"
     try:
-        for method, path in [("get", "/"), ("get", "/market"), ("get", "/listings"), ("get", "/raw"), ("get", "/static/app.js"),
+        for method, path in [("get", "/"), ("get", "/internal/overview"), ("get", "/v1/listings"), ("get", "/raw"), ("get", "/static/app.js"),
                              ("get", "/static/logos/lium.png"), ("get", "/classic"), ("get", "/docs"), ("post", "/fetch"), ("post", "/normalize")]:
             r = getattr(client, method)(path)
             assert r.status_code == 401, f"{method.upper()} {path} must need the password, got {r.status_code}"
             assert "Basic" in r.headers["www-authenticate"], "the browser must be told to ask for a password"
         for bad in [basic("opengrid", "wrong"), basic("someone", "s3cret-pass"), basic("", ""), basic("opengrid", ""), {"Authorization": "Basic !!!notbase64"},
                     {"Authorization": "Bearer s3cret-pass"}, {"Authorization": "Basic"}, basic("opengrid", "s3cret-pass-extra"), basic("opengrid", "s3cret")]:
-            assert client.get("/market", headers=bad).status_code == 401, f"rejected: {bad}"
+            assert client.get("/internal/overview", headers=bad).status_code == 401, f"rejected: {bad}"
         good = basic("opengrid", "s3cret-pass")
         assert client.get("/", headers=good).status_code == 200
         assert client.get("/static/app.js", headers=good).status_code == 200

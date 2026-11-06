@@ -2,7 +2,7 @@
 
 Each side resolves to a GPU (canonical slug), a provider, or a region group:
   GPU vs GPU            /internal/compare + /v1/markets/{a,b} (providers selling both) + /v1/markets/{a,b}/history (overlay)
-  provider vs provider  /internal/compare (coverage, relative value, common GPUs) + /market/detail for one common GPU
+  provider vs provider  /internal/compare (coverage, relative value, common GPUs) + /v1/markets/{gpu}/history/providers for one common GPU
                         (?gpu= picks it: "the same GPU across providers")
   region vs region      /internal/heatmaps/gpu-region-* ("the same GPU across regions"; ?gpu= highlights one)
 Mixed pairs: the API's 400 is shown as is. Different GPUs are different products: side by side, never "equivalent".
@@ -67,7 +67,7 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
     const hist = OG.legacyHistory(await api("/v1/markets/" + side.id + "/history", { params: { window: win[0] } }).catch(() => null));
     const pts = hist && hist.series ? hist.series.filter(p => p.median != null) : [];
     if (pts.length >= 6) return { hourly: true, coherent: hist.coherent_from, median: pts.map(p => ({ t: p.t, v: p.median })), low: pts.map(p => ({ t: p.t, v: p.lowest })) };
-    const d = await api("/market/detail", { params: { gpu: side.name, hours: win[2] } }).catch(() => null);
+    const d = OG.legacyHistory(await api("/v1/markets/" + side.id + "/history/providers", { params: { hours: win[2] } }).catch(() => null));
     if (!d || !d.times) return { hourly: false, median: [], low: [] };
     const pick = arr => d.times.map((t, i) => ({ t, v: arr[i] })).filter(p => p.v != null);
     return { hourly: false, coherent: d.market_from, median: pick(d.median), low: pick(d.lowest) };
@@ -243,7 +243,7 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
       chartEl.replaceChildren(OG.loading());
       const w = win, f = focus;
       let det;
-      try { det = await ctx.api("/market/detail", { params: { gpu: f.gpu, hours: w[2] }, slot: "cmp-pp" }); } catch (e) { if (!e.stale) chartEl.replaceChildren(OG.error(e)); return; }
+      try { det = OG.legacyHistory(await ctx.api("/v1/markets/" + encodeURIComponent(f.gpu) + "/history/providers", { params: { hours: w[2] }, slot: "cmp-pp" })); } catch (e) { if (!e.stale) chartEl.replaceChildren(OG.error(e)); return; }
       if (w !== win || f !== focus) return;
       const line = (p, color, label) => { const s = det.providers.find(x => x.provider === p); return { key: p, label, color, width: 2, points: s ? det.times.map((t, i) => ({ t, v: s.series[i] })).filter(x => x.v != null) : [] }; };
       if (chart) chart.destroy();

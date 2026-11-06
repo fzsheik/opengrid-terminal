@@ -376,6 +376,19 @@ only), generated from the code, key or site login. The CLI sends `OpenGrid-Versi
 call, so upgrading the CLI is what moves its users to a new shape. A separate Python SDK package (its own repo,
 generated from that schema) is not built yet.
 
+**Market trend and 24h change** (`/v1/markets?trend=true&hours=24&points=48`): opt-in (it reads history), adds per
+row `change {pct, since, hours}` (the lowest price's move over `hours`) and `trend` (that lowest price on a shared
+grid; the grid's times are `meta.trend_times`). Every market row also names `low_provider` and `high_provider`.
+**Provider price lines** (`/v1/markets/{gpu}/history/providers?hours=`): each provider's price on one time grid plus
+the market `low` / `median` / `high`; `hours=0` is everything recorded.
+**Price change on listings** (`/v1/listings?previous=true`): adds `price_change {previous_price_per_gpu_hour,
+previous_observed_at, changed_at}`, the price before the newest recorded change (opt-in: a window over the history).
+
+**The first-UI routes are retired** (decided 2026-11-06 once their data was in the Data API): `/market`,
+`/market/detail`, `/listings`, `/changes`, `/history`, `/reference-prices` are gone; `/classic` redirects to `/gpus`;
+`/polling` and `/mapping` are website-only reads under `/internal`. Operator tools `/raw`, `/unmapped`, `/fetch`,
+`/normalize` stay as they are (not website, not Data API). The website now reads only `/v1` and `/internal`.
+
 **Timestamps** end in `Z`, in `data` and `meta`.
 
 **Lists** (every one, enforced by the route sweep in tests/test_contract.py) page by cursor; small reference

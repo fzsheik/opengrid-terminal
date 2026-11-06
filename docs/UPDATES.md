@@ -5,6 +5,36 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-06 (second release): the website runs on the Data API; first-UI routes retired
+
+### What shipped
+- The Data API gained what the first UI's routes gave the website, so nothing is lost: `/v1/markets?trend=true`
+  (24h `change`, `trend` series, `low_provider` / `high_provider`), `/v1/markets/{gpu}/history/providers` (each
+  provider's price line plus the market low / median / high), `/v1/listings?previous=true` (`price_change`: the
+  price before the newest recorded change). All additive; the frozen contract snapshot lost nothing.
+- Every website page now reads only `/v1` and `/internal`. Retired: `/market`, `/market/detail`, `/listings`,
+  `/changes`, `/history`, `/reference-prices`, and the first UI (`/classic` redirects to `/gpus`; `classic.html`
+  and its test removed). `/polling` and `/mapping` moved to `/internal/polling` and `/internal/mapping`.
+- Tests prove the replacements match the old routes (trend, change, providers, series, previous price).
+
+### What did not ship
+- The website's client-side field adapters (`OG.legacyGpu`, `OG.legacyHistory`, flattening `price_change` in three
+  pages) stay: they sit in the browser, customers never see them; removing them means editing every chart.
+- Python SDK, customer sign-up / login, stored export files.
+
+### Known issues
+- The disk of the development machine filled during a parallel test run and stopped its local Postgres; tests ran
+  fine once space was freed. Production is unaffected.
+- Baseten has failed every poll since 2026-11-03 (a scraped page); unrelated to this release.
+
+### Deploy notes
+- No migration. Rollback target: deployment 29daeac7 (previous release).
+
+### Next
+- Customer-facing docs, an account-creation test on the real address, customer login.
+
+---
+
 ## 2026-11-06: OpenGrid Data API v1 (contract, new routes, API address)
 
 ### What shipped

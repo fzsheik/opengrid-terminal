@@ -2,8 +2,8 @@
 
 Joins three reads on the canonical GPU name, each optional except the first:
   /v1/gpus?limit=1000        reference data: vendor specs per canonical GPU
-  /market?hours=24           24h change of the lowest price + sparkline (the first UI's market board)
-  /v1/markets?limit=1000     price (low / median / high), providers, listings, spread, efficiency score
+  /v1/markets?limit=1000&trend=true  price (low / median / high), providers, listings, spread, efficiency score,
+                             24h change of the lowest price and its sparkline
 Filters (vendor, architecture, VRAM band, workload class, form factor, only-available, text) and sort live
 in the URL so a filtered view is shareable. $/GB-VRAM-h = current low / VRAM: theoretical capability pricing.
 */
@@ -109,9 +109,9 @@ in the URL so a filtered view is shareable. $/GB-VRAM-h = current low / VRAM: th
         let r;
         try { r = await ctx.api("/v1/gpus", { params: { limit: 1000 }, full: true, slot: "gpus-v1" }); }
         catch (e) { if (!e.stale) holder.replaceChildren(OG.error(e, load)); return; }
-        // /v1/markets: price, spread, score per GPU with a live listing; /market only for the 24h change + sparkline
-        const [mk, ms] = await Promise.all([ctx.api("/market", { params: { hours: 24 } }).catch(() => null), ctx.api("/v1/markets", { params: { limit: 1000 } }).catch(() => null)]);
-        const byM = new Map((mk && mk.gpus || []).map(g => [g.gpu, g])), byS = new Map((ms || []).map(s => [s.gpu, s]));
+        // /v1/markets?trend=true: price, spread, score, 24h change and sparkline per GPU with a live listing
+        const ms = await ctx.api("/v1/markets", { params: { limit: 1000, trend: true } }).catch(() => null), mk = ms;
+        const byM = new Map((ms || []).map(g => [g.gpu, { change_pct: g.change ? g.change.pct : null, change_since: g.change ? g.change.since : null, spark: g.trend || null }])), byS = new Map((ms || []).map(s => [s.gpu, s]));
         const rows = r.data.map(g => {
           const m = byM.get(g.name), s = byS.get(g.name), p = s ? s.price : {};
           return { slug: OG.slug(g.name), name: g.name, short: OG.shortGpu(g.name), vendor: g.vendor || L.vendorOf(g.name), arch: g.architecture || null, vram: g.vram_gb || null,

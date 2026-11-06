@@ -77,7 +77,7 @@ same stored value and does not write a new history row each poll.
 
 A converted listing is an ordinary USD listing (`currency` is `USD`): indices, spreads, percentiles, routing and
 every other statistic read it like any other and read none of the provenance fields. The provenance is stored on
-`compute_listings` and is returned by `GET /listings` and, as each row's `original`, by `GET /v1/listings`:
+`compute_listings` and is returned as each row's `original` by `GET /v1/listings`:
 
 | Field | Meaning |
 |---|---|

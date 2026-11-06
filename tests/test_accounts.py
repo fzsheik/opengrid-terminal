@@ -299,7 +299,7 @@ def test_bearer_bypasses_site_password():
         assert client.get("/v1/me").status_code == 401, "nothing: the site password applies"
         r = client.get("/v1/me", headers=basic("opengrid", "s3cret-pass"))
         assert r.status_code == 200 and r.json()["data"]["principal"] == "operator"
-        assert client.get("/market", headers=bearer(k["secret"])).status_code == 401, "keys only open /v1"
+        assert client.get("/raw", headers=bearer(k["secret"])).status_code == 401, "keys only open /v1"
     finally:
         settings.app_password = None
 

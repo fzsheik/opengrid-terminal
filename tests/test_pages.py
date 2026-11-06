@@ -236,9 +236,9 @@ def test_is_public_matrix():
              "/v1/gpus", "/v1/gpus/h100-80gb-sxm5", "/v1/markets/x", "/v1/indices", "/v1/listings", "/v1/events", "/v1/news", "/v1/reliability/providers",
              "/v1/providers/lambda", "/internal/heatmaps/x", "/internal/overview", "/internal/tape", "/v1/methodology", "/v1/methodology/data-kinds",
              "/v1/timeline", "/v1/best", "/v1/capabilities", "/internal/opportunities", "/internal/trust/providers",
-             "/market", "/market/detail", "/listings", "/polling"]
+             "/internal/polling"]
     deny = ["/v1/route", "/v1/route/preview", "/v1/deployments", "/v1/deployments/dep_x", "/v1/keys", "/v1/admin/x", "/v1/ops", "/v1/ops/jobs",
-            "/v1/me", "/v1/usage", "/v1/billing", "/v1/billing/invoices", "/v1/execution/reliability", "/v1/probes/targets", "/internal/live/status", "/v1/overview", "/v1/watchlists", "/v1/alerts", "/v1/credentials", "/v1/unknown",
+            "/v1/me", "/v1/usage", "/v1/billing", "/v1/billing/invoices", "/v1/execution/reliability", "/v1/probes/targets", "/internal/live/status", "/internal/mapping", "/market", "/listings", "/v1/overview", "/v1/watchlists", "/v1/alerts", "/v1/credentials", "/v1/unknown",
             "/v1/gpusx", "/raw", "/raw/payload", "/mapping", "/unmapped", "/docs", "/openapi.json", "/classic", "/history", "/reference-prices", "/nope"]
     for p in allow:
         assert pages.is_public(_req("GET", p)), f"GET {p} should be public"
@@ -325,7 +325,7 @@ def test_unknown_url_shows_the_apps_not_found_page():
         assert client.get("/nope").status_code == 401, "no text/html: the API-style answer"
         assert client.post("/nope", headers=html).status_code == 401, "only GET / HEAD"
         # private and API paths never turn into a page, whatever the Accept header says
-        for p in ("/raw", "/raw/summary", "/v1/me", "/v1/jobs", "/v1/nope", "/openapi.json", "/docs", "/mapping", "/unmapped", "/history"):
+        for p in ("/raw", "/raw/summary", "/v1/me", "/v1/jobs", "/v1/nope", "/openapi.json", "/docs", "/internal/mapping", "/unmapped"):
             r = client.get(p, headers=html)
             assert r.status_code == 401, (p, r.status_code)
             assert 'id="page"' not in r.text, p

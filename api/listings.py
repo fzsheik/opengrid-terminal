@@ -37,7 +37,18 @@ def _num(v):
     return None if v is None else float(v)
 
 
-def listing_row(r: dict, trust_ctx) -> dict:
+def previous_prices(provider: str | None = None) -> dict:
+    """{(provider, listing_id): {previous_price_per_gpu_hour, previous_observed_at, changed_at}}: the price before
+    each listing's newest recorded change (normalize._previous_prices, a window over the change-only history)."""
+    from sqlalchemy import select
+
+    sub = normalize._previous_prices()
+    q = select(sub) if not provider else select(sub).where(sub.c.provider == provider)
+    with normalize.SessionLocal() as s:
+        return {(r.provider, r.listing_id): r for r in s.execute(q)}
+
+
+def listing_row(r: dict, trust_ctx, prev: dict | None = None) -> dict:
     """One compute_listings row -> the public listing object."""
     original = None
     if r["original_currency"] and r["original_currency"] != "USD":
@@ -59,13 +70,23 @@ def listing_row(r: dict, trust_ctx) -> dict:
             "available": r["available"], "capacity": r["capacity"], "capacity_unit": r["capacity_unit"],
             "vcpu": r["vcpu"], "ram_gb": r["ram_gb"], "storage_gb": r["storage_gb"],
             "observed_at": r["observed_at"].isoformat(), "first_seen_at": r["first_seen_at"].isoformat(),
-            "trust": trust.listing_trust(r, trust_ctx) if trust_ctx is not None else None}
+            "trust": trust.listing_trust(r, trust_ctx) if trust_ctx is not None else None,
+            "price_change": None if prev is None else _change(prev.get((r["provider"], r["listing_id"])))}
+
+
+def _change(p) -> dict | None:
+    if p is None:
+        return None
+    return {"previous_price_per_gpu_hour": _num(p.previous_price_per_gpu_hour),
+            "previous_observed_at": p.previous_observed_at and p.previous_observed_at.isoformat(),
+            "changed_at": p.changed_at.isoformat()}
 
 
 @router.get("/v1/listings", summary="Current price listings: every offer, cheapest first, with provenance")
 def listings(gpu: str | None = None, provider: str | None = None, region_group: str | None = None,
              market_type: str | None = None, available: bool | None = None,
              as_of: datetime | None = Query(None, description="the listings as published at this time (UTC)"),
+             previous: bool = Query(False, description="add price_change: the price before the newest recorded change"),
              limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, who: Principal = Depends(READ)):
     if as_of is not None:
         if _utc(as_of) > datetime.now(timezone.utc):
@@ -95,7 +116,8 @@ def listings(gpu: str | None = None, provider: str | None = None, region_group: 
     items, pg = cursor_page(rows, limit, cursor)
     ctx = trust.context(sorted({r["provider"] for r in items}) or [provider or ""],
                         [(r["provider"], r["listing_id"]) for r in items])
-    return envelope([listing_row(r, ctx) for r in items], kind=OBSERVED, methodology="data-trust",
+    prev = previous_prices(provider) if previous else None
+    return envelope([listing_row(r, ctx, prev) for r in items], kind=OBSERVED, methodology="data-trust",
                     price_concept="list_price", trust_kind="inferred", **pg)
 
 

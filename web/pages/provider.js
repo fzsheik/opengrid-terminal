@@ -295,10 +295,10 @@
       const rawRegions = h("div", { class: "pd-raw" });
 
       async function loadListings() {
-        const [rows, tl] = await Promise.all([ctx.api("/listings").catch(e => e), ctx.api("/v1/listings", { params: { provider: p, limit: 1000 } }).catch(() => null)]);
+        const rows = await OG.all(ctx.api, "/v1/listings", { params: { provider: p, previous: true } }).catch(e => e);
         if (rows instanceof Error) { listEl.replaceChildren(OG.error(rows)); chgEl.replaceChildren(OG.error(rows)); return; }
-        const mine = rows.filter(r => r.provider === p);
-        const trustBy = new Map((tl || []).map(r => [r.listing_id, r.trust]));
+        const mine = rows.map(r => ({ ...r, canonical_gpu_name: r.gpu, ...(r.price_change || {}) }));
+        const trustBy = new Map(mine.map(r => [r.listing_id, r.trust]));
         // raw locations as the provider publishes them
         const locs = new Map();
         for (const r of mine) { const k = r.region || r.country; if (k) locs.set(k, (locs.get(k) || 0) + 1); }
@@ -356,7 +356,7 @@
       // /mapping is internal: visitors (401/403) do not see this panel at all
       async function loadMapping() {
         let m = null;
-        try { m = await ctx.api("/mapping"); }
+        try { m = await ctx.api("/internal/mapping"); }
         catch (e) { if (e.status === 401 || e.status === 403) { mapSec.remove(); return; } }
         const entry = m && (m.providers || []).find(x => x.provider === p);
         if (!entry) { mapEl.replaceChildren(OG.empty(m ? "No field map is recorded for this provider." : "The field map could not be loaded.")); return; }

@@ -111,9 +111,7 @@ PRIVATE_V1 = ("route", "deployments", "keys", "admin", "ops", "me", "usage", "bi
               "reservations")
 # /internal areas readable without the site password when PUBLIC_PAGES is on (UI-only views that were public at
 # /v1). Not "live" (operator-only, as before).
-PUBLIC_INTERNAL = ("overview", "tape", "opportunities", "heatmaps", "compare", "uptime", "trust")
-# The first UI's JSON reads, which the interim pages still call. Read-only current market data.
-PUBLIC_LEGACY = ("/market", "/market/detail", "/listings", "/polling", "/changes")
+PUBLIC_INTERNAL = ("overview", "tape", "opportunities", "heatmaps", "compare", "uptime", "trust", "polling")
 
 
 def is_public(request: Request) -> bool:
@@ -133,7 +131,7 @@ def is_public(request: Request) -> bool:
         return area in PUBLIC_V1
     if path.startswith("/internal/"):  # the website's own reads: never on the Data API host, never with a key
         return path[len("/internal/"):].split("/", 1)[0] in PUBLIC_INTERNAL
-    if path in ("/robots.txt", "/sitemap.xml") or path in PUBLIC_LEGACY:
+    if path in ("/robots.txt", "/sitemap.xml"):
         return True
     if path.startswith("/static/"):
         return True

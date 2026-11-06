@@ -235,7 +235,7 @@ def test_listings_as_of():
                                   "AND listing_id = :l AND observed_at <= :t ORDER BY observed_at DESC LIMIT 1"),
                              {"p": r["provider"], "l": r["listing_id"], "t": t}).one()
             assert r["price_per_gpu_hour"] == (None if want[0] is None else float(want[0])), (r, want)
-            assert r["observed_at"] <= t.isoformat().replace("+00:00", "Z")
+            assert datetime.fromisoformat(r["observed_at"].replace("Z", "+00:00")) <= t
     assert client.get("/v1/listings", params={"as_of": "2000-01-01T00:00:00Z"}).json()["data"] == []
     future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
     assert assert_error(client.get("/v1/listings", params={"as_of": future}), 422)["param"] == "as_of"
@@ -309,6 +309,55 @@ def test_data_api_openapi():
         assert TestClient(main.app).get("/v1/openapi.json").status_code == 401, "never anonymous"
     finally:
         settings.app_password, settings.public_pages = old_pw, old_pub
+
+
+def test_replaces_the_old_first_ui_routes():
+    """The Data API now carries everything the retired /market, /market/detail and /listings gave the website."""
+    import market
+    import normalize as nz
+    from gpu_ids import GPU_IDS
+
+    # /market  ->  /v1/markets?trend=true (change, trend, who is lowest / highest)
+    ov = market.overview(24, 48)
+    r = client.get("/v1/markets", params={"trend": True, "hours": 24, "points": 48, "limit": 1000}).json()
+    by_old = {g["gpu"]: g for g in ov["gpus"]}
+    assert len(r["meta"]["trend_times"]) == len(ov["times"]) and r["data"]  # each call takes its own "now"
+    for row in r["data"]:
+        old = by_old.get(row["gpu_name"])
+        assert old is not None, row["gpu_name"]
+        assert len(row["trend"]) == len(old["spark"]) and all(
+            (a is None and b is None) or abs(a - b) < 1e-9 for a, b in zip(row["trend"], old["spark"]))
+        assert (row["change"]["pct"] is None and old["change_pct"] is None) or abs(row["change"]["pct"] - old["change_pct"]) < 1e-9
+        assert (row["change"]["since"] is None) == (old["change_since"] is None)
+        assert row["low_provider"] == old["lowest_provider"] and row["high_provider"] == old["highest_provider"]
+        assert abs(row["price"]["low"] - old["lowest"]) < 1e-6, (row["gpu_name"], row["price"], old["lowest"])
+    assert "trend" not in client.get("/v1/markets", params={"limit": 1}).json()["data"][0], "trend is opt-in"
+
+    # /market/detail  ->  /v1/markets/{gpu}/history/providers
+    gpu = r["data"][0]["gpu_name"]
+    d = client.get(f"/v1/markets/{r['data'][0]['gpu']}/history/providers", params={"hours": 24}).json()["data"]
+    old_d = market.detail(gpu, 24)
+    assert [p["provider"] for p in d["providers"]] == [p["provider"] for p in old_d["providers"]]
+    assert d["low"] == old_d["lowest"] and d["high"] == old_d["highest"] and len(d["times"]) == len(old_d["times"])
+    assert all(p["series"] == o["series"] and p["now"] == o["now"] for p, o in zip(d["providers"], old_d["providers"]))
+
+    # /listings  ->  /v1/listings?previous=true (the price before the newest change)
+    prev = {(x["provider"], x["listing_id"]): x for x in nz.listings()}
+    rows = _all_pages("/v1/listings", limit=500, previous=True)
+    assert len(rows) == len(prev) and rows
+    for x in rows:
+        o = prev[(x["provider"], x["listing_id"])]
+        pc = x["price_change"]
+        want = o.get("previous_price_per_gpu_hour")
+        assert (pc["previous_price_per_gpu_hour"] if pc else None) == (None if want is None else float(want)), x["listing_id"]
+    assert all(x["price_change"] is None for x in _all_pages("/v1/listings", limit=500)), "previous is opt-in"
+
+    # the old routes are gone; the retired first UI redirects to the GPU table
+    for gone in ("/market", "/market/detail?gpu=x", "/listings", "/changes", "/history", "/reference-prices", "/polling", "/mapping"):
+        assert client.get(gone).status_code in (404, 401), gone
+    rc = client.get("/classic", follow_redirects=False)
+    assert rc.status_code == 308 and rc.headers["location"] == "/gpus"
+    assert {"/internal/polling", "/internal/mapping"} <= set(main.app.openapi()["paths"])  # moved, not dropped
 
 
 def test_etag_and_cache_headers():

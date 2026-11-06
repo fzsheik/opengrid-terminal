@@ -4,6 +4,7 @@
     GET /v1/indices/{index_id}                          definition, level, constituents, stats
     GET /v1/indices/{index_id}/history                  stored levels over a window
     GET /v1/markets/{gpu}/history                       low / median / high / providers over time + index
+    GET /v1/markets/{gpu}/history/providers             each provider's price over time + the market lines
     GET /v1/markets/{gpu}/history/daily                 daily, archived before recording + observed after (kind per day)
     GET /v1/markets/{gpu}/history/archived              ARCHIVED prices before (and alongside) recording: captures of
                                                         provider price pages / AWS price-list versions
@@ -22,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 
 import analytics.rollups  # noqa: F401  (registers the market_hourly job)
+import market
 import normalize
 import provider_meta
 from accounts.auth import Principal, require_scope
@@ -127,6 +129,16 @@ def gpu_history(gpu: str, window: Window = "30d", interval: Resolution | None = 
 @ttl_cache(300, maxsize=256)
 def _gpu_archived(gpu: str, segment: str):
     return archived.gpu_archived(gpu, segment)
+
+
+@router.get("/v1/markets/{gpu}/history/providers",
+            summary="Each provider's price over time for one GPU, with the market low / median / high")
+def gpu_history_providers(gpu: str, hours: float = Query(24, ge=0, le=24 * 90, description="0 = everything recorded"),
+                          _: Principal = Depends(READ)):
+    d = market.detail(_one_gpu(gpu), hours)
+    return envelope(low_high(d), kind=OBSERVED, methodology=stats.METHODOLOGY, price_concept=OBSERVED_MARKET_PRICE,
+                    note="a price per provider on one shared time grid (null before a provider was recorded or while it "
+                         "had no in-stock listing); market_from is where every provider currently selling was recorded")
 
 
 @router.get("/v1/markets/{gpu}/history/archived",

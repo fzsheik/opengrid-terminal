@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 import analytics.rollups  # noqa: F401  (registers the market_hourly job and its AFTER_REFRESH list)
 import hardware
+import market as market_history
 import provider_meta
 import regions
 from accounts.auth import Principal, require_scope
@@ -78,7 +79,10 @@ def price_block(low, median, high) -> dict:
 
 def _market_row(m: dict) -> dict:
     st, sc, li = m["stats"], m["score"], m["listings"]
+    by = [r for r in m["by_provider"] if r.get("price") is not None]
     return {"gpu": m["gpu"], "price": price_block(m["low"], m["median"], m["high"]), "providers": m["providers"],
+            "low_provider": min(by, key=lambda r: r["price"])["provider"] if by else None,
+            "high_provider": max(by, key=lambda r: r["price"])["provider"] if by else None,
             "listings": {k: li[k] for k in ("live", "priced", "available", "sold_out", "availability_unknown")},
             "spread": {"abs": st.get("spread_abs"), "pct_of_low": st.get("spread_pct_of_low"),
                        "pct_of_median": st.get("spread_pct_of_median")},
@@ -107,12 +111,23 @@ def gpu_detail(gpu: str, who: Principal = Depends(READ)):
 
 @router.get("/v1/markets", summary="Current market per GPU: price, spread, efficiency score")
 def markets(min_providers: int = Query(1, ge=1), vendor: str | None = None, limit: int = Query(100, ge=1, le=1000),
-            cursor: str | None = None, who: Principal = Depends(READ)):
+            cursor: str | None = None,
+            trend: bool = Query(False, description="add change (lowest price over `hours`) and trend (a small series)"),
+            hours: float = Query(24, ge=0, le=24 * 90, description="trend window; 0 = everything recorded"),
+            points: int = Query(48, ge=2, le=200, description="trend points"), who: Principal = Depends(READ)):
     ms = [m for m in dispersion.all_markets().values() if m["providers"] >= min_providers]
     if vendor:
         ms = [m for m in ms if ((hardware.spec(m["gpu"]) or {}).get("vendor") or "").lower() == vendor.lower()]
     ms.sort(key=lambda m: (-m["providers"], m["gpu"]))
     items, pg = cursor_page([_market_row(m) for m in ms], limit, cursor)
+    if trend:  # opt-in: a history read per call. change.pct is the lowest price's move over `hours`; trend the lowest-price series
+        ov = market_history.overview(hours, points)
+        by_gpu = {g["gpu"]: g for g in ov["gpus"]}
+        for r in items:
+            g = by_gpu.get(r["gpu"])
+            r["change"] = {"pct": g["change_pct"], "since": g["change_since"], "hours": hours} if g else None
+            r["trend"] = g["spark"] if g else None
+        pg["trend_times"] = ov["times"]
     return envelope(items, kind=INFERRED, methodology=dispersion.METHODOLOGY, price_concept=_PC, **pg)
 
 

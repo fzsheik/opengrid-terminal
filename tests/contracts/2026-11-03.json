@@ -1793,6 +1793,9 @@
   "[].original": [
    "null"
   ],
+  "[].price_change": [
+   "null"
+  ],
   "[].price_per_gpu_hour": [
    "number"
   ],
@@ -1996,6 +1999,9 @@
   "[].gpu_name": [
    "string"
   ],
+  "[].high_provider": [
+   "string"
+  ],
   "[].listings": [
    "object"
   ],
@@ -2013,6 +2019,9 @@
   ],
   "[].listings.sold_out": [
    "number"
+  ],
+  "[].low_provider": [
+   "string"
   ],
   "[].price": [
    "object"
@@ -3068,6 +3077,105 @@
    "number"
   ],
   ".points[].t": [
+   "string"
+  ]
+ },
+ "/v1/markets/h100-80gb-sxm5/history/providers": {
+  "$": [
+   "object"
+  ],
+  ".change_pct": [
+   "number"
+  ],
+  ".change_since": [
+   "string"
+  ],
+  ".gpu": [
+   "string"
+  ],
+  ".gpu_name": [
+   "string"
+  ],
+  ".high": [
+   "array"
+  ],
+  ".high[]": [
+   "number"
+  ],
+  ".hours": [
+   "number"
+  ],
+  ".low": [
+   "array"
+  ],
+  ".low[]": [
+   "number"
+  ],
+  ".market_from": [
+   "string"
+  ],
+  ".median": [
+   "array"
+  ],
+  ".median[]": [
+   "number"
+  ],
+  ".providers": [
+   "array"
+  ],
+  ".providers[]": [
+   "object"
+  ],
+  ".providers[].available": [
+   "boolean",
+   "null"
+  ],
+  ".providers[].change_pct": [
+   "null",
+   "number"
+  ],
+  ".providers[].first_seen": [
+   "string"
+  ],
+  ".providers[].gpu_count": [
+   "null",
+   "number"
+  ],
+  ".providers[].now": [
+   "null",
+   "number"
+  ],
+  ".providers[].provider": [
+   "string"
+  ],
+  ".providers[].provider_name": [
+   "string"
+  ],
+  ".providers[].region": [
+   "null",
+   "string"
+  ],
+  ".providers[].series": [
+   "array"
+  ],
+  ".providers[].series[]": [
+   "null",
+   "number"
+  ],
+  ".providers[].sku": [
+   "null",
+   "string"
+  ],
+  ".t0": [
+   "string"
+  ],
+  ".t1": [
+   "string"
+  ],
+  ".times": [
+   "array"
+  ],
+  ".times[]": [
    "string"
   ]
  },
