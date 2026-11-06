@@ -270,8 +270,91 @@ def test_db_runner_api():
     print("test_db_runner_api ok")
 
 
+def test_db_per_day_files():
+    """A source with one file per day (NYISO / MISO style): a 404 is "not published", not a failure, and blocks
+    only its own day; a day with a real gap at the source is stored once its answer succeeded and is not re-asked;
+    month-aligned chunks; fetch(now=) receives the run's clock; an unchanged forward re-read keeps no bytes."""
+    import config  # noqa: F401
+    import fixtures
+    import normalize
+    from sqlalchemy import text
+
+    from power.http import Client
+    from power.registry import Dataset, Series
+
+    url = scratchdb.create(DB)
+    try:
+        normalize.SessionLocal = fixtures.session(url)
+        seen_now = []
+        published = {date(2025, 1, d) for d in range(1, 32)} - {date(2025, 1, 30)}   # 01-30 posted late
+        gap_day = date(2025, 1, 15)
+
+        async def fetch(get, start, end, now=None):
+            seen_now.append(now)
+            out = []
+            for d in storage.days(start, end):
+                f = await get.get(f"https://example.test/{d:%Y%m%d}.csv")
+                f.start = f.end = d
+                out.append(f)
+            return out
+
+        def parse(f):
+            d = date.fromisoformat(f.url.rsplit("/", 1)[1][:8][:4] + "-" + f.url.rsplit("/", 1)[1][4:6] + "-"
+                                   + f.url.rsplit("/", 1)[1][6:8])
+            t0 = storage.day_start(d, "UTC")
+            hours = [h for h in range(24) if not (d == gap_day and h == 10)]   # the source never had 10:00
+            return {"t.da.lmp.x": {t0 + timedelta(hours=h): float(f.body.decode()) + h for h in hours}}
+
+        ds = Dataset(key="t.da", source="t", series=(Series("t.da.lmp.x", "x", "lmp", "da", "X", "hub", "usd_per_mwh"),),
+                     interval_minutes=60, tz="UTC", chunk_days=10, earliest=lambda now: date(2024, 12, 25),
+                     latest=lambda now: date(2025, 2, 3), fetch=fetch, parse=parse, pace_seconds=0, overlap_days=2,
+                     keep_raw=True, empty_statuses=(404,), align="month")
+        assert runner.chunks([date(2025, 1, 30), date(2025, 1, 31), date(2025, 2, 1)], 10, "month") == [
+            (date(2025, 1, 30), date(2025, 1, 31)), (date(2025, 2, 1), date(2025, 2, 1))]
+        hits = []
+
+        def handler(req):
+            d = datetime.strptime(req.url.path.rsplit("/", 1)[1][:8], "%Y%m%d").date()
+            hits.append(d)
+            return httpx.Response(200, text="10") if d in published else httpx.Response(404, text="not found")
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        now = datetime(2025, 2, 4, 12, tzinfo=UTC)
+
+        def go(mode):
+            return asyncio.run(runner.run_dataset(ds, mode, Client(client, "t", 0), now, date(2025, 1, 1),
+                                                  date(2025, 1, 31)))
+
+        r = go("backfill")
+        assert r["failed"] == 0 and r["empty"] == 1 and r["new"] == 30, r   # 01-30: not published, not a failure
+        assert all(n == now for n in seen_now) and seen_now
+        assert all(a.month == b.month for a, b in runner.plan(ds, "backfill", now, date(2024, 12, 28))["chunks"])
+        hits.clear()
+        r = go("backfill")
+        assert hits == [date(2025, 1, 30)], ("only the unpublished day is re-asked; the gap day is final", hits)
+        published.add(date(2025, 1, 30))
+        r = go("backfill")
+        assert r["new"] == 1
+        with normalize.SessionLocal() as s:
+            n, complete = s.execute(text("SELECT n, complete FROM power_days WHERE day = :d"), {"d": gap_day}).one()
+            assert n == 23 and not complete, "the source's own gap stays a NULL slot"
+        # forward re-read of unchanged days keeps url + sha256 only
+        hits.clear()
+        asyncio.run(runner.run_dataset(ds, "forward", Client(client, "t", 0), datetime(2025, 2, 1, 12, tzinfo=UTC)))
+        assert hits, "forward re-read the overlap"
+        with normalize.SessionLocal() as s:
+            kept = s.execute(text("""SELECT count(*) FILTER (WHERE body IS NOT NULL), count(*) FROM power_fetches
+                                     WHERE fetched_at > now() - interval '1 minute' AND mode = 'hash'
+                                     AND period_start >= '2025-01-29'""")).one()
+            assert kept[0] == 0 and kept[1] >= 1, kept
+    finally:
+        scratchdb.drop(DB)
+    print("test_db_per_day_files ok")
+
+
 if __name__ == "__main__":
     test_registry_and_grid()
     test_parse()
     test_db_runner_api()
+    test_db_per_day_files()
     print("all passed")

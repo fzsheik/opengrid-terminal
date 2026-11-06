@@ -8,6 +8,8 @@ string names one ("US, Culpeper, VA", "Arizona, US"). This module adds one step,
     "zone"             the place itself is documented (a cloud region table below, or a "US, <city>, <ST>" region
                        whose city is in CITY_AREA) and lies in one ISO pricing area: that area's day-ahead series
                        (a CAISO trading hub, an ERCOT load-zone hub, a NYISO zone, a PJM zone)
+    "state_hub"        only the state is known and the ISO prices a hub for that state (MISO: MINN.HUB, MS.HUB,
+                       ARKANSAS.HUB, LOUISIANA.HUB): that hub
     "market_area_hub"  only the state is known and the state's load sits in one ISO (context/geo.MARKET_AREA):
                        the ISO's reference hub (REFERENCE_HUB), labelled as such. It is the market's price level,
                        not the local price. CAISO and NYISO have no single reference hub, so a state-only
@@ -48,9 +50,15 @@ CITY_AREA: dict[tuple[str, str], tuple[str, str]] = {
     **{(c, "CA"): ("CAISO", "TH_SP15_GEN-APND") for c in ("los angeles", "el segundo", "irvine", "san diego")},
     ("new york", "NY"): ("NYISO", "N.Y.C."),
     ("buffalo", "NY"): ("NYISO", "WEST"),
+    **{(c, "MN"): ("MISO", "MINN.HUB") for c in ("minneapolis", "saint paul", "st. paul", "chaska", "eagan")},
     **{(c, "VA"): ("PJM", "DOM") for c in ("ashburn", "sterling", "culpeper", "manassas", "reston", "leesburg")},
     ("chicago", "IL"): ("PJM", "COMED"),
 }
+
+# A state's own hub where the ISO prices one per state (MISO's hub names, as MISO spells them): a state-only
+# match uses it before the ISO's reference hub
+STATE_HUB = {"MN": ("MISO", "MINN.HUB"), "MS": ("MISO", "MS.HUB"), "AR": ("MISO", "ARKANSAS.HUB"),
+             "LA": ("MISO", "LOUISIANA.HUB")}
 
 # The ISO's reference hub, for a state-only match (None: the ISO has no single reference price)
 REFERENCE_HUB = {"PJM": "WESTERN HUB", "ERCOT": "HB_HUBAVG", "MISO": "INDIANA.HUB", "SPP": "SPPSOUTH_HUB",
@@ -106,6 +114,12 @@ def locate(provider: str | None, region: str | None, country: str | None = None)
     iso = geo.market_area(state)
     if not iso:
         return None
+    sh = STATE_HUB.get(state)
+    if sh and sh[0] == iso:
+        key = _series_for(iso, sh[1])
+        if key:
+            return {"state": state, "iso": iso, "area": sh[1], "match": "state_hub", "price_series": key,
+                    "ba": BA.get(iso)}
     key = _series_for(iso, REFERENCE_HUB.get(iso))
     if not key:
         return None

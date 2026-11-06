@@ -8,7 +8,10 @@ miss if they leaked:
     - an internal listing under a PUBLIC provider (`syn_alpha:zzsecret:...`, the DeepInfra container-API pattern),
       on demand and spot, with FX provenance (so /v1/fx/listings would list it);
     - a GPU sold ONLY by internal listings (ONLY_GPU);
-    - internal capacity rows (count 4321) and an internal archived price.
+    - internal capacity rows (count 4321) and an internal archived price;
+    - power markets (power/): internal CAISO prices, internal-by-choice natural gas and internal derived
+      cross-analysis rows, all at 4321 (the count, so any number leak is caught), beside a PUBLIC EIA-930 series
+      whose value (1234.5) must show on /v1/power/series.
 Then every derived table is built (rollups -> indices, structure, events; settlement fixings) and EVERY public route
 of the app is called: the routes are enumerated from the app itself and kept when api.pages.is_public says an
 anonymous visitor may read them (plus the legacy JSON reads), so a new public endpoint is covered without editing
@@ -191,7 +194,36 @@ def setup_world():
             break
     from analytics import shifts
     shifts.run(now=now)   # market_shifts + their related items, over observed and archived history
+    _seed_power(now)
     cache.clear_all()
+
+
+POWER_PUBLIC = 1234.5
+
+
+def _seed_power(now):
+    """Internal power / gas values at COUNT; one public EIA-930 day at POWER_PUBLIC."""
+    from power import storage
+    from power.sources import caiso, eia, eia_gas
+    from store.power import PowerGpuRegionDaily, PowerLeadLag
+
+    day = now.date() - timedelta(days=1)
+    dss = [caiso.DATASETS[0], caiso.DATASETS[1], eia_gas.DATASETS[0], eia.DATASETS[0]]
+    ids = storage.sync_series(dss)
+    rows = {("caiso.da.lmp.th_np15", day): [float(COUNT)] * storage.slots(day, caiso.TZ, 60),
+            ("caiso.rt.lmp.th_sp15", day): [float(COUNT)] * storage.slots(day, caiso.TZ, 5),
+            ("eia_gas.spot.spot_price.henry_hub", day): [float(COUNT)],
+            ("eia.actual.demand.ciso", day): [POWER_PUBLIC] * 24}
+    storage.upsert_days(rows, ids, None)
+    with W["Session"].begin() as s:
+        s.add(PowerGpuRegionDaily(day=day, provider="aws", region="us-west-1", gpu=H100, state="CA", iso="CAISO",
+                                  price_series="caiso.da.lmp.th_np15", match="zone", power_price_usd_mwh=COUNT,
+                                  power_price_max_usd_mwh=COUNT, tdp_w=700, pue=1.3, power_cost_usd_per_gpu_hour=COUNT,
+                                  gpu_price_median=2.0, gpu_price_low=2.0, listings=1, spread_usd_per_gpu_hour=COUNT,
+                                  power_share=COUNT, visibility="internal", computed_at=now))
+        s.add(PowerLeadLag(gpu=H100, iso="CAISO", price_series="caiso.da.lmp.th_np15", metric="gpu_price_median",
+                           lag_days=2, window_start=day - timedelta(days=180), window_end=day, n=COUNT, corr=0.4321,
+                           spike_days=COUNT, visibility="internal", computed_at=now, method="test"))
 
 
 # ---------------------------------------------------------------- leak detection
@@ -413,7 +445,7 @@ def test_every_public_route_is_clean():
                  "/history", "/market", "/gpu/{slug}", "/v1/trust/listings", "/v1/spreads",
                  # 2026-11-02 release: freshness, full cost (API and page)
                  "/v1/freshness", "/v1/cost/components", "/v1/cost/billing", "/v1/cost/sources",
-                 "/v1/cost/presets", "/cost", "/v1/context/power", "/v1/context/series"):
+                 "/v1/cost/presets", "/cost", "/v1/context/power", "/v1/context/series", "/v1/power/series"):
         assert must in templates, must
     status, bad = {}, []
     for tmpl, url, echo in reqs:
@@ -908,12 +940,37 @@ def test_admins_still_see_internal_values():
         assert sel["visibility"] == "internal" and abs(sel["price_per_gpu_hour"] - float(SECRET)) < 1e-9, sel
 
 
+def test_power_internal_never_public():
+    """Power markets: the public /v1/power/series carries EIA-930 (public domain) and nothing else; ISO prices and
+    natural gas (internal) are "unknown" to it, for anyone; the admin reads have them, private, no-store."""
+    from power import registry
+
+    assert registry.visibility("caiso") == "internal" and registry.visibility("eia_gas") == "internal"
+    assert registry.visibility("eia") == "public"
+    c = _client()
+    cat = c.get("/v1/power/series").json()["data"]
+    assert cat and {x["source"] for x in cat} == {"eia"}, {x["source"] for x in cat}
+    r = c.get("/v1/power/series?key=eia.actual.demand.ciso&intervals=true")
+    assert r.status_code == 200 and r.json()["data"][0]["values"][0] == POWER_PUBLIC, r.text[:300]
+    for k in ("caiso.da.lmp.th_np15", "caiso.rt.lmp.th_sp15", "eia_gas.spot.spot_price.henry_hub"):
+        for h in ({}, BASIC):
+            r = c.get(f"/v1/power/series?key={k}&intervals=true", headers=h)
+            assert r.status_code == 404 and not body_leaks(r, (k,)), (k, r.status_code, r.text[:200])
+    for url in ("/v1/ops/power/series?key=caiso.da.lmp.th_np15", "/v1/ops/power/cross/regional",
+                "/v1/ops/power/cross/leadlag", "/v1/ops/power/series?source=eia_gas", "/v1/ops/power/shifts"):
+        assert c.get(url).status_code in (401, 403), url
+        r = c.get(url, headers=BASIC)
+        assert r.status_code == 200 and r.headers["cache-control"] == "private, no-store", (url, r.text[:200])
+    assert c.get("/v1/ops/power/series?key=caiso.da.lmp.th_np15", headers=BASIC).json()["data"][0]["mean"] == COUNT
+    assert body_leaks(c.get("/v1/ops/power/cross/regional", headers=BASIC)), "the admin read does carry them"
+
+
 TESTS = [test_registry, test_derived_tables_have_no_internal_rows, test_every_public_route_is_clean,
          test_public_posts_are_clean, test_routing_and_recommend_see_internal, test_admin_view_labels_internal_rows,
          test_save_stamps_the_tier, test_deepinfra_internal_listings_route, test_fireworks_is_wholly_internal,
          test_context_power_counts_public_listings_only, test_reserved_and_provider_lists,
          test_customers_never_see_internal_values, test_workload_market_reference_is_public,
-         test_admins_still_see_internal_values]
+         test_admins_still_see_internal_values, test_power_internal_never_public]
 
 if __name__ == "__main__":
     saved = (settings.app_password, settings.public_pages, settings.public_rate_limit_per_minute,

@@ -146,7 +146,7 @@ def record_fetch(ds: Dataset, f: Fetched, keep: bool, days_stored: int = 0, fetc
     with _session().begin() as s:
         row = PowerFetch(source=ds.source, dataset=ds.key, url=f.url[:1000], period_start=f.start, period_end=f.end,
                          fetched_at=fetched_at or datetime.now(UTC), status_code=f.status, duration_ms=f.ms,
-                         ok=f.ok, empty=f.empty, error=(f.error or None) and f.error[:2000],
+                         ok=f.ok or f.empty, empty=f.empty, error=(f.error or None) and f.error[:2000],
                          bytes=None if f.body is None else len(f.body),
                          sha256=None if f.body is None else hashlib.sha256(f.body).hexdigest(),
                          content_type=(f.content_type or None) and f.content_type[:80],
@@ -156,13 +156,18 @@ def record_fetch(ds: Dataset, f: Fetched, keep: bool, days_stored: int = 0, fetc
         return row.id
 
 
-def set_days_stored(fetch_id: int, n: int) -> None:
+def set_days_stored(fetch_id: int, n: int, drop_body: bool = False) -> None:
+    """Mark a fetch's days stored. drop_body: a forward re-read that changed nothing keeps url + sha256 only (the
+    data it carried is already in power_days, backed by the earlier answer's bytes)."""
     from sqlalchemy import update
 
     from store.power import PowerFetch
 
+    vals = {"days_stored": n}
+    if drop_body:
+        vals.update(body=None, encoding=None, mode="hash")
     with _session().begin() as s:
-        s.execute(update(PowerFetch).where(PowerFetch.id == fetch_id).values(days_stored=n))
+        s.execute(update(PowerFetch).where(PowerFetch.id == fetch_id).values(**vals))
 
 
 # --------------------------------------------------------------------------- series-days
@@ -208,11 +213,16 @@ def upsert_days(rows: dict[tuple[str, date], list[float | None]], ids: dict[str,
     return {"new": new, "revised": revised, "unchanged": len(vals) - new - revised}
 
 
+UNPUBLISHED_RETRY_DAYS = 14
+
+
 def done_days(ds: Dataset, start: date, end: date, empty_before: date | None = None) -> set[date]:
     """Days with at least one stored row for the dataset and no incomplete one; plus, before `empty_before`, every
-    day a wholly successful chunk covered (days_stored > 0) or the source answered "no data" for: the source's
-    own gaps (an EIA hour never reported) are final there and not re-asked on every run. Days from `empty_before`
-    on are re-read until complete (a recent day may still fill)."""
+    day a successful answer marked stored (days_stored > 0; see runner.run_chunk) or the source answered "no data"
+    / "not published" for: the source's own gaps (an EIA hour never reported, NYISO's missing 10:20 interval on
+    2025-11-12) are final there, kept as NULL slots (power_days.n < slots, complete false), not re-asked on every
+    run. Days from `empty_before` on are re-read until complete (a recent day may still fill). A "not published"
+    answer (an HTTP status in Dataset.empty_statuses) is re-asked for UNPUBLISHED_RETRY_DAYS more: late files."""
     from sqlalchemy import text
 
     with _session()() as s:
@@ -225,8 +235,10 @@ def done_days(ds: Dataset, start: date, end: date, empty_before: date | None = N
             for a, b in s.execute(text("""SELECT period_start, period_end FROM power_fetches
                                           WHERE dataset = :ds AND ok AND (empty OR days_stored > 0)
                                           AND period_start IS NOT NULL
+                                          AND (coalesce(status_code, 200) < 400 OR period_end < :np)
                                           AND period_end >= :a AND period_start <= :b"""),
-                                  {"ds": ds.key, "a": start, "b": end}).all():
+                                  {"ds": ds.key, "a": start, "b": end,
+                                   "np": empty_before - timedelta(days=UNPUBLISHED_RETRY_DAYS)}).all():
                 out.update(d for d in days(max(a, start), min(b, end)) if d < empty_before)
     return out
 

@@ -284,7 +284,9 @@ def refresh(now: datetime | None = None) -> dict:
         s.execute(delete(L).where(L.window_end == end))
         for i in range(0, len(out_rows), 2000):
             s.execute(insert(L).values(out_rows[i:i + 2000]).on_conflict_do_nothing())
-        s.execute(text("DELETE FROM power_leadlag WHERE window_end < :old"), {"old": end - timedelta(days=400)})
+        # retention: the last 35 daily windows, then one per month (window_end on the 1st)
+        s.execute(text("""DELETE FROM power_leadlag WHERE window_end < :old AND extract(day FROM window_end) <> 1"""),
+                  {"old": end - timedelta(days=35)})
     return {"regional_rows": len(rows), "leadlag_rows": len(out_rows), "regions_mapped": len(places),
             "price_series": price_keys}
 

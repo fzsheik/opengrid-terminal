@@ -20,6 +20,7 @@ Memory is bounded by one chunk's response (a few MB at most); nothing is written
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from datetime import date, datetime, timedelta, timezone
 
@@ -33,7 +34,7 @@ log = logging.getLogger("power")
 
 UTC = timezone.utc
 FORWARD_INITIAL_DAYS = 7
-POLL_SECONDS = 6 * 3600
+POLL_SECONDS = 12 * 3600   # day-level data: twice a day catches CAISO's DA posting within half a day
 
 
 def _secrets(source: str) -> tuple[str, ...]:
@@ -42,11 +43,12 @@ def _secrets(source: str) -> tuple[str, ...]:
     return tuple(str(getattr(settings, r, "") or "") for r in getattr(registry.module(source), "REQUIRES", ()))
 
 
-def chunks(missing: list[date], size: int) -> list[tuple[date, date]]:
-    """Contiguous runs of missing days, each at most `size` days."""
+def chunks(missing: list[date], size: int, align: str | None = None) -> list[tuple[date, date]]:
+    """Contiguous runs of missing days, each at most `size` days; with align="month" never across a month."""
     out: list[tuple[date, date]] = []
     for d in sorted(missing):
-        if out and (d - out[-1][1]).days == 1 and (d - out[-1][0]).days < size:
+        same_month = align != "month" or (out and (out[-1][0].year, out[-1][0].month) == (d.year, d.month))
+        if out and same_month and (d - out[-1][1]).days == 1 and (d - out[-1][0]).days < size:
             out[-1] = (out[-1][0], d)
         else:
             out.append((d, d))
@@ -73,46 +75,65 @@ def plan(ds: Dataset, mode: str, now: datetime, since: date | None = None, until
             d for d in storage.done_days(ds, first, latest) if d < keep_from}
     missing = [d for d in storage.days(first, latest) if d not in skip] if first <= latest else []
     return {"dataset": ds.key, "first": first, "latest": latest, "skipped": len(skip),
-            "missing": len(missing), "chunks": chunks(missing, ds.chunk_days)}
+            "missing": len(missing), "chunks": chunks(missing, ds.chunk_days, ds.align)}
 
 
-async def run_chunk(ds: Dataset, get: Client, a: date, b: date, ids: dict[str, int], keep: bool) -> dict:
+def _days(a: date, b: date) -> set[date]:
+    return set(storage.days(a, b))
+
+
+async def run_chunk(ds: Dataset, get: Client, a: date, b: date, ids: dict[str, int], keep: bool,
+                    now: datetime | None = None) -> dict:
     """Fetch a chunk (one or more answers: pages, per-day files), record every answer raw-first, merge what parsed
-    and upsert it once, so answers that each carry part of a day (EIA pages) never overwrite each other. Only a
-    chunk whose every answer succeeded is marked stored (days_stored on its last fetch row): a partial chunk is
-    re-asked on the next run, its partial days kept meanwhile (never replacing more complete ones)."""
+    and upsert it once, so answers that each carry part of a day (EIA pages) never overwrite each other.
+
+    Stored days are marked PER ANSWER: an answer that succeeded marks its own days (f.start..f.end) stored, unless a
+    failed answer covers them too (a failed page of a paged query covers the whole chunk, so nothing is marked).
+    A "not published" answer (Dataset.empty_statuses, or f.empty set by fetch / parse) is empty, not a failure;
+    the runner re-asks empty and unmarked days while they are recent (power/storage.done_days)."""
     out = {"fetches": 0, "failed": 0, "empty": 0, "new": 0, "revised": 0, "unchanged": 0}
     try:
-        answers = await ds.fetch(get, a, b)
+        if "now" in inspect.signature(ds.fetch).parameters:
+            answers = await ds.fetch(get, a, b, now=now)
+        else:
+            answers = await ds.fetch(get, a, b)
     except Exception as exc:  # noqa: BLE001 - a fetch() bug is a failed fetch, recorded
         answers = [Fetched(f"{ds.key}:{a}..{b}", None, None, None, error=get.redact(f"{type(exc).__name__}: {exc}")[:500])]
     merged: dict[str, dict] = {}
-    last_id, all_ok, any_data = None, bool(answers), False
+    recorded: list[tuple[int, Fetched]] = []
+    failed_days: set[date] = set()
     for f in answers:
         f.start, f.end = f.start or a, f.end or b
         out["fetches"] += 1
+        if not f.ok and f.status in ds.empty_statuses:
+            f.empty, f.error = True, None          # not published (yet): recorded, re-asked while recent
         if f.ok:
             try:
                 for key, pts in ds.parse(f).items():
                     merged.setdefault(key, {}).update(pts)
             except Exception as exc:  # noqa: BLE001 - stored as a failed parse, never silently
                 f.error = f"parse: {type(exc).__name__}: {exc}"[:500]
-        last_id = await asyncio.to_thread(storage.record_fetch, ds, f, keep)   # raw first
-        if not f.ok:
-            all_ok = False
+                f.empty = False
+        fid = await asyncio.to_thread(storage.record_fetch, ds, f, keep)   # raw first
+        recorded.append((fid, f))
+        if f.empty and (f.ok or not f.error):
+            out["empty"] += 1
+        elif not f.ok:
+            failed_days |= _days(f.start, f.end)
             out["failed"] += 1
             log.warning("power %s %s..%s: %s", ds.key, f.start, f.end, f.error or f.status)
-        elif f.empty:
-            out["empty"] += 1
-        else:
-            any_data = True
     parsed = storage.to_days(ds, merged, a, b) if merged else {}
+    res = {"new": 0, "revised": 0, "unchanged": 0}
     if parsed:
-        res = await asyncio.to_thread(storage.upsert_days, parsed, ids, last_id)
+        res = await asyncio.to_thread(storage.upsert_days, parsed, ids, recorded[-1][0])
         for k in ("new", "revised", "unchanged"):
             out[k] += res[k]
-    if all_ok and any_data and last_id:
-        await asyncio.to_thread(storage.set_days_stored, last_id, max(1, len({d for _, d in parsed})))
+    changed = res["new"] + res["revised"] > 0
+    for fid, f in recorded:
+        if f.ok and not f.empty:
+            mine = _days(f.start, f.end) - failed_days
+            if mine:
+                await asyncio.to_thread(storage.set_days_stored, fid, len(mine), keep and not changed)
     return out
 
 
@@ -129,7 +150,7 @@ async def run_dataset(ds: Dataset, mode: str, get: Client, now: datetime, since=
     ids = await asyncio.to_thread(storage.sync_series, [ds])
     keep = mode == "forward" and ds.keep_raw
     for i, (a, b) in enumerate(p["chunks"], 1):
-        res = await run_chunk(ds, get, a, b, ids, keep)
+        res = await run_chunk(ds, get, a, b, ids, keep, now)
         for k in ("fetches", "failed", "empty", "new", "revised", "unchanged"):
             stats[k] += res[k]
         if i == len(p["chunks"]) or i % 10 == 0 or mode == "forward":

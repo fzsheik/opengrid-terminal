@@ -76,8 +76,10 @@ class Fetched:
 # outside the requested days are ignored, a series key not in the dataset is ignored, a value of None (or NaN) is a
 # gap. Raise ValueError on a malformed body; set fetched.empty = True for a "no data for this selection" answer.
 Parse = Callable[[Fetched], dict[str, dict[datetime, float | None]]]
-# fetch(get, start, end) -> [Fetched]: one or more requests covering market days start..end (inclusive), made
-# through `get` (power/http.Client.get: polite pacing, retries, redaction). Must not store anything.
+# fetch(get, start, end[, now=]) -> [Fetched]: one or more requests covering market days start..end (inclusive),
+# made through `get` (power/http.Client.get: polite pacing, retries, redaction). Must not store anything. A fetch
+# that declares a `now` parameter receives the run's clock. Set f.start / f.end on an answer that covers only some
+# of the chunk's days (one file per day): its days are then marked stored, or retried, on their own.
 Fetch = Callable[..., Awaitable[list[Fetched]]]
 
 
@@ -99,6 +101,10 @@ class Dataset:
     overlap_days: int = 2         # forward re-reads the last N stored days (late corrections)
     keep_raw: bool = True         # forward fetches keep the bytes (measured small per day); False: url + sha256
     description: str = ""
+    # HTTP statuses that mean "not published (yet)", not a failure: e.g. (404,) for per-day files posted late.
+    # Such an answer is recorded as empty and its days re-asked while recent (fetch / parse may also set f.empty)
+    empty_statuses: tuple[int, ...] = ()
+    align: str | None = None      # "month": chunks never cross a calendar month (sources with monthly archives)
     meta: dict = field(default_factory=dict)
 
 
