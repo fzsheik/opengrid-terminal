@@ -24,6 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from accounts.auth import Principal, require_scope
 from api.common import OBSERVED, envelope
+from cache import ttl_cache
 from power import cross, reads, registry, runner
 
 router = APIRouter()
@@ -113,6 +114,11 @@ def ops_power_shifts(response: Response, gpu: str | None = None, limit: int = Qu
 
 # --------------------------------------------------------------------------- PUBLIC tier only
 
+@ttl_cache(300)
+def _public_catalog():
+    return reads.catalog(public_only=True)   # counts every stored day: cached, like /v1/context/series
+
+
 PUBLIC_ATTRIBUTION = "Source: U.S. Energy Information Administration, Hourly Electric Grid Monitor (EIA-930)"
 
 
@@ -121,7 +127,7 @@ PUBLIC_ATTRIBUTION = "Source: U.S. Energy Information Administration, Hourly Ele
 def power_series(key: str | None = Query(None, description="comma-separated series keys"),
                  since: date | None = None, until: date | None = None, intervals: bool = False,
                  who: Principal = Depends(READ)):
-    cat = reads.catalog(public_only=True)
+    cat = _public_catalog()
     meta = {"rule": reads.NOT_CAUSAL, "attribution": PUBLIC_ATTRIBUTION, "methodology": "power-markets"}
     if not key:
         return envelope(cat, kind=OBSERVED, count=len(cat), **meta)

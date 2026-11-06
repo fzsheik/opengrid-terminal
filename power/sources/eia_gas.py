@@ -20,9 +20,9 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
+from power import geo
 from power.registry import DAILY, INTERNAL, MONTHLY, WEEKLY, Dataset, Fetched, Series, Terms
 from power.sources import eia
-from context import geo
 
 SOURCE = "eia_gas"
 DEFAULT_ON = True

@@ -92,6 +92,7 @@
       ["GET", "/v1/cost/sources", "Machine-readable cost sources: last fetch, last success, error", ""],
       ["GET", "/v1/cost/presets", "The published reference jobs R0-R3", ""],
       ["GET", "/v1/context/series", "Market-context series (EIA electricity prices, SEC EDGAR revenue and capex): catalogue, or points with id=", "id, source, entity, geo, since"],
+      ["GET", "/v1/power/series", "US grid data (EIA-930 hourly demand, generation, interchange per balancing authority; public domain): catalogue, or daily rows with key=", "key, since, until, intervals"],
       ["GET", "/v1/context/power", "US states with current listings, beside the state's latest electricity price (context, not cause)", ""],
       ["GET", "/v1/uptime/providers", "Control-plane uptime per tracked provider", ""],
       ["GET", "/v1/uptime/services", "Every measured service", "provider, category"],

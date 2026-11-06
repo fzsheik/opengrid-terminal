@@ -5,6 +5,78 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-05 — Power markets: wholesale prices and grid data, beside GPU prices, never mixed
+
+### What shipped
+- **New `power/` package and `power_*` tables** (migration `0035_power_markets`, additive only):
+  - `power_series`, the catalogue;
+  - `power_days`, one row per series and market day, with the day's values as `real[]` (24 hourly or 288
+    five-minute values, DST days 23/25 or 276/300) and the day's mean, min and max;
+  - `power_fetches`, every request with its URL, SHA-256 and byte count, plus the bytes where they are small;
+  - two derived tables, `power_gpu_region_daily` and `power_leadlag`.
+  Power data is never written into listings, rollups, indices, fixings or archived prices, and never votes in a
+  GPU statistic.
+- **Sources** (`power/sources/`; terms verdicts in each module, read by `power/registry.py`):
+  - **EIA-930** (public, public domain): hourly demand, net generation, interchange, the day-ahead forecast and
+    generation by fuel per balancing authority. Available from 2019-01.
+  - **CAISO OASIS** (internal: its terms do not clearly permit redistribution): day-ahead hourly and real-time
+    5-minute LMP at NP15, SP15, ZP26 and the four DLAPs. OASIS serves only a rolling ~39 months (from 2023-08).
+  - **EIA natural gas** (internal by choice: Henry Hub spot, NYMEX C1-C4 until EIA stopped them on 2024-04-05,
+    weekly storage, the monthly electric-power price by state). Documented in `methodology/internal/natural-gas.md`.
+  - NYISO, SPP, ERCOT, PJM and ISO-NE come as their own modules (separate branches). MISO's public files are not
+    pulled, because MISO's terms forbid automated access.
+- **Runner:** `python -m power backfill|forward|status|sources`.
+  - Idempotent and resumable: stored days are skipped; "no data" and not-yet-published days are recorded.
+  - Polite: one request at a time per source, paced.
+  - Streams: one chunk in memory, nothing written to disk.
+  - The `power_forward` job runs every 12 h behind `POWER_ENABLED`.
+- **Cross-analysis** (`power/cross.py`, internal):
+  - provider regions are mapped to ISO zones or hubs only where the place is documented (`power/geo.py`);
+  - power cost per GPU-hour = TDP × PUE (1.3) × the day-ahead hub price;
+  - the spread to the median listed price;
+  - lagged correlations of GPU price and in-stock share against power, and against Henry Hub;
+  - power spikes around major shifts, joined at read time, so `market_shift_items` is untouched.
+  Correlation, never cause.
+- **API:**
+  - admin-only `/v1/ops/power/{sources,status,series,map,cross/regional,cross/leadlag,shifts}`;
+  - the public `/v1/power/series` serves EIA-930 only. An internal key is "unknown" there, for everyone.
+  - `tests/test_visibility.py` now seeds internal power, gas and derived values and checks every public route.
+- **Storage:** measured 250 bytes per hourly series-day and 1,417 per 5-minute day. Projected about 1.2 GB for the
+  backfill plus 3 years with room for the other ISOs (about 0.9 GB without), against the 3 GB budget.
+  `methodology/power-markets.md` has the table.
+
+### Not shipped
+- The CAISO history before 2023-08: OASIS does not serve it.
+- MISO through its Data Exchange API (subscription key): not implemented.
+- ERCOT, PJM and ISO-NE are off until the free accounts in `methodology/power-markets.md` exist and their keys are
+  set.
+
+### Deploy notes
+- **Migration:** `0035_power_markets`. `down_revision` is `0029_news_history`; re-chain it after the co-founder's
+  0034 at merge.
+- **Variables:**
+  - `POWER_ENABLED=true` turns on the `power_forward` job (default off).
+  - `POWER_SOURCES` is optional: a comma list, empty for the defaults (caiso, eia, eia_gas, and the other no-signup
+    ISO modules).
+  - `POWER_PUE` defaults to 1.3.
+  - `EIA_API_KEY` is already set.
+  - ERCOT, PJM and ISO-NE: `ERCOT_API_SUBSCRIPTION_KEY`, `ERCOT_API_USERNAME`, `ERCOT_API_PASSWORD`,
+    `PJM_API_KEY`, `ISONE_USERNAME`, `ISONE_PASSWORD` (unset means off).
+- **Backfill on the production server, AFTER the deploy, detached** (a deploy restarts the container and kills
+  one-off jobs; re-running resumes where it stopped). In this order, smallest first:
+  1. `nohup .venv/bin/python -m power backfill --source eia_gas > /tmp/power-gas.log 2>&1 &` (no `--since`: the
+     gas history from 1993 to 1997; minutes, about 9 MB)
+  2. `nohup .venv/bin/python -m power backfill --source caiso > /tmp/power-caiso.log 2>&1 &` (OASIS's ~39 months;
+     about 440 requests at 1 per 5 s, so about 40 min; about 25 MB)
+  3. `nohup .venv/bin/python -m power backfill --source eia --since 2021-01 > /tmp/power-eia.log 2>&1 &` (about
+     8,500 paged requests at 1 a second plus response time, so about 4-5 h; about 600 MB)
+  4. Then `.venv/bin/python -m power forward` once (it fills the overlap and builds the cross-analysis) and
+     `.venv/bin/python -m power status`. Set `POWER_ENABLED=true` after that.
+  Steps 1-3 may run in parallel (different sources). `--dry-run` prints the plan first.
+- Full suite before commit: 118 Python test files and 11 web tests, all passing except the known `test_jobs_e2e` ("no usage slice metered", fails on main too).
+
+---
+
 ## 2026-11-02 (fifth release) — Linode capacity: Retry-After on a 200 is not a request to wait
 
 ### What shipped

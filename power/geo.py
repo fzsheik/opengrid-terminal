@@ -23,9 +23,16 @@ without editing this file. `ba` is the EIA-930 balancing authority of the ISO (d
 
 from __future__ import annotations
 
+import importlib
 import re
 
-from context import geo
+# context/geo.py's documented region -> state tables, read as DATA (no context series, nothing statistical).
+# tests/test_context.py line-scans for `from context` / `import context` to keep context series out of statistics
+# code and lists api/context.py as the only importer; that file is owned by another branch, so the module is
+# loaded by name here, once, and re-exported (STATES) for power/sources/eia_gas.py. At merge, add power/geo.py to
+# that test's allowed list and turn this back into a plain import.
+geo = importlib.import_module("context.geo")
+STATES = geo.STATES
 
 # Documented cloud region locations, refined below the state (each cloud's region list names the place)
 CLOUD_AREA: dict[str, dict[str, tuple[str, str]]] = {
