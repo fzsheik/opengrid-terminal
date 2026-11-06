@@ -88,9 +88,9 @@ def test_parse():
     config.settings.equity_tickers = " nvda, AMD ,nvda"
     assert eq.tickers() == ("NVDA", "AMD")
     config.settings.equity_tickers = None
-    assert len(eq.tickers()) == 20 and {"SMH", "SOXX", "CRWV", "NBIS"} <= set(eq.tickers())
+    assert len(eq.tickers()) == 40 and {"SMH", "SOXX", "CRWV", "NBIS", "CEG", "VST", "XLU"} <= set(eq.tickers())
     cat = eq.catalog()
-    assert len(cat) == 20 * 13 and all(c["visibility"] == "internal" for c in cat)
+    assert len(cat) == len(eq.tickers()) * 13 and all(c["visibility"] == "internal" for c in cat)
     print("test_parse ok")
 
 
@@ -266,7 +266,7 @@ def test_db_api_visibility():
             assert "/v1/ops/context/equities" not in json.dumps(anon.get("/openapi.json").json() if anon.get("/openapi.json").status_code == 200 else {})
             r = op.get("/v1/ops/context/equities")
             assert r.status_code == 200 and r.headers["cache-control"] == "private, no-store"
-            assert r.json()["meta"]["visibility"] == "internal" and len(r.json()["data"]) == 20
+            assert r.json()["meta"]["visibility"] == "internal" and len(r.json()["data"]) == len(eq.tickers())
             r = op.get("/v1/ops/context/equities?symbol=nvda&adjustment=raw&since=2024-06-10").json()
             assert r["data"][0] == {"date": "2024-06-10", "value": 121.79} and r["meta"]["unit"] == "usd"
             assert op.get("/v1/ops/context/equities?symbol=NVDA&timeframe=1Hour").json()["meta"]["count"] == 16

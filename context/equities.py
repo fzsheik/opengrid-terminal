@@ -37,8 +37,12 @@ FEED = "sip"
 ET = ZoneInfo("America/New_York")
 
 TICKERS = ("NVDA", "AMD", "TSM", "AVGO", "MU", "INTC", "ARM", "SMCI", "DELL", "CRWV", "NBIS", "ORCL", "MSFT", "GOOGL",
-           "AMZN", "META", "VRT", "ANET", "SMH", "SOXX")
-ETFS = frozenset({"SMH", "SOXX"})
+           "AMZN", "META", "VRT", "ANET", "SMH", "SOXX",
+           # Power: generators selling to datacenters, utilities in the datacenter regions (Virginia, Texas, the
+           # Southeast, the Midwest), nuclear and fuel, grid and datacenter power equipment, and the utilities ETF.
+           "CEG", "VST", "TLN", "NRG", "D", "AEP", "SO", "EXC", "NEE", "DUK", "ETR", "XEL", "OKLO", "SMR", "CCJ",
+           "GEV", "ETN", "PWR", "BE", "XLU")
+ETFS = frozenset({"SMH", "SOXX", "XLU"})
 
 DAILY_START = date(2016, 1, 1)
 HOURLY_YEARS = 5
