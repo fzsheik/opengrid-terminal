@@ -4,7 +4,7 @@ Some sources push changes as they happen instead of waiting to be polled. OpenGr
 Every change is recorded once, with the provider's own timestamp, and the provider's normal poller keeps running as
 the fallback. Today there is one such source: Lium's public executor WebSocket.
 
-Kind: **observed**. Code: `live/`. API (operator): `GET /v1/live/status`, `GET /v1/live/events`.
+Kind: **observed**. Code: `live/`. API (operator): `GET /internal/live/status`, `GET /internal/live/events`.
 
 ## Lium executor WebSocket
 

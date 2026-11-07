@@ -58,6 +58,12 @@ def basic(user="opengrid", password="pw"):
     return {"Authorization": "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()}
 
 
+def msg(r) -> str:
+    """Error text in either shape: Data API {error: {message}} or FastAPI {detail}."""
+    j = r.json()
+    return (j.get("error") or {}).get("message") or j.get("detail")
+
+
 def bearer(token):
     return {"Authorization": f"Bearer {token}"}
 
@@ -73,7 +79,7 @@ def test_csrf_basic_auth():
     for path in ["/v1/admin/keys/999/revoke", "/v1/deployments/dep_x/terminate", "/v1/ops/quarantine/1/accept",
                  "/v1/news/refresh", "/fetch", "/normalize", "/v1/admin/invoices/draft?period=2026-01"]:
         r = client.post(path, headers=form, content="a=b")
-        assert r.status_code == 403 and "cross-site" in r.json()["detail"], (path, r.status_code, r.text)
+        assert r.status_code == 403 and "cross-site" in msg(r), (path, r.status_code, r.text)
     # JSON without the header (even same-origin) -> 403
     r = client.post("/v1/keys", headers=B, json={"name": "x"})
     assert r.status_code == 403, r.text
@@ -151,7 +157,7 @@ def test_key_escalation_blocked():
                         expires_at=datetime.now(timezone.utc) + timedelta(days=2))
     H = bearer(k["secret"])
     r = client.post("/v1/keys", headers=H, json={"name": "big", "scopes": ["data:read"], "rate_limit_per_minute": 100000})
-    assert r.status_code == 403 and "rate limit" in r.json()["detail"], r.text
+    assert r.status_code == 403 and "rate limit" in msg(r), r.text
     r = client.post("/v1/keys", headers=H, json={"scopes": ["route:execute"]})
     assert r.status_code == 403
     r = client.post("/v1/keys", headers=H, json={"name": "kid", "scopes": ["data:read"], "expires_in_days": 365})

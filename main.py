@@ -18,6 +18,7 @@ import market
 import normalize
 import raw_store
 from accounts import security, sitelogin
+from accounts.auth import require_scope
 from config import settings
 from db import get_db, init_db
 from fetch import fetch_all
@@ -89,9 +90,7 @@ LOGOUT_PATH = "/logout"
 
 # Paths that are never a web page: API, assets, the hosted MCP endpoint, the login, health and the first UI's
 # JSON reads (some of them private). An unknown path under these keeps its normal answer (401 / 404 JSON).
-_NOT_PAGES = ("/v1", "/static", "/mcp", LOGIN_PATH, LOGOUT_PATH, "/health", "/docs", "/redoc", "/openapi", "/classic", "/market",
-              "/listings", "/changes", "/history", "/reference-prices", "/polling", "/mapping", "/unmapped", "/raw",
-              "/fetch", "/normalize", "/robots.txt", "/sitemap.xml")
+_NOT_PAGES = ("/v1", "/internal", "/static", "/mcp", LOGIN_PATH, LOGOUT_PATH, "/health", "/docs", "/redoc", "/openapi", "/classic", "/unmapped", "/raw", "/fetch", "/normalize", "/robots.txt", "/sitemap.xml")
 
 
 def _unknown_page(request) -> bool:
@@ -204,8 +203,8 @@ app.mount("/static", StaticFiles(directory=WEB), name="static")  # the page's cs
 
 @app.get("/classic", include_in_schema=False)
 def classic():
-    """The earlier plain page: leaderboard, listings table, change arrows."""
-    return FileResponse(WEB / "classic.html")
+    """The first UI is retired (the site covers it): old links go to the GPU table."""
+    return RedirectResponse("/gpus", status_code=308)
 
 
 _SAFE_NEXT = re.compile(r"/[A-Za-z0-9/_.~?=&%+-]*")
@@ -255,15 +254,20 @@ def logout():
     return resp
 
 
-@app.get("/market", summary="Every canonical GPU: current price, change, sparkline")
-def market_overview(hours: float = Query(24, ge=0, le=24 * 90)):
-    """`hours=0` means all the history we have."""
-    return market.overview(hours)
+@app.get("/v1/openapi.json", include_in_schema=False)
+def data_api_openapi(who=Depends(require_scope("data:read"))):
+    """The OpenGrid Data API's own OpenAPI schema: market intelligence routes only (no Compute, ops, admin or website
+    routes). Generated from the code, so it cannot drift; key or site login, like any Data API read."""
+    from api import contract
 
-
-@app.get("/market/detail", summary="One canonical GPU: every provider's price over time")
-def market_detail(gpu: str, hours: float = Query(24, ge=0, le=24 * 90)):
-    return market.detail(gpu, hours)
+    spec = app.openapi()
+    paths = {p: v for p, v in spec["paths"].items() if contract.is_data_path(p)}
+    return {**spec, "info": {"title": "OpenGrid Data API", "version": contract.LATEST,
+                             "description": "Market intelligence: GPU prices, indices, fixings, capacity, costs, "
+                                            "reliability, events, news. Contract: docs/API_CONTRACT.md. Send "
+                                            "OpenGrid-Version to pin a version."},
+            "servers": [{"url": f"https://{settings.data_api_host}"}] if settings.data_api_host else [],
+            "paths": paths}
 
 
 @app.get("/health")
@@ -272,31 +276,7 @@ def health(db: Session = Depends(get_db)):
     return {"status": "ok", "db": "up"}
 
 
-@app.get("/listings")
-def listings(q: str | None = None, available: bool = False, limit: int | None = None):
-    """Normalized ComputeListing rows, cheapest first."""
-    return normalize.listings(q=q, only_available=available, limit=limit)
-
-
-@app.get("/changes")
-def changes(hours: float = Query(24, gt=0, le=24 * 90)):
-    """Each listing's per-GPU price now against its price `hours` ago."""
-    return normalize.price_changes(hours)
-
-
-@app.get("/history")
-def history(q: str | None = None, limit: int = 200):
-    """Recorded changes, newest first. A gap means nothing moved."""
-    return normalize.history(q=q, limit=limit)
-
-
-@app.get("/reference-prices")
-def reference_prices(q: str | None = None, limit: int = 300):
-    """Priced entries a provider publishes that are not purchasable listings."""
-    return normalize.reference_prices(q=q, limit=limit)
-
-
-@app.get("/polling")
+@app.get("/internal/polling")
 def polling():
     """What is being polled and how often."""
     return {
@@ -315,7 +295,7 @@ def polling():
     }
 
 
-@app.get("/mapping")
+@app.get("/internal/mapping")
 def provider_mapping():
     """How each provider's API fills in ComputeListing, plus its quirks."""
     return {"providers": mapping.as_dicts(), "coverage_problems": mapping.check_mapping_coverage()}
@@ -376,16 +356,22 @@ from api import probes as probes_api  # noqa: E402  (registers the probe_local +
 from api import capacity as capacity_api  # noqa: E402
 from api import reserved as reserved_api  # noqa: E402  (read-only; never part of listings or statistics)
 from api import fx as fx_api  # noqa: E402  (registers the fx_rates background job)
-from api import freshness as freshness_api  # noqa: E402  (public, read-only, like capacity)
+from api import reliability as reliability_api  # noqa: E402  (Data API: our probes, freshness, status pages)
 from api import cost as cost_api  # noqa: E402  (full cost; registers the cost_components background job)
 from api import live as live_api  # noqa: E402  (live feeds; registers the lium_stream supervisor job)
 from api import context as context_api  # noqa: E402  (market context; registers context_series when configured)
 from api import shifts as shifts_api  # noqa: E402  (registers the market_shifts job; never causal)
 
 for _module in (execution_api, partners_api, product_api, reconcile_api, uptime_api, probes_api, capacity_api,
-                reserved_api, fx_api, freshness_api, cost_api,
+                reserved_api, fx_api, reliability_api, cost_api,
                 live_api, context_api, shifts_api):
     app.include_router(_module.router)
+
+from api import listings as listings_api  # noqa: E402  (Data API: /v1/listings)
+from api import exports as exports_api  # noqa: E402  (Data API: /v1/exports, key only)
+
+app.include_router(listings_api.router)
+app.include_router(exports_api.router)
 
 from api import jobs as jobs_api  # noqa: E402  (OpenGrid Jobs; registers the job_sync background job)
 
@@ -423,5 +409,10 @@ import alerts.channels  # noqa: E402,F401  (registers the channel_feeds job: Dis
 import alerts.silence  # noqa: E402,F401  (registers the silence_alerts job: provider feeds gone quiet)
 import backfill.gpuhunt  # noqa: E402,F401  (registers gpuhunt_snapshot: daily raw copy of dstack's catalogues)
 import observability  # noqa: E402
+from api import contract  # noqa: E402
 
+# Data API edge (version header, one error shape): inside the request-id middleware, outside the rest.
+app.add_middleware(contract.ContractMiddleware)
 observability.install(app)
+# CORS for the docs playground (data host and docs origin only): outermost, so preflights skip the key gate.
+app.add_middleware(contract.DocsCorsMiddleware)

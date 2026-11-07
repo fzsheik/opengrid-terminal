@@ -1,0 +1,76 @@
+---
+title: Pagination
+description: Every list pages by cursor.
+icon: ListOrdered
+---
+
+Lists return at most `limit` items (default `100` on most routes, maximum `1000`). When there are more, `meta`
+holds a `next_cursor`. Pass it back as `cursor` to get the next page, until `next_cursor` is `null`.
+
+```json
+"meta": { "limit": 100, "next_cursor": "eyJvIjoxMDB9", "total": 412 }
+```
+
+Treat the cursor as opaque. Pass it back exactly as you received it, with the same filters. A cursor from another list
+is a `400 invalid_cursor`.
+
+<Tabs items={['Python', 'JavaScript']}>
+<Tab value="Python">
+
+```python
+import os
+import requests
+
+session = requests.Session()
+session.headers.update({
+    "Authorization": f"Bearer {os.environ['OPENGRID_API_KEY']}",
+    "OpenGrid-Version": "2026-11-03",
+})
+
+def all_rows(path, **params):
+    cursor = None
+    while True:
+        r = session.get(f"https://data.tryopengrid.com{path}",
+                        params={**params, "limit": 1000, "cursor": cursor}, timeout=60)
+        r.raise_for_status()
+        body = r.json()
+        yield from body["data"]
+        cursor = body["meta"].get("next_cursor")
+        if not cursor:
+            return
+
+listings = list(all_rows("/v1/listings", gpu="nvidia-h100-80gb-sxm5"))
+```
+
+</Tab>
+<Tab value="JavaScript">
+
+```js
+async function* allRows(path, params = {}) {
+  let cursor = null;
+  do {
+    const q = new URLSearchParams({ ...params, limit: '1000', ...(cursor && { cursor }) });
+    const r = await fetch(`https://data.tryopengrid.com${path}?${q}`, {
+      headers: { Authorization: `Bearer ${process.env.OPENGRID_API_KEY}`, 'OpenGrid-Version': '2026-11-03' },
+    });
+    if (!r.ok) throw new Error((await r.json()).error.message);
+    const { data, meta } = await r.json();
+    yield* data;
+    cursor = meta.next_cursor;
+  } while (cursor);
+}
+
+for await (const row of allRows('/v1/listings', { gpu: 'nvidia-h100-80gb-sxm5' })) console.log(row.price_per_gpu_hour);
+```
+
+</Tab>
+</Tabs>
+
+## Two kinds of cursor
+
+- **Reference lists** (GPUs, providers, markets) are small and change slowly. Their cursor is a position in the list,
+  and `meta.total` is the full count.
+- **Time-ordered feeds** (listing changes, capacity changes, events, news, fixings) are newest first. Their cursor
+  marks the last row you saw, so pages stay stable while new rows arrive.
+
+To get everything for a past day in one file, use [bulk exports](/bulk-exports) instead.

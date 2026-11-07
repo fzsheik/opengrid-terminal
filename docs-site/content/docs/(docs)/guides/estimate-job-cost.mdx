@@ -1,0 +1,46 @@
+---
+title: Estimate a job's full cost
+description: Compute, egress and storage per provider, with unknown components named.
+icon: Calculator
+---
+
+The cheapest GPU-hour isn't always the cheapest job. `POST /v1/costs/estimate` prices a whole job on every provider
+that lists the GPU: compute, egress and storage, with billing increments applied.
+
+```bash
+curl -X POST https://data.tryopengrid.com/v1/costs/estimate \
+  -H "Authorization: Bearer $OPENGRID_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"gpu": "nvidia-h100-80gb-sxm5", "count": 8, "hours": 24, "egress_tb": 2, "storage_tb": 5}'
+```
+
+## The job
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `gpu` | string | GPU id or alias. Required unless a `preset` sets it. |
+| `count` | integer | GPUs, 1 to 1,024. |
+| `hours` | number | Duration, 1 minute to 8,760 hours. |
+| `egress_tb` or `egress_gb` | number | Data out. Give one, not both. |
+| `storage_tb` or `storage_gb` | number | Data stored for the job. Give one, not both. |
+| `storage_class` | string | `auto` (default), `shared_fs`, `block_storage` or `object_storage`. |
+| `min_fabric_gbps` | number | Only providers with at least this interconnect. |
+| `preset` | string | Start from a reference job (`GET /v1/costs/presets`) and override any field. |
+
+Terabytes are decimal: 1 TB = 1,000 GB. Unknown fields are a `422 unknown_field`.
+
+## Reading the result
+
+`data` is one row per provider, cheapest total first. When OpenGrid can't verify a component (the provider doesn't
+publish it), the row lists it in `unknown`, sets `total_is_lower_bound: true`, and sorts after the complete totals. `meta` repeats the parsed `job`,
+lists providers it couldn't rank in `unranked`, and counts the lower-bound rows.
+
+<Callout title="List prices">
+  Estimates use published list prices. Negotiated discounts aren't included.
+</Callout>
+
+## Inputs you can inspect
+
+- `GET /v1/costs/components`: egress and storage prices per provider.
+- `GET /v1/costs/billing`: billing increments and minimums per provider.
+- `GET /v1/costs/sources`: where each number comes from, and when it was last fetched.

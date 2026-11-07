@@ -15,7 +15,7 @@
       async function load() {
         let res;
         try {
-          res = await ctx.api("/v1/capacity", { params: { provider: st.provider || null, in_stock: st.stock || null }, full: true, slot: "capacity" });
+          res = await OG.allPages(ctx.api, "/v1/capacity", { params: { provider: st.provider || null, in_stock: st.stock || null }, slot: "capacity" });
         } catch (e) { if (!e.stale) box.replaceChildren(OG.error(e, load)); return; }
         OG.status.asOf(res.meta && res.meta.as_of);
         bar.replaceChildren(

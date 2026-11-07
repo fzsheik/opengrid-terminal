@@ -41,7 +41,7 @@ Components   OG.head(title, sub, ...right) · OG.section(title, ...kids) · OG.s
              OG.tabs(options, value, onChange) · OG.table(spec) · OG.csv(rows, columns, filename) · OG.logo(p, size)
              OG.gpuLink(nameOrSlug) · OG.providerLink(name) · OG.stub(el, {title, line, links})
 Data         OG.slug(gpuName) (== api.common.gpu_slug) · OG.data.gpuName(slug) · OG.data.gpus() · OG.data.providers()
-             OG.data.market(hours) (cached /market)
+             OG.data.market(hours) (cached /v1/markets?trend=true)
 Commands     OG.command(/^g\s+(.+)$/i, (match, text) => ..., "g <gpu>  open a GPU market")
 Status bar   OG.status.asOf(iso) · OG.status.live(ok, text)
 Charts       OG.charts.* (web/charts.js)
@@ -365,7 +365,7 @@ Full docs: web/README.md.
     if (sec > 600) return { tone: "stale", text: "Prices may be out of date: last read " + ago(sec), title: "Prices were last read from providers at " + when + " (your time). They are normally refreshed every few minutes." };
     return { tone: "live", text: "Prices updated " + ago(sec), title: "Prices were last read from providers at " + when + " (your time)." };
   }
-  // When prices were last read: the newest successful provider fetch in /v1/trust/providers (null if none).
+  // When prices were last read: the newest successful provider fetch in /internal/trust/providers (null if none).
   function lastReadOf(providers) {
     let best = null, bt = -Infinity;
     for (const p of Array.isArray(providers) ? providers : []) {
@@ -388,9 +388,48 @@ Full docs: web/README.md.
   }
 
   /* ================= pure: API envelope ================= */
+  // shortcut: Data API rows say gpu = public id + gpu_name; page code still reads gpu as the display name, so map
+  // it back (the id stays as gpu_id). Remove once every page reads gpu_name (docs/API_CONTRACT.md, step 3).
+  function legacyGpu(v) {
+    if (Array.isArray(v)) return v.map(legacyGpu);
+    if (!v || typeof v !== "object") return v;
+    const o = {};
+    for (const k of Object.keys(v)) o[k] = legacyGpu(v[k]);
+    if (typeof o.gpu_name === "string") { o.gpu_id = o.gpu; o.gpu = o.gpu_name; }
+    if (typeof o.index === "string" && !("index_id" in o)) o.index_id = o.index;  // Data API says index
+    return o;
+  }
+  // shortcut: chart code reads lowest / highest; Data API time series say low / high. Remove when charts read
+  // low / high directly (docs/API_CONTRACT.md, step 3).
+  function legacyHistory(v) {
+    if (Array.isArray(v)) return v.map(legacyHistory);
+    if (!v || typeof v !== "object") return v;
+    const o = {};
+    for (const k of Object.keys(v)) o[k === "low" ? "lowest" : k === "high" ? "highest" : k] = legacyHistory(v[k]);
+    return o;
+  }
+  OG.legacyHistory = legacyHistory;
+  // Every row of a Data API list as an array (null when a soft call failed): follows meta.next_cursor.
+  OG.all = async (call, path, opts) => {
+    const r = await OG.allPages(call, path, opts);
+    return r && r.meta === undefined ? null : r.data;
+  };
+  // Every page of a Data API list: follows meta.next_cursor (1000 rows a request); { data, meta } like full: true.
+  OG.allPages = async (call, path, opts) => {
+    opts = opts || {};
+    let data = [], cursor = null, r = null;
+    for (let i = 0; i < 100; i++) {
+      r = await call(path, { ...opts, full: true, params: { ...(opts.params || {}), limit: 1000, ...(cursor ? { cursor } : {}) } });
+      if (!r) return { data: null, meta: undefined };  // a soft call that failed
+      data = data.concat(Array.isArray(r.data) ? r.data : []);
+      cursor = r.meta && r.meta.next_cursor;
+      if (!cursor) break;
+    }
+    return { data, meta: r && r.meta };
+  };
   function unwrap(j) {
     if (j && typeof j === "object" && !Array.isArray(j) && "data" in j && j.meta && typeof j.meta === "object" &&
-        Object.keys(j).every(k => k === "data" || k === "meta")) return { data: j.data, meta: j.meta };
+        Object.keys(j).every(k => k === "data" || k === "meta")) return { data: legacyGpu(j.data), meta: j.meta };
     return { data: j, meta: null };
   }
   function withParams(path, params) {
@@ -541,7 +580,7 @@ Full docs: web/README.md.
     let body = null;
     if (r.status !== 204) body = ct.includes("json") ? await r.json().catch(() => null) : await r.text().catch(() => null);
     if (!r.ok) {
-      const d = body && typeof body === "object" ? body.detail : body;
+      const d = body && typeof body === "object" ? (body.error || body.detail) : body;  // Data API: {error}
       const msg = typeof d === "string" ? d : d && d.message ? d.message : Array.isArray(d) ? d.map(x => x.msg).join("; ") : `HTTP ${r.status}`;
       throw new ApiError(r.status, msg, url, body);
     }
@@ -660,9 +699,9 @@ Full docs: web/README.md.
     // Every canonical GPU (from the server), weighted by how many providers sell it now (from /market).
     async gpus() {
       let live = null;
-      const v1 = await api.soft("/v1/gpus", { params: { limit: 1000 } });
-      const list = Array.isArray(v1) ? v1 : v1 && Array.isArray(v1.items) ? v1.items : null;
-      if (list) live = list.map(g => ({ name: g.name || g.gpu || g.canonical_name, providers: g.providers || g.provider_count || 0 }));
+      const [ref, mk] = await Promise.all([api.soft("/v1/gpus", { params: { limit: 1000 } }), api.soft("/v1/markets", { params: { limit: 1000 } })]);
+      const list = Array.isArray(ref) ? ref : null, sold = new Map((Array.isArray(mk) ? mk : []).map(m => [m.gpu, m.providers]));
+      if (list) live = list.map(g => ({ name: g.name, providers: sold.get(g.name) || 0 }));
       else { const m = await OG.data.market(24).catch(() => null); live = m ? m.gpus.map(g => ({ name: g.gpu, providers: g.providers })) : []; }
       const weight = new Map(live.filter(g => g.name).map(g => [g.name, typeof g.providers === "number" ? g.providers : Array.isArray(g.providers) ? g.providers.length : 0]));
       const names = new Set([...GPU_BY_SLUG.values(), ...weight.keys()]);
@@ -674,14 +713,21 @@ Full docs: web/README.md.
     },
     // GPU families (/v1/families): [{slug, id, name, kind, variants?|variant_count}] or [] when unavailable
     families() {
-      if (!familiesP) familiesP = api.soft("/v1/families").then(r => (Array.isArray(r) ? r : r && Array.isArray(r.items) ? r.items : r && Array.isArray(r.families) ? r.families : []));
+      if (!familiesP) familiesP = OG.all(api.soft, "/v1/families").then(r => (Array.isArray(r) ? r : r && Array.isArray(r.items) ? r.items : r && Array.isArray(r.families) ? r.families : []));
       return familiesP;
     },
-    // /market overview, shared by every page for 20 s
+    // market overview (/v1/markets?trend=true), shared by every page for 20 s
     market(hours) {
       const k = String(hours == null ? 24 : hours), hit = marketCache.get(k);
       if (hit && Date.now() - hit.t < 20000) return hit.p;
-      const p = api("/market", { params: { hours: k } });
+      // one /v1/markets read (trend=true), returned in the shape the pages already use: gpus[] with lowest, change_pct, spark
+      const p = api("/v1/markets", { params: { trend: true, hours: k, limit: 1000 }, full: true }).then(r => {
+        const times = (r.meta && r.meta.trend_times) || [];
+        return { hours: Number(k), t0: times[0] || null, t1: times[times.length - 1] || null, times,
+          gpus: r.data.map(g => ({ gpu: g.gpu, providers: g.providers, lowest: g.price.low, lowest_provider: g.low_provider,
+            median: g.price.median, highest: g.price.high, highest_provider: g.high_provider,
+            change_pct: g.change ? g.change.pct : null, change_since: g.change ? g.change.since : null, spark: g.trend || null })) };
+      });
       marketCache.set(k, { t: Date.now(), p });
       p.catch(() => marketCache.delete(k));
       return p;
@@ -757,7 +803,7 @@ Full docs: web/README.md.
     archived: "Read by OpenGrid from a public archive (an archived price page or price-list version), not observed live",
   };
   OG.badge = (text, tone, title) => h("span", { class: "badge " + (tone || ""), title: title || null }, text);
-  // Major shifts (/v1/shifts) and the items OpenGrid stored around each (methodology/shifts). Being near a shift
+  // Major shifts (/v1/events/shifts) and the items OpenGrid stored around each (methodology/shifts). Being near a shift
   // in time is all an item shows: the heading says so wherever shifts appear. params: {gpu | provider | kind ...}.
   OG.SHIFT_HEADING = "Related news and events around this shift (not necessarily causal)";
   const SHIFT_ITEM = { news: "news", provider_announcement: "announcement", filing: "SEC filing", market_event: "OpenGrid event" };
@@ -776,7 +822,7 @@ Full docs: web/README.md.
     async function open(r) {
       detail.replaceChildren(OG.loading("Loading related items…"));
       let d;
-      try { d = await ctx.api("/v1/shifts/" + r.id, { slot: (opts.slot || "shifts") + "-d" }); }
+      try { d = await ctx.api("/v1/events/shifts/" + r.id, { slot: (opts.slot || "shifts") + "-d" }); }
       catch (e) { if (!e.stale) detail.replaceChildren(OG.error(e)); return; }
       const items = d.items || [];
       detail.replaceChildren(
@@ -788,7 +834,7 @@ Full docs: web/README.md.
     }
     (async () => {
       let rows;
-      try { rows = await ctx.api("/v1/shifts", { params: { limit: opts.limit || 20, top: 2, ...params }, slot: opts.slot || "shifts" }); }
+      try { rows = await ctx.api("/v1/events/shifts", { params: { limit: opts.limit || 20, top: 2, ...params }, slot: opts.slot || "shifts" }); }
       catch (e) { if (!e.stale) box.replaceChildren(OG.error(e)); return; }
       rows = Array.isArray(rows) ? rows : (rows && rows.items) || [];
       if (opts.onRows) opts.onRows(rows, open);
@@ -808,7 +854,7 @@ Full docs: web/README.md.
   };
   // "inferred" is a data kind in the API but is not shown as a badge in the UI
   OG.kindBadge = kind => kind === "inferred" ? null : h("a", { class: "badge kind k-" + kind, href: "/methodology/data-kinds", title: KIND_HELP[kind] || kind }, kind);
-  // Poll interval per provider (seconds), from /polling, loaded at start: freshBadge(..., {provider}) uses it.
+  // Poll interval per provider (seconds), from /internal/polling, loaded at start: freshBadge(..., {provider}) uses it.
   const INTERVALS = new Map();
   OG.data_intervals = INTERVALS;
   OG.pollInterval = p => INTERVALS.get(p) || null;
@@ -1391,13 +1437,13 @@ Full docs: web/README.md.
   // When prices were last read from providers (the newest successful fetch), shared for 30 s. Never rejects.
   let readP = null, readT = 0;
   OG.data.lastRead = () => {
-    if (!readP || Date.now() - readT > 30000) { readT = Date.now(); readP = api.soft("/v1/trust/providers", { nocache: true }).then(lastReadOf); }
+    if (!readP || Date.now() - readT > 30000) { readT = Date.now(); readP = api.soft("/internal/trust/providers", { nocache: true }).then(lastReadOf); }
     return readP;
   };
   let pollingP = null;
   // Poll intervals per provider: resolves to the Map used by freshBadge({provider}). Never rejects.
   OG.data.intervals = () => {
-    if (!pollingP) pollingP = api.soft("/polling").then(p => {
+    if (!pollingP) pollingP = api.soft("/internal/polling").then(p => {
       for (const x of (p && p.providers) || []) if (x.provider && x.interval_seconds) INTERVALS.set(x.provider, x.interval_seconds);
       return p;
     });
@@ -1414,11 +1460,11 @@ Full docs: web/README.md.
     }
   }
   // Tape (the same on every page): GPU prices from /market (lowest on-demand $/GPU-hr), then the latest notable
-  // moves from /v1/tape. The status bar's "Prices updated" is the last provider read, not the response time.
+  // moves from /internal/tape. The status bar's "Prices updated" is the last provider read, not the response time.
   const EVENT_WORDS = { sold_out: "sold out", capacity_returned: "back in stock", provider_added_gpu: "now listed", provider_removed_gpu: "delisted",
     new_cheapest_provider: "new cheapest", new_30d_low: "30-day low", new_30d_high: "30-day high", new_all_time_low: "all-time low", new_all_time_high: "all-time high" };
   async function loadTape() {
-    const [m, v1, read] = await Promise.all([OG.data.market(24).catch(() => null), api.soft("/v1/tape"), OG.data.lastRead()]);
+    const [m, v1, read] = await Promise.all([OG.data.market(24).catch(() => null), api.soft("/internal/tape"), OG.data.lastRead()]);
     if (!m) { OG.status.live(false); return; }
     if (read) OG.status.asOf(read); else OG.status.live(true);
     const top = m.gpus.filter(g => g.providers >= 2).slice(0, 16);

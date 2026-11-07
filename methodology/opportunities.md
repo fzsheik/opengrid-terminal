@@ -1,6 +1,6 @@
 # Opportunity monitor
 
-`GET /v1/opportunities` lists places where a buyer might currently get a better deal than usual. It is
+`GET /internal/opportunities` lists places where a buyer might currently get a better deal than usual. It is
 computed live from the hourly rollup (`market_hourly`), the detector's cross-provider table
 (`market_gpu_hourly`), current listings and recent events (nothing is stored) and cached 60 seconds.
 Code: `analytics/opportunities.py`.

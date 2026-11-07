@@ -434,7 +434,7 @@ def converted_listings(provider: str | None = None) -> list[dict]:
     """Current listings whose USD price was converted, with their provenance."""
     from tables import ComputeListingRow as c
 
-    stmt = (select(c).where(c.original_currency.is_not(None), c.visibility == "public")  # public: /v1/fx/listings
+    stmt = (select(c).where(c.original_currency.is_not(None), c.visibility == "public")  # public tier only
             .order_by(c.provider, c.listing_id))
     if provider:
         stmt = stmt.where(c.provider == provider)
@@ -443,18 +443,20 @@ def converted_listings(provider: str | None = None) -> list[dict]:
             "original_price_per_instance_hour", "fx_rate", "fx_rate_date", "fx_source", "observed_at")
     with _session()() as s:
         out = [{k: getattr(r, k) for k in cols} for r in s.execute(stmt).scalars()]
-        # a cross rate's legs are the two stored EUR quotes of its date (cross() takes both from one date)
-        need = {(r["fx_rate_date"], r["original_currency"]) for r in out if r["fx_source"] == CROSS_SOURCE}
-        legs = {}
-        if need:
-            for fr in s.execute(select(FxRate).where(FxRate.base == BASE,
-                                                     FxRate.rate_date.in_({d for d, _ in need}))).scalars():
-                legs[(fr.rate_date, fr.quote)] = {"base": BASE, "quote": fr.quote, "rate": fr.rate,
-                                                  "rate_date": fr.rate_date, "source": fr.source}
-        for r in out:
-            if r["fx_source"] == CROSS_SOURCE:
-                r["fx_legs"] = [legs.get((r["fx_rate_date"], "USD")), legs.get((r["fx_rate_date"], r["original_currency"]))]
+    for r in out:
+        if r["fx_source"] == CROSS_SOURCE:
+            r["fx_legs"] = legs_for(r["fx_rate_date"], r["original_currency"])
     return out
+
+
+def legs_for(rate_date, currency: str) -> list[dict | None]:
+    """A cross rate's two legs: the stored EUR->USD and EUR->currency quotes of its date (cross() takes both
+    from one date)."""
+    with _session()() as s:
+        got = {fr.quote: fr for fr in s.execute(select(FxRate).where(
+            FxRate.base == BASE, FxRate.rate_date == rate_date, FxRate.quote.in_(("USD", currency)))).scalars()}
+    return [None if fr is None else {"base": BASE, "quote": fr.quote, "rate": fr.rate, "rate_date": fr.rate_date,
+                                     "source": fr.source} for fr in (got.get("USD"), got.get(currency))]
 
 
 # --------------------------------------------------------------------------

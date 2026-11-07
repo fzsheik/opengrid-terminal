@@ -5,7 +5,7 @@
    /v1/events?provider=     market events · /v1/news?provider= related news (never presented as a cause)
    /listings                current listings incl. previous price (recent changes)
    /mapping                 field-level provenance and quirks for this provider's feed
-   soft: /v1/trust/providers, /v1/trust/listings?provider=, /v1/providers/{p}/gpus/{gpu}/context */
+   soft: /internal/trust/providers, /v1/listings?provider=, /v1/providers/{p}/gpus/{gpu}/context */
 (() => {
   const { h, fmt, Lib: L } = OG;
   const V = () => OG.views || {};
@@ -72,6 +72,11 @@
       el.append(body);
 
       // ------------------------------------------------------------ main payload
+      // /v1/providers/{provider} nests listings / market blocks; this page reads the flat names, so map them once.
+      const flat = d => ({ ...d, meta: { ...d, display_name: d.provider_name },
+        coverage: { ...d.coverage, live_listings: d.coverage.listings.live, priced_listings: d.coverage.listings.priced },
+        catalog: d.catalog.map(c => ({ ...c, slug: OG.slug(c.gpu), best_price: c.price_per_gpu_hour, market_providers: c.market.providers,
+          market_median: c.market.median, listings: c.listings.live, priced_listings: c.listings.priced, available_listings: c.listings.available })) });
       async function load() {
         let res;
         try { res = await ctx.api(`/v1/providers/${encodeURIComponent(p)}`, { params: { days: st.days }, full: true, slot: "provider" }); }
@@ -83,7 +88,7 @@
           if (!st.d) { statsEl.replaceChildren(); catEl.replaceChildren(OG.error(e, load)); }
           return;
         }
-        st.d = res.data; st.meta = res.meta;
+        st.d = flat(res.data); st.meta = res.meta;
         OG.status.asOf(res.meta && res.meta.as_of);
         drawStats(); drawCatalog(); drawBeats(); drawHist(); drawFacts(); drawRegions();
         if (!st.gpu || !st.d.catalog.some(c => c.slug === st.gpu)) {
@@ -260,7 +265,7 @@
       }
 
       async function loadFeed() {
-        const [trust, d] = [await ctx.api("/v1/trust/providers").catch(() => null), st.d];
+        const [trust, d] = [await ctx.api("/internal/trust/providers").catch(() => null), st.d];
         const t = (trust || []).find(x => x.provider === p), fh = d && d.feed_health, m = (d && d.meta) || m0 || {};
         const life = d && d.listing_lifetime;
         feedEl.replaceChildren(
@@ -290,10 +295,10 @@
       const rawRegions = h("div", { class: "pd-raw" });
 
       async function loadListings() {
-        const [rows, tl] = await Promise.all([ctx.api("/listings").catch(e => e), ctx.api("/v1/trust/listings", { params: { provider: p, limit: 1000 } }).catch(() => null)]);
+        const rows = await OG.all(ctx.api, "/v1/listings", { params: { provider: p, previous: true } }).catch(e => e);
         if (rows instanceof Error) { listEl.replaceChildren(OG.error(rows)); chgEl.replaceChildren(OG.error(rows)); return; }
-        const mine = rows.filter(r => r.provider === p);
-        const trustBy = new Map((tl || []).map(r => [r.listing_id, r.trust]));
+        const mine = rows.map(r => ({ ...r, canonical_gpu_name: r.gpu, ...(r.price_change || {}) }));
+        const trustBy = new Map(mine.map(r => [r.listing_id, r.trust]));
         // raw locations as the provider publishes them
         const locs = new Map();
         for (const r of mine) { const k = r.region || r.country; if (k) locs.set(k, (locs.get(k) || 0) + 1); }
@@ -351,7 +356,7 @@
       // /mapping is internal: visitors (401/403) do not see this panel at all
       async function loadMapping() {
         let m = null;
-        try { m = await ctx.api("/mapping"); }
+        try { m = await ctx.api("/internal/mapping"); }
         catch (e) { if (e.status === 401 || e.status === 403) { mapSec.remove(); return; } }
         const entry = m && (m.providers || []).find(x => x.provider === p);
         if (!entry) { mapEl.replaceChildren(OG.empty(m ? "No field map is recorded for this provider." : "The field map could not be loaded.")); return; }

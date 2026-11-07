@@ -6,12 +6,12 @@ miss if they leaked:
     - a wholly internal provider `syn_hidden` (registered for the test as an ALL_SOURCES entry), selling every seeded
       GPU at SECRET = $0.004321 per GPU-hour, far below every public price, so it would be the market low;
     - an internal listing under a PUBLIC provider (`syn_alpha:zzsecret:...`, the DeepInfra container-API pattern),
-      on demand and spot, with FX provenance (so /v1/fx/listings would list it);
+      on demand and spot, with FX provenance (so /v1/listings would carry its FX provenance);
     - a GPU sold ONLY by internal listings (ONLY_GPU);
     - internal capacity rows (count 4321) and an internal archived price;
     - power markets (power/): internal CAISO prices, internal-by-choice natural gas and internal derived
-      cross-analysis rows, all at 4321 (the count, so any number leak is caught), beside a PUBLIC EIA-930 series
-      whose value (1234.5) must show on /v1/power/series.
+      cross-analysis rows, all at 4321 (the count, so any number leak is caught), beside an EIA-930 series
+      (public domain, 1234.5) that only the admin reads serve: power has no public route.
 Then every derived table is built (rollups -> indices, structure, events; settlement fixings) and EVERY public route
 of the app is called: the routes are enumerated from the app itself and kept when api.pages.is_public says an
 anonymous visitor may read them (plus the legacy JSON reads), so a new public endpoint is covered without editing
@@ -300,7 +300,7 @@ def _required_query(route) -> list[str]:
 
 
 # Operator-only JSON reads of the first UI that still serve market data: public tier too.
-LEGACY_OPERATOR = ("/history", "/reference-prices")
+LEGACY_OPERATOR = ()
 # Public GETs that serve no market data and need no check (docs).
 SKIP = ("/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json")
 
@@ -309,7 +309,7 @@ def _values(name: str, route_path: str) -> list[tuple[str, tuple[str, ...]]]:
     """Values for a path / query parameter: (value, strings the response may echo back)."""
     h100, only = gpu_slug(H100), gpu_slug(ONLY_GPU)
     if name in ("gpu", "slug", "a", "b"):
-        if route_path.startswith("/v1/compare") and name in ("a", "b"):
+        if route_path.startswith("/internal/compare") and name in ("a", "b"):
             return [(h100 if name == "a" else gpu_slug("NVIDIA A100 80GB SXM4"), ())]
         return [(h100, ()), (only, ())]
     if name == "provider":
@@ -329,6 +329,8 @@ def _values(name: str, route_path: str) -> list[tuple[str, tuple[str, ...]]]:
         return [(f"{h100}-vs-{gpu_slug('NVIDIA A100 80GB SXM4')}", ()), (f"{h100}-vs-{only}", ())]
     if name == "family":
         return [(W.get("family", "h100"), ())]
+    if name == "series":  # a public series, and an internal (equity) one that must stay a 404
+        return [("eia.retail_price.ind.VA", ()), ("alpaca.nvda.close.split", ())]
     if name == "fixing_id":
         return [(f, ()) for f in W.get("fixing_ids") or ["1"]]
     if name == "at":
@@ -441,11 +443,11 @@ def test_every_public_route_is_clean():
     templates = {t for t, _, _ in reqs}
     assert len(templates) >= 80, f"route enumeration found only {len(templates)} public GET routes"
     for must in ("/v1/gpus", "/v1/markets/{gpu}", "/v1/indices/{index_id}", "/v1/fixings", "/v1/capacity",
-                 "/v1/fx/listings", "/v1/reserved", "/v1/history/{gpu}/archived", "/v1/best/{gpu}", "/listings",
-                 "/history", "/market", "/gpu/{slug}", "/v1/trust/listings", "/v1/spreads",
+                 "/v1/listings", "/v1/reserved", "/v1/markets/{gpu}/history/archived", "/v1/best/{gpu}", "/internal/polling",
+                 "/gpu/{slug}", "/v1/listings/history", "/v1/markets",
                  # 2026-11-02 release: freshness, full cost (API and page)
-                 "/v1/freshness", "/v1/cost/components", "/v1/cost/billing", "/v1/cost/sources",
-                 "/v1/cost/presets", "/cost", "/v1/context/power", "/v1/context/series", "/v1/power/series"):
+                 "/v1/reliability/providers", "/v1/costs/components", "/v1/costs/billing", "/v1/costs/sources",
+                 "/v1/costs/presets", "/cost", "/v1/macro/power", "/v1/macro/series"):
         assert must in templates, must
     status, bad = {}, []
     for tmpl, url, echo in reqs:
@@ -461,7 +463,7 @@ def test_every_public_route_is_clean():
     assert not bad, "\n".join(bad[:40])
     assert ok >= 0.8 * len(reqs), {k: v[:8] for k, v in status.items() if k != 200}
     # operator-only reads stay closed with public pages on (live feeds: raw executor records)
-    for url in ("/v1/live/status", "/v1/live/events"):
+    for url in ("/internal/live/status", "/internal/live/events"):
         assert c.get(url).status_code in (401, 403), url
         assert c.get(url, headers=BASIC).status_code == 200, url
     # the internal-only GPU has no public price anywhere
@@ -482,7 +484,7 @@ def test_public_posts_are_clean():
     assert not body_leaks(r), body_leaks(r)[:5]
     # the full-cost estimator ranks list prices: public listings only (the internal H100 is the cheapest)
     for gpu in (H100, ONLY_GPU):
-        r = c.post("/v1/cost/estimate", json={"gpu": gpu, "count": 1, "hours": 10, "egress_tb": 1})
+        r = c.post("/v1/costs/estimate", json={"gpu": gpu, "count": 1, "hours": 10, "egress_tb": 1})
         assert r.status_code == 200, r.text[:300]
         rows = r.json()["data"] + (r.json().get("unranked") or [])
         assert not body_leaks(r), (gpu, body_leaks(r)[:5])
@@ -618,8 +620,8 @@ def test_deepinfra_internal_listings_route():
     assert any(c["listing_id"] == "nvidia-b200:8x:api" and c["visibility"] == "internal" for c in allt["candidates"])
     c = _client()
     for url in ("/v1/gpus/b200-180gb-sxm", "/v1/markets/b200-180gb-sxm", "/v1/best/b200-180gb-sxm?count=8",
-                "/listings?q=deepinfra", "/v1/trust/listings?provider=deepinfra"):
-        r = c.get(url, headers=BASIC if url.startswith("/listings") else {})
+                "/v1/listings?provider=deepinfra", "/v1/listings?provider=deepinfra&previous=true"):
+        r = c.get(url)
         assert r.status_code == 200, (url, r.status_code)
         assert ":api" not in r.text and f"{api_price:g}" not in r.text, url
 
@@ -653,19 +655,19 @@ def test_fireworks_is_wholly_internal():
     assert "fireworks" not in prov.feed_health()
     c = _client()
     slug = gpu_slug(gpu)
-    for url in (f"/v1/gpus/{slug}", f"/v1/markets/{slug}", f"/v1/best/{slug}", "/v1/trust/listings?provider=fireworks",
-                "/v1/providers", "/v1/freshness", "/listings?q=fireworks", "/history?q=fireworks", "/market"):
-        r = c.get(url, headers=BASIC if url.startswith(("/listings", "/history", "/market")) else {})
+    for url in (f"/v1/gpus/{slug}", f"/v1/markets/{slug}", f"/v1/best/{slug}", "/v1/listings?provider=fireworks",
+                "/v1/providers", "/v1/reliability/providers", "/v1/markets?trend=true", f"/v1/markets/{slug}/history/providers"):
+        r = c.get(url)
         assert r.status_code in (200, 404), (url, r.status_code)
         body = r.text.lower()
         assert not any(lid in body for lid in rows), (url, "fireworks listing id in a public answer")
         assert '"provider":"fireworks"' not in body.replace(" ", ""), (url, "fireworks named as a provider")
-    r = c.post("/v1/cost/estimate", json={"gpu": gpu, "count": 1, "hours": 10})
+    r = c.post("/v1/costs/estimate", json={"gpu": gpu, "count": 1, "hours": 10})
     assert r.status_code == 200 and "fireworks" not in r.text.lower(), r.text[:300]
 
 
 def test_context_power_counts_public_listings_only():
-    """/v1/context/power (US listings per state beside the state's electricity price) is public: an internal
+    """/v1/macro/power (US listings per state beside the state's electricity price) is public: an internal
     listing in a mapped US region changes neither its counts nor its provider and region lists."""
     c = _client()
 
@@ -677,12 +679,12 @@ def test_context_power_counts_public_listings_only():
     with W["Session"].begin() as s:
         s.add(va("pub-va", Decimal("3.5"), "public"))
     cache.clear_all()
-    before = {r["state"]: r for r in c.get("/v1/context/power").json()["data"]}
+    before = {r["state"]: r for r in c.get("/v1/macro/power").json()["data"]}
     assert before.get("VA", {}).get("listings", 0) >= 1, before
     with W["Session"].begin() as s:
         s.add(va("int-va", SECRET, "internal"))
     cache.clear_all()
-    r = c.get("/v1/context/power")
+    r = c.get("/v1/macro/power")
     after = {x["state"]: x for x in r.json()["data"]}
     assert after["VA"]["listings"] == before["VA"]["listings"], (before["VA"], after["VA"])
     assert not body_leaks(r), body_leaks(r)[:5]
@@ -941,21 +943,16 @@ def test_admins_still_see_internal_values():
 
 
 def test_power_internal_never_public():
-    """Power markets: the public /v1/power/series carries EIA-930 (public domain) and nothing else; ISO prices and
-    natural gas (internal) are "unknown" to it, for anyone; the admin reads have them, private, no-store."""
+    """Power markets have no public route (internal use: routing and research): the public routes never carry a power
+    value (test_every_public_route_is_clean scans them all for 4321); the admin reads have them, private, no-store."""
     from power import registry
 
     assert registry.visibility("caiso") == "internal" and registry.visibility("eia_gas") == "internal"
     assert registry.visibility("eia") == "public"
     c = _client()
-    cat = c.get("/v1/power/series").json()["data"]
-    assert cat and {x["source"] for x in cat} == {"eia"}, {x["source"] for x in cat}
-    r = c.get("/v1/power/series?key=eia.actual.demand.ciso&intervals=true")
+    assert not [r.path for r in all_routes() if r.path.startswith("/v1/power")], "no public power route"
+    r = c.get("/v1/ops/power/series?key=eia.actual.demand.ciso&intervals=true", headers=BASIC)
     assert r.status_code == 200 and r.json()["data"][0]["values"][0] == POWER_PUBLIC, r.text[:300]
-    for k in ("caiso.da.lmp.th_np15", "caiso.rt.lmp.th_sp15", "eia_gas.spot.spot_price.henry_hub"):
-        for h in ({}, BASIC):
-            r = c.get(f"/v1/power/series?key={k}&intervals=true", headers=h)
-            assert r.status_code == 404 and not body_leaks(r, (k,)), (k, r.status_code, r.text[:200])
     for url in ("/v1/ops/power/series?key=caiso.da.lmp.th_np15", "/v1/ops/power/cross/regional",
                 "/v1/ops/power/cross/leadlag", "/v1/ops/power/series?source=eia_gas", "/v1/ops/power/shifts"):
         assert c.get(url).status_code in (401, 403), url

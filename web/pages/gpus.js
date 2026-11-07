@@ -1,9 +1,9 @@
 /* /gpus: the full GPU market table.
 
 Joins three reads on the canonical GPU name, each optional except the first:
-  /v1/gpus?limit=1000        hardware summary + current low / median / high, providers, listings
-  /market?hours=24           24h change of the lowest price + sparkline (the first UI's market board)
-  /v1/spreads                spread and efficiency score per GPU
+  /v1/gpus?limit=1000        reference data: vendor specs per canonical GPU
+  /v1/markets?limit=1000&trend=true  price (low / median / high), providers, listings, spread, efficiency score,
+                             24h change of the lowest price and its sparkline
 Filters (vendor, architecture, VRAM band, workload class, form factor, only-available, text) and sort live
 in the URL so a filtered view is shareable. $/GB-VRAM-h = current low / VRAM: theoretical capability pricing.
 */
@@ -109,16 +109,17 @@ in the URL so a filtered view is shareable. $/GB-VRAM-h = current low / VRAM: th
         let r;
         try { r = await ctx.api("/v1/gpus", { params: { limit: 1000 }, full: true, slot: "gpus-v1" }); }
         catch (e) { if (!e.stale) holder.replaceChildren(OG.error(e, load)); return; }
-        const [mk, sp] = await Promise.all([ctx.api("/market", { params: { hours: 24 } }).catch(() => null), ctx.api("/v1/spreads").catch(() => null)]);
-        const byM = new Map((mk && mk.gpus || []).map(g => [g.gpu, g])), byS = new Map((sp || []).map(s => [s.gpu, s]));
+        // /v1/markets?trend=true: price, spread, score, 24h change and sparkline per GPU with a live listing
+        const ms = await ctx.api("/v1/markets", { params: { limit: 1000, trend: true } }).catch(() => null), mk = ms;
+        const byM = new Map((ms || []).map(g => [g.gpu, { change_pct: g.change ? g.change.pct : null, change_since: g.change ? g.change.since : null, spark: g.trend || null }])), byS = new Map((ms || []).map(s => [s.gpu, s]));
         const rows = r.data.map(g => {
-          const hw = g.hardware || {}, m = byM.get(g.name), s = byS.get(g.name);
-          return { slug: g.slug, name: g.name, short: OG.shortGpu(g.name), vendor: hw.vendor || L.vendorOf(g.name), arch: hw.architecture || null, vram: hw.vram_gb || null,
-            ff: hw.form_factor || null, wl: hw.workload_class || null, low: g.low, median: g.median, high: g.high, providers: g.providers,
-            available: g.available_listings, priced: g.priced_listings,
+          const m = byM.get(g.name), s = byS.get(g.name), p = s ? s.price : {};
+          return { slug: OG.slug(g.name), name: g.name, short: OG.shortGpu(g.name), vendor: g.vendor || L.vendorOf(g.name), arch: g.architecture || null, vram: g.vram_gb || null,
+            ff: g.form_factor || null, wl: g.workload_class || null, low: p.low ?? null, median: p.median ?? null, high: p.high ?? null, providers: s ? s.providers : 0,
+            available: s ? s.listings.available : 0, priced: s ? s.listings.priced : 0,
             chg: m ? m.change_pct : null, chgReason: m ? (m.change_since ? null : "not enough history in 24h") : mk ? "no 24h data" : "24h data unavailable", spark: m ? m.spark : null,
-            spread: s ? s.spread_pct_of_low : g.low ? g.high / g.low - 1 : null, eff: s ? s.efficiency : null, effReason: s ? s.reason : g.low == null ? "no price" : "spreads unavailable",
-            perGb: g.low != null && hw.vram_gb ? g.low / hw.vram_gb : null, perTf: g.low != null && hw.bf16_tflops_dense ? g.low / (hw.bf16_tflops_dense / 1000) : null };
+            spread: s ? s.spread.pct_of_low : null, eff: s ? s.score.efficiency : null, effReason: s ? s.score.reason : ms ? "no price" : "markets unavailable",
+            perGb: p.low != null && g.vram_gb ? p.low / g.vram_gb : null, perTf: p.low != null && g.bf16_tflops_dense ? p.low / (g.bf16_tflops_dense / 1000) : null };
         });
         st.rows = rows;
         OG.status.asOf(r.meta && r.meta.as_of);

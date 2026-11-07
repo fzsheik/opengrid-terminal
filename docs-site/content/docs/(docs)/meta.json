@@ -1,0 +1,30 @@
+{
+  "title": "Documentation",
+  "description": "Concepts, guides and conventions",
+  "root": true,
+  "icon": "BookOpen",
+  "pages": [
+    "---Get started---",
+    "index",
+    "quickstart",
+    "authentication",
+    "---Using the API---",
+    "versioning",
+    "responses",
+    "errors",
+    "pagination",
+    "rate-limits",
+    "caching",
+    "---Data---",
+    "ids",
+    "data-rules",
+    "point-in-time",
+    "bulk-exports",
+    "---Guides---",
+    "...guides",
+    "---More---",
+    "for-agents",
+    "changelog",
+    "terms"
+  ]
+}

@@ -519,16 +519,19 @@ def test_api_shapes_and_scopes():
     body = r.json()
     assert body["meta"]["methodology"] == "/methodology/settlement" and body["meta"]["kind"] == "observed"
     d = body["data"]
-    assert [x["index_id"] for x in d["indices"]] == list(S.SETTLEMENT_INDICES)
+    assert [x["index"] for x in d["indices"]] == list(S.SETTLEMENT_INDICES)
     assert d["ledger_head"]["row_hash"] == S.verify_chain()["head_hash"]
-    rich = [x for x in d["indices"] if x["index_id"] == W["rich"]][0]
+    rich = [x for x in d["indices"] if x["index"] == W["rich"]][0]
     assert rich["hourly"]["status"] in ("final", "restated", "not_published") and rich["daily"]
     assert rich["provisional"]["status"] == "provisional" and "not a fixing" in rich["provisional"]["note"]
     h = c.get(f"/v1/indices/{W['rich']}/fixings", headers=ro, params={"type": "daily"}).json()
     assert h["data"]["settlement_index"] and all(f["fixing_type"] == "daily" for f in h["data"]["fixings"])
-    assert h["meta"]["pagination"]["total"] >= 1
+    assert h["meta"]["total"] >= 1 and "next_cursor" in h["meta"]
     fid = h["data"]["fixings"][0]["fixing_id"]
     e = c.get(f"/v1/fixings/{fid}", headers=ro).json()["data"]
+    # money may settle on a fixing: its value is an exact decimal string of the stored double, never a JSON float
+    stored = _q("SELECT value FROM index_fixings WHERE fixing_id = :f", f=fid)[0].value
+    assert e["value"] is None or (isinstance(e["value"], str) and float(e["value"]) == stored), (e["value"], stored)
     assert e["inputs"]["fixing_type"] == "daily" and e["links"]["verify"] == f"/v1/fixings/{fid}/verify"
     v = c.get(f"/v1/fixings/{fid}/verify", headers=ro).json()["data"]
     assert v["result"] == "ok" and v["checks"]["hourly_references"], v

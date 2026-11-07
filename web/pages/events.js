@@ -116,8 +116,9 @@
         sevSeg.set(st.sev); sinceSeg.set(st.since); covBtn.setAttribute("aria-pressed", String(st.cov));
         legend.querySelectorAll(".ev-lg").forEach(n => n.classList.toggle("on", n.dataset.t === st.type));
       }
-      function params(offset, limit) {
-        const p = { limit, offset };
+      function params(cursor, limit) {
+        const p = { limit };
+        if (cursor) p.cursor = cursor;
         if (st.type) p.type = st.type;
         else if (!st.cov && st.cat) p.type = st.cat.events.map(t => t.type).filter(t => t !== "coverage_started").join(",");
         if (st.sev) p.min_severity = st.sev;
@@ -150,9 +151,9 @@
         // Day counts over the filtered window: newest 1000 events (says so when truncated).
         const days = st.since === "all" ? null : Number(st.since);
         let r;
-        try { r = await ctx.api("/v1/events", { params: params(0, 1000), full: true, slot: "ev-hist" }); }
+        try { r = await ctx.api("/v1/events", { params: params(null, 1000), full: true, slot: "ev-hist" }); }
         catch (e) { if (!e.stale) histEl.replaceChildren(OG.error(e)); return; }
-        const items = r.data || [], total = (r.meta && r.meta.pagination && r.meta.pagination.total) || items.length;
+        const items = r.data || [], total = (r.meta && r.meta.total) || items.length;
         const counts = new Map();
         for (const e of items) counts.set(dayKey(e.occurred_at), (counts.get(dayKey(e.occurred_at)) || 0) + 1);
         const end = new Date(); end.setHours(0, 0, 0, 0);
@@ -174,8 +175,8 @@
       async function reload() {
         feed.replaceChildren(OG.loading("Loading events…")); more.replaceChildren();
         try {
-          const r = await ctx.api("/v1/events", { params: params(0, PAGE), full: true, slot: "ev-feed" });
-          st.items = r.data || []; st.total = (r.meta && r.meta.pagination && r.meta.pagination.total) || st.items.length;
+          const r = await ctx.api("/v1/events", { params: params(null, PAGE), full: true, slot: "ev-feed" });
+          st.items = r.data || []; st.total = (r.meta && r.meta.total) || st.items.length; st.cursor = r.meta && r.meta.next_cursor;
           count.textContent = `${fmt.num(st.total)} event${st.total === 1 ? "" : "s"}`;
           if (r.meta) OG.status.asOf(r.meta.as_of);
           drawFeed();
@@ -185,8 +186,8 @@
       async function loadMore() {
         more.replaceChildren(OG.loading());
         try {
-          const r = await ctx.api("/v1/events", { params: params(st.items.length, PAGE), full: true });
-          st.items = st.items.concat(r.data || []);
+          const r = await ctx.api("/v1/events", { params: params(st.cursor, PAGE), full: true });
+          st.items = st.items.concat(r.data || []); st.cursor = r.meta && r.meta.next_cursor;
           drawFeed();
         } catch (e) { more.replaceChildren(OG.error(e, loadMore)); }
       }
@@ -194,8 +195,8 @@
       async function refresh() {
         if (st.items.length > PAGE) return;
         try {
-          const r = await ctx.api("/v1/events", { params: params(0, PAGE), full: true, slot: "ev-feed", nocache: true });
-          st.items = r.data || []; st.total = (r.meta && r.meta.pagination && r.meta.pagination.total) || st.items.length;
+          const r = await ctx.api("/v1/events", { params: params(null, PAGE), full: true, slot: "ev-feed", nocache: true });
+          st.items = r.data || []; st.total = (r.meta && r.meta.total) || st.items.length; st.cursor = r.meta && r.meta.next_cursor;
           count.textContent = `${fmt.num(st.total)} event${st.total === 1 ? "" : "s"}`;
           drawFeed(); loadHist();
         } catch (e) { /* keep the current feed */ }

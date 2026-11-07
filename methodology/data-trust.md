@@ -1,6 +1,6 @@
 # Data trust: source, freshness, availability basis, confidence
 
-Every listing can carry a **trust block** (`GET /v1/trust/listings`, and
+Every listing can carry a **trust block** (`GET /v1/listings`, and
 `quality.trust.listing_trust(row)` for other modules). It is built from observable facts
 only. OpenGrid does not invent a reliability score: the confidence label is a fixed rule
 over the facts below, and the reasons are returned with it. The listing's own fields are
@@ -37,7 +37,7 @@ not a claim about the provider's uptime, capacity or service quality.
 
 ## Provider health
 
-`GET /v1/ops/providers` (admin; includes error text) and `GET /v1/trust/providers`
+`GET /v1/ops/providers` (admin; includes error text) and `GET /internal/trust/providers`
 (data:read; no error text or endpoint paths). Per provider, from `raw_snapshots`,
 `compute_listings` and the quality tables:
 

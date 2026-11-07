@@ -234,22 +234,22 @@ def test_db_shifts_items_api():
         import main
         from fastapi.testclient import TestClient
         client = TestClient(main.app, headers={"X-OpenGrid-Request": "1"})
-        r = client.get("/v1/shifts", params={"gpu": "h100-80gb-sxm5"})
+        r = client.get("/v1/events/shifts", params={"gpu": "h100-80gb-sxm5"})
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["meta"]["heading"].endswith("(not necessarily causal)") and body["meta"]["methodology"] == "/methodology/shifts"
         assert {x["kind"] for x in body["data"]} == {"observed", "archived"}
         top = next(x for x in body["data"] if x["kind"] == "observed")["top_items"]
         assert top and top[0]["item_type"] != "market_event", "the list leads with outside items"
-        assert client.get("/v1/shifts", params={"kind": "archived"}).json()["data"][0]["kind"] == "archived"
-        assert client.get("/v1/shifts", params={"type": "bogus"}).status_code == 422
-        det = client.get(f"/v1/shifts/{med[0]['id']}").json()
+        assert client.get("/v1/events/shifts", params={"kind": "archived"}).json()["data"][0]["kind"] == "archived"
+        assert client.get("/v1/events/shifts", params={"type": "bogus"}).status_code == 422
+        det = client.get(f"/v1/events/shifts/{med[0]['id']}").json()
         assert det["data"]["heading"].endswith("(not necessarily causal)") and det["data"]["items"]
-        assert client.get("/v1/shifts/999999").status_code == 404
-        defn = client.get("/v1/shifts/definition").json()["data"]
+        assert client.get("/v1/events/shifts/999999").status_code == 404
+        defn = client.get("/v1/events/shifts/definition").json()["data"]
         assert defn["thresholds"]["median_min"] == 0.10 and defn["thresholds"]["k_times_rms"] == 3.0
         from api import pages
-        assert "shifts" in pages.PUBLIC_V1
+        assert "events" in pages.PUBLIC_V1  # shifts live under /v1/events/shifts
 
         # Wording: every OpenGrid-authored string about shifts, and the methodology page, makes no causal claim.
         authored = _authored(body) + _authored(det) + _authored(defn) + [shifts.NOTE, shifts.NOT_CAUSAL]

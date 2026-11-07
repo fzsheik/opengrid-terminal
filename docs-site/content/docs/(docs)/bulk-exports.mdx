@@ -1,0 +1,54 @@
+---
+title: Bulk exports
+description: One completed UTC day of a dataset as one gzipped JSON-lines file.
+icon: Download
+---
+
+For backfills and warehouses, download whole days instead of paging.
+
+```bash
+curl -o listings-2026-11-05.jsonl.gz \
+  "https://data.tryopengrid.com/v1/exports/listings?date=2026-11-05" \
+  -H "Authorization: Bearer $OPENGRID_API_KEY"
+
+gunzip -c listings-2026-11-05.jsonl.gz | head -1
+```
+
+## Datasets
+
+| Dataset | One line per |
+| --- | --- |
+| `listings` | Public listing as it stood at 23:59:59 UTC that day (the [point-in-time](/point-in-time) read). |
+| `listing_changes` | Recorded change of price, availability or capacity during the day. |
+| `index_levels` | Public index per hour of the day. |
+| `fixings` | Official fixing taken for a time in the day. |
+
+`GET /v1/exports` lists the datasets and the first day each one has data.
+
+## Rules
+
+- `date` must be a **completed** UTC day, yesterday or earlier. Today is a `422`.
+- The file is `application/gzip`, one JSON object per line, named `opengrid-<dataset>-<date>.jsonl.gz`.
+- Rows follow the same [data rules](/data-rules) as the API: ids, `Z` timestamps, and fixing values as strings.
+- A past day never changes, so cache it. Responses carry `Cache-Control: private, max-age=86400`.
+
+## Loading into a warehouse
+
+```python
+import gzip
+import json
+import os
+from datetime import date, timedelta
+
+import requests
+
+day = (date.today() - timedelta(days=1)).isoformat()
+r = requests.get(
+    f"https://data.tryopengrid.com/v1/exports/listings?date={day}",
+    headers={"Authorization": f"Bearer {os.environ['OPENGRID_API_KEY']}"},
+    timeout=300,
+)
+r.raise_for_status()
+rows = [json.loads(line) for line in gzip.decompress(r.content).splitlines() if line]
+print(len(rows), "listings on", day)
+```

@@ -1,0 +1,57 @@
+---
+title: Responses
+description: One envelope for every success, one shape for every error.
+icon: Braces
+---
+
+## Success
+
+```json
+{
+  "data": { "...": "the resource, or a list of them" },
+  "meta": {
+    "as_of": "2026-11-06T14:00:00Z",
+    "api_version": "2026-11-03",
+    "request_id": "req_5bd092f30d380c07d2f32f8f",
+    "next_cursor": null
+  }
+}
+```
+
+| `meta` field | Meaning |
+| --- | --- |
+| `as_of` | When the response was built, UTC. Each row also carries its own observation time, such as `observed_at`. |
+| `api_version` | The version the body is shaped for. See [Versioning](/versioning). |
+| `request_id` | Unique per request. Quote it when you contact us. |
+| `limit`, `next_cursor`, `total` | On lists. See [Pagination](/pagination). |
+
+Some routes add context to `meta`, such as `methodology` (the document that defines the numbers) or `kind`
+(`observed`, `estimated` or `inferred`).
+
+## Errors
+
+Every error, including authentication and rate limits, has this shape:
+
+```json
+{
+  "error": {
+    "type": "invalid_request",
+    "code": "invalid_parameter",
+    "message": "window: Input should be '24h', '7d', '30d', '90d', 'ytd' or 'all'",
+    "param": "window",
+    "request_id": "req_b8f8cd7f553c12d68b341bb0",
+    "docs_url": "https://docs.tryopengrid.com/errors#invalid_parameter"
+  }
+}
+```
+
+Branch on `code`, never on `message`. See [Errors](/errors) for every code.
+
+## Headers
+
+| Header | On | Meaning |
+| --- | --- | --- |
+| `X-Request-Id` | every response | Same as `request_id`. |
+| `OpenGrid-Version` | every response | The version used. |
+| `X-RateLimit-Limit`, `-Remaining`, `-Reset` | every response | Your budget. See [Rate limits](/rate-limits). |
+| `ETag`, `Cache-Control`, `Vary` | successful `GET`s | See [Caching](/caching). |

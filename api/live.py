@@ -22,12 +22,12 @@ METHOD = "live-feeds"
 lium_stream.register()  # the lium_stream supervisor job (off when the poller or LIUM_STREAM_ENABLED is off)
 
 
-@router.get("/v1/live/status", tags=["live"], summary="State of each live market stream")
+@router.get("/internal/live/status", tags=["live"], summary="State of each live market stream")
 def live_status(who: Principal = Depends(READ)):
     return envelope([lium_stream.status()], kind=OBSERVED, methodology=METHOD)
 
 
-@router.get("/v1/live/events", tags=["live"], summary="Change-only events recorded from live streams, newest first")
+@router.get("/internal/live/events", tags=["live"], summary="Change-only events recorded from live streams, newest first")
 def live_events(provider: str = "lium", item: str | None = None, since: datetime | None = None,
                 limit: int = Query(100, ge=1, le=1000), raw: bool = False, who: Principal = Depends(READ)):
     import normalize

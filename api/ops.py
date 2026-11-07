@@ -134,35 +134,7 @@ _LISTING_COLS = (
 )
 
 
-@router.get("/v1/trust/listings", summary="Listings with their trust block (source, freshness, availability basis)")
-def trust_listings(gpu: str | None = None, provider: str | None = None,
-                   limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0),
-                   who: Principal = Depends(reader)):
-    canonical = resolve_gpu(gpu) if gpu else None
-    q = f"SELECT {_LISTING_COLS} FROM compute_listings WHERE visibility = 'public'"  # public read: public tier
-    params: dict = {}
-    if canonical:
-        q += " AND canonical_gpu_name = :g"
-        params["g"] = canonical
-    if provider:
-        q += " AND provider = :p"
-        params["p"] = provider
-    q += " ORDER BY price_per_gpu_hour NULLS LAST, provider, listing_id"
-    with normalize.SessionLocal() as s:
-        rows = [dict(r._mapping) for r in s.execute(text(q), params)]
-    items, pg = page(rows, limit, offset)
-    ctx = trust.context(sorted({r["provider"] for r in items}) or [provider or ""],
-                        [(r["provider"], r["listing_id"]) for r in items])
-    out = []
-    for r in items:
-        for k in ("price_per_gpu_hour", "price_per_instance_hour"):
-            r[k] = None if r[k] is None else float(r[k])
-        out.append({**r, "trust": trust.listing_trust(r, ctx)})
-    return envelope(out, kind=OBSERVED, methodology=M_TRUST, pagination=pg, gpu=canonical,
-                    trust_kind=INFERRED, price_concept="list_price")
-
-
-@router.get("/v1/trust/providers", summary="Provider feed health (no internal error text)")
+@router.get("/internal/trust/providers", summary="Provider feed health (no internal error text)")
 def trust_providers(who: Principal = Depends(reader)):
     import provider_meta  # a wholly internal provider is not named on public lists
 

@@ -295,26 +295,38 @@ def test_end_to_end_on_synthetic_history():
 def _endpoints():
     from fastapi.testclient import TestClient
 
+    import gpu_ids
     import main
 
     c = TestClient(main.app)  # not entered: no lifespan, so nothing touches the dev database
-    for path in ("/v1/gpus", "/v1/gpus/h100-80gb-sxm5", "/v1/markets/h100-80gb-sxm5", "/v1/markets/h100-80gb-sxm5/dispersion",
-                 "/v1/markets/h100-80gb-sxm5/dispersion?resolution=1h&days=2",
-                 "/v1/spreads", "/v1/providers", "/v1/providers/syn_alpha", "/v1/hardware", "/v1/regions",
-                 "/v1/heatmaps/gpu-region-cheapest", "/v1/heatmaps/gpu-time-volatility",
-                 "/v1/compare?a=h100-80gb-sxm5&b=h200-141gb-sxm5", "/v1/compare?a=syn_alpha&b=syn_beta"):
+    for path in ("/v1/gpus", "/v1/gpus/h100-80gb-sxm5", "/v1/markets", "/v1/markets/h100-80gb-sxm5",
+                 "/v1/markets/h100-80gb-sxm5/history/dispersion", "/v1/markets/h100-80gb-sxm5/history/dispersion?interval=1h&days=2",
+                 "/v1/providers", "/v1/providers/syn_alpha", "/v1/regions",
+                 "/internal/heatmaps/gpu-region-cheapest", "/internal/heatmaps/gpu-time-volatility",
+                 "/internal/compare?a=h100-80gb-sxm5&b=h200-141gb-sxm5", "/internal/compare?a=syn_alpha&b=syn_beta"):
         r = c.get(path)
         assert r.status_code == 200, (path, r.status_code, r.text[:500])
         body = r.json()
         assert "data" in body and "as_of" in body["meta"], path
     assert c.get("/v1/gpus/not-a-gpu").status_code == 404
     assert c.get("/v1/providers/nobody").status_code == 404
-    assert c.get("/v1/heatmaps/nonsense").status_code == 404
-    assert c.get("/v1/compare?a=h100-80gb-sxm5&b=syn_alpha").status_code == 400
+    assert c.get("/internal/heatmaps/nonsense").status_code == 404
+    assert c.get("/internal/compare?a=h100-80gb-sxm5&b=syn_alpha").status_code == 400
     g = c.get("/v1/gpus").json()
     assert g["meta"]["total"] == len(canonical.all_canonical_names())
     m = c.get("/v1/markets/h100-80gb-sxm5").json()
     assert m["meta"]["methodology"] == "/methodology/dispersion" and m["data"]["score"]
+    assert m["data"]["capability"] and m["data"]["alternatives"] and m["data"]["price"]["unit"] == "gpu_hour"
+    rows = c.get("/v1/markets").json()["data"]
+    h = next(r for r in rows if r["gpu"] == "nvidia-h100-80gb-sxm5")
+    assert h["price"]["low"] == m["data"]["price"]["low"] and h["score"]["efficiency"] == m["data"]["score"]["efficiency"]
+    # Equivalence with the retired /v1/gpus price columns: both read dispersion.market_now, unchanged numbers.
+    from analytics import dispersion
+    for r in rows:
+        old_m = dispersion.market_now(gpu_ids.BY_ID[r["gpu"]])
+        assert r["providers"] == old_m["providers"], (r, old_m)
+        for k in ("low", "median", "high"):  # equal up to the API's 12-significant-digit cleanup
+            assert abs(r["price"][k] - old_m[k]) < 1e-9, (k, r, old_m)
     p = c.get("/v1/providers/syn_alpha").json()["data"]
     assert p["catalog"] and "beats_the_market" in p and p["rank_history"]
 

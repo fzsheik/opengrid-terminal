@@ -1013,8 +1013,9 @@ def _row(r) -> dict:
 
 
 def query(gpu=None, provider=None, since=None, types=None, severities=None, min_severity=None,
-          limit=200, offset=0, until=None) -> tuple[list[dict], int]:
-    """Events newest first, plus the total matching count (for pagination)."""
+          limit=200, offset=0, until=None, before=None) -> tuple[list[dict], int]:
+    """Events newest first, plus the total matching count (for pagination). `before` = (occurred_at, id) of the
+    previous page's last row: a keyset page that stays stable while new events arrive."""
     sev = list(severities or [])
     if min_severity in SEVERITIES:
         sev = [x for x in SEVERITIES[SEVERITIES.index(min_severity):] if not severities or x in severities]
@@ -1033,6 +1034,9 @@ def query(gpu=None, provider=None, since=None, types=None, severities=None, min_
     w = " AND ".join(where)
     with normalize.SessionLocal() as s:
         total = s.execute(text(f"SELECT count(*) FROM market_events WHERE {w}"), params).scalar()
+        if before:
+            w += " AND (occurred_at, id) < (:bt, :bid)"
+            params["bt"], params["bid"] = before
         rows = s.execute(text(f"""
             SELECT id, occurred_at, detected_at, type, segment, gpu, provider, region_group, severity, title,
                    detail, value_before, value_after, pct, dedupe_key

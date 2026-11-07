@@ -398,6 +398,8 @@ def test_first_paid_job_e2e():
                             "synthetic": "e2e test: GPU-shaped result"})
         rep.phase("artifacts_uploaded", uploaded=sorted(up["uploaded"]))
         rep.phase("training_completed", test_accuracy=0.982)
+        # Billing rounds a slice to whole seconds: a sub-second run meters nothing and step 10 found no slice.
+        time.sleep(1.2)
         assert rep.complete("succeeded", {"exit_code": 0, "synthetic": True}), "complete not delivered"
         ja_row = T.job_row(ja)
         assert ja_row.outcome == "succeeded", (ja_row.status, ja_row.failure_code, ja_row.failure_reason)

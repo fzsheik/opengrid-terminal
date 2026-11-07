@@ -1,0 +1,55 @@
+---
+title: Versioning
+description: Dated versions keep your integration stable while the API grows.
+icon: GitBranch
+---
+
+The URL always starts with `/v1`. The shape of a response is chosen by a dated version, sent in the
+`OpenGrid-Version` header:
+
+```bash
+curl https://data.tryopengrid.com/v1/markets \
+  -H "Authorization: Bearer $OPENGRID_API_KEY" \
+  -H "OpenGrid-Version: 2026-11-03"
+```
+
+## Which version you get
+
+1. The `OpenGrid-Version` header, if you send one.
+2. Otherwise, the version pinned to your key when it was created.
+3. Otherwise, the latest version.
+
+Every response says which version it was shaped for, in the `OpenGrid-Version` response header and in
+`meta.api_version`.
+
+An unknown or retired version is a `400` with code `unknown_api_version`, and the message lists the supported dates.
+
+<Callout title="Recommendation">
+  Send `OpenGrid-Version` on every request. Your integration then only changes shape when you change the header.
+</Callout>
+
+## Supported versions
+
+| Version | Status |
+| --- | --- |
+| `2026-11-03` | Current |
+
+## What changes without a new version
+
+These are additive, so they can ship at any time. Write your client to tolerate them:
+
+- a new endpoint,
+- a new field in a response,
+- a new optional parameter,
+- a new value in an enum field. Treat unknown values as "other", and don't fail on them.
+
+## What needs a new version
+
+Removing or renaming a field, changing a type, unit or meaning, adding a required parameter, changing a default, or
+changing an error `code`. Each one ships as a new dated version, and requests pinned to an older version keep the old
+shape.
+
+## Deprecation
+
+A version is supported for at least 12 months after its successor ships, with at least 6 months' notice by email
+and in `Deprecation` and `Sunset` response headers. See the [changelog](/changelog).

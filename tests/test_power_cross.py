@@ -3,7 +3,7 @@ power/cross.py, api/power.py): parsing over REAL saved EIA answers (hour-ending 
 months), the region -> price-series mapping (documented places only), power cost per GPU-hour, the spread, lagged
 correlations (a designed 2-day lag is found; gas as a slow input), the shifts hook (read-time only: market_shift_items
 untouched), and visibility: EIA-930 public, gas internal by choice, every derived row internal; the public
-/v1/power/series never shows an ISO or gas value. No network: httpx.MockTransport.
+power has no public route. No network: httpx.MockTransport.
 
 Fixtures (real EIA API v2 answers, captured 2026-11-05; the api_key is not in them):
     fixtures_power/eia_region_ciso_erco_2025-11-02.json   region-data CISO + ERCO, UTC day 2025-11-02 (168 rows)
@@ -263,16 +263,9 @@ def test_db_cross_api():
             m = op.get("/v1/ops/power/map").json()
             assert m["meta"]["mapped"] >= 1
             assert op.get("/v1/ops/power/series?source=eia_gas").json()["meta"]["count"] == 5
-            pub = anon.get("/v1/power/series")
-            assert pub.status_code == 200, pub.text[:200]
-            cat = pub.json()["data"]
-            assert cat and {c["source"] for c in cat} == {"eia"} and {c["visibility"] for c in cat} == {"public"}
-            r = anon.get("/v1/power/series?key=eia.actual.demand.ciso")
+            assert anon.get("/v1/power/series").status_code == 404, "power has no public route"
+            r = op.get("/v1/ops/power/series?key=eia.actual.demand.ciso")
             assert r.status_code == 200 and r.json()["data"][0]["n"] == 24
-            for k in ("caiso.da.lmp.th_np15", "eia_gas.spot.spot_price.henry_hub"):
-                r = anon.get(f"/v1/power/series?key={k}")
-                assert r.status_code == 404, (k, r.status_code)
-                assert op.get(f"/v1/power/series?key={k}").status_code == 404, "the public read is public-only for admins too"
         finally:
             keys.verify = real
     finally:

@@ -70,5 +70,5 @@ rows per ticker.
   on-demand market median and lowest % move (`market_gpu_hourly`, the last hour on or before each date, at most 48 h
   stale). For internal context, for example the shifts / explanations work; never shown publicly.
 
-`/v1/context/series` and `/v1/context/power` filter on `visibility = 'public'` for every caller, admins included;
+`/v1/macro/series` and `/v1/macro/power` filter on `visibility = 'public'` for every caller, admins included;
 `tests/test_equities.py` checks anonymous, keyed and operator callers.

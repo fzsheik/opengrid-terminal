@@ -4,7 +4,7 @@ No build step. Plain scripts loaded by `index.html` in this order:
 `lib.js` (pure helpers, tested by `tests/test_lib.js`) → `core.js` (global `OG`) → `charts.js` (`OG.charts`)
 → `pages/*.js` (one file per section, each calls `OG.page`) → `OG.start()`.
 
-`classic.html` is the older standalone page at `/classic` (tested by `tests/test_page.js`); leave it alone.
+The older standalone page at `/classic` is retired: the route redirects to `/gpus`.
 `app.js` is a legacy shim kept so `/static/app.js` still resolves.
 
 The server (`api/pages.py`) serves `index.html` for every page path with the title, description,
@@ -46,7 +46,7 @@ OG.page("/gpu/:slug", {
   resolves; older ones reject with `err.stale === true` (ignore those).
 - `OG.api.soft(path, opts)` → data or `null` on any error. Use it for endpoints that may not exist yet.
 - `OG.data.gpuName(slug)` (sync, from the boot block), `OG.data.gpus()` → `[{slug, name, short, vendor, weight, live}]`,
-  `OG.data.providers()` → provider_meta dicts, `OG.data.market(hours)` → cached `/market`.
+  `OG.data.providers()` → provider_meta dicts, `OG.data.market(hours)` → cached `/v1/markets?trend=true`.
   `OG.data.families()` (soft /v1/families, cached), `OG.data.family(slug)` (one family or null), `OG.data.intervals()`
   (Map provider → poll seconds). A `/gpu/<family>` path renders `pages/family.js` (variants side by side, never merged).
   `OG.slug(name)` equals `api.common.gpu_slug`. `OG.resolveGpu(q)` (async fuzzy), `OG.resolveProvider(q)`.
@@ -59,7 +59,7 @@ OG.page("/gpu/:slug", {
 - `OG.reasonOf(obj)` reads `reason | unavailable_reason | insufficient_reason | coverage_reason`.
 - `OG.kindBadge("observed" | "estimated" | "transaction"; "inferred" renders nothing)` (links to /methodology/data-kinds),
   `OG.freshBadge(isoOrSeconds | "fresh" | "aging" | "stale", {intervalSeconds, provider, now})`: relative to the
-  provider's poll interval when known (fresh ≤ 2×, aging ≤ 6×; `{provider}` looks it up from /polling via
+  provider's poll interval when known (fresh ≤ 2×, aging ≤ 6×; `{provider}` looks it up from /internal/polling via
   `OG.data.intervals()`), else fresh ≤ 30 min, aging ≤ 3 h. `OG.badge(text, tone)`.
 - `OG.loading(text)`, `OG.empty(text)`, `OG.error(err, retryFn)`.
 

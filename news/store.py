@@ -305,23 +305,29 @@ def related(gpu=None, provider=None, region_group=None, t0=None, t1=None, limit=
     return out[:limit]
 
 
-def list_stories(limit=50, offset=0, **filters) -> tuple[list[dict], int]:
-    """Story-clustered listing: one entry per story_id, newest activity first, with every source."""
+def list_stories(limit=50, offset=0, before=None, keys=False, **filters) -> tuple[list[dict], int]:
+    """Story-clustered listing: one entry per story_id, newest activity first, with every source.
+    `before` = (last activity, story id) of the previous page's last story: keyset paging. A story only moves up
+    when a new item joins it, so paging forward never repeats one. keys=True adds each story's sort key as _keyset."""
+    from sqlalchemy import tuple_
+
     w = _filters(**filters)
     sid = func.coalesce(NewsItem.story_id, NewsItem.id)
-    grouped = (select(sid.label("story"), func.max(NewsItem.published_at).label("last"),
-                      func.count().over().label("total"))
-               .where(and_(*w)).group_by(sid).order_by(func.max(NewsItem.published_at).desc())
-               .limit(limit).offset(offset))
+    last = func.max(NewsItem.published_at)
+    grouped = (select(sid.label("story"), last.label("last"))
+               .where(and_(*w)).group_by(sid).order_by(last.desc(), sid.desc()).limit(limit).offset(offset))
+    if before:
+        grouped = grouped.having(tuple_(last, sid) < tuple(before))
     with normalize.SessionLocal() as s:
         page = s.execute(grouped).all()
-        total = page[0].total if page else (s.execute(select(func.count(func.distinct(sid))).where(and_(*w))).scalar() or 0)
+        total = s.execute(select(func.count(func.distinct(sid))).where(and_(*w))).scalar() or 0
         ids = [p.story for p in page]
         members = list(s.scalars(select(NewsItem).where(func.coalesce(NewsItem.story_id, NewsItem.id).in_(ids)))) if ids else []
     by_story: dict[int, list] = defaultdict(list)
     for m in members:
         by_story[m.story_id or m.id].append(m)
     out = []
+    sort_key = {p.story: (p.last, p.story) for p in page}
     for story in ids:
         items = sorted(by_story.get(story, []), key=lambda r: r.published_at)
         if not items:
@@ -334,6 +340,8 @@ def list_stories(limit=50, offset=0, **filters) -> tuple[list[dict], int]:
                            "source_name": (registry.get(r.source_id).name if registry.get(r.source_id) else r.source_id),
                            "url": r.url, "title": r.title, "published_at": r.published_at} for r in items],
                  source_count=len({r.source_id for r in items}))
+        if keys:
+            d["_keyset"] = sort_key[story]
         out.append(d)
     return out, int(total)
 

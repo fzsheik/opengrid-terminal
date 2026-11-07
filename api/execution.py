@@ -7,7 +7,7 @@
     GET  /v1/admin/quality                      routing quality aggregates + per-route outcomes (all)        [admin]
     POST /v1/admin/quality/recompute            recompute route_outcomes now (full=true: every row)          [admin]
     GET  /v1/quality                            the same, for the calling account                            [deployments:read]
-    GET  /v1/reliability                        provider reliability from real transactions (customer)       [data:read]
+    GET  /v1/execution/reliability              provider reliability from real transactions (customer)       [data:read]
     GET  /v1/admin/reliability                  ... plus validation deployments and in-process call counters [admin]
     GET  /v1/economics                          savings vs market median (account-scoped; operator: all)     [deployments:read]
 """
@@ -250,7 +250,7 @@ def my_quality(days: float | None = Query(90, gt=0, le=3650), limit: int = Query
                     kind=TRANSACTION, methodology="routing-quality")
 
 
-@router.get("/v1/reliability", tags=["routing"], summary="Provider reliability from OpenGrid's real launches")
+@router.get("/v1/execution/reliability", tags=["routing"], summary="Provider reliability from OpenGrid's real launches")
 def get_reliability(provider: str | None = None, who: Principal = Depends(require_scope("data:read"))):
     return envelope(reliability.report(provider=provider), kind=TRANSACTION, methodology="reliability")
 

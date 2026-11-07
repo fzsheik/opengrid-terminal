@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
 from accounts.auth import principal
@@ -94,29 +94,24 @@ def is_page_path(path: str) -> bool:
 
 
 # /v1 areas readable without a key when PUBLIC_PAGES is on (GET/HEAD only).
-PUBLIC_V1 = ("gpus", "markets", "indices", "history", "spreads", "events", "news", "providers", "heatmaps",
-             "overview", "tape", "methodology", "timeline", "best", "capabilities", "opportunities", "trust",
-             "families", "scopes", "fixings", "recommend", "assistant", "compare", "regions", "hardware", "uptime", "probes", "capacity", "fx", "freshness",
-             # Major shifts with related items (read-only, like events; never causal).
-             "shifts",
+PUBLIC_V1 = ("gpus", "markets", "listings", "indices", "events", "news", "providers", "methodology", "timeline", "best", "capabilities", "families", "scopes", "fixings", "recommend", "assistant", "regions", "capacity", "fx", "reliability",
              # Reserved / committed list prices (read-only, like capacity). Not "reservations" (private, below).
              "reserved",
              # Full cost: cost components, billing increments, the reference-job estimator (read-only).
-             "cost",
+             "costs",
              # Market context: public-domain numeric series (EIA, SEC EDGAR) beside prices (read-only).
-             "context",
-             # US grid data (EIA-930, public domain) only; ISO prices and gas are internal (api/power.py).
-             "power")
+             "macro")
 # POSTs that are public too: read-only computations over the request body (no writes, no provider calls, no
 # quotes; the market read is routing.scoring.rank_listings). Exactly these paths; the anonymous rate limit applies.
 # /v1/assistant: the OpenGrid Assistant is READ-ONLY (assistant/tools.py has no mutation tools; it writes no rows,
 # issues no quote, calls no provider); POST only because the question and context are a body.
-PUBLIC_POST = ("/v1/recommend/estimate", "/v1/recommend", "/v1/assistant", "/v1/cost/estimate")
+PUBLIC_POST = ("/v1/recommend/estimate", "/v1/recommend", "/v1/assistant", "/v1/costs/estimate")
 # Never public, whatever else matches: money, private data, operator functions.
 PRIVATE_V1 = ("route", "deployments", "keys", "admin", "ops", "me", "usage", "billing", "watchlists", "alerts", "credentials", "jobs", "quotes",
               "reservations")
-# The first UI's JSON reads, which the interim pages still call. Read-only current market data.
-PUBLIC_LEGACY = ("/market", "/market/detail", "/listings", "/polling", "/changes")
+# /internal areas readable without the site password when PUBLIC_PAGES is on (UI-only views that were public at
+# /v1). Not "live" (operator-only, as before).
+PUBLIC_INTERNAL = ("overview", "tape", "opportunities", "heatmaps", "compare", "uptime", "trust", "polling")
 
 
 def is_public(request: Request) -> bool:
@@ -134,7 +129,9 @@ def is_public(request: Request) -> bool:
         if area in PRIVATE_V1:
             return False
         return area in PUBLIC_V1
-    if path in ("/robots.txt", "/sitemap.xml") or path in PUBLIC_LEGACY:
+    if path.startswith("/internal/"):  # the website's own reads: never on the Data API host, never with a key
+        return path[len("/internal/"):].split("/", 1)[0] in PUBLIC_INTERNAL
+    if path in ("/robots.txt", "/sitemap.xml"):
         return True
     if path.startswith("/static/"):
         return True
@@ -653,11 +650,11 @@ def methodology_source(name: str) -> str:
 
 
 @router.get("/v1/methodology", summary="Methodology documents: name, title, links")
-def v1_methodology(who=Depends(principal)):
+def v1_methodology(limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, who=Depends(principal)):
     summaries = _methodology_summaries()
     docs = [{"name": n, "title": t, "summary": summaries.get(n) or None, "html": f"/methodology/{n}", "markdown": f"/v1/methodology/{n}"}
             for n, t in methodology_titles()]
-    return envelope(docs)
+    return envelope(page=(limit, cursor), data=docs)
 
 
 def _methodology_summaries() -> dict:

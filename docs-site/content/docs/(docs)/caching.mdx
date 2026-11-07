@@ -1,0 +1,48 @@
+---
+title: Caching
+description: ETags and conditional requests.
+icon: DatabaseZap
+---
+
+Every successful `GET` carries:
+
+```http
+ETag: "3f2a9c..."
+Cache-Control: private, max-age=60
+Vary: Authorization, OpenGrid-Version
+```
+
+- **`ETag`** identifies the data and the API version. It ignores `as_of` and `request_id`, so it only changes when the data does.
+- **`Cache-Control: private, max-age=60`**: your client may reuse a response for 60 seconds. Shared caches and CDNs
+  must not store it.
+
+## Conditional requests
+
+Send the last `ETag` back in `If-None-Match`. If nothing changed, you get `304 Not Modified` with no body:
+
+```bash
+curl -i https://data.tryopengrid.com/v1/markets \
+  -H "Authorization: Bearer $OPENGRID_API_KEY" \
+  -H 'If-None-Match: "3f2a9c..."'
+# HTTP/2 304
+```
+
+```python
+etag, cached = None, None
+
+def markets(session):
+    global etag, cached
+    r = session.get("https://data.tryopengrid.com/v1/markets",
+                    headers={"If-None-Match": etag} if etag else {})
+    if r.status_code == 304:
+        return cached
+    r.raise_for_status()
+    etag, cached = r.headers.get("ETag"), r.json()
+    return cached
+```
+
+A `304` still counts against your [rate limit](/rate-limits), but it is faster and carries no body.
+
+## Exports
+
+A completed day's [bulk export](/bulk-exports) never changes, so it carries `Cache-Control: private, max-age=86400`.

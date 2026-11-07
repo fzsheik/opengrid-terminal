@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 import news.ingest  # noqa: F401  (registers the news poll job)
 from accounts.auth import Principal, require_scope
-from api.common import INFERRED, OBSERVED, envelope, resolve_gpu
+from api.common import INFERRED, OBSERVED, envelope, keyset_cursor, keyset_values, resolve_gpu
 from news import classify as cls
 from news import sources as registry
 from news import store, timeline as tl
@@ -106,38 +106,41 @@ _CLASSIFICATION = "entities, topics and relevance are assigned by deterministic 
 def news_list(gpu: str | None = None, provider: str | None = None, region: str | None = None,
               topic: str | None = None, source: str | None = None, q: str | None = Query(None, max_length=200),
               since: str | None = None, min_relevance: int = Query(1, ge=0, le=100),
-              limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
+              limit: int = Query(50, ge=1, le=200), cursor: str | None = None,
               _: Principal = Depends(READ)):
     if source and registry.get(source) is None:
         raise HTTPException(404, f"unknown source {source!r}; see /v1/news/sources")
     stories, total = store.list_stories(
-        limit=limit, offset=offset, gpu=_gpu(gpu), provider=provider.lower() if provider else None,
+        limit=limit + 1, before=keyset_values(cursor, 2) if cursor else None, keys=True, gpu=_gpu(gpu), provider=provider.lower() if provider else None,
         region_group=_region(region), topic=_topic(topic), source=source, q=q, t0=_time(since, "since"),
         min_relevance=min_relevance)
+    more, stories = len(stories) > limit, stories[:limit]
+    keys = [st.pop("_keyset") for st in stories]  # the exact sort key of each story (filtered last activity, id)
+    nxt = keyset_cursor(*keys[-1]) if more and keys else None
     return envelope(stories, kind=OBSERVED, methodology=METHODOLOGY, classification=_CLASSIFICATION,
-                    clustered_by="story_id", pagination={"limit": limit, "offset": offset, "total": total})
+                    clustered_by="story_id", limit=limit, next_cursor=nxt, total=total)
 
 
 @router.get("/v1/news/sources")
-def news_sources(_: Principal = Depends(READ)):
+def news_sources(limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, _: Principal = Depends(READ)):
     rows = store.sources_health()
-    return envelope(rows, methodology=METHODOLOGY, enabled=sum(1 for r in rows if r["enabled"]),
+    return envelope(page=(limit, cursor), data=rows, methodology=METHODOLOGY, enabled=sum(1 for r in rows if r["enabled"]),
                     disabled=sum(1 for r in rows if not r["enabled"]))
 
 
 @router.get("/v1/news/topics")
-def news_topics(_: Principal = Depends(READ)):
+def news_topics(limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, _: Principal = Depends(READ)):
     counts = store.topic_counts(30)
     data = [{**t, "items_30d": counts.get(t["id"], 0)} for t in cls.topic_catalog()]
-    return envelope(data, kind=INFERRED, methodology=METHODOLOGY)
+    return envelope(page=(limit, cursor), data=data, kind=INFERRED, methodology=METHODOLOGY)
 
 
 @router.get("/v1/news/families")
-def news_families(_: Principal = Depends(READ)):
+def news_families(limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, _: Principal = Depends(READ)):
     import families
 
     data = families.classifier_families()
-    return envelope(data, kind=INFERRED, methodology="families", count=len(data),
+    return envelope(page=(limit, cursor), data=data, kind=INFERRED, methodology="families", count=len(data),
                     note="every GPU family the news classifier recognises; tracked=false means OpenGrid has no "
                          "canonical variant (no market data) for it yet. " + families.NOTE)
 

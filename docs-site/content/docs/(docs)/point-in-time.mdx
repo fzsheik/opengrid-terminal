@@ -1,0 +1,36 @@
+---
+title: Point in time
+description: Ask what the market looked like at any past moment.
+icon: RotateCcwClock
+---
+
+`GET /v1/listings` accepts `as_of`, an ISO 8601 UTC time. It returns each public listing as it was last recorded at
+or before that moment:
+
+```bash
+curl "https://data.tryopengrid.com/v1/listings?gpu=nvidia-h100-80gb-sxm5&as_of=2026-10-01T00:00:00Z" \
+  -H "Authorization: Bearer $OPENGRID_API_KEY"
+```
+
+## What counts as live
+
+A listing is included if it had been seen by `as_of` and was still being seen then (within its last sighting plus a
+few polls). This is the same rule the price charts use, so a point-in-time read agrees with history.
+
+## What is and isn't historical
+
+- **Historical:** price, availability, capacity and observation time at that moment.
+- **Current:** static fields such as region and specs.
+- **Null:** `original` (currency conversion) and `trust`, which are not stored historically.
+
+A future `as_of` is a `422`.
+
+## Other ways to look back
+
+| You want | Use |
+| --- | --- |
+| A GPU's low, median and high over time | `GET /v1/markets/{gpu}/history` |
+| Each provider's price line for a GPU | `GET /v1/markets/{gpu}/history/providers` |
+| Every recorded change of a listing | `GET /v1/listings/history` |
+| An index over time | `GET /v1/indices/{index}/history` |
+| A whole past day, in one file | [Bulk exports](/bulk-exports) |

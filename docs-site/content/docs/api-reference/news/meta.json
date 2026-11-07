@@ -1,0 +1,12 @@
+{
+ "title": "News",
+ "pages": [
+  "list-news",
+  "news-gpu-families",
+  "news-sources",
+  "news-topics",
+  "get-a-news-story",
+  "timeline",
+  "timeline-around-a-moment"
+ ]
+}

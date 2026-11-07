@@ -1,0 +1,53 @@
+---
+title: Introduction
+description: Real-time market data for GPU compute, over one REST API.
+icon: House
+---
+
+The OpenGrid Data API gives you the GPU compute market as data: every price OpenGrid observes across cloud and
+marketplace providers, the indices and fixings built from them, capacity, the full cost of a job, provider
+reliability, market events and news.
+
+```txt title="Base URL"
+https://data.tryopengrid.com/v1
+```
+
+Every request needs an API key. Every response says how fresh its data is.
+
+<Cards>
+  <Card title="Quickstart" href="/quickstart">
+    Make your first request in two minutes.
+  </Card>
+  <Card title="API reference" href="/api-reference">
+    Every endpoint, its fields, and a playground to call it with your key.
+  </Card>
+  <Card title="Authentication" href="/authentication">
+    How to get a key and send it.
+  </Card>
+  <Card title="For AI agents" href="/for-agents">
+    llms.txt, markdown pages and the OpenAPI schema.
+  </Card>
+</Cards>
+
+## What you can get
+
+| Area | What it answers | Start with |
+| --- | --- | --- |
+| Markets | What does an H100 cost right now, across every provider? | `GET /v1/markets` |
+| Listings | Which exact offers exist, where, and are they in stock? | `GET /v1/listings` |
+| History | How has that price moved over 24 hours, 90 days, or as far back as archives go? | `GET /v1/markets/{gpu}/history` |
+| Indices and fixings | What is the reference price of a GPU, and can I verify it? | `GET /v1/indices`, `GET /v1/fixings` |
+| Capacity | What do providers report as available? | `GET /v1/capacity` |
+| Costs | What does a whole job cost, with egress and storage? | `POST /v1/costs/estimate` |
+| Reliability | Is a provider's API up, and how fresh is its data? | `GET /v1/reliability/providers` |
+| Events and news | What changed in the market, and what was reported? | `GET /v1/events`, `GET /v1/news` |
+
+## How it works
+
+OpenGrid polls each provider's own API or price list every 15 to 60 minutes. It maps every offer to a canonical
+GPU, converts it to USD per GPU-hour, and checks it before publishing. Every row carries when it was observed, and
+corrections are never silent.
+
+<Callout title="Access">
+  The Data API is available to companies under an enterprise agreement. To get a key, contact us at <Contact />.
+</Callout>

@@ -90,7 +90,7 @@ consecutive failures, the ops error list or the poll-failure counts, and it coun
 the silence alert: being paced is not the source going silent. The capacity stale flag (3 capacity cadences) and the
 capacity-silence alert (at least 2 capacity cadences) follow each provider's capacity cadence.
 
-## The published measure: GET /v1/freshness
+## The published measure: GET /v1/reliability/providers (`freshness`)
 
 Public with public pages on, like `/v1/capacity`; keys need `data:read`. One row per provider and stream (`price`,
 `capacity`; a provider with no capacity data has no capacity row). Filters: `provider`, `stream`.

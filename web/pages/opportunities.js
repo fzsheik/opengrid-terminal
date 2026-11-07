@@ -1,4 +1,4 @@
-/* /opportunities: the opportunity monitor (/v1/opportunities, computed live, cached 60 s).
+/* /opportunities: the opportunity monitor (/internal/opportunities, computed live, cached 60 s).
    Tabs by type (with counts), sorted by score; each item: score, explanation, the numbers, observed/inferred,
    links. Filters (type, gpu, provider, min) live in the URL. Types the server could not evaluate are listed with
    the reason. These are observations about listed prices, not advice and not quotes. */
@@ -125,7 +125,7 @@
         if (st.provider) p.provider = st.provider;
         if (st.min !== "0") p.min_score = st.min;
         try {
-          const r = await ctx.api("/v1/opportunities", { params: p, full: true, slot: "opps" });
+          const r = await ctx.api("/internal/opportunities", { params: p, full: true, slot: "opps" });
           st.data = r.data;
           asof.textContent = r.data.as_of_hour ? `hour ${fmt.dateTime(r.data.as_of_hour)} · ${r.data.total} item${r.data.total === 1 ? "" : "s"}` : "no market history";
           if (r.meta) OG.status.asOf(r.meta.as_of);

@@ -3,11 +3,12 @@
     GET /v1/indices                                     every index with data: level + changes
     GET /v1/indices/{index_id}                          definition, level, constituents, stats
     GET /v1/indices/{index_id}/history                  stored levels over a window
-    GET /v1/history/{gpu}                               lowest / median / highest / providers over time + index
-    GET /v1/history/{gpu}/extended                      daily, archived before recording + observed after (kind per day)
-    GET /v1/history/{gpu}/archived                      ARCHIVED prices before (and alongside) recording: captures of
+    GET /v1/markets/{gpu}/history                       low / median / high / providers over time + index
+    GET /v1/markets/{gpu}/history/providers             each provider's price over time + the market lines
+    GET /v1/markets/{gpu}/history/daily                 daily, archived before recording + observed after (kind per day)
+    GET /v1/markets/{gpu}/history/archived              ARCHIVED prices before (and alongside) recording: captures of
                                                         provider price pages / AWS price-list versions
-    GET /v1/markets/{gpu}/context                       percentiles vs 30d / 90d (stats.gpu_context)
+    (/v1/markets/{gpu}/history/dispersion lives in api/structure.py)
     GET /v1/providers/{provider}/gpus/{gpu}/context     one provider's price vs its own history
     GET /v1/providers/{provider}/listings/context       one listing's price vs its own history
 
@@ -22,11 +23,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 
 import analytics.rollups  # noqa: F401  (registers the market_hourly job)
+import market
 import normalize
 import provider_meta
 from accounts.auth import Principal, require_scope
 from analytics import archived, indices, stats
-from api.common import ARCHIVED, OBSERVED, OBSERVED_MARKET_PRICE, envelope, resolve_gpu, resolve_gpu_or_family
+from api.common import ARCHIVED, OBSERVED, OBSERVED_MARKET_PRICE, envelope, low_high, resolve_gpu
 from cache import ttl_cache
 
 router = APIRouter()
@@ -67,9 +69,9 @@ def _meta():
 
 @router.get("/v1/indices", summary="OpenGrid indices: current level and changes")
 def list_indices(kind: Literal["gpu", "spot", "regional", "provider_class", "composite"] | None = None,
-                 _: Principal = Depends(READ)):
+                 limit: int = Query(100, ge=1, le=1000), cursor: str | None = None, _: Principal = Depends(READ)):
     items = indices.index_list(kind)
-    return envelope(items, **_meta(), count=len(items),
+    return envelope(page=(limit, cursor), data=items, **_meta(), count=len(items),
                     note="Only indices with data in the last 90 days are listed; "
                          "an index with too few constituents is listed unpublished with its reason.")
 
@@ -77,9 +79,8 @@ def list_indices(kind: Literal["gpu", "spot", "regional", "provider_class", "com
 @router.get("/v1/indices/{index_id}", summary="One index: definition, level, constituents, statistics")
 def index_detail(index_id: str, _: Principal = Depends(READ)):
     d = _index(index_id)
-    lv = indices.index_level(index_id)
-    return envelope({"definition": d.as_dict(), **lv, "constituents_now": indices.constituents_now(index_id)},
-                    **_meta())
+    lv = indices.index_level(index_id)  # definition fields once, then the current state
+    return envelope({**d.as_dict(), **lv, "constituents_now": indices.constituents_now(index_id)}, **_meta())
 
 
 @ttl_cache(300, maxsize=512)
@@ -91,11 +92,11 @@ def _history(index_id: str, window: str, resolution: str):
 
 
 @router.get("/v1/indices/{index_id}/history", summary="Stored index levels over a window")
-def index_history(index_id: str, window: Window = "30d", resolution: Resolution | None = None,
+def index_history(index_id: str, window: Window = "30d", interval: Resolution | None = None,
                   _: Principal = Depends(READ)):
     d = _index(index_id)
-    res = _resolution(window, resolution)
-    return envelope({"index_id": index_id, "name": d.name, "unit": d.unit, "window": window, "resolution": res,
+    res = _resolution(window, interval)
+    return envelope({"index": index_id, "index_name": d.name, "unit": d.unit, "window": window, "interval": res,
                      "points": _history(index_id, window, res)}, **_meta())
 
 
@@ -108,16 +109,19 @@ def _gpu_history(gpu: str, segment: str, window: str, resolution: str):
     return out
 
 
-@router.get("/v1/history/{gpu}", summary="One GPU over time: lowest / median / highest / provider count + index")
-def gpu_history(gpu: str, window: Window = "30d", resolution: Resolution | None = None,
+def _one_gpu(value: str) -> str:
+    from api.structure import _gpu_only  # a family is a 404 naming /v1/families/{family}
+    return _gpu_only(value)
+
+
+@router.get("/v1/markets/{gpu}/history", summary="One GPU over time: low / median / high / provider count + index")
+def gpu_history(gpu: str, window: Window = "30d", interval: Resolution | None = None,
                 segment: Segment = "on_demand", _: Principal = Depends(READ)):
-    kind, name = resolve_gpu_or_family(gpu)
-    if kind == "family":
-        from api.families import family_response
-        return family_response(name, requested=gpu, endpoint="history")
-    res = _resolution(window, resolution)
-    data = _gpu_history(name, segment, window, res)
-    return envelope({**data, "window": window}, **_meta(),
+    name = _one_gpu(gpu)
+    res = _resolution(window, interval)
+    data = low_high(_gpu_history(name, segment, window, res))
+    data["interval"] = data.pop("resolution", res)
+    return envelope({**data, "window": window, "currency": "USD", "unit": "gpu_hour"}, **_meta(),
                     note="lowest/median/highest are the plain cross-section of provider prices (one vote per "
                          "provider) and can move when a provider starts being recorded; the index is chain-linked.")
 
@@ -127,11 +131,21 @@ def _gpu_archived(gpu: str, segment: str):
     return archived.gpu_archived(gpu, segment)
 
 
-@router.get("/v1/history/{gpu}/archived",
+@router.get("/v1/markets/{gpu}/history/providers",
+            summary="Each provider's price over time for one GPU, with the market low / median / high")
+def gpu_history_providers(gpu: str, hours: float = Query(24, ge=0, le=24 * 90, description="0 = everything recorded"),
+                          _: Principal = Depends(READ)):
+    d = market.detail(_one_gpu(gpu), hours)
+    return envelope(low_high(d), kind=OBSERVED, methodology=stats.METHODOLOGY, price_concept=OBSERVED_MARKET_PRICE,
+                    note="a price per provider on one shared time grid (null before a provider was recorded or while it "
+                         "had no in-stock listing); market_from is where every provider currently selling was recorded")
+
+
+@router.get("/v1/markets/{gpu}/history/archived",
             summary="One GPU's ARCHIVED price history: public archive captures of provider price pages")
 def gpu_history_archived(gpu: str, segment: Segment = "on_demand", _: Principal = Depends(READ)):
-    name = resolve_gpu(gpu)
-    return envelope(_gpu_archived(name, segment), kind=ARCHIVED, methodology="archived-history",
+    name = _one_gpu(gpu)
+    return envelope(low_high(_gpu_archived(name, segment)), kind=ARCHIVED, methodology="archived-history",
                     price_concept=OBSERVED_MARKET_PRICE,
                     note="recovered from Internet Archive captures and AWS's price-list archive by OpenGrid's own "
                          "parsers; sampled only on capture days; never used in percentiles, indices or routing")
@@ -142,26 +156,16 @@ def _gpu_extended(gpu: str, segment: str, days: int):
     return archived.extended(gpu, segment, days or None)
 
 
-@router.get("/v1/history/{gpu}/extended",
+@router.get("/v1/markets/{gpu}/history/daily",
             summary="One GPU, daily, as far back as archives reach: archived before recording, observed after")
 def gpu_history_extended(gpu: str, days: int = Query(365, ge=0, le=3660, description="0 = everything archived"),
                          segment: Segment = "on_demand", _: Principal = Depends(READ)):
-    name = resolve_gpu(gpu)
-    return envelope(_gpu_extended(name, segment, days), kind="mixed", methodology="archived-history",
+    name = _one_gpu(gpu)
+    return envelope(low_high(_gpu_extended(name, segment, days)), kind="mixed", methodology="archived-history",
                     price_concept=OBSERVED_MARKET_PRICE,
                     note="kind[i] says which: 'archived' days (before archived_until) hold each provider's archived "
                          "price until its next capture; 'observed' days are OpenGrid's own recording. Statistics, "
                          "indices and routing use observed data only.")
-
-
-@router.get("/v1/markets/{gpu}/context", summary="Where the GPU's price sits in its 30d / 90d history")
-def market_context(gpu: str, segment: Segment = "on_demand", _: Principal = Depends(READ)):
-    kind, name = resolve_gpu_or_family(gpu)
-    if kind == "family":
-        from api.families import family_response
-        return family_response(name, requested=gpu, endpoint="context")
-    return envelope(stats.gpu_context(name, segment), kind=OBSERVED, methodology=stats.METHODOLOGY,
-                    price_concept=OBSERVED_MARKET_PRICE)
 
 
 def _provider(value: str) -> str:

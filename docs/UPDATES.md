@@ -5,7 +5,7 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
-## 2026-11-05 — Power markets: wholesale prices and grid data, beside GPU prices, never mixed
+## 2026-11-06 (fourth release) — Power markets, natural gas and power stocks (internal), beside GPU prices, never mixed
 
 ### What shipped
 - **New `power/` package and `power_*` tables** (migration `0035_power_markets`, additive only):
@@ -23,8 +23,16 @@ what is left, and what is next. Add an entry in the same commit as the change.
     5-minute LMP at NP15, SP15, ZP26 and the four DLAPs. OASIS serves only a rolling ~39 months (from 2023-08).
   - **EIA natural gas** (internal by choice: Henry Hub spot, NYMEX C1-C4 until EIA stopped them on 2024-04-05,
     weekly storage, the monthly electric-power price by state). Documented in `methodology/internal/natural-gas.md`.
-  - NYISO, SPP, ERCOT, PJM and ISO-NE come as their own modules (separate branches). MISO's public files are not
-    pulled, because MISO's terms forbid automated access.
+  - **NYISO** (internal; no signup): zonal day-ahead hourly and real-time 5-minute LBMP, 15 zones, from 2021-01.
+  - **SPP** (internal; no signup): SPPNORTH_HUB and SPPSOUTH_HUB, day-ahead hourly and real-time 5-minute, from
+    2021-01.
+  - **ERCOT** (PUBLIC: its Terms of Use §5 permit redistributing raw public data in compilations and analyses; no
+    signup, MIS public reports): day-ahead hourly and real-time 15-minute settlement point prices, 6 hubs and 8 load
+    zones, from 2011-01.
+  - **PJM** (internal; free Data Miner 2 key) and **ISO-NE** (internal; free ISO Express account): hub and zone
+    LMPs, off until their keys are set. They are built from the documented formats and not verified live yet.
+  - **MISO** (built, off): its site terms forbid automated access, so its public files must not be enabled. Its
+    Data Exchange API (subscription key) is the allowed route and is not implemented.
 - **Runner:** `python -m power backfill|forward|status|sources`.
   - Idempotent and resumable: stored days are skipped; "no data" and not-yet-published days are recorded.
   - Polite: one request at a time per source, paced.
@@ -39,8 +47,16 @@ what is left, and what is next. Add an entry in the same commit as the change.
   Correlation, never cause.
 - **API:**
   - admin-only `/v1/ops/power/{sources,status,series,map,cross/regional,cross/leadlag,shifts}`;
-  - the public `/v1/power/series` serves EIA-930 only. An internal key is "unknown" there, for everyone.
+  - no public route. Power is for OpenGrid's routing and research; the EIA-930 series are public domain and could
+    be added later through the Data API's versioned contract.
   - `tests/test_visibility.py` now seeds internal power, gas and derived values and checks every public route.
+- **Power stocks (internal equities):** 20 tickers were added to `context/equities.TICKERS`:
+  - generators: CEG, VST, TLN, NRG;
+  - datacenter-region utilities: D, AEP, SO, EXC, NEE, DUK, ETR, XEL;
+  - nuclear and fuel: OKLO, SMR, CCJ;
+  - grid and datacenter power equipment: GEV, ETN, PWR, BE;
+  - XLU.
+  The hourly `context_equities` job backfills each from 2016 (or its listing) on its first run.
 - **Storage:** measured 250 bytes per hourly series-day and 1,417 per 5-minute day. Projected about 1.2 GB for the
   backfill plus 3 years with room for the other ISOs (about 0.9 GB without), against the 3 GB budget.
   `methodology/power-markets.md` has the table.
@@ -48,16 +64,14 @@ what is left, and what is next. Add an entry in the same commit as the change.
 ### Not shipped
 - The CAISO history before 2023-08: OASIS does not serve it.
 - MISO through its Data Exchange API (subscription key): not implemented.
-- ERCOT, PJM and ISO-NE are off until the free accounts in `methodology/power-markets.md` exist and their keys are
-  set.
+- PJM and ISO-NE are off until the free accounts in `methodology/power-markets.md` exist and their keys are set.
 
 ### Deploy notes
-- **Migration:** `0035_power_markets`. `down_revision` is `0029_news_history`; re-chain it after the co-founder's
-  0034 at merge.
+- **Migration:** `0035_power_markets`, after `0034_api_key_version`. It was re-chained at the merge with Data
+  API v1; it was written against `0029_news_history`.
 - **Variables:**
   - `POWER_ENABLED=true` turns on the `power_forward` job (default off).
-  - `POWER_SOURCES` is optional: a comma list, empty for the defaults (caiso, eia, eia_gas, and the other no-signup
-    ISO modules).
+  - `POWER_SOURCES` is optional: a comma list, empty for the defaults (caiso, eia, eia_gas, nyiso, spp, ercot).
   - `POWER_PUE` defaults to 1.3.
   - `EIA_API_KEY` is already set.
   - ERCOT, PJM and ISO-NE: `ERCOT_API_SUBSCRIPTION_KEY`, `ERCOT_API_USERNAME`, `ERCOT_API_PASSWORD`,
@@ -72,8 +86,121 @@ what is left, and what is next. Add an entry in the same commit as the change.
      8,500 paged requests at 1 a second plus response time, so about 4-5 h; about 600 MB)
   4. Then `.venv/bin/python -m power forward` once (it fills the overlap and builds the cross-analysis) and
      `.venv/bin/python -m power status`. Set `POWER_ENABLED=true` after that.
+  Then the same for `nyiso`, `spp` and `ercot` (`--since 2021-01`; ERCOT from 2011 with no `--since`). SPP's
+  real-time files are large, about 39 GB downloaded in total, and are streamed and discarded.
   Steps 1-3 may run in parallel (different sources). `--dry-run` prints the plan first.
-- Full suite before commit: 118 Python test files and 11 web tests, all passing except the known `test_jobs_e2e` ("no usage slice metered", fails on main too).
+- Full suite before push: SUITE_RESULT
+
+---
+
+## 2026-11-06 (third release): public customer docs at docs.tryopengrid.com
+
+### What shipped
+- A separate, public docs site in `docs-site/` (Next.js + Fumadocs, Mintlify-style layout), on Vercel project
+  `opengrid-docs`, domain `docs.tryopengrid.com`. Pages: introduction, quickstart (curl / Python / JavaScript),
+  authentication, versioning, responses, errors (one anchor per code), pagination, rate limits, caching, ids, data
+  rules, point in time, bulk exports, three guides, for-agents, changelog, terms.
+- API reference: one page per customer endpoint (67), grouped by tag, generated from the app by
+  `python -m api.docs_openapi` into `docs-site/openapi.json`. Internal, website-only and write-side routes
+  (`/v1/events/track`, `/v1/news/refresh`, `/v1/news/reclassify`) are left out. Response fields come from the
+  frozen contract snapshot; the estimate body from the limits in `api/cost.py`.
+- Playground, deliberately limited: only for key holders. The reader pastes their own key, the browser calls
+  `data.tryopengrid.com` directly, nothing goes through the docs site, there is no shared or demo key. The docs
+  CSP allows requests only to itself and the Data API.
+- For agents: `/llms.txt`, `/llms-full.txt`, `.md` on any page URL, `Accept: text/markdown`, `/openapi.json`,
+  copy-as-markdown and open-in-ChatGPT / Claude / Cursor on every page.
+- App: CORS on the Data API host for the docs origin only (no credentials); error `docs_url` now points to
+  `docs.tryopengrid.com/errors#<code>`. `tests/test_docs_site.py` checks the generated files are current, only
+  customer routes are published, every route and link named in the docs exists, every error code has an anchor,
+  and the CORS rules.
+- Keys: the docs say to contact `hello@tryopengrid.com`; there is no self-serve sign-up.
+
+### What did not ship
+- Self-serve keys and a sandbox / anonymous playground (by decision: the docs are public, so nothing runs without
+  a key).
+- Field-level response schemas for 11 routes without a contract snapshot; their pages say so.
+
+### Known issues
+- The playground keeps the pasted key in the browser's localStorage (Fumadocs default), on that reader's machine only.
+- The playground works only after the app release (CORS) is deployed and the docs DNS record exists.
+
+### Deploy notes
+- Docs: `cd docs-site && vercel deploy --prod`. DNS: Cloudflare `A docs 76.76.21.21`, DNS only (not proxied).
+- App: no migration; needs a `railway up` for CORS and the new `docs_url`. Rollback: the previous deployment.
+- After changing routes, rerun `python -m api.docs_openapi` and commit the output (the test fails otherwise).
+
+### Next
+- Account-creation test on the real address, customer login, self-serve keys.
+
+---
+
+## 2026-11-06 (second release): the website runs on the Data API; first-UI routes retired
+
+### What shipped
+- The Data API gained what the first UI's routes gave the website, so nothing is lost: `/v1/markets?trend=true`
+  (24h `change`, `trend` series, `low_provider` / `high_provider`), `/v1/markets/{gpu}/history/providers` (each
+  provider's price line plus the market low / median / high), `/v1/listings?previous=true` (`price_change`: the
+  price before the newest recorded change). All additive; the frozen contract snapshot lost nothing.
+- Every website page now reads only `/v1` and `/internal`. Retired: `/market`, `/market/detail`, `/listings`,
+  `/changes`, `/history`, `/reference-prices`, and the first UI (`/classic` redirects to `/gpus`; `classic.html`
+  and its test removed). `/polling` and `/mapping` moved to `/internal/polling` and `/internal/mapping`.
+- Tests prove the replacements match the old routes (trend, change, providers, series, previous price).
+
+### What did not ship
+- The website's client-side field adapters (`OG.legacyGpu`, `OG.legacyHistory`, flattening `price_change` in three
+  pages) stay: they sit in the browser, customers never see them; removing them means editing every chart.
+- Python SDK, customer sign-up / login, stored export files.
+
+### Known issues
+- The disk of the development machine filled during a parallel test run and stopped its local Postgres; tests ran
+  fine once space was freed. Production is unaffected.
+- Baseten has failed every poll since 2026-11-03 (a scraped page); unrelated to this release.
+
+### Deploy notes
+- No migration. Rollback target: deployment 29daeac7 (previous release).
+
+### Next
+- Customer-facing docs, an account-creation test on the real address, customer login.
+
+---
+
+## 2026-11-06: OpenGrid Data API v1 (contract, new routes, API address)
+
+### What shipped
+- The market intelligence API follows one contract, written in `docs/API_CONTRACT.md`: one error format
+  (`{error: {type, code, message, param, request_id, docs_url}}`), `request_id` and `api_version` in every `meta`,
+  dated versions (`OpenGrid-Version` header, pinned per API key in the new `api_keys.api_version` column, migration
+  0034), cursor paging on every list, frozen vendor-prefixed GPU ids (`nvidia-h100-80gb-sxm5`, `gpu_ids.py`) with
+  `gpu_name` beside them, `provider_name` beside provider ids, exact decimal strings for fixings, ETag + 304 +
+  `Cache-Control`, `?as_of=` on `/v1/listings`, bulk export `/v1/exports`, the schema at `/v1/openapi.json`.
+- New route layout (old paths removed, no outside clients): `/v1/gpus` (reference), `/v1/markets`,
+  `/v1/markets/{gpu}` (+ `/history`, `/history/daily|archived|dispersion`, `/regions`), `/v1/listings` (+ `/history`),
+  `/v1/costs/*`, `/v1/fx/rates` (+ `/history`), `/v1/reliability/*`, `/v1/events/shifts`, `/v1/macro/*`.
+  UI-only reads moved to `/internal/*` (overview, tape, opportunities, heatmaps, compare, uptime, trust, live).
+  Launch reliability is `/v1/execution/reliability` (key only).
+- `DATA_API_HOST` (set to data.tryopengrid.com after this deploys): that host serves Data API routes only and needs
+  an API key. Unset, nothing changes.
+- Every DB connection is set to UTC (a non-UTC server shifted dates by a day). Tests: one runner
+  (`tests/run_all.py`), GitHub Actions on every push, 132 test files; contract shape snapshot
+  (`tests/contracts/2026-11-03.json`); website smoke compare (`tests/smoke/compare.sh`).
+
+### What did not ship
+- Python SDK package (planned, own repo). Customer sign-up / login (keys are still issued by the operator on
+  `/admin/partners`). Stored daily export files (exports are built per request). Rounding of published fixings
+  (full stored value is published; a rounding rule is a settlement methodology decision).
+
+### Known issues
+- A few website pages translate new field names back to the old ones (`OG.legacyHistory`, `gpu`/`index_id` shim in
+  `web/core.js`); cleanup before the next contract change.
+- `/v1/listings?as_of=` and the listings export scan `listing_observations`; untested at production size.
+- Whole-suite runs can hit a 10 minute timeout on `test_money_invariants` when the machine is busy (81 s alone).
+
+### Deploy notes
+- Migration 0034 only adds a column (and sets existing keys to 2026-11-03); old code ignores it, so a rollback is safe.
+- Rollback target: deployment 8862412c (2026-11-02).
+
+### Next
+- Set `DATA_API_HOST`, test account creation end to end, write the customer-facing docs, then customer login.
 
 ---
 

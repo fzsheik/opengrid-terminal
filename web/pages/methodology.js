@@ -57,7 +57,7 @@
     const body = h("div", {}, OG.loading("Loading documents…"));
     root.append(body);
     let docs;
-    try { docs = await ctx.api("/v1/methodology"); }
+    try { docs = await OG.all(ctx.api, "/v1/methodology"); }
     catch (e) { body.replaceChildren(...(ssr && ssr.length ? [h("div", { class: "methodology" }, ssr)] : [OG.error(e)])); return; }
     const groups = new Map(GROUPS.map(g => [g[0], []]));
     for (const d of docs) { const g = groupOf(d.name); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(d); }

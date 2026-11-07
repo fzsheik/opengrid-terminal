@@ -264,7 +264,7 @@ def test_safe_url_web_client():
     # an allowlisted same-site path: every off-site or browser-normalised trick lands on "/"
     for f in list(ROOT.glob("*.py")) + list((ROOT / "api").glob("*.py")) + list((ROOT / "accounts").glob("*.py")):
         n = f.read_text(encoding="utf-8").count("RedirectResponse(")
-        assert n == (4 if f.name == "main.py" else 0), (f, n)  # login-redirect, /login x2, /logout
+        assert n == (5 if f.name == "main.py" else 0), (f, n)  # login-redirect, /login x2, /logout, /classic -> /gpus (a constant)
     setup()
     for evil in ("//evil.example", "https://evil.example", "/\\evil.example", "\\\\evil.example", "/\t/evil.example",
                  "/\n/evil.example", " //evil.example", "evil.example", "javascript:alert(1)", "/\r\n/evil", "///evil.example"):
@@ -294,11 +294,6 @@ def test_csp_does_not_allow_injected_inline_script():
     assert "*" not in parts["script-src"] and "data:" not in parts["script-src"]
     assert parts["object-src"] == "'none'" and parts["frame-ancestors"] == "'none'" and parts["base-uri"] == "'self'"
     assert parts["form-action"] == "'self'"
-    # the classic page's own big inline script is allowed (it comes from our template)
-    rc = client.get("/classic", headers=basic())
-    own_c = re.findall(r"<script>(.*?)</script>", rc.text, re.S)
-    assert own_c and security.inline_script_hashes(f"<script>{own_c[0]}</script>")[0] in \
-        rc.headers["content-security-policy"]
 
 
 def test_security_headers_everywhere():

@@ -442,7 +442,7 @@
 
       /* ---------- news ---------- */
       async function loadNews(force) {
-        const rows = await OG.api.soft("/v1/news/sources", { nocache: force });
+        const rows = await OG.all(OG.api.soft, "/v1/news/sources", { nocache: force });
         if (!ctx.alive()) return;
         if (!rows) { B.news.replaceChildren(OG.insufficient("/v1/news/sources did not answer on this server.", "News health unavailable")); return; }
         const rank = { failing: 0, degraded: 1, never_fetched: 2, ok: 3, disabled: 4 };

@@ -18,7 +18,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0035_power_markets"
-down_revision: Union[str, Sequence[str], None] = "0029_news_history"
+down_revision: Union[str, Sequence[str], None] = "0034_api_key_version"  # re-chained after Data API v1 at merge
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

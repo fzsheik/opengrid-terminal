@@ -5,8 +5,8 @@ chipmakers sell into data centres, and how much the largest buyers spend on capa
 cause. Nothing on OpenGrid says one of these series moved a GPU price, and none of them feeds listings, indices,
 spreads, percentiles or routing.
 
-Kind: **observed**. Code: `context/`. API: `GET /v1/context/series` (the catalogue, or the points of up to 20 series
-with `id=`), `GET /v1/context/power` (US listings by state, beside that state's electricity price).
+Kind: **observed**. Code: `context/`. API: `GET /v1/macro/series` (the catalogue), `/v1/macro/series/{series}` and `/v1/macro/series/{series}/history` (one series' points; was the points of up to 20 series
+with `id=`), `GET /v1/macro/power` (US listings by state, beside that state's electricity price).
 
 Only sources whose terms allow republishing are used:
 
@@ -63,7 +63,7 @@ differ (NVIDIA's year ends in late January), so periods are kept as dates, never
 
 ## Power by region
 
-`GET /v1/context/power` maps current listings to a US state only where the region names one unambiguously:
+`GET /v1/macro/power` maps current listings to a US state only where the region names one unambiguously:
 - a documented cloud region (AWS, Google Cloud, Azure and Oracle tables in `context/geo.py`);
 - Shadeform's "US, city, ST";
 - Vast's "State, US".

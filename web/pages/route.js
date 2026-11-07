@@ -179,7 +179,7 @@
           h("div", { class: "rt-h" }, f.note || "Variants of one family are different products (memory, form factor, interconnect); OpenGrid never merges their prices."),
           vs.length ? h("ul", { class: "rt-fam-l" }, vs.map(v => h("li", {},
             h("a", { class: "lnk", href: "/gpu/" + (v.slug || OG.slug(v.gpu)), title: v.gpu }, OG.shortGpu(v.gpu || v.slug)),
-            h("span", { class: "mono dim" }, v.low != null ? "from " + fmt.price(v.low) : "no live price"),
+            h("span", { class: "mono dim" }, v.price && v.price.low != null ? "from " + fmt.price(v.price.low) : "no live price"),
             h("span", { class: "dim" }, v.providers != null ? `${v.providers} prov` : ""),
             h("button", { type: "button", class: "btn sm", title: "Route this variant only", onclick: () => { const g = gpus.find(x => x.slug === (v.slug || OG.slug(v.gpu))); if (g) pickGpu(g); } }, "only this")))) : h("div", { class: "dim" }, "Variant list unavailable."),
           h("label", { class: "rt-chk", title: "allow_variants: rank listings of every variant of this family together; each candidate keeps its own GPU name and price" },
