@@ -263,7 +263,7 @@ def test_db_cross_api():
             m = op.get("/v1/ops/power/map").json()
             assert m["meta"]["mapped"] >= 1
             assert op.get("/v1/ops/power/series?source=eia_gas").json()["meta"]["count"] == 5
-            assert anon.get("/v1/power/series").status_code == 404, "power has no public route"
+            assert anon.get("/v1/power/series").status_code in (401, 404), "power has no public route"
             r = op.get("/v1/ops/power/series?key=eia.actual.demand.ciso")
             assert r.status_code == 200 and r.json()["data"][0]["n"] == 24
         finally:

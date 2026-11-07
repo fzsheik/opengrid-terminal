@@ -268,7 +268,7 @@ def test_exports():
                       {"a": d0, "b": d0 + timedelta(days=1)}).scalar()
     assert n > 0 and len(changes) == n and all(c["observed_at"].endswith("Z") and "gpu_name" in c for c in changes)
     rows("index_levels"), rows("fixings")
-    today = client.get("/v1/exports/listings", params={"date": date.today().isoformat()})
+    today = client.get("/v1/exports/listings", params={"date": datetime.now(timezone.utc).date().isoformat()})  # UTC day
     assert assert_error(today, 422)["param"] == "date"
     assert client.get("/v1/exports/nope", params={"date": day.isoformat()}).status_code == 422
 

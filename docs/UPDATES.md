@@ -89,7 +89,7 @@ what is left, and what is next. Add an entry in the same commit as the change.
   Then the same for `nyiso`, `spp` and `ercot` (`--since 2021-01`; ERCOT from 2011 with no `--since`). SPP's
   real-time files are large, about 39 GB downloaded in total, and are streamed and discarded.
   Steps 1-3 may run in parallel (different sources). `--dry-run` prints the plan first.
-- Full suite before push: SUITE_RESULT
+- Full suite before push (`tests/run_all.py`): 136 of 136 files pass. `test_contract.py` compared the export date with the local day; it now uses the UTC day (it failed on main every evening after 19:00 US Eastern).
 
 ---
 
