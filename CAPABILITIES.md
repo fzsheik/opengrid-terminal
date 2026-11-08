@@ -17,21 +17,22 @@ important) what it deliberately does not claim.
 
 1. [At a glance](#1-at-a-glance)
 2. [Architecture](#2-architecture)
-3. [Market data layer](#3-market-data-layer)
-4. [Market intelligence](#4-market-intelligence) (incl. 4.2a settlement-grade fixings)
+3. [Market data layer](#3-market-data-layer) (incl. capacity, live feeds, public and internal data tiers)
+4. [Market intelligence](#4-market-intelligence) (incl. 4.2a settlement-grade fixings, reserved prices, full cost)
 5. [News & external signals](#5-news--external-signals)
+   - [Market context, equities and power markets (beside GPU prices, never mixed)](#5a-market-context-equities-and-power-markets-beside-gpu-prices-never-mixed)
 6. [Execution layer: routing & provisioning](#6-execution-layer-routing--provisioning)
    - [Training jobs (OpenGrid Jobs)](#6a-training-jobs-opengrid-jobs)
    - [Reserved compute: price-lock requests](#6b-reserved-compute-price-lock-requests-reservations-methodologyreservationsmd)
    - [Workload intelligence, CLI, MCP and assistant](#6c-workload-intelligence-cli-mcp-and-assistant-opengrid-20)
 7. [Reconciliation, billing & cost accounting](#7-reconciliation-billing--cost-accounting)
-8. [Routing quality, reliability & economics](#8-routing-quality-reliability--economics)
+8. [Routing quality, reliability & economics](#8-routing-quality-reliability--economics) (incl. provider uptime and probes)
 9. [Design partners, onboarding & product analytics](#9-design-partners-onboarding--product-analytics)
 10. [Alerts & Discord channels](#10-alerts--discord-channels)
 11. [Accounts, API keys & security](#11-accounts-api-keys--security)
 12. [Web terminal (UI)](#12-web-terminal-ui)
 13. [Text terminal (TUI)](#13-text-terminal-tui)
-14. [Public API](#14-public-api)
+14. [Public API](#14-public-api) (the Data API v1 contract and the Compute API)
 15. [Operations: deployment, jobs, configuration](#15-operations-deployment-jobs-configuration)
 16. [Testing](#16-testing)
 17. [Data honesty principles](#17-data-honesty-principles)
@@ -44,20 +45,22 @@ important) what it deliberately does not claim.
 
 | | |
 |---|---|
-| GPU clouds monitored | **60**, 59 published (Fireworks AI is internal only: used for routing, never republished) (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb, Civo, Atlantic.Net, E2E Networks, Modal, Replicate, Baseten, Beam, Arkane Cloud, VESSL AI, Mithril, DeepInfra, SimplePod, Nosana, Thunder Compute, Clore.ai, Paperspace, Akash Network, Hydra Host, CUDO Compute, GPU.ai, Exoscale, Hugging Face Inference Endpoints, Gcore, Fireworks AI, IONOS Cloud, Hetzner, Yotta Shakti Cloud, Sakura Internet) |
-| Canonical GPU models | **91**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL) |
-| OpenGrid indices defined | **251** (per-GPU, family composites, overall compute index, regional, spot, provider-class) |
-| News & signal sources | **44** verified feeds (hyperscalers, neoclouds, NVIDIA/AMD, US Federal Register, trade press) |
-| API operations | **203** (188 under `/v1`, 61 of them admin-only), plus 3 runner-callback routes outside the public schema |
-| Web pages | **37** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar |
-| Database tables | **71** (Postgres, migrated by Alembic, 20 migrations) |
-| Background jobs | **18** (polling, rollups, indices, settlement fixings, events, news, reconciliation, tracking, training-job sync, job relaunch (off by default), reservation expiry, alerts, feeds…) |
+| GPU clouds monitored | **60**, 59 published (Fireworks AI is the only wholly internal provider: used for routing, never republished; two more sources of public providers are internal, DeepInfra's container-API prices and AWS's Spot Advisor bands, section 3.8) (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb, Civo, Atlantic.Net, E2E Networks, Modal, Replicate, Baseten, Beam, Arkane Cloud, VESSL AI, Mithril, DeepInfra, SimplePod, Nosana, Thunder Compute, Clore.ai, Paperspace, Akash Network, Hydra Host, CUDO Compute, GPU.ai, Exoscale, Hugging Face Inference Endpoints, Gcore, Fireworks AI, IONOS Cloud, Hetzner, Yotta Shakti Cloud, Sakura Internet) |
+| Canonical GPU models | **100**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL); each has a hardware spec row |
+| OpenGrid indices defined | **269**: 100 per-GPU, 100 spot, 40 regional, 25 provider-class, 4 composites (H100 / H200 / A100 class and the overall GPU Compute Index) |
+| News & signal sources | **81** registered, **66** enabled (41 RSS, 4 Atom, 3 US Federal Register, 16 SEC EDGAR, 2 GDELT queries); the 15 disabled ones are listed with the reason. About 55k items stored in production, history backfill included |
+| API operations | **236** in the OpenAPI schema: 214 under `/v1` (73 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 9 admin-only reads (7 power, 2 equities), 4 runner-callback routes, `/v1/openapi.json` and the page routes |
+| Web pages | **42** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar |
+| Database tables | **103** in a freshly migrated database (102 application tables plus `alembic_version`; Postgres, migrated by Alembic: 37 migrations, head `0035_power_markets`) |
+| Background jobs | **31** registered when every optional source is configured, beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync and relaunch, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets…; table 15.2) |
+| Capacity (stock) feeds | **32** providers report in-stock state or counts from their own APIs (section 3.6) |
+| Power markets (internal) | EIA-930 grid data, EIA natural gas, CAISO, NYISO, SPP and ERCOT wholesale prices in their own `power_*` tables (about 511 MB in production); admin-only reads, never in a GPU statistic (section 5a) |
 | Provisioning adapters | **9 providers** (Lambda, RunPod, Hyperstack, DigitalOcean, Crusoe/Denvr/Latitude via Shadeform, Vast, Verda) |
 | Discord channels | **4** (ops, deployments, market, news) with OpenGrid-branded embeds |
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
 | Workload intelligence | GPU memory estimator, project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (13 tools, 3 prompts; hosted at `/mcp` with an API key, or local via uvx), grounded assistant |
-| Automated tests | **60** Python test files + **11** JavaScript test files + **4** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team |
+| Automated tests | **124** Python test files + **12** JavaScript test files, all 136 run in parallel by `tests/run_all.py` (and by CI on every push), + **4** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
 
 ---
 
@@ -95,11 +98,16 @@ important) what it deliberately does not claim.
         └── job state machine ◄── automatic termination + reconciliation ◄──────────────────────┘
 
    index_levels ─► index_fixings (final hours only) ─► hash-chained ledger ─► /v1/fixings + verify
+
+   Beside the market, never inside it (own tables; nothing statistical reads them):
+   context_snapshots ─► context_series (EIA state power prices, SEC EDGAR; equities internal) ─► /v1/macro/*
+   power_fetches ─► power_days ─► power_gpu_region_daily + power_leadlag (internal) ─► /v1/ops/power/* (admin)
 ```
 
 **Stack:** Python 3.13 · FastAPI · SQLAlchemy 2 · Alembic · PostgreSQL · httpx · Textual (TUI) ·
 vanilla JavaScript (no build step) · deployed on Railway as a single web process that also runs
-the poller and background jobs.
+the poller and background jobs. The public customer docs (`docs-site/`, Next.js + Fumadocs) are a separate site on
+Vercel at docs.tryopengrid.com.
 
 **Design rules that shape everything:**
 - Raw first: provider responses are stored before they are interpreted, so normalization can be
@@ -116,8 +124,12 @@ the poller and background jobs.
 ### 3.1 Providers and sources
 
 Each provider is one module with `fetch()` (network) and `normalize()` (pure, re-runnable).
-Every provider polls on its own schedule (15 minutes for most, hourly for AWS); a slow or failing
-provider never holds up the others.
+Every provider polls on its own schedule; a slow or failing provider never holds up the others. Polling is
+tiered (methodology/freshness.md): each provider has a price and a capacity cadence and a request budget (a token
+bucket at about half of each documented limit), and rate-limit answers are stored as `throttled`, not as failures.
+Fast: Lambda, Hyperstack, RunPod 2 min, Vast 5 min; medium: Salad, DigitalOcean, Linode 5 min, AWS and Nebius spot
+every 5 min, most others 15 min; slow: Azure, GCP, Oracle, IBM, OVHcloud, E2E, Mithril 6 h, scraped pages, Vultr and
+Exoscale 1 h. Lium is also read live from its public WebSocket (section 3.7).
 
 | Provider | Class | How OpenGrid reads prices |
 |---|---|---|
@@ -196,15 +208,22 @@ Andromeda (resellers, brokers or no stable source), Fluidstack and Nscale (still
 - Every listing becomes a standard `ComputeListing`: provider, SKU, GPU, count, region, country,
   price per GPU-hour and per instance-hour, market type (on-demand/spot), tier, interruptibility,
   availability, capacity, vCPU, RAM, storage, observed time.
-- **Canonical GPU naming** (`canonical.py`) is hand-maintained: 91 models, named
-  `<VENDOR> <MODEL> <VRAM> [<VARIANT>]`. Unknown names go to an **unmapped queue** instead of being
-  guessed. Materially different variants are never merged.
+- **Canonical GPU naming** (`canonical.py`) is hand-maintained: 100 models, named
+  `<VENDOR> <MODEL> <VRAM> [<VARIANT>]`, each with a frozen public id (`nvidia-h100-80gb-sxm5`, `gpu_ids.py`).
+  Unknown names go to an **unmapped queue** instead of being guessed, each with the reason it stays unmapped
+  (`mapping.UNMAPPED_REASONS`: board, memory or edition not stated by any provider source). Materially different
+  variants are never merged.
 - **GPU families** (`families.py`): H100, H200, B200, A100, Blackwell, Hopper… group variants for
   browsing (`/gpu/h100`) but are never priced as one product.
 - **Field provenance** (`mapping.py`): for every provider, how each field is obtained (raw,
   derived, constant, lookup, absent) and the provider's quirks.
 - **Regions** (`regions.py`): provider region strings mapped deterministically to US, Canada,
-  Europe, UK, APAC, Middle East, LATAM, Africa. Unknown stays unknown.
+  Europe, UK, APAC, Middle East, LATAM, Africa. Unknown stays unknown. Google Cloud is listed only in the regions
+  where Compute Engine itself offers the exact machine shape (methodology/gcp-regions.md), not wherever a SKU is
+  priced.
+- **Currencies** (`fx.py`, methodology/fx.md): EUR, INR, JPY and other list prices are converted to USD at the ECB
+  reference rate (cross rates through the euro, both legs from the same ECB date, fail closed after 5 days);
+  `GET /v1/fx/rates` and `/v1/fx/rates/history`.
 
 ### 3.3 Raw storage & retention
 - Every fetch is recorded (`raw_snapshots`: time, provider, endpoint, request, status, latency,
@@ -213,6 +232,10 @@ Andromeda (resellers, brokers or no stable source), Fluidstack and Nscale (still
   **90 days**. The latest complete fetch round per endpoint is always kept.
 - Normalized listings, price/supply history, rollups, indices, events, articles and all
   billing/audit records are **never trimmed**.
+- Other raw stores follow the same rule (store first, parse later): `cost_snapshots`, `context_snapshots`,
+  `catalog_snapshots` (a daily copy of dstack's expiring gpuhunt catalogues), `stream_events` (Lium live changes),
+  `power_fetches` (every power request with URL, SHA-256 and byte count; bytes kept only where small). Probe raw
+  results are kept 30 days and UptimeProject probe samples 90 days; their hourly rollups are kept for good.
 
 ### 3.4 Data quality & quarantine
 Suspicious values are **held, not published**. Rules include:
@@ -238,6 +261,52 @@ aggregator / pricing file), last fetched, last changed, freshness (fresh / aging
 to that provider's own polling interval), and whether availability is **explicit, inferred or
 unknown**. Providers have health: last success, failure rate, latency p50/p95, consecutive failures.
 
+**When a change happened** (`changed_at.py`, methodology/freshness.md). Every price-history row carries
+`observed_at` (the fetch that first showed it), `prev_observed_at` (the last fetch that still showed the old value),
+and, where the provider publishes one, `provider_changed_at` with a `changed_at_basis`: `exact` (AWS spot, Nebius
+spot, the Lium stream), `date_only` (Azure), `lower_bound` (GCP) or `poll_window` (everyone else: only the bracket is
+known). AWS spot is read as a change log, so every change between polls is recorded with its own time. Per provider
+and stream, the cadence, data age, p95 age over 24 h, detection lag over 7 days and throttled answers are served in
+the `freshness` block of `GET /v1/reliability/providers`.
+
+### 3.6 Capacity (`capacity.py`, methodology/capacity.md)
+What each provider says it can supply now, read from its own API and stored raw first: `capacity_current` (current
+state) plus change-only `capacity_changes`. **32 providers** implement it (counted from the modules that define
+`normalize_capacity`, including the Shadeform-routed clouds). Shapes are kept as the provider states them: a tier
+word (RunPod `High/Medium/Low`, Scaleway `available/scarce/shortage`), a count (Hyperstack deployable VMs, Lium free
+GPUs) or a boolean (Linode, Verda). An unknown stays unknown, never "in stock". Capacity runs after the price refresh
+and fails open: a capacity error never touches prices. `GET /v1/capacity`, `/v1/capacity/history`; page `/capacity`.
+
+### 3.7 Live feeds (`live/`, methodology/live-feeds.md)
+One source pushes changes: Lium's public executor WebSocket (no key). Changes are stored change-only in
+`stream_events` with Lium's own `ts` and `seq`, written at most once a minute together with the whole book as one raw
+snapshot in the poller's shape, then Lium is re-normalized, so its listings and capacity follow a change within about
+a minute instead of fifteen. Sequence gaps and reconnects resnapshot and diff; a book with no frame for three minutes
+is never written. The REST poller keeps running as the fallback, and the two never normalize Lium at the same time.
+Operator-only status: `/internal/live/status`, `/internal/live/events`.
+
+### 3.8 Public and internal data tiers (`provider_meta.INTERNAL_SOURCES`, methodology/data-visibility.md)
+Every listing, capacity row and archived price carries a `visibility` (`public` or `internal`; migration
+`0027_visibility`). Internal data is data OpenGrid may read and use but may not republish. The one registry of
+internal sources, each with its reason, is `provider_meta.INTERNAL_SOURCES`:
+
+| Provider | Internal source | Why |
+|---|---|---|
+| Fireworks AI | the whole provider (listings, capacity, signals) | its terms forbid copying or distributing any part of the Service |
+| DeepInfra | container-API hourly prices (listings ending `:api`) | not the public price-page prices; its terms treat non-public pricing as confidential. Its public listings stay the price-page ones |
+| AWS | Spot Instance Advisor interruption bands and savings | AWS's site terms restrict republishing data from aws.amazon.com |
+
+Everything else is public, and `enforce()` fails closed: anything not exactly `public` is stored internal. Every
+public statistic (market view, rollups, indices, fixings, spreads, capacity, archived history, trust) reads the public
+tier only. Routing, job placement and keyed recommendations may use internal rows to choose and order candidates, but
+a non-admin caller never sees an internal value: the candidate shows the public list price of the same product or no
+price ("available via OpenGrid"), and derived numbers (quotes, savings, cost estimates, the stored audit record) are
+rewritten. `tests/test_visibility.py` seeds unmistakable internal rows (listings, power, gas, derived values) and
+calls every public route enumerated from the app; it fails on any internal name, price or count. Power and equities
+have their own registries with the same rule (section 5a). Separately, Gcore's rows stay public but are kept out of
+the assistant's grounding and every MCP answer (`provider_meta.AI_INPUT_EXCLUDED`: its robots.txt sets
+`ai-input=no`).
+
 ---
 
 ## 4. Market intelligence
@@ -247,12 +316,13 @@ unknown**. Providers have health: last success, failure rate, latency p50/p95, c
 (on-demand, not interruptible, not floor prices, not sold out, not stale), per GPU × provider ×
 region. Everything historical reads from it, so 90-day statistics don't replay raw history.
 
-### 4.2 OpenGrid indices (251 defined)
+### 4.2 OpenGrid indices (269 defined)
 - **Per-GPU indices** (e.g. *OpenGrid H100 80GB SXM5 Index*) in $/GPU-hour.
 - **Family composites** (H100 / H200 / A100 class) and the **OpenGrid GPU Compute Index**, in
   base-100 points with fixed, documented weights.
 - **Regional**, **spot** (interruptible, labelled) and **provider-class** (neocloud, hyperscaler,
-  marketplace…) indices.
+  marketplace…) indices. The 269 are 100 per-GPU, 100 spot, 40 regional, 25 provider-class and 4 composites
+  (`analytics/indices.REGISTRY`); a defined index is published only when it meets the rules below.
 - Methodology: one vote per provider; median below 5 constituents, 20% trimmed mean from 5;
   outliers beyond 3× / ⅓ of the median excluded; providers with failing feeds excluded; **at least
   3 providers or the index is not published (with the reason)**; **chain-linked** so a provider
@@ -296,13 +366,29 @@ Current price percentile vs its own 30-day and 90-day distribution, distance fro
 median and from historical low/high, and labels (very cheap → very expensive) only when the window
 has enough samples. Generated sentences like *"H100 is in the 18th percentile of its 90-day range"*.
 
-**Archived price history** (data kind `archived`, methodology/archived-history.md): about 12 months of prices
-from before OpenGrid started recording, read by OpenGrid's own parsers from Internet Archive captures of
-provider price pages and from AWS's monthly EC2 price-list versions (`python -m backfill import`). Shown per
-provider at `GET /v1/markets/{gpu}/history/archived`, each sample linked to the exact
-archived document. The 1Y / ALL price chart runs one continuous line through it (archived stretch drawn lighter
-and labelled), via `GET /v1/markets/{gpu}/history/daily`. Sampled only on capture days, so it misses short moves;
-never used in percentiles, indices, events or routing.
+**Archived price history** (data kind `archived`, methodology/archived-history.md): prices from before OpenGrid
+started recording, read by OpenGrid's own parsers from official and archived sources, raw first, each point with
+its `basis`, `licence`, `attribution` and visibility tier (migration `0031_backfill_sources`):
+- **Internet Archive captures** of provider price pages, one parser per page design (`python -m backfill import`):
+  e.g. Azure's Linux VM page 2017-2024, Lambda 2020-2025, CoreWeave 2021-2024, RunPod 2022-2024, Verda/DataCrunch
+  2020-2025, Paperspace 2017-2026, Exoscale from 2021, Hugging Face Inference Endpoints from 2022 (`resold:<vendor>`).
+- **AWS's own EC2 price-list archive**: all 123 monthly versions from 2015-12 (`python -m backfill aws`); reserved
+  1y / 3y rows are stored at their effective hourly price, never as on-demand, and are not served yet.
+- **Azure "effective since" anchors**: one point per GPU size, region and market at the current price's
+  `effectiveStartDate`.
+- **Open datasets with licences**: Full Stack Deep Learning's cloud-gpus.csv history (MIT, from 2022-08) and Huang
+  (2026) Vast monthly transacted medians (CC BY 4.0, stored as their own market `transacted`). A dataset point that
+  repeats a primary source becomes corroboration on the primary row, never a second point.
+
+Depth in production after the archive import: **17 providers** reach back at least 24 months, **15** at least 36
+months and **7** at least 60 months (AWS, Azure, CoreWeave, Exoscale, Lambda, OVHcloud, Verda); about 30 providers
+have no archive. `python -m backfill coverage` reports the depth per provider and GPU. Shown per provider at
+`GET /v1/markets/{gpu}/history/archived`, each sample linked to the exact archived document. The 1Y / ALL price
+chart runs one continuous line through it (archived stretch drawn lighter and labelled), via
+`GET /v1/markets/{gpu}/history/daily`. Sampled only on capture days (monthly for AWS), so it misses short moves;
+never used in percentiles, indices, events or routing. Public reads serve the public tier only. SkyPilot's
+catalogue history stays off (`SKYPILOT_CATALOG_ENABLED`) until SkyPilot confirm a licence, and dstack's gpuhunt
+catalogues are kept raw only (no licence for the data).
 
 ### 4.4 Market structure
 - **Dispersion** per GPU: low / median / high, absolute and % spread, IQR, standard deviation,
@@ -312,7 +398,7 @@ never used in percentiles, indices, events or routing.
   % of time top-3, rank distribution, availability frequency, listing lifetime, price volatility,
   GPU coverage, regional coverage, feed health, each gated by minimum sample sizes. Generated
   facts like *"RunPod has been the cheapest H100 provider 37% of the last 30 days"*.
-- **Hardware metadata** for all 91 GPUs (architecture, VRAM, memory bandwidth, dense
+- **Hardware metadata** for all 100 GPUs (architecture, VRAM, memory bandwidth, dense
   FP16/BF16/FP8, interconnect, form factor, TDP, workload class, sources).
 - **Price per capability** (labelled theoretical): $/GB-VRAM-hour, $/PFLOP-hour (BF16, FP8),
   $/TB/s-hour.
@@ -348,15 +434,37 @@ Structured events detected every hour, idempotent, with severities and the numbe
   regional dislocations, providers far below their usual premium, temporary scarcity, sudden new
   cheapest provider, each with a score, explanation and observed/inferred label.
 
+### 4.7 Reserved prices (`reserved.py`, methodology/reserved-prices.md)
+What providers charge for a commitment term, in their own section: page `/reserved`, `GET /v1/reserved` and
+`/v1/reserved/summary`. Six providers: Azure reserved instances (1 / 3 / 5 years), GCP committed use (1 / 3 years,
+every region Compute Engine offers the GPU), Jarvislabs (1 / 3 / 6 months, 1 / 2 years), Latitude (month, year),
+Together AI GPU Clusters (3-30 to 181+ days) and Verda's commitment ladder. **The hard rule:** none of these is a
+listing. They are computed on read from raw responses already stored (under labels no on-demand normalizer reads),
+write nothing, and never enter an index, spread, percentile, heatmap, routing or reliability; `tests/test_reserved.py`
+proves the listings, hourly rows and every index vote are identical with and without them.
+
+### 4.8 Full cost of a job (`cost/`, methodology/full-cost.md)
+The hourly price is not the cost of a job. `POST /v1/costs/estimate` (public, read-only) ranks providers on compute +
+egress + storage for a reference job (presets R0-R3 or custom); `GET /v1/costs/components`, `/v1/costs/billing`,
+`/v1/costs/sources`, `/v1/costs/presets`; page `/cost` ("True cost"). Components come from price APIs and files
+fetched daily into `cost_snapshots` (AWS Data Transfer and S3, Azure Retail Prices, Oracle's price list, Verda volume
+types), from provider raw already stored (Hyperstack, Vultr, each Vast offer), or from a hand table with source page
+and verification date (only values checked on the provider's own page are used). An unknown component is named and
+makes the total a lower bound ("≥ $X"), never $0, and a lower bound never outranks a complete total. Public tier only;
+nothing statistical reads cost data.
+
 ---
 
 ## 5. News & external signals
 
-- **44 verified sources** via RSS/Atom/JSON APIs (no scraping where a feed exists): AWS, Google
-  Cloud, Azure, Meta, Lambda, CoreWeave, RunPod, Together, Voltage Park, Hyperstack, DigitalOcean,
+- **81 registered sources, 66 enabled** (`news/sources.py`): 41 RSS and 4 Atom feeds, 3 US Federal Register
+  queries, 16 SEC EDGAR submissions sources and 2 GDELT queries; official feeds and APIs only, no HTML scraping.
+  Enabled by category: 19 trade press, 16 filings, 12 hyperscaler, 12 provider, 4 vendor, 3 regulation. They include
+  AWS, Google Cloud, Azure, Meta, Lambda, CoreWeave, RunPod, Together, Voltage Park, Hyperstack, DigitalOcean,
   Vultr, Scaleway, NVIDIA, AMD, the **US Federal Register** (BIS export controls, FERC data-center
   rules), DatacenterDynamics, The Register, HPCwire, Tom's Hardware, SemiAnalysis, The
-  Information, and more. Sources that couldn't be verified are listed as disabled with the reason.
+  Information, and more. The 15 sources that couldn't be verified are listed as disabled with the reason.
+- **About 55k items** are stored in production, the history backfill included; the earliest is from 2008-02.
 - **Raw first** (re-classifiable), conditional GET (ETag / Last-Modified), per-source health.
 - **Deduplication**: canonical URLs, plus story clustering across sources (one story, N sources).
 - **Classification** (deterministic, re-runnable): providers (with aliases), GPUs ("H100" → the
@@ -370,14 +478,92 @@ Structured events detected every hour, idempotent, with severities and the numbe
   news caused a move.
 - **SEC EDGAR, changelogs, GDELT** (2026-11-01): 16 EDGAR submissions sources (NVIDIA, AMD, Intel,
   CoreWeave, hyperscalers, Nebius, DigitalOcean, Super Micro; Form D for Lambda, Crusoe, Fluidstack),
-  DigitalOcean release notes, Together changelog, Lambda status history, two GDELT queries.
+  DigitalOcean release notes, Together changelog, Lambda status history, two GDELT queries. The GDELT GPU-cloud
+  query returned nothing, live and in history, until the fix in d2fad60 (2026-11-07): GDELT rejects a quoted
+  phrase as short as "H100", so all 119 history months failed. The model names are now unquoted, and the registry
+  test refuses short quoted phrases in any GDELT query. GDELT is paced at one request per 5.5 s and answers 429
+  ("limit requests") when pushed, so a GDELT history run is slow.
 - **News history** (`news/history.py`, methodology/news-history.md): past items recovered from the feeds'
   own archive pages, Internet Archive captures of feed and index pages, EDGAR and GDELT; raw first with
-  provenance, marked backfilled, deduplicated against live items (live wins), same classifier.
-- **Major shifts** (`analytics/shifts.py`, `GET /v1/events/shifts`, methodology/shifts.md): GPU median and index
+  provenance, marked backfilled, deduplicated against live items (live wins), same classifier. Placeholder dates
+  before 1995 (e.g. TrendForce's 1970-01-01) are never publish times.
+- **Major shifts** (`analytics/shifts.py`, `GET /v1/events/shifts`, `/v1/events/shifts/{id}`,
+  `/v1/events/shifts/definition`, methodology/shifts.md; job `market_shifts`, every 15 min): GPU median and index
   moves beyond their own volatility, provider-wide repricings, capacity collapses, and archived list-price
-  changes before live coverage; each with stored, ranked related items (news, announcements, filings,
-  OpenGrid events) under *"Related news and events around this shift (not necessarily causal)"*.
+  changes before live coverage (archived points enter only where their visibility is `public`); each with stored,
+  ranked related items (news, announcements, filings, OpenGrid events) under *"Related news and events around this
+  shift (not necessarily causal)"*.
+
+---
+
+## 5a. Market context, equities and power markets (beside GPU prices, never mixed)
+
+Numbers about the world around GPU prices. They are context, never cause: none of them feeds listings, rollups,
+indices, fixings, spreads, percentiles, archived prices or routing, and nothing on OpenGrid says one of them moved a
+GPU price. Each lives in its own tables, raw first.
+
+### 5a.1 Market context (`context/`, `api/context.py`, methodology/market-context.md)
+- **EIA state electricity prices**: average retail price by US state, industrial and commercial, monthly (public
+  domain). **SEC EDGAR XBRL**: NVIDIA and AMD total and Data Center revenue; capital expenditure of Microsoft,
+  Alphabet, Amazon, Meta, Oracle, CoreWeave, NVIDIA and AMD, quarterly, each point with the filing date that made it
+  knowable and its revisions.
+- Raw first in `context_snapshots`, parsed into `context_series` (migration `0032_context_series`) with
+  `published_at`, `first_seen_at` and revision counts. Job `context_series` (daily), registered only when
+  `EIA_API_KEY` or `SEC_USER_AGENT` is set.
+- **Geo** (`context/geo.py`): a provider region gets a US state only where the cloud documents the place or the
+  region string names it; nothing is guessed.
+- **API** (public, Data API): `GET /v1/macro/series` (the catalogue), `/v1/macro/series/{series}`,
+  `/v1/macro/series/{series}/history`, and `GET /v1/macro/power` (public US listings by state, beside that state's
+  electricity price).
+
+### 5a.2 Equities (internal only; `context/equities.py`)
+Alpaca market data (never the trading API, SIP feed only): daily bars from 2016 and hourly bars for 5 years, stored
+raw first (`context_snapshots`, `equity_bars`; migration `0033_equities`). **40 tickers** in `context/equities.TICKERS`
+(`EQUITY_TICKERS` overrides): 20 GPU and AI names (NVDA, AMD, TSM, AVGO, MU, INTC, ARM, SMCI, DELL, CRWV, NBIS, ORCL,
+MSFT, GOOGL, AMZN, META, VRT, ANET and the SMH and SOXX ETFs) and 20 power names: generators (CEG, VST, TLN, NRG),
+datacenter-region utilities (D, AEP, SO, EXC, NEE, DUK, ETR, XEL), nuclear and fuel (OKLO, SMR, CCJ), grid and
+datacenter power equipment (GEV, ETN, PWR, BE) and the XLU ETF. **Every equity series is internal**: read only at the
+admin-only `/v1/ops/context/equities` and `/v1/ops/context/equities/moves` (equity moves beside GPU market moves for
+a window), never on a public page, API, index or export. Job `context_equities` (hourly) when both Alpaca keys are set.
+
+### 5a.3 Power markets (internal; `power/`, `api/power.py`, methodology/power-markets.md)
+US wholesale electricity, grid data and natural gas, hub and zone level (never nodal).
+- **Storage** (migration `0035_power_markets`): `power_series` (the catalogue); `power_days`, one row per series and
+  market day with the day's values as a compact `real[]` (24 hourly or 288 five-minute slots, DST days 23/25 or
+  276/300) plus the day's mean, min and max; `power_fetches`, raw first: every request (failures and "no data"
+  answers too) with its URL, status, byte count and SHA-256, and the bytes only where they are small. A value the
+  source did not give is NULL, never 0 and never carried over. About **511 MB** in production.
+- **Sources** (`power/sources/`; each module's terms verdict is read by `power/registry.py`):
+
+  | Source | What | Tier | In production |
+  |---|---|---|---|
+  | EIA-930 (EIA API v2) | hourly demand, net generation, interchange, day-ahead forecast and generation by fuel per balancing authority | public (public domain) | on; region hourly and fuel mix back to 2021 |
+  | EIA natural gas | Henry Hub spot and NYMEX C1-C4 futures (daily, back to 1993; EIA stopped the futures on 2024-04-05), weekly storage (back to 2010), electric-power gas price by state (monthly, back to 2002) | internal by choice | on |
+  | CAISO OASIS | day-ahead hourly and real-time 5-minute LMP at NP15, SP15, ZP26 and the four DLAPs | internal (terms do not clearly permit redistribution) | on, back to 2023-08 (OASIS serves a rolling ~39 months) |
+  | NYISO | zonal day-ahead and real-time LBMP, 15 zones | internal | on, back to 2021 |
+  | SPP | SPPNORTH_HUB and SPPSOUTH_HUB, day-ahead and real-time | internal | on, back to 2021 |
+  | ERCOT (keyless public MIS reports) | day-ahead hourly and real-time 15-minute settlement point prices, 6 hubs and 8 load zones | public (its terms permit redistributing raw public data in compilations) | on, back to 2011 |
+  | PJM (Data Miner 2) | hub and zone LMPs | internal | off: needs `PJM_API_KEY` |
+  | ISO-NE (web services) | hub and zone LMPs | internal | off: needs an ISO Express account (`ISONE_USERNAME`, `ISONE_PASSWORD`) |
+  | MISO | hub LMPs | internal | off and must stay off: its site terms forbid automated access to its public files; its Data Exchange API (subscription key) is not implemented |
+
+  PJM and ISO-NE are built from their documented formats and not verified live yet. ERCOT and EIA-930 are
+  public-tier, but they too are served only through the admin routes below.
+- **Runner** (`python -m power backfill|forward|status|sources`): idempotent and resumable (stored days are skipped,
+  "no data" days recorded), one request at a time per source, paced, streamed (nothing written to disk). The
+  `power_forward` job runs every 12 h when `POWER_ENABLED=true` (on in production) and re-reads a few days of
+  overlap, so revisions replace a day and are counted.
+- **Cross-analysis** (`power/cross.py`, derived, internal): provider regions are mapped to ISO zones or hubs only
+  where the place is documented (`power/geo.py`); power cost per GPU-hour = TDP × PUE (1.3, `POWER_PUE`) × the
+  day-ahead hub price, and its spread to the median listed price (`power_gpu_region_daily`); lagged correlations of
+  GPU price and in-stock share against power and against Henry Hub, lags −7 to +7 days (gas −14 to +30) over 180
+  days, at least 20 pairs (`power_leadlag`); power spikes around major shifts, joined at read time so
+  `market_shift_items` is untouched. Correlation, never cause. The wholesale energy cost of a GPU at full board power
+  is **not** a provider's cost.
+- **Access**: every read is admin-only under `/v1/ops/power/*` (`sources`, `status`, `series`, `map`,
+  `cross/regional`, `cross/leadlag`, `shifts`), outside the OpenAPI schema. **There is no public power route**;
+  `tests/test_visibility.py` asserts none exists and seeds internal power, gas and derived values to check every
+  public route.
 
 ---
 
@@ -616,10 +802,29 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
   interruptions, uptime. Aggregates: routing/provisioning success rates, savings, quote accuracy.
 - **Provider reliability from real transactions only**: launches, failures by kind, provisioning
   latency p50/p95, unexpected terminations, API error rate, termination success, quote accuracy,
-  **with sample sizes; no score below 10 launches**. Validation runs are reported separately.
+  **with sample sizes; no score below 10 launches**. Validation runs are reported separately. Served at
+  `/v1/execution/reliability` (key only).
 - **Economic value**: per deployment market median vs selected price vs savings, only when a
   valid comparison exists (same GPU, on-demand, ≥ 3 providers); totals by GPU, provider and
   strategy.
+
+Two separate datasets measure whether a provider's public API answers. Neither feeds provider reliability, any
+routing score or capacity, and neither is blended into another number:
+- **Provider probes, OpenGrid's own** (`probes/`, methodology/probes.md, migration `0024_probes`): 39 targets over
+  32 providers (`probes/targets.py`; 28 real API routes, 1 API host, 10 websites, each kind labelled by strength),
+  one header-only GET per probe from every vantage point that reports (the web process is one, job `probe_local`
+  every 30 s; `probes/agent.py` adds more via `POST /v1/probes/ingest`, scope `probes:write`). Raw results with
+  DNS / TCP / TLS / first-byte timings and a classified failure reason are kept 30 days in `probe_results`; hourly
+  rollups (`probe_rollup`, every 5 min) are kept for good. `GET /v1/reliability/providers`,
+  `/v1/reliability/providers/{provider}`, `…/dips`, `/v1/reliability/targets`, `/v1/reliability/agents`,
+  `/v1/reliability/probes`; page `/probes` ("Provider probes").
+- **Provider uptime, external** (`uptime/`, methodology/uptime.md): control-plane uptime and latency measured by
+  UptimeProject from five probe locations, republished under CC BY 4.0 (job `uptime`, hourly; the first poll
+  backfills up to a year of daily buckets). Shown on the `/uptime` page only, read through `/internal/uptime/*`,
+  never served by the Data API (third-party data). Providers UptimeProject does not measure read "not measured",
+  never zero. **Status-page incidents** (the providers' own reports: Hyperstack, Nebius, Crusoe, DigitalOcean,
+  Lambda and Google Cloud; job `provider_incidents`, every 10 min) are `GET /v1/reliability/incidents`, shown beside a
+  dip only when their times overlap, never as proof of cause.
 
 ---
 
@@ -707,7 +912,7 @@ monospaced market tables, and plain-language copy, access states and errors arou
 description is in docs/UI_GUIDE.md.
 
 **Navigation and access**
-- **Home**, then **Explore** (free, no account): **GPUs** (Compare, Explorer, Heatmaps, Providers), **Find
+- **Home**, then **Explore** (free, no account): **GPUs** (Compare, Explorer, Heatmaps, Providers, Capacity, Reserved prices, True cost, Provider uptime, Provider probes), **Find
   Compute** (Ask the assistant), **Markets** (Indices, Opportunities, Events, News, Watchlists), **Developers**
   (API docs, API keys, Onboarding). Then **Your workspace** (needs an account): **My Jobs** (Deployments,
   Reserve, Route). Methodology at the bottom. **Operator** tools (Execution, Checklist, Partners, Value, Ops)
@@ -737,7 +942,7 @@ description is in docs/UI_GUIDE.md.
 | Area | Pages |
 |---|---|
 | Home | "Compare GPU prices. Find the right compute. Run supported workloads.", a "What works today" list (including what does not work yet), three actions tagged free / simulation / needs an account, the live price board, indices, how it works |
-| Market | Overview · Indices · Index detail · GPUs · GPU detail · GPU family · Providers · Provider detail · Compare · Explorer · Heatmaps |
+| Market | Overview · Indices · Index detail · GPUs · GPU detail · GPU family · Providers · Provider detail · Compare · Explorer · Heatmaps · Capacity · Reserved prices · True cost (full-cost estimator) · Provider uptime · Provider probes |
 | Signals | Opportunities · Events · News (feed + timeline) |
 | Find Compute | four guided steps (what you are doing, model or project, what matters incl. **training data** and epochs, recommendation); one recommended option with price, memory per GPU, availability, estimated runtime and whole-job cost, and whether OpenGrid can run it; up to three alternatives; the three or four answers kept apart (lowest advertised price, best fit, execution-ready, lowest cost for the whole job); per-option performance across its GPUs; everything else under Advanced details |
 | Workspace | My Jobs (Needs attention / Active / Completed, simulation vs real tags, a plain-English box) · New job (example job as a free simulation, a real-GPU card with readiness, run your own model) · Job page (at a glance, next step, timeline) · Route (a simple ticket; technical panel folded) · Deployments · Deployment detail · Reserve (price-lock requests) · Request detail · Watchlists |
@@ -772,28 +977,63 @@ description is in docs/UI_GUIDE.md.
 
 ## 14. Public API
 
-All `/v1` responses use one envelope: `{"data": …, "meta": {"as_of", "kind", "methodology", …}}`.
-Authentication: `Authorization: Bearer opg_…` (or the operator session). Highlights:
+Two products share one app, one account and one key; scopes decide what a key reaches:
+- **OpenGrid Data API v1** (market intelligence; contract in **docs/API_CONTRACT.md**, enforced at the HTTP edge by
+  `api/contract.py`). Success: `{"data": …, "meta": {"as_of", "api_version", "request_id", "next_cursor", …}}`.
+  Every error, whoever produced it (validation, auth, rate limits, an unhandled exception), is one shape:
+  `{"error": {"type", "code", "message", "param", "request_id", "docs_url"}}`, with `docs_url` pointing at
+  `docs.tryopengrid.com/errors#<code>`. Dated versions: the `OpenGrid-Version` header, else the version pinned to the
+  key (`api_keys.api_version`, migration `0034`), else latest (today the only one, `2026-11-03`); an unknown value is
+  a 400 and the version used is echoed. **Cursor paging on every list** (`limit`, `cursor`; follow
+  `meta.next_cursor` until it is `null`), frozen vendor-prefixed GPU ids with `gpu_name` beside them, exact decimal
+  strings for fixings, ETag + 304 + `Cache-Control`, `?as_of=` on `/v1/listings`, bulk export `/v1/exports`, the
+  schema at `/v1/openapi.json` (key required).
+- **OpenGrid Compute API** (routing, jobs, reservations, accounts, billing): same `/v1` prefix, keeps FastAPI's
+  `{"detail": …}` errors for now.
+- **`DATA_API_HOST`** (meant for data.tryopengrid.com): a request to that host reaches only Data API routes and needs
+  an API key (no site login, no anonymous reads); it answers CORS only for the docs origin. Unset, nothing changes.
+  With `PUBLIC_PAGES` on, the main host serves the Data API's read-only areas to anonymous visitors.
+- **`/internal/*`**: the website's own reads (overview, tape, opportunities, heatmaps, compare, uptime, trust,
+  polling, mapping, live). Never on the Data API host, never with a key, not part of the contract. Every website
+  page reads only `/v1` and `/internal`; the first UI's routes (`/market`, `/listings`, `/history`, …) are retired
+  and `/classic` redirects to `/gpus`.
+- **Contract tests**: `tests/test_contract.py` sweeps every Data API GET route for the envelope, version header and
+  error shape; `tests/test_contract_shapes.py` compares responses with the frozen shape snapshot
+  `tests/contracts/2026-11-03.json`; `tests/test_docs_site.py` checks the generated docs are current.
+
+Authentication: `Authorization: Bearer opg_…` (or the operator session on the main host). Routes, as registered in
+the app:
 
 | Domain | Endpoints |
 |---|---|
-| GPUs & markets | `/v1/gpus`, `/v1/gpus/{gpu}`, `/v1/markets/{gpu}`, `/v1/markets/{gpu}/regions`, `/v1/markets/{gpu} (`context`)`, `/v1/families`, `/v1/gpus`, `/v1/regions`, `/internal/compare` |
-| History & indices | `/v1/markets/{gpu}/history`, `/v1/indices`, `/v1/indices/{id}`, `/v1/indices/{id}/history`, `/v1/indices/{id}/fixings` |
-| Settlement fixings | `/v1/fixings`, `/v1/fixings/{id}`, `…/verify`, `/v1/fixings/chain/verify`, `/v1/fixings/restatements`, `/v1/fixings/methodology` |
-| Structure | `/v1/markets`, `/internal/heatmaps/{kind}`, `/v1/providers`, `/v1/providers/{p}` |
-| Signals | `/internal/overview`, `/v1/events`, `/internal/opportunities`, `/internal/tape`, `/v1/news`, `/v1/timeline` |
-| Trust | `/v1/listings`, `/internal/trust/providers`, `/v1/capabilities` |
-| Routing | `/v1/best/{gpu}`, `/v1/route/preview`, `/v1/route`, `/v1/route/{id}`, `/v1/quotes/{id}` |
-| Deployments | `/v1/deployments`, `/v1/deployments/{id}`, `…/terminate`, `…/stop`, `…/feedback` |
+| Reference | `/v1/gpus`, `/v1/gpus/{gpu}`, `/v1/families`, `/v1/families/{family}`, `/v1/providers`, `/v1/providers/{provider}`, `/v1/regions`, `/v1/methodology`, `/v1/methodology/{name}` |
+| Markets & listings | `/v1/markets` (`?trend=true`), `/v1/markets/{gpu}`, `…/regions`, `…/history`, `…/history/daily`, `…/history/archived`, `…/history/dispersion`, `…/history/providers`, `/v1/listings` (`?as_of=`, `?previous=true`), `/v1/listings/history`, `/v1/providers/{provider}/listings/context`, `/v1/providers/{provider}/gpus/{gpu}/context` |
+| Indices & fixings | `/v1/indices`, `/v1/indices/{id}`, `…/history`, `…/fixings`; `/v1/fixings`, `/v1/fixings/{id}`, `…/verify`, `/v1/fixings/chain/verify`, `/v1/fixings/restatements`, `/v1/fixings/methodology` |
+| Capacity, reserved, costs, FX | `/v1/capacity`, `/v1/capacity/history`, `/v1/reserved`, `/v1/reserved/summary`, `/v1/costs/components`, `/v1/costs/billing`, `/v1/costs/sources`, `/v1/costs/presets`, `POST /v1/costs/estimate`, `/v1/fx/rates`, `/v1/fx/rates/history` |
+| Reliability | `/v1/reliability/providers`, `/v1/reliability/providers/{provider}`, `…/dips`, `/v1/reliability/targets`, `/v1/reliability/agents`, `/v1/reliability/probes`, `/v1/reliability/incidents`; probe agents: `/v1/probes/targets`, `POST /v1/probes/ingest` |
+| Signals | `/v1/events`, `/v1/events/types`, `/v1/events/shifts`, `/v1/events/shifts/{id}`, `/v1/events/shifts/definition`, `/v1/news`, `/v1/news/{id}`, `/v1/news/sources`, `/v1/news/topics`, `/v1/news/families`, `/v1/timeline`, `/v1/timeline/around` |
+| Market context | `/v1/macro/series`, `/v1/macro/series/{series}`, `…/history`, `/v1/macro/power` (power markets and equities: admin only, section 5a) |
+| Exports | `/v1/exports`, `/v1/exports/{dataset}` |
+| Website reads | `/internal/overview`, `/internal/tape`, `/internal/opportunities`, `/internal/heatmaps/{kind}`, `/internal/compare`, `/internal/trust/providers`, `/internal/polling`, `/internal/mapping`, `/internal/uptime/*` (5), `/internal/live/status`, `/internal/live/events` |
+| Trust & capabilities | `/v1/capabilities`, `/v1/capabilities/{provider}`, `/v1/quality` |
+| Recommend & assistant | `POST /v1/recommend`, `POST /v1/recommend/estimate`, `POST /v1/assistant` |
+| Routing | `/v1/best/{gpu}`, `/v1/route/preview`, `/v1/route`, `/v1/route/{id}`, `…/approve`, `…/reject`, `/v1/quotes/{id}` |
+| Deployments | `/v1/deployments`, `/v1/deployments/{id}`, `…/terminate`, `…/stop`, `…/feedback`, `…/outcome`; launch reliability `/v1/execution/reliability` |
 | MCP (hosted) | `/mcp`: the MCP tool set over streamable HTTP; Bearer API key only (section 6c) |
-| Training jobs | `/v1/jobs/templates`, `/v1/jobs/readiness`, `/v1/jobs/preview`, `/v1/jobs`, `/v1/jobs/{id}`, `…/logs`, `…/metrics`, `…/artifacts`, `…/artifacts/{name}`, `…/cancel`; runner callbacks (job token only) |
+| Training jobs | `/v1/jobs/templates`, `/v1/jobs/readiness`, `/v1/jobs/preview`, `/v1/jobs`, `/v1/jobs/{id}`, `…/logs`, `…/metrics`, `…/artifacts`, `…/artifacts/{name}`, `…/cancel`; 4 runner callbacks outside the schema (job token only) |
 | Reservations | `/v1/reservations/reference`, `/v1/reservations/requests`, `/v1/reservations`, `/v1/reservations/{id}`, `…/accept`, `…/withdraw` |
-| Accounts & billing | `/v1/me`, `/v1/keys`, `/v1/scopes`, `/v1/usage`, `/v1/credentials`, `/v1/billing/*` |
-| Watchlists | `/v1/watchlists`, `/v1/alerts`, `/v1/alerts/firings` |
-| Analytics | `/v1/quality`, `/v1/reliability`, `/v1/economics`, `/v1/onboarding`, `/v1/partners/me` |
-| Admin (61) | execution control, kill switches, validation, reconciliation, orphans, resources, channels, ops, metrics, traces, checklist, partners, funnel, accounts, fee policies, reservation offers, fixing restatements, methodology change notices |
+| Accounts & billing | `/v1/me`, `/v1/keys`, `/v1/scopes`, `/v1/usage`, `/v1/credentials`, `/v1/billing/usage`, `/v1/billing/invoices`, `/v1/billing/policy` |
+| Watchlists | `/v1/watchlists`, `…/items`, `/v1/alerts`, `/v1/alerts/{id}`, `…/test`, `/v1/alerts/firings` |
+| Analytics | `/v1/economics`, `/v1/onboarding`, `/v1/partners/me`, `POST /v1/events/track` (anonymous product analytics) |
+| Admin & ops (73 in the schema, 9 more outside it) | execution control, kill switches, validation, reconciliation, orphans, resources, channels, ops, metrics, traces, checklist, partners, funnel, accounts, fee policies, reservation offers, fixing restatements, methodology change notices; outside the schema: `/v1/ops/power/*` (7) and `/v1/ops/context/equities` (2) |
 
-Full interactive reference: `/api` in the terminal, or `/docs` (OpenAPI).
+Counts (from `main.app.openapi()` on a freshly migrated database): 236 operations, 214 under `/v1`, 73 of them under
+`/v1/ops` or `/v1/admin`, 15 under `/internal`, and 7 operator/debug routes at the root (`/health`, `/fetch`,
+`/normalize`, `/raw`, `/raw/summary`, `/raw/payload`, `/unmapped`). The public customer docs at
+**docs.tryopengrid.com** (`docs-site/`) publish one page per customer endpoint (67), generated by
+`python -m api.docs_openapi` (internal, website-only and write-side routes left out), with a key-holders-only
+playground that calls the Data API host directly. Full interactive reference: `/api` in the terminal, or `/docs`
+(OpenAPI).
 
 ---
 
@@ -802,21 +1042,30 @@ Full interactive reference: `/api` in the terminal, or `/docs` (OpenAPI).
 ### 15.1 Deployment
 Railway, one service + Postgres, built from `pyproject.toml` / `uv.lock`, started by
 `railway.toml` with **exactly one worker** (the poller lives in the web process). Migrations run
-automatically at startup. A push to GitHub does not trigger a Railway build on its own: deploy with
-`railway up --service opengrid-terminal --detach`. The app **refuses to start in production** without `APP_PASSWORD` and
-`API_KEY_PEPPER`.
+automatically at startup (one head, `0035_power_markets`). A push to GitHub does not trigger a Railway build on its
+own: deploy with `railway up --service opengrid-terminal --detach`. The app **refuses to start in production**
+without `APP_PASSWORD` and `API_KEY_PEPPER`. `RAILPACK_DEPLOY_APT_PACKAGES=git` puts `git` in the image (the dataset
+backfill needs it). Long one-off backfills (`python -m backfill …`, `python -m news.history run`,
+`python -m power backfill …`, `python -m context equities backfill`) run on the production server detached, after a
+deploy, because a deploy restarts the container and stops them; each resumes where it stopped. The customer docs
+deploy separately (`cd docs-site && vercel deploy --prod`).
 
 ### 15.2 Background jobs
+31 jobs are registered when every optional source is configured (`jobs.JOBS`; the provider poll loops run beside
+them). `OPENGRID_NO_JOBS` starts none; with `POLLER_ENABLED` off, the jobs marked "poller" are not registered.
+
 | Job | Every | Purpose |
 |---|---|---|
-| provider pollers | 15 min (AWS 1h) | fetch, store raw, normalize, quality-screen |
+| provider pollers | tiered: 2 min to 6 h per provider and stream (section 3.1) | fetch, store raw, normalize, quality-screen, capacity |
 | `market_hourly` | 10 min | hourly rollup → indices, provider value, events hooks |
 | `index_fixings` | 10 min | settlement fixings for hours that can no longer be revised; daily TWAP |
 | `market_events` | 15 min | event detection |
+| `market_shifts` | 15 min | major shifts and their related items (never causal) |
 | `news` | 1 min | poll due news sources |
 | `reconcile` | 2 min | provider vs OpenGrid state, orphans, deadlines |
 | `routing_tracker` | 1 min | deployment status, uptime, usage metering |
 | `job_sync` | 30 s | training jobs: deployment state + runner callbacks → job state; terminate on completion, failure, timeout |
+| `job_relaunch` | 1 min | automatic relaunch of an interrupted job (acts only with `JOB_AUTO_RELAUNCH_ENABLED` and a per-job retry) |
 | `reservation_expiry` | 5 min | expire stale price-lock offers and requests |
 | `channel_feeds` | 1 min | Discord deployments / market / news posts |
 | `silence_alerts` | 10 min | ops alert when a provider's prices, listings or capacity go silent; recovery |
@@ -826,15 +1075,38 @@ automatically at startup. A push to GitHub does not trigger a Railway build on i
 | `route_outcomes`, `product_events` | 5 min | routing quality and product analytics |
 | `db_latency` | 1 min | database latency metric |
 | `api_usage_flush`, `api_usage_retention` | 10 s / daily | API usage logging |
+| `gpuhunt_snapshot` | daily | raw copy of dstack's expiring gpuhunt catalogues (`GPUHUNT_SNAPSHOT_ENABLED`) |
+| `uptime`, `provider_incidents` | 1 h / 10 min | UptimeProject uptime and latency; providers' status-page incidents (`UPTIME_ENABLED`) |
+| `probe_local`, `probe_rollup` | 30 s / 5 min | OpenGrid's own probes from this process (`PROBES_LOCAL_ENABLED`); hourly rollups |
+| `fx_rates` | 1 h | ECB reference rates (poller) |
+| `cost_components` | daily | full-cost sources into `cost_snapshots` (poller) |
+| `lium_stream` | 1 min | supervisor of the Lium WebSocket consumer (poller, `LIUM_STREAM_ENABLED`) |
+| `context_series` | daily | EIA state electricity prices and SEC EDGAR series (poller; only with `EIA_API_KEY` or `SEC_USER_AGENT`) |
+| `context_equities` | 1 h | internal equity bars (poller; only with both Alpaca keys) |
+| `power_forward` | 12 h | power markets: forward read with overlap, then the cross-analysis (poller; only with `POWER_ENABLED=true`, on in production) |
 
 ### 15.3 Key configuration
+`config.py` defines 153 settings; the ones an operator sets:
+
 | Variable | Purpose |
 |---|---|
 | `DATABASE_URL`, `APP_USER`, `APP_PASSWORD` | database and site login |
 | `API_KEY_PEPPER`, `CREDENTIALS_ENCRYPTION_KEY` | key hashing and credential encryption; never change once set |
 | `ENVIRONMENT=production`, `TRUST_PROXY_HEADERS=true` | production behaviour behind Railway's proxy |
+| `PUBLIC_BASE_URL`, `DATA_API_HOST`, `DOCS_BASE_URL` | canonical links; the Data API host name (Data API routes only, key required; unset: no such host); the customer docs origin (error `docs_url`, the only CORS origin) |
 | `SALAD_*`, `HYPERSTACK_API_KEY`, `LAMBDA_API_KEY`, `RUNPOD_API_KEY`, `DIGITALOCEAN_API_KEY` | provider market data (and routing where supported) |
+| `JARVIS_API_KEY`, `MASSEDCOMPUTE_API_KEY`, `THUNDER_API_KEY`, `CLORE_API_KEY`, `DEEPINFRA_API_KEY`, `HOTAISLE_API_KEY` + `HOTAISLE_TEAM`, `LATITUDE_API_KEY`, `CRUSOE_ACCESS_KEY_ID` + `CRUSOE_SECRET_KEY` | further provider prices, stock or capacity (read-only) |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | read-only EC2 market calls: spot price history, spot placement scores, capacity blocks |
+| `GCP_API_KEY`, `GCP_SERVICE_ACCOUNT_JSON`, `GCP_PROJECT_ID` | Cloud Billing Catalog; the read-only service account opens GCP regions beyond Iowa |
 | `SHADEFORM_API_KEY`, `VAST_API_KEY`, `VERDA_CLIENT_ID/SECRET` | optional additional routing credentials |
+| `POLLER_ENABLED`, `LIUM_STREAM_ENABLED`, `NEWS_ENABLED`, `SEC_USER_AGENT` | background polling, the Lium stream, news feeds; the SEC fair-access User-Agent (news EDGAR sources and market context) |
+| `UPTIME_ENABLED`, `PROBES_LOCAL_ENABLED`, `PROBES_LOCATION`, `PROBES_RAW_RETENTION_DAYS` | external uptime; OpenGrid's own probes (raw kept 30 days by default) |
+| `GPUHUNT_SNAPSHOT_ENABLED`, `SKYPILOT_CATALOG_ENABLED`, `SKYPILOT_CATALOG_LICENCE` | archived-history sources (SkyPilot off until its licence is confirmed) |
+| `EIA_API_KEY` | EIA API v2: market-context state electricity prices, and the EIA-930 and natural-gas power sources |
+| `ALPACA_DATA_KEY_ID`, `ALPACA_DATA_SECRET_KEY`, `EQUITY_TICKERS` | internal equities (market data only); ticker override |
+| `POWER_ENABLED`, `POWER_SOURCES`, `POWER_PUE` | power markets: the `power_forward` job (default off; on in production); sources (empty: each module's default); facility overhead (1.3) |
+| `PJM_API_KEY`, `ISONE_USERNAME`, `ISONE_PASSWORD` | PJM and ISO-NE power sources (unset: off) |
+| `ERCOT_API_SUBSCRIPTION_KEY`, `ERCOT_API_USERNAME`, `ERCOT_API_PASSWORD` | defined for ERCOT's Public API, but not read: ERCOT is read keyless from its public MIS reports |
 | `ROUTING_LIVE_PROVISIONING` | env ceiling for real launches (default off) |
 | `ROUTING_LAUNCH_DEFAULTS` | per-provider launch defaults, e.g. the validation SSH key name |
 | `OPS_ALERT_WEBHOOK_URL`, `OPS_ALERT_WEBHOOK_SECRET` | ops alerts (+ signing secret used by all channels) |
@@ -845,6 +1117,8 @@ automatically at startup. A push to GitHub does not trigger a Railway build on i
 | `JOB_CALLBACK_BASE_URL` | where GPU runners call back (default `PUBLIC_BASE_URL`; https required) |
 | `JOB_ARTIFACT_STORE`, `JOB_ARTIFACT_MAX_MB`, `JOB_ARTIFACT_S3_*` | training artifacts: Postgres (default) or S3-compatible |
 | `JOB_SYNC_INTERVAL_SECONDS`, `JOB_BOOTSTRAP_TIMEOUT_MINUTES`, `JOB_RUNNER_SILENCE_MINUTES`, `JOB_TOKEN_GRACE_MINUTES` | training-job timing |
+| `JOB_AUTO_RELAUNCH_ENABLED` | automatic relaunch of interrupted jobs (default off) |
+| `ASSISTANT_LLM_PROVIDER`, `ANTHROPIC_API_KEY`, `ASSISTANT_LLM_MODEL` | optional LLM for the assistant (off unless both provider and key are set) |
 
 `deploy/make_env.py` builds the Railway variables file and generates the secrets.
 
@@ -852,8 +1126,11 @@ automatically at startup. A push to GitHub does not trigger a Railway build on i
 
 ## 16. Testing
 
-109 Python test files and 11 JavaScript web test files (plain scripts, scratch Postgres databases, no real
-provider calls):
+124 Python test files and 12 JavaScript web test files in `tests/` (plain scripts, each with its own scratch
+Postgres database, no real provider calls), plus 4 CLI/MCP test files in `cli/tests/`. `tests/run_all.py` runs all
+136 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
+(`.github/workflows/tests.yml`) runs it on every push and pull request against a throwaway Postgres 16 whose zone is
+deliberately not UTC. Beyond the per-module tests:
 - unit and integration tests for every analytics module, API and page;
 - **routing benchmark**: 50 deterministic decision scenarios;
 - **chaos suite**: 22 failure scenarios (timeouts, 5xx, crashes mid-launch, restarts, expired
@@ -875,8 +1152,21 @@ provider calls):
 - **reservations**: state machine, supply-basis enforcement, tenant isolation, nothing launched or billed;
 - **provider page parsers**: the newer scraped price pages parsed from saved real copies (CoreWeave, Together AI,
   Jarvislabs, Hot Aisle, Boost Run, Vultr, Nebius), plus one parser test file each for Google Cloud, Azure,
-  Oracle, IBM, the general clouds (Linode, OVHcloud, Scaleway, Koyeb) and Shadeform's Horizon / Phyntec;
-- JavaScript tests for the terminal's core, charts and execution UI.
+  Oracle, IBM, the general clouds (Linode, OVHcloud, Scaleway, Koyeb) and Shadeform's Horizon / Phyntec, and one
+  file each for most providers added since (`test_provider_*.py`);
+- **data visibility** (`tests/test_visibility.py`): seeds unmistakable internal listings, power, gas and derived
+  values, calls every public route enumerated from the app, and fails on any internal name, price or count; also
+  asserts no `/v1/power` route exists;
+- **API contract** (`test_contract.py`, `test_contract_shapes.py` against `tests/contracts/2026-11-03.json`) and the
+  customer docs (`test_docs_site.py`);
+- **archived history, news history, shifts, capacity, freshness, full cost, reserved prices, FX, live feeds, uptime,
+  probes, market context, equities and power** (four power files: sources, cross-analysis, NYISO / MISO, SPP / ERCOT
+  / PJM / ISO-NE), each parsed from saved real responses in `tests/fixtures_*`;
+- JavaScript tests for the terminal's core, shell, navigation, charts, Find Compute, jobs, cost, reserve, reserved,
+  developers, assistant and execution UI.
+
+Known flaky: `test_jobs_e2e` has failed intermittently ("no usage slice metered"), and `test_money_invariants` can
+exceed the 10-minute timeout on a busy machine.
 
 ---
 
@@ -889,6 +1179,10 @@ provider calls):
 5. Never claim provisioning support, a completed route, or reliability that isn't real.
 6. Never claim news caused a market move.
 7. Every published statistic links to its methodology.
+8. Data OpenGrid may read but not republish is used internally and never exposed; a source whose terms forbid
+   automated access is not read at all.
+9. Context (power, gas, equities, filings) sits beside GPU prices and never mixes into them: correlation, never
+   cause.
 
 ---
 
@@ -899,8 +1193,25 @@ provider calls):
 - **Public pages** are on in production (`PUBLIC_PAGES=true`): the market pages, Find Compute, Developers and the
   assistant are open to visitors; jobs, keys, billing and every money path still need a login or an API key.
   The hosted MCP endpoint (`/mcp`) is live and accepts only an API key.
-- **Accounts**: no self-serve sign-up or payments yet. Keys are created by the operator (`/keys`, or
-  `POST /v1/admin/accounts/{id}/keys`); credits are admin-issued.
+- **Accounts**: no self-serve sign-up, customer login or payments yet. Keys are created by the operator (`/keys`,
+  `/admin/partners`, or `POST /v1/admin/accounts/{id}/keys`); the public docs tell customers to ask
+  hello@tryopengrid.com. Credits are admin-issued. No Python SDK and no stored daily export files yet (exports are
+  built per request).
+- **Data API v1** (section 14): one contract, one version (`2026-11-03`), customer docs at
+  docs.tryopengrid.com. `/v1/listings?as_of=` and the listings export scan `listing_observations` and are untested
+  at production size. A few website pages still translate new field names back to old ones in the browser
+  (`OG.legacyGpu`, `OG.legacyHistory`).
+- **Power markets** (§5a): internal only. Every read is admin-only under `/v1/ops/power/*`; there is no public power
+  route, even for the public-tier ERCOT and EIA-930 series. Missing markets: **PJM** (needs `PJM_API_KEY`), **ISO-NE**
+  (needs an ISO Express account) and **MISO** (its terms forbid automated access to its public files; the Data
+  Exchange API is not implemented). CAISO history before 2023-08 is not available from OASIS. A derived
+  cross-analysis row is internal unless every input is public, and all of them are served to admins only.
+- **Market context and equities**: EIA and EDGAR series are public at `/v1/macro/*`; all 40 equity tickers are
+  internal.
+- **Archived history**: about 30 of the 60 providers have no archive; AWS reserved archive rows are stored but not
+  served; archived points are sampled on capture days only.
+- **News**: GDELT throttles (HTTP 429 "limit requests"), so GDELT history runs are paced at one request per 5.5 s
+  and are slow; the GDELT GPU-cloud query returned nothing before d2fad60.
 - **Execution**: built, hardened, and independently reviewed; **all adapters are still
   simulated**. Training jobs (§6a) are built and tested but have not run on a real GPU provider yet. The next step is one supervised **Lambda validation run** (≈ $1 realistic, ≤ $1.85
   worst case with the operator abort rule). Customer routes follow only after validation.
@@ -911,17 +1222,28 @@ provider calls):
   Compute provisioning (need IAM/partner access), workload-performance benchmarks.
 - Known limits: rate limits and login throttling are per process; rotating a provider key during
   live deployments strands them as `credentials_unavailable` (alerted, never marked terminated);
-  Lambda's API exposes no termination timestamp, so billing end is an observed estimate.
+  Lambda's API exposes no termination timestamp, so billing end is an observed estimate. Full cost: Verda publishes
+  no egress prices, so its totals are lower bounds. Gcore is withheld from AI input only row by row; market
+  aggregates that include it are not recomputed for the assistant. Paperspace is Shadeform's resale price and Akash
+  a bid summary, both labelled.
 
 ---
 
 ## 19. Methodology documents
 
 Every number OpenGrid publishes traces to a document in `methodology/` (also served at
-`/methodology` in the terminal):
+`/methodology` in the terminal and listed at `GET /v1/methodology`). The 45 documents:
 
-`data-kinds` · `indices` · `historical-context` · `dispersion` · `provider-value` · `hardware` ·
-`families` · `events` · `opportunities` · `news` · `data-quality` · `data-trust` · `routing` ·
-`best-execution` · `execution-safety` · `reconciliation` · `provider-capabilities` ·
-`first-live-route` · `routing-quality` · `reliability` · `economics` · `billing` · `alerts` ·
-`security` · `jobs` · `workloads` · `runner` · `settlement` · `reservations` · `fx`
+- **Market data:** `data-kinds` · `data-quality` · `data-trust` · `data-visibility` · `freshness` · `capacity` ·
+  `live-feeds` · `families` · `hardware` · `fx` · `gcp-regions`
+- **Market intelligence:** `indices` · `settlement` · `historical-context` · `archived-history` · `dispersion` ·
+  `provider-value` · `events` · `shifts` · `opportunities` · `reserved-prices` · `full-cost`
+- **News and context:** `news` · `news-history` · `market-context` · `power-markets`
+- **Reliability:** `uptime` · `probes` · `reliability`
+- **Execution:** `routing` · `best-execution` · `execution-safety` · `reconciliation` · `provider-capabilities` ·
+  `first-live-route` · `routing-quality` · `economics` · `billing`
+- **Jobs, workloads and reservations:** `jobs` · `workloads` · `runner` · `recommendations` · `reservations`
+- **Operations:** `alerts` · `security`
+
+Two internal-only methodology notes (`methodology/internal/equities.md`, `methodology/internal/natural-gas.md`) are
+not served on the site.
