@@ -31,7 +31,8 @@ from urllib.parse import urlencode as _urlencode
 
 # GPU-market searches run against GDELT (live: the last day; history: month by month, news/history.py).
 _GDELT_Q = {
-    "gdelt_gpu_cloud": '("H100" OR "H200" OR "B200" OR "GB200" OR "MI300X" OR "A100") (GPU OR cloud OR datacenter) '
+    # Model names stay unquoted: GDELT rejects a quoted phrase this short ("The specified phrase is too short").
+    "gdelt_gpu_cloud": '(H100 OR H200 OR B200 OR GB200 OR MI300X OR A100) (GPU OR cloud OR datacenter) '
                        'sourcelang:english',
     "gdelt_gpu_market": '("GPU prices" OR "GPU rental" OR "GPU shortage" OR "GPU cloud" OR "neocloud" OR '
                         '"AI compute prices") sourcelang:english',

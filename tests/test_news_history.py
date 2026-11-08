@@ -116,6 +116,10 @@ def test_sources_registry():
     assert s["sec_nvda"].entity_hints == {"vendor": "nvidia"} and s["sec_crwv"].entity_hints == {"provider": "coreweave"}
     assert s["digitalocean_release_notes"].day_dates and s["together_changelog"].key == "guid"
     assert s["gdelt_gpu_cloud"].kind == "gdelt" and "gdeltproject.org" in s["gdelt_gpu_cloud"].note
+    import re
+    for sid, q in registry._GDELT_Q.items():
+        short = [ph for ph in re.findall(r'"([^"]+)"', q) if " " not in ph and len(ph) < 7]
+        assert not short, f"{sid}: GDELT rejects short quoted phrases ({short}): leave them unquoted"
     assert history.methods_for(s["lambda_blog"]) == ["feed_archive", "wayback_feed"]
     assert history.methods_for(s["crusoe_blog"]) == ["wayback_index"], "feedless provider: archived index pages"
     assert history.methods_for(s["sec_amd"]) == ["edgar"] and history.methods_for(s["cme_press"]) == []
