@@ -3,94 +3,225 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OpenGrid: the cheapest GPUs, one API key</title>
-<meta name="description" content="Search live GPU prices across every GPU cloud and get an API key in one click. OpenGrid finds the cheapest GPU for your job from observed market prices.">
+<title>OpenGrid: the GPU compute market, priced</title>
+<meta name="description" content="Live listed prices for 100 exact GPU models across 59 GPU clouds, fair-price indices with a public method, and one API key for all of it.">
 <!--OG:CANONICAL-->
+<meta name="theme-color" content="#070906">
+<meta name="color-scheme" content="dark">
 <meta property="og:site_name" content="OpenGrid">
 <meta property="og:type" content="website">
-<meta property="og:title" content="OpenGrid: the cheapest GPUs, one API key">
-<meta property="og:description" content="Search live GPU prices across every GPU cloud and get an API key in one click.">
+<meta property="og:title" content="OpenGrid: the GPU compute market, priced">
+<meta property="og:description" content="Live listed prices for 100 exact GPU models across 59 GPU clouds, fair-price indices, and one API key for all of it.">
 <meta name="twitter:card" content="summary">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23131920'/%3E%3Cpath d='M6 6h12M6 12h12M6 18h12M6 6v12M12 6v12M18 6v12' stroke='%234d94ff' stroke-width='1.6' fill='none'/%3E%3C/svg%3E">
-<link rel="preload" href="/static/fonts/Figtree-var.woff2" as="font" type="font/woff2" crossorigin>
-<script>try{var t=localStorage.getItem("og-theme");document.documentElement.dataset.theme=t==="light"||t==="dark"?t:matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}catch(e){document.documentElement.dataset.theme="light"}</script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='2' fill='%23070906'/%3E%3Cpath fill='%2391C61D' d='M6 6h9v9H6zM6 17h9v9H6zM17 17h9v9h-9z'/%3E%3Cpath d='M18 7h7v7' fill='none' stroke='%2391C61D' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="preload" href="/static/fonts/Archivo-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/JetBrainsMono-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/landing.css">
 <script src="/static/landing.js" defer></script>
 </head>
 <body>
-<header class="lp-top">
-  <a class="lp-brand" href="/" aria-label="OpenGrid home">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 4h16M4 12h16M4 20h16M4 4v16M12 4v16M20 4v16"/></svg>
-    OpenGrid
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <a class="brand" href="/" aria-label="OpenGrid home">
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 3h12v12H3zM3 17h12v12H3zM17 17h12v12H17z"/><path class="mark-open" d="M18.5 4.5h9v9"/></svg>
+    <span>opengrid</span>
   </a>
-  <nav class="lp-links" aria-label="Site">
-    <a href="/gpus">Prices</a>
-    <a href="/api">Docs</a>
-    <a href="/login">Sign in</a>
+  <nav class="links" aria-label="Site">
+    <a href="/markets">Markets</a>
+    <a href="/indices">Indices</a>
+    <a href="/methodology">Method</a>
+    <a href="https://docs.tryopengrid.com" rel="noopener">Docs</a>
   </nav>
+  <a class="btn btn-key top-key" href="#key">Get API key</a>
 </header>
 
-<main class="lp">
-  <h1 class="lp-head">
-    <svg class="lp-mark" id="lp-mark" viewBox="0 0 48 48" fill="none" stroke-linecap="round" aria-hidden="true">
-      <path d="M8 8h32"/><path d="M8 24h32"/><path d="M8 40h32"/>
-      <path d="M8 8v32"/><path d="M24 8v32"/><path d="M40 8v32"/>
-      <circle class="lp-node" cx="24" cy="24" r="3.6"/>
-    </svg>
-    <span class="lp-type" id="lp-type" aria-hidden="true"><span class="lp-type-a">Cheapest GPUs</span><span class="lp-type-b"></span><span class="lp-caret"></span></span>
-    <span class="lp-sr">Cheapest GPUs, from every GPU cloud. OpenGrid.</span>
-  </h1>
+<main id="main">
 
-  <form class="lp-bar" id="lp-form" role="search" autocomplete="off">
-    <label class="lp-sr" for="lp-q">Search a GPU or describe your job</label>
-    <svg class="lp-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
-    <input class="lp-q" id="lp-q" name="q" type="text" enterkeyhint="search" spellcheck="false" maxlength="300"
-           placeholder="Search a GPU or describe your job">
-    <button type="submit" class="lp-go" id="lp-go" aria-label="Search">
-      <svg class="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-      <span class="i-spin" aria-hidden="true"></span>
-    </button>
-  </form>
+  <!-- First viewport: the market itself -->
+  <section class="hero" aria-labelledby="h-hero">
+    <div class="hero-copy">
+      <h1 id="h-hero">The GPU market, <span class="nowrap">priced.</span></h1>
+      <p class="lede" id="lede">OpenGrid reads the listed price of every GPU on every cloud it tracks, checks it, and turns it into one comparable market.</p>
+      <p class="spread" id="spread" hidden></p>
 
-  <p class="lp-proof" id="lp-proof" hidden></p>
+      <div class="hero-acts">
+        <a class="btn btn-key" href="#key">Get a free API key</a>
+        <a class="btn btn-line" href="/markets">Open the markets</a>
+      </div>
 
-  <div class="lp-try" id="lp-try" aria-label="Try a search">
-    <button type="button" data-q="H100 for 8 hours">H100 for 8 hours</button>
-    <button type="button" data-q="Cheapest A100">Cheapest A100</button>
-    <button type="button" data-q="Fine-tune Llama 3 8B">Fine-tune Llama 3 8B</button>
-  </div>
-
-  <section class="lp-res" id="lp-res" aria-live="polite" hidden></section>
-
-  <section class="lp-key" id="lp-key">
-    <div class="lp-key-ask" id="lp-key-ask">
-      <p>Get these prices from your own code.</p>
-      <button type="button" class="lp-btn" id="lp-gen">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2 20 3M16 7l3 3M14 9l2 2"/></svg>
-        <span id="lp-gen-t">Generate API key</span>
-      </button>
+      <form class="find" id="find" role="search" autocomplete="off">
+        <label for="find-q">Find a GPU in the grid</label>
+        <div class="find-row">
+          <input id="find-q" type="search" placeholder="H100, B200, L40S, MI300X" spellcheck="false" enterkeyhint="go" aria-describedby="find-msg">
+          <button type="submit" class="find-go" aria-label="Open this GPU's market">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+        <p class="find-msg" id="find-msg" aria-live="polite"></p>
+      </form>
     </div>
-    <p class="lp-err" id="lp-err" role="alert" hidden></p>
 
-    <div class="lp-key-out" id="lp-key-out" hidden>
-      <div class="lp-key-h">
-        <h2>Your API key</h2>
-        <span class="lp-scope" title="This key reads OpenGrid market data. It cannot launch or pay for compute.">Read-only · market data</span>
+    <figure class="board" aria-labelledby="board-cap">
+      <div class="board-scroll" id="board-scroll" tabindex="0" aria-label="Price grid: GPUs by cloud. Scrolls sideways on small screens.">
+        <table class="grid" id="grid" aria-describedby="board-cap">
+          <caption class="sr">Each GPU's lowest listed price at each cloud, compared with the other clouds' lowest prices.</caption>
+        </table>
+        <div class="grid-wait" id="grid-wait">Loading the market</div>
       </div>
-      <div class="lp-key-row">
-        <code class="lp-secret" id="lp-secret" tabindex="0" aria-label="Your API key"></code>
-        <button type="button" class="lp-copy" id="lp-copy">Copy</button>
+      <figcaption id="board-cap" class="legend">
+        <span class="lg"><i class="sw sw-4"></i>Cheaper than other clouds</span>
+        <span class="lg"><i class="sw sw-2"></i>About the same</span>
+        <span class="lg"><i class="sw sw-p"></i>Pricier</span>
+        <span class="lg"><i class="sw sw-o"></i>Not listed</span>
+        <span class="lg-asof" id="asof"></span>
+      </figcaption>
+      <div class="tip" id="tip" role="status" hidden></div>
+    </figure>
+  </section>
+
+  <!-- Facts in a sentence, not a stat row -->
+  <p class="facts" id="facts">Tracking <b>59</b> GPU clouds and <b>100</b> exact GPU models. An H100 SXM and an H100 PCIe are different products here, so they are never averaged together.</p>
+
+  <!-- Indices -->
+  <section class="sec idx" aria-labelledby="h-idx">
+    <div class="sec-head">
+      <h2 id="h-idx">One fair price per GPU.</h2>
+      <p>Every hour, each GPU gets an index: the typical listed price across clouds, one vote per cloud, recomputed from the hour's prices.</p>
+    </div>
+
+    <div class="composite" id="composite" hidden>
+      <div class="comp-num">
+        <h3>OpenGrid GPU Compute Index</h3>
+        <p class="comp-level"><span id="comp-level"></span><span class="comp-chg" id="comp-chg"></span></p>
+        <p class="comp-note" id="comp-note"></p>
       </div>
-      <p class="lp-saved" id="lp-saved"></p>
-      <h3>Try it</h3>
-      <pre class="lp-code" id="lp-curl" tabindex="0"></pre>
-      <h3 id="lp-resp-h" hidden>Live response</h3>
-      <pre class="lp-code lp-resp" id="lp-resp" tabindex="0" hidden></pre>
-      <p class="lp-scope-note">This key reads live prices from every GPU cloud OpenGrid tracks. Running jobs through OpenGrid is early access.</p>
-      <a class="lp-more" href="/get-started">Learn more <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+      <svg class="comp-chart" id="comp-chart" role="img" preserveAspectRatio="none"></svg>
+    </div>
+
+    <div class="tbl-wrap">
+      <table class="itbl" id="itbl">
+        <caption class="sr">GPU price indices</caption>
+        <thead>
+          <tr><th scope="col">GPU</th><th scope="col" class="n">Index, $/GPU-hr</th><th scope="col" class="n">7 days</th><th scope="col" class="n wide">Clouds</th><th scope="col" class="n wide">Listed now, low to high</th><th scope="col" class="spk-h"><span class="sr">Last 7 days</span></th></tr>
+        </thead>
+        <tbody id="itbl-b"></tbody>
+      </table>
+    </div>
+    <p class="fine" id="itbl-note" hidden><sup class="mk">*</sup> The index sits outside today's listed range. An index is chain-linked hour to hour and counts every cloud with a price that hour, so it can differ from the listings live this minute.</p>
+    <p class="more"><a href="/indices">All indices</a></p>
+  </section>
+
+  <!-- Method, shown on a real number -->
+  <section class="sec how" aria-labelledby="h-how">
+    <div class="sec-head">
+      <h2 id="h-how">How <span id="how-num">one index</span> is made.</h2>
+      <p>The method is public and the same for every GPU. Here it is on the H100 SXM index, using the prices that went into it.</p>
+    </div>
+    <figure class="strip" id="strip" hidden>
+      <svg id="strip-svg" role="img"></svg>
+      <figcaption id="strip-cap"></figcaption>
+    </figure>
+    <ol class="steps">
+      <li><h3>One vote per cloud</h3><p>Each cloud counts once, at its lowest listed price. A cloud with forty listings can't outvote a cloud with one.</p></li>
+      <li><h3>Bad prints held out</h3><p>A price more than three times the median, or under a third of it, is set aside, as is a feed that is failing.</p></li>
+      <li><h3>A trimmed average</h3><p>With five or more clouds, the top and bottom fifth are cut and the rest averaged. Under three clouds, nothing is published.</p></li>
+      <li><h3>Chain-linked</h3><p>When a cloud joins or leaves, the index moves only by how prices changed, not by who is in it. That is why the index can differ from this hour's plain average.</p></li>
+      <li><h3>Fixed and hashed</h3><p>For settlement indices, each hour is fixed five hours later and chained to the hour before by hash. Anyone can recompute one.</p></li>
+    </ol>
+    <p class="fine" id="ledger">These are listed prices, not completed trades. <a href="/methodology/indices">Read the method</a></p>
+  </section>
+
+  <!-- What moved -->
+  <section class="sec tape" aria-labelledby="h-tape" id="tape-sec" hidden>
+    <div class="sec-head">
+      <h2 id="h-tape">What moved.</h2>
+      <p>Price cuts, new lows, and GPUs selling out or coming back, as OpenGrid sees them.</p>
+    </div>
+    <ul class="moves" id="moves"></ul>
+    <p class="more"><a href="/events">All market events</a></p>
+  </section>
+
+  <!-- Developers -->
+  <section class="sec dev" id="key" aria-labelledby="h-dev" tabindex="-1">
+    <div class="sec-head">
+      <h2 id="h-dev">One key for the whole market.</h2>
+      <p>Read every price, index and event from your own code, or give your coding agent the market as a tool.</p>
+    </div>
+
+    <div class="dev-grid">
+      <div class="keybox" id="keybox">
+        <div id="key-ask">
+          <h3>Free API key</h3>
+          <ul class="key-terms">
+            <li>Reads market data: prices, indices, events, history.</li>
+            <li>Can't launch, route or pay for compute.</li>
+            <li>No sign-up. Shown once, so copy it.</li>
+          </ul>
+          <button type="button" class="btn btn-key btn-big" id="gen">Generate API key</button>
+          <p class="key-err" id="key-err" role="alert" hidden></p>
+        </div>
+        <div id="key-out" hidden>
+          <h3>Your API key</h3>
+          <div class="key-row">
+            <code class="secret" id="secret" tabindex="0" aria-label="Your API key"></code>
+            <button type="button" class="btn btn-line btn-sm" id="copy">Copy</button>
+          </div>
+          <p class="key-saved" id="key-saved"></p>
+        </div>
+      </div>
+
+      <div class="code">
+        <div class="tabs" role="tablist" aria-label="Ways to use the key">
+          <button role="tab" type="button" id="tab-curl" aria-selected="true" aria-controls="pane-curl">curl</button>
+          <button role="tab" type="button" id="tab-mcp" aria-selected="false" aria-controls="pane-mcp" tabindex="-1">Claude Code</button>
+          <button role="tab" type="button" id="tab-py" aria-selected="false" aria-controls="pane-py" tabindex="-1">Python</button>
+        </div>
+        <pre role="tabpanel" id="pane-curl" aria-labelledby="tab-curl" tabindex="0"></pre>
+        <pre role="tabpanel" id="pane-mcp" aria-labelledby="tab-mcp" tabindex="0" hidden></pre>
+        <pre role="tabpanel" id="pane-py" aria-labelledby="tab-py" tabindex="0" hidden></pre>
+        <p class="code-note" id="code-note">Without a key you can still read prices on this site. The key is for your code.</p>
+      </div>
     </div>
   </section>
-  <p class="lp-live" id="lp-live" aria-live="polite"></p>
+
+  <!-- Honest status -->
+  <section class="sec now" aria-labelledby="h-now">
+    <div class="sec-head">
+      <h2 id="h-now">What works today.</h2>
+    </div>
+    <dl class="status">
+      <div><dt><i class="st st-live"></i>Live</dt><dd>Prices, capacity, indices, market events and history, on this site and through the API, the CLI and the MCP server. Free to read.</dd></div>
+      <div><dt><i class="st st-test"></i>Being tested</dt><dd>Launching GPUs through OpenGrid: pick the best fit, approve a quote, run, and shut down on time, with spend limits. Built for nine clouds; not yet run on a live cloud.</dd></div>
+      <div><dt><i class="st st-no"></i>Not offered</dt><dd>Payments through OpenGrid, and any trading of compute or of these indices.</dd></div>
+    </dl>
+  </section>
+
+  <section class="close" aria-labelledby="h-close">
+    <h2 id="h-close">See every price, then decide.</h2>
+    <div class="hero-acts">
+      <a class="btn btn-key" href="/markets">Open the markets</a>
+      <a class="btn btn-line" href="/find">Find a GPU for my job</a>
+    </div>
+  </section>
 </main>
+
+<footer class="foot">
+  <a class="brand brand-sm" href="/" aria-label="OpenGrid home">
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 3h12v12H3zM3 17h12v12H3zM17 17h12v12H17z"/><path class="mark-open" d="M18.5 4.5h9v9"/></svg>
+    <span>opengrid</span>
+  </a>
+  <nav aria-label="Footer">
+    <a href="/gpus">GPUs</a>
+    <a href="/providers">Clouds</a>
+    <a href="/indices">Indices</a>
+    <a href="/methodology">Methodology</a>
+    <a href="/developers">Developers</a>
+    <a href="/get-started">Get started</a>
+    <a href="mailto:hello@tryopengrid.com">hello@tryopengrid.com</a>
+  </nav>
+  <p>Listed prices from public sources, checked and normalized by OpenGrid. Not an offer to sell compute.</p>
+</footer>
+<p class="sr" id="live" aria-live="polite"></p>
 </body>
 </html>

@@ -412,10 +412,12 @@ def test_keys_listing_scope():
 
 def test_security_headers():
     setup()
-    r = client.get("/", headers=basic())
+    r = client.get("/gpus", headers=basic())  # an app page: the shell carries an inline boot script
     csp = r.headers["content-security-policy"]
     assert "frame-ancestors 'none'" in csp and "object-src 'none'" in csp and "'unsafe-inline'" not in csp.split(";")[1]
     assert "'sha256-" in csp, "the page's own inline boot script is allowed by hash"
+    home = client.get("/", headers=basic()).headers["content-security-policy"]
+    assert "script-src 'self';" in home, "the homepage has no inline script, so nothing inline is allowed"
     assert r.headers["x-frame-options"] == "DENY" and r.headers["x-content-type-options"] == "nosniff"
     assert r.headers["referrer-policy"] == "same-origin"
     j = client.get("/v1/me", headers=basic())

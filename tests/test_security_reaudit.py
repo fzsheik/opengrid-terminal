@@ -279,7 +279,7 @@ def test_safe_url_web_client():
 
 def test_csp_does_not_allow_injected_inline_script():
     setup()
-    r = client.get("/", headers=basic())
+    r = client.get("/gpus", headers=basic())  # an app page: the shell carries inline boot scripts
     csp = r.headers["content-security-policy"]
     own = re.findall(r"<script>(.*?)</script>", r.text, re.S)
     assert own and all(security.inline_script_hashes(f"<script>{s}</script>")[0] in csp for s in own)

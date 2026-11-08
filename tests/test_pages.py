@@ -373,10 +373,12 @@ def test_execution_pages_are_private_and_noindex():
 
 
 def test_homepage_markets_and_developers_pages():
-    """/ is the landing page (animated headline + "Generate API key"); "Learn more" goes to /get-started; the market dashboard
+    """/ is the homepage (the live GPU x cloud price grid, indices, the method, "Generate API key"); /get-started is linked from it; the market dashboard
     moved to /markets, /developers is new: all served, indexable, in the sitemap."""
     land = client.get("/")
-    assert land.status_code == 200 and "Cheapest GPUs" in land.text and 'id="lp-gen"' in land.text
+    assert land.status_code == 200 and "The GPU market" in land.text and 'id="gen"' in land.text and 'id="grid"' in land.text
+    assert 'href="/get-started"' in land.text and "/static/fonts/Archivo-var.woff2" in land.text
+    assert "<script>" not in land.text, "no inline script: the homepage runs under script-src 'self' alone"
     assert "/static/landing.js?v=" in land.text and "/static/landing.css?v=" in land.text, "assets carry the content hash"
     assert "/static/pages/home.js" not in land.text, "the landing page is its own document, not the app shell"
     assert 'name="robots" content="noindex"' not in land.text and '<link rel="canonical" href="' + BASE + '/">' in land.text

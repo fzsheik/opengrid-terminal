@@ -19,7 +19,7 @@ const navHtml = html.slice(html.indexOf('<nav class="nav"'), html.indexOf("</nav
 const K = OG.navKeyFor;
 ok(typeof K === "function", "navKeyFor is exported for Node");
 eq(K("/"), "home", "/ is the homepage");
-eq(K("/get-started"), "start", "/get-started: where the landing page's Learn more goes");
+eq(K("/get-started"), "start", "/get-started: linked from the homepage footer");
 eq(K("/markets"), "markets", "/markets: the market dashboard");
 eq(K("/developers"), "developers", "/developers");
 eq(K("/find"), "find", "/find");

@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-08T00:00:00Z",
+  "title": "Design System: OpenGrid",
+  "extensions": {
+    "colorMeta": {
+      "lime": { "role": "primary", "displayName": "Grid Lime", "canonical": "oklch(76.2% 0.189 127.0)", "tonalRamp": ["#050f00", "#192a00", "#304900", "#4a6a00", "#648d00", "#81b112", "#a5d84b", "#e6f5d3"] },
+      "lime-hi": { "role": "primary", "displayName": "Lit Lime", "tonalRamp": ["#050f00", "#192a00", "#304900", "#4a6a00", "#648d00", "#81b112", "#a5d84b", "#e6f5d3"] },
+      "lime-ink": { "role": "primary", "displayName": "Lime Ink", "tonalRamp": ["#050f00", "#192a00", "#304900", "#4a6a00", "#648d00", "#81b112", "#a5d84b", "#e6f5d3"] },
+      "scale-cheaper": { "role": "data", "displayName": "Cheaper", "tonalRamp": ["#1f241b", "#2d3328", "#3a4f1c", "#5f8a16", "#91c61d"] },
+      "scale-lower": { "role": "data", "displayName": "Lower", "canonical": "oklch(58.1% 0.145 129.0)", "tonalRamp": ["#1f241b", "#2d3328", "#3a4f1c", "#5f8a16", "#91c61d"] },
+      "scale-par": { "role": "data", "displayName": "At Par", "tonalRamp": ["#1f241b", "#2d3328", "#3a4f1c", "#5f8a16", "#91c61d"] },
+      "scale-pricier": { "role": "data", "displayName": "Pricier", "tonalRamp": ["#1f241b", "#2d3328", "#3a4f1c", "#5f8a16", "#91c61d"] },
+      "scale-priciest": { "role": "data", "displayName": "Priciest", "tonalRamp": ["#1f241b", "#2d3328", "#3a4f1c", "#5f8a16", "#91c61d"] },
+      "cell-open": { "role": "data", "displayName": "Open Cell" },
+      "ground": { "role": "neutral", "displayName": "Ground", "canonical": "oklch(13.6% 0.009 134.2)", "tonalRamp": ["#070906", "#0b0e09", "#11160e", "#1b2216", "#2a3422", "#949f8b", "#c2cbb9", "#eef2e9"] },
+      "ground-2": { "role": "neutral", "displayName": "Ground 2", "tonalRamp": ["#070906", "#0b0e09", "#11160e", "#1b2216", "#2a3422", "#949f8b", "#c2cbb9", "#eef2e9"] },
+      "ground-3": { "role": "neutral", "displayName": "Ground 3", "tonalRamp": ["#070906", "#0b0e09", "#11160e", "#1b2216", "#2a3422", "#949f8b", "#c2cbb9", "#eef2e9"] },
+      "hairline": { "role": "neutral", "displayName": "Hairline", "canonical": "oklch(24.1% 0.024 132.6)", "tonalRamp": ["#070906", "#0b0e09", "#11160e", "#1b2216", "#2a3422", "#949f8b", "#c2cbb9", "#eef2e9"] },
+      "hairline-2": { "role": "neutral", "displayName": "Hairline 2", "tonalRamp": ["#070906", "#0b0e09", "#11160e", "#1b2216", "#2a3422", "#949f8b", "#c2cbb9", "#eef2e9"] },
+      "text": { "role": "neutral", "displayName": "Text", "canonical": "oklch(95.6% 0.013 126.4)", "tonalRamp": ["#070906", "#0b0e09", "#11160e", "#1b2216", "#2a3422", "#949f8b", "#c2cbb9", "#eef2e9"] },
+      "text-2": { "role": "neutral", "displayName": "Text 2", "tonalRamp": ["#070906", "#0b0e09", "#11160e", "#1b2216", "#2a3422", "#949f8b", "#c2cbb9", "#eef2e9"] },
+      "muted": { "role": "neutral", "displayName": "Muted", "canonical": "oklch(68.8% 0.031 130.9)", "tonalRamp": ["#070906", "#0b0e09", "#11160e", "#1b2216", "#2a3422", "#949f8b", "#c2cbb9", "#eef2e9"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The single H1 only. Archivo expanded (width 118%) and heavy." },
+      "headline": { "displayName": "Headline", "purpose": "Section heads as short declarative sentences. Width 112%." },
+      "title": { "displayName": "Title", "purpose": "Step names and panel titles." },
+      "body": { "displayName": "Body", "purpose": "Paragraphs at 36 to 72ch; 16px under 640px." },
+      "label": { "displayName": "Label", "purpose": "Condensed (78 to 88% width) grid axis labels, strip labels, event types. Sentence case." },
+      "figure": { "displayName": "Figure", "purpose": "The composite index level; mono with tabular figures." },
+      "data": { "displayName": "Data", "purpose": "Table prices, tooltip prices, timestamps, the search input." },
+      "code": { "displayName": "Code", "purpose": "Code samples in the developer section." }
+    },
+    "shadows": [
+      { "name": "tooltip-float", "value": "0 10px 30px -8px rgba(0, 0, 0, 0.7)", "purpose": "The grid tooltip only: something floating over live data." },
+      { "name": "cell-open", "value": "inset 0 0 0 1px #263020", "purpose": "Outline of a grid cell where the cloud lists nothing (a border, not elevation)." },
+      { "name": "cell-active", "value": "0 0 0 2px #eef2e9", "purpose": "Hovered or focused grid cell ring, with scale(1.12)." }
+    ],
+    "motion": [
+      { "name": "ease", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Expo-out easing for every state transition." },
+      { "name": "state", "value": "180ms", "purpose": "Button, border and cell hover transitions." },
+      { "name": "grid-boot", "value": "opacity 500ms, delay col*22ms + row*6ms", "purpose": "The market switches on cloud by cloud, left to right. Off under reduced motion." }
+    ],
+    "breakpoints": [
+      { "name": "stack", "value": "1100px" },
+      { "name": "compact", "value": "640px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Lime fill, lime-ink label. The one action per region: get or generate a key, open the markets.",
+      "html": "<a class=\"ds-btn-key\" href=\"#\">Get a free API key</a>",
+      "css": ".ds-btn-key { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; font-family: Archivo, ui-sans-serif, system-ui, sans-serif; font-size: 15px; font-weight: 650; text-decoration: none; border-radius: 2px; border: 1px solid transparent; background: #91c61d; color: #0a0f04; transition: background-color .18s cubic-bezier(0.16, 1, 0.3, 1); } .ds-btn-key:hover { background: #b4e04a; } .ds-btn-key:focus-visible { outline: 2px solid #91c61d; outline-offset: 2px; }"
+    },
+    {
+      "name": "Line Button",
+      "kind": "button",
+      "refersTo": "button-line",
+      "description": "Transparent with a hairline border. The secondary action beside a primary, and Copy.",
+      "html": "<a class=\"ds-btn-line\" href=\"#\">Open the markets</a>",
+      "css": ".ds-btn-line { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; font-family: Archivo, ui-sans-serif, system-ui, sans-serif; font-size: 15px; font-weight: 650; text-decoration: none; border-radius: 2px; border: 1px solid #2a3422; background: transparent; color: #eef2e9; transition: border-color .18s cubic-bezier(0.16, 1, 0.3, 1); } .ds-btn-line:hover { border-color: #949f8b; } .ds-btn-line:focus-visible { outline: 2px solid #91c61d; outline-offset: 2px; }"
+    },
+    {
+      "name": "GPU Search",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "One bordered row: mono input and a square submit cell. The whole row turns lime on focus.",
+      "html": "<div class=\"ds-find\"><label class=\"ds-find-label\" for=\"ds-q\">Find a GPU in the grid</label><div class=\"ds-find-row\"><input id=\"ds-q\" class=\"ds-find-input\" type=\"search\" placeholder=\"H100, B200, L40S, MI300X\"><button class=\"ds-find-go\" type=\"button\" aria-label=\"Open\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" aria-hidden=\"true\"><path d=\"M5 12h14M13 6l6 6-6 6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg></button></div></div>",
+      "css": ".ds-find { max-width: 420px; font-family: Archivo, ui-sans-serif, system-ui, sans-serif; } .ds-find-label { display: block; font-size: 14px; color: #949f8b; margin-bottom: 8px; } .ds-find-row { display: flex; border: 1px solid #2a3422; background: #0b0e09; border-radius: 2px; transition: border-color .18s cubic-bezier(0.16, 1, 0.3, 1); } .ds-find-row:focus-within { border-color: #91c61d; } .ds-find-input { flex: 1; min-width: 0; height: 50px; padding: 0 14px; background: transparent; border: 0; color: #eef2e9; font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 16px; } .ds-find-input::placeholder { color: #949f8b; } .ds-find-input:focus { outline: none; } .ds-find-go { width: 50px; border: 0; border-left: 1px solid #2a3422; background: transparent; color: #eef2e9; cursor: pointer; display: grid; place-items: center; } .ds-find-go:hover { color: #91c61d; } .ds-find-go:focus-visible { outline: 2px solid #91c61d; outline-offset: 2px; }"
+    },
+    {
+      "name": "Top Bar",
+      "kind": "nav",
+      "description": "Mark and lowercase wordmark, four text links pushed right, the key button, one hairline beneath.",
+      "html": "<header class=\"ds-top\"><a class=\"ds-brand\" href=\"#\"><svg class=\"ds-mark\" viewBox=\"0 0 32 32\" aria-hidden=\"true\"><path fill=\"#91c61d\" d=\"M3 3h12v12H3zM3 17h12v12H3zM17 17h12v12H17z\"/><path d=\"M18.5 4.5h9v9\" fill=\"none\" stroke=\"#91c61d\" stroke-width=\"3\" stroke-linecap=\"square\"/></svg><span>opengrid</span></a><nav class=\"ds-links\"><a href=\"#\">Markets</a><a href=\"#\">Indices</a><a href=\"#\">Method</a><a href=\"#\">Docs</a></nav><a class=\"ds-top-key\" href=\"#\">Get API key</a></header>",
+      "css": ".ds-top { display: flex; align-items: center; gap: 28px; padding: 14px 32px; border-bottom: 1px solid #1b2216; background: #070906; font-family: Archivo, ui-sans-serif, system-ui, sans-serif; } .ds-brand { display: inline-flex; align-items: center; gap: 10px; color: #eef2e9; text-decoration: none; font-weight: 800; font-size: 21px; letter-spacing: -0.02em; font-stretch: 108%; min-height: 44px; } .ds-mark { width: 26px; height: 26px; } .ds-links { display: flex; gap: 4px; margin-left: auto; } .ds-links a { color: #c2cbb9; text-decoration: none; font-size: 15px; padding: 10px 12px; min-height: 44px; display: inline-flex; align-items: center; } .ds-links a:hover { color: #eef2e9; } .ds-links a:focus-visible, .ds-brand:focus-visible, .ds-top-key:focus-visible { outline: 2px solid #91c61d; outline-offset: 2px; } .ds-top-key { display: inline-flex; align-items: center; min-height: 40px; padding: 0 18px; background: #91c61d; color: #0a0f04; font-size: 15px; font-weight: 650; text-decoration: none; border-radius: 2px; transition: background-color .18s cubic-bezier(0.16, 1, 0.3, 1); } .ds-top-key:hover { background: #b4e04a; }"
+    },
+    {
+      "name": "Market Grid",
+      "kind": "custom",
+      "refersTo": "grid-cell",
+      "description": "Signature: exact GPUs by clouds, 16px squares at 3px gaps, price scale fills, open outline for not listed.",
+      "html": "<div class=\"ds-grid-wrap\"><table class=\"ds-grid\"><thead><tr><th></th><th><span>Cloud A</span></th><th><span>Cloud B</span></th><th><span>Cloud C</span></th><th><span>Cloud D</span></th><th><span>Cloud E</span></th></tr></thead><tbody><tr><th>H100 SXM</th><td class=\"c4\"><i tabindex=\"0\"></i></td><td class=\"c2\"><i tabindex=\"0\"></i></td><td class=\"c1\"><i tabindex=\"0\"></i></td><td class=\"co\"><i></i></td><td class=\"c3\"><i tabindex=\"0\"></i></td></tr><tr><th>B200</th><td class=\"co\"><i></i></td><td class=\"c3\"><i tabindex=\"0\"></i></td><td class=\"c0\"><i tabindex=\"0\"></i></td><td class=\"c2\"><i tabindex=\"0\"></i></td><td class=\"c4\"><i tabindex=\"0\"></i></td></tr></tbody></table><div class=\"ds-legend\"><span><i class=\"ds-sw\" style=\"background:#91c61d\"></i>Cheaper than other clouds</span><span><i class=\"ds-sw\" style=\"background:#3a4f1c\"></i>About the same</span><span><i class=\"ds-sw\" style=\"background:#2d3328\"></i>Pricier</span><span><i class=\"ds-sw\" style=\"box-shadow: inset 0 0 0 1px #2a3422\"></i>Not listed</span></div></div>",
+      "css": ".ds-grid-wrap { background: #070906; padding: 16px; font-family: Archivo, ui-sans-serif, system-ui, sans-serif; } .ds-grid { border-collapse: separate; border-spacing: 3px; } .ds-grid th, .ds-grid td { padding: 0; } .ds-grid thead th { height: 80px; vertical-align: bottom; font-weight: 500; font-size: 12px; font-stretch: 78%; color: #949f8b; } .ds-grid thead th span { display: inline-block; writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; line-height: 16px; } .ds-grid tbody th { text-align: right; padding-right: 10px; white-space: nowrap; font-weight: 500; font-size: 13px; font-stretch: 82%; color: #c2cbb9; line-height: 16px; } .ds-grid td i { display: block; width: 16px; height: 16px; border-radius: 1px; transition: transform .18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow .18s cubic-bezier(0.16, 1, 0.3, 1); } .ds-grid td.c4 i { background: #91c61d; } .ds-grid td.c3 i { background: #5f8a16; } .ds-grid td.c2 i { background: #3a4f1c; } .ds-grid td.c1 i { background: #2d3328; } .ds-grid td.c0 i { background: #1f241b; } .ds-grid td.co i { box-shadow: inset 0 0 0 1px #263020; } .ds-grid td i:hover, .ds-grid td i:focus-visible { outline: none; box-shadow: 0 0 0 2px #eef2e9; transform: scale(1.12); } .ds-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 14px; font-size: 13px; color: #949f8b; } .ds-legend span { display: inline-flex; align-items: center; gap: 7px; } .ds-sw { width: 12px; height: 12px; display: inline-block; border-radius: 1px; }"
+    },
+    {
+      "name": "Key Panel",
+      "kind": "card",
+      "refersTo": "panel-key",
+      "description": "The only boxed container: ground-2, hairline-2 border, square bullets stating the key's scope before minting.",
+      "html": "<div class=\"ds-keybox\"><h3 class=\"ds-keybox-h\">Free API key</h3><ul class=\"ds-terms\"><li>Reads market data: prices, indices, events, history.</li><li class=\"ds-no\">Can't launch, route or pay for compute.</li><li>No sign-up. Shown once, so copy it.</li></ul><button class=\"ds-keybox-btn\" type=\"button\">Generate API key</button></div>",
+      "css": ".ds-keybox { border: 1px solid #2a3422; background: #0b0e09; padding: 26px; border-radius: 2px; max-width: 420px; font-family: Archivo, ui-sans-serif, system-ui, sans-serif; color: #eef2e9; } .ds-keybox-h { margin: 0 0 14px; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; } .ds-terms { margin: 0 0 22px; padding: 0; list-style: none; color: #c2cbb9; font-size: 16px; } .ds-terms li { padding: 6px 0 6px 22px; position: relative; } .ds-terms li::before { content: ''; position: absolute; left: 0; top: 0.85em; width: 10px; height: 10px; background: #5f8a16; } .ds-terms li.ds-no::before { background: none; box-shadow: inset 0 0 0 1px #949f8b; } .ds-keybox-btn { min-height: 52px; padding: 0 24px; font: inherit; font-size: 17px; font-weight: 650; border: 1px solid transparent; border-radius: 2px; background: #91c61d; color: #0a0f04; cursor: pointer; transition: background-color .18s cubic-bezier(0.16, 1, 0.3, 1); } .ds-keybox-btn:hover { background: #b4e04a; } .ds-keybox-btn:focus-visible { outline: 2px solid #91c61d; outline-offset: 2px; }"
+    },
+    {
+      "name": "Code Tabs",
+      "kind": "nav",
+      "refersTo": "tab",
+      "description": "Text tabs on a hairline rail; selected tab in Text with a 2px Text underline. No lime.",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\"><button role=\"tab\" aria-selected=\"true\">curl</button><button role=\"tab\" aria-selected=\"false\">Claude Code</button><button role=\"tab\" aria-selected=\"false\">Python</button></div><pre class=\"ds-pre\"><span class=\"ds-c\"># every H100 price, live</span>\ncurl -H <span class=\"ds-k\">\"Authorization: Bearer $KEY\"</span> ...</pre>",
+      "css": ".ds-tabs { display: flex; border-bottom: 1px solid #2a3422; font-family: Archivo, ui-sans-serif, system-ui, sans-serif; } .ds-tabs button { font: inherit; font-size: 14px; color: #949f8b; background: none; border: 0; padding: 10px 14px; min-height: 44px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; } .ds-tabs button[aria-selected='true'] { color: #eef2e9; border-bottom-color: #eef2e9; } .ds-tabs button:hover { color: #eef2e9; } .ds-tabs button:focus-visible { outline: 2px solid #91c61d; outline-offset: 2px; } .ds-pre { margin: 0; padding: 20px 0; font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 13.5px; line-height: 1.7; color: #c2cbb9; white-space: pre; } .ds-k { color: #eef2e9; } .ds-c { color: #949f8b; }"
+    },
+    {
+      "name": "Status List",
+      "kind": "custom",
+      "description": "Hairline-ruled rows with a 12px status square: filled lime (live), olive with moss outline (being tested), open outline (not offered).",
+      "html": "<dl class=\"ds-status\"><div><dt><i class=\"ds-st ds-st-live\"></i>Live</dt><dd>Prices, indices and events, on the site and through the API. Free to read.</dd></div><div><dt><i class=\"ds-st ds-st-test\"></i>Being tested</dt><dd>Launching GPUs through OpenGrid.</dd></div><div><dt><i class=\"ds-st ds-st-no\"></i>Not offered</dt><dd>Payments, and any trading of compute.</dd></div></dl>",
+      "css": ".ds-status { margin: 0; border-top: 1px solid #1b2216; font-family: Archivo, ui-sans-serif, system-ui, sans-serif; color: #eef2e9; font-size: 16px; } .ds-status > div { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 24px; padding: 20px 0; border-bottom: 1px solid #1b2216; } .ds-status dt { font-weight: 700; display: flex; align-items: center; gap: 10px; } .ds-status dd { margin: 0; color: #c2cbb9; } .ds-st { width: 12px; height: 12px; display: inline-block; flex: none; } .ds-st-live { background: #91c61d; } .ds-st-test { background: #3a4f1c; box-shadow: inset 0 0 0 1px #5f8a16; } .ds-st-no { box-shadow: inset 0 0 0 1px #949f8b; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Mark Is a Piece of the Market",
+    "overview": "The OpenGrid mark, a 2×2 of lime squares with the top-right square left open, is not decoration placed on top of the product; it is a four-cell crop of the product's own price grid. Every surface in this world is built from that same material: square cells, 1px hairlines, a near-black ground with a green cast, and one lime that means \"cheaper than the rest\" or \"do this\". Filled square, dim square, open outline: those three states carry price, status, and list bullets alike.\n\nDensity is high where data lives and generous where reading happens. The live grid packs cells three pixels apart; prose sections breathe on wide section padding and narrow measures (36 to 72ch). Type does the hierarchy work through Archivo's width axis: headlines run expanded and heavy, labels run condensed and quiet, and JetBrains Mono carries every number a reader might compare. Type size also carries magnitude: in the H100 spread sentence the high price is set larger in proportion to how far apart the prices are.\n\nThe world is dark only. Premiums fade toward a dim grey-green and never turn red; there is no alarm colour because a higher listed price is information, not danger.",
+    "keyCharacteristics": [
+      "Near-black green-cast ground, one chroma (lime), no red anywhere.",
+      "Square cells and 1px hairlines; no corner radius above 2px.",
+      "Filled / dim / open-outline squares as the single state vocabulary.",
+      "Archivo variable, width axis wide for headlines and narrow for labels; JetBrains Mono only for prices, tickers and code.",
+      "Flat: depth by tonal steps of the ground, one soft shadow for the floating tooltip only."
+    ],
+    "rules": [
+      { "name": "The One Chroma Rule", "body": "Lime is the only hue with chroma. It appears where something is cheaper than the market or where the reader can act (the primary button, focus, hover). Everything else is the green-grey neutral family.", "section": "colors" },
+      { "name": "The No-Red Rule", "body": "A higher price fades toward the ground; it never turns red, orange or warm. The world has no alarm colour.", "section": "colors" },
+      { "name": "The Width Axis Rule", "body": "Hierarchy comes from Archivo's width axis as much as from size: wide (112 to 118%) for H1 and H2, normal (100%) for text, narrow (78 to 88%) for dense labels. Do not reach for a second display family.", "section": "typography" },
+      { "name": "The Ledger Rule", "body": "JetBrains Mono is for prices, tickers, timestamps, step numerals and code, always with tabular figures. Prose and headings never use it.", "section": "typography" },
+      { "name": "The Hairline-Not-Shadow Rule", "body": "Separate things with a 1px hairline or a one-step change of ground. A new shadow needs the tooltip's reason: something floating over live data.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do use lime only for cheaper-than-market data, the primary action, and interaction feedback (focus, hover, selection).",
+      "Do express state with the square vocabulary: filled, dimmed, or open 1px outline.",
+      "Do set every comparable number in JetBrains Mono with tabular figures.",
+      "Do carry hierarchy through Archivo's width axis: 112 to 118% for headlines, 78 to 88% for dense labels.",
+      "Do separate content with 1px hairlines and ground steps; rule lists as rows.",
+      "Do keep touch targets at 44px minimum, and let the grid scroll sideways rather than shrink cells below 13px."
+    ],
+    "donts": [
+      "Don't use red, orange, or any warm hue for a higher price; premiums fade toward the ground.",
+      "Don't round anything above 2px.",
+      "Don't add shadows for elevation; the tooltip float is the only one.",
+      "Don't introduce a second accent hue or a second display family.",
+      "Don't use mono for prose or headings, or uppercase tracked labels above headings.",
+      "Don't reuse the logged-in app's tokens here: the app (web/app.css, web/index.html) has its own incumbent terminal system (blue accent, system fonts, light and dark themes) that is not yet aligned with this world."
+    ]
+  }
+}

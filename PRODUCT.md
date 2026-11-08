@@ -23,16 +23,20 @@ code, and finds (and eventually runs on) the cheapest GPU that fits.
 
 ## Positioning
 
-Lead claim (confirmed): **one key, every GPU cloud.** A single API key that reads and routes across ~60 GPU clouds to
-the cheapest fit. Supporting it: OpenGrid's own clean, continuously collected market data (prices, capacity,
-uptime, probes), which is what makes "cheapest" trustworthy.
+Homepage line: **the GPU market, priced.** OpenGrid reads the listed price of every GPU on ~60 clouds, checks it,
+and publishes one fair, method-public index per exact GPU, all readable with one API key (earlier confirmed claim:
+"one key, every GPU cloud", which the developer section carries). Market research (Nov 2026): no competitor shows
+live compute prices on its homepage; Silicon Data and Ornn sell a few indices, aggregators sell breadth without a
+method. OpenGrid owns breadth plus a public, verifiable method. It must not imply transaction data (Ornn's angle).
 
 ## Operating Context
 
-- The front door is the landing page at `/` (`web/landing.html`): an animated headline that types "Cheapest GPUs",
-  live GPU prices and "OpenGrid"; one search bar answered by the OpenGrid Assistant (`POST /v1/assistant`, observed
-  prices only); and "Generate API key", issued in one click with no sign-up (`POST /v1/instant-key`, data:read only).
-- "Learn more" leads to `/get-started`, then the app: GPUs, Find Compute (workload → GPUs that fit), Markets,
+- The front door is the homepage at `/` (`web/landing.html`): the live market grid (exact GPUs by clouds, each square a
+  cloud's lowest listed price against the other clouds), the H100 price spread in one sentence, the GPU indices and
+  the GPU Compute Index, the index method worked on real constituents, recent market events, a one-click read-only
+  API key (`POST /v1/instant-key`, data:read) with curl / Claude Code (MCP) / Python examples, and an honest
+  "what works today". All data is public and read live.
+- `/get-started` and `/markets` lead into the app: GPUs, Find Compute (workload → GPUs that fit), Markets,
   Developers (API docs, `/api`), My Jobs.
 - Developers use the key with curl, the Python examples, the CLI and the hosted MCP endpoint.
 - Light and dark themes; keyboard command bar in the app.
@@ -51,7 +55,8 @@ re-check, not as permanent:
 
 ## Brand Commitments
 
-- Name: OpenGrid (one word, capital G). Grid mark: a 3×3 line grid.
+- Name: OpenGrid in prose (one word, capital G); the wordmark is lowercase "opengrid". Mark: a 2×2 grid of lime
+  squares with the top-right square open (outline corner). Brand green #91C61D on near-black (pitch deck, Discord).
 - Voice: plain, literal language; say what works and what does not; never claim more than the data shows.
 
 ## Evidence on Hand
