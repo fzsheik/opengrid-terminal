@@ -569,11 +569,28 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
       const single = rows.length === 1 && !rows[0].label;
       // narrow columns: the label column shrinks (labels truncate, full text on hover) before the plot does
       const Lw = single ? 8 : Math.round(Math.min(150, Math.max(54, W * 0.3), Math.max(70, ...rows.map(r => String(r.label).length * 6.4)))), Rm = 14, rh = single ? 34 : 24, Tm = 4, Bm = 18;
-      const H = Tm + rows.length * rh + Bm;
       const ext = padExtent(extent(...rows.map(r => r.points.map(p => p.value)), o.axisMin != null ? [o.axisMin] : [], o.axisMax != null ? [o.axisMax] : []), 0.06, o.zero);
-      const svg = s("svg", { class: "dots", width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": o.label || "price dispersion" });
       if (!ext) { el.append(hd("div", "c-mute", "no prices")); return; }
       const xs = scale(ext[0], ext[1], Lw, W - Rm);
+      // beeswarm: each dot takes the level nearest the centre line where it doesn't touch a dot already there;
+      // the row grows to fit the swarm up to a cap, past which levels squeeze together (dots overlap, never spill)
+      const R = 4, GAP = 2 * R + 1, CAP = 72;
+      const lay = rows.map(r => {
+        const pts = r.points.filter(p => p.value != null).sort((a, b) => a.value - b.value).map(p => ({ p, x: xs(p.value) }));
+        const lastX = new Map(); let maxLv = 0;
+        for (const d of pts) {
+          for (let k = 0; ; k++) {
+            const lv = k === 0 ? 0 : (k % 2 ? -1 : 1) * Math.ceil(k / 2);
+            if (!(d.x - (lastX.get(lv) ?? -1e9) < GAP)) { d.lv = lv; lastX.set(lv, d.x); maxLv = Math.max(maxLv, Math.abs(lv)); break; }
+          }
+        }
+        const want = 2 * maxLv * GAP + 2 * R + 8, h = Math.max(rh, Math.min(CAP, want));
+        const step = maxLv ? Math.min(GAP, (h - 2 * R - 8) / (2 * maxLv)) : 0;
+        return { pts, h, step };
+      });
+      const tops = []; let acc = Tm; lay.forEach(l => { tops.push(acc); acc += l.h; });
+      const H = acc + Bm;
+      const svg = s("svg", { class: "dots", width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": o.label || "price dispersion" });
       // axis labels: drop any that would touch its neighbour or run off either edge
       const ticks = L.niceTicks(ext[0], ext[1], Math.max(2, Math.round((W - Lw) / 80)));
       const tl = ticks.map(t => ({ t, x: xs(t), text: vf(t), w: vf(t).length * 6.2 }));
@@ -583,7 +600,7 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
         if (keep[i] && k.x - k.w / 2 >= (single ? 0 : Lw - 4) && k.x + k.w / 2 <= W + 2) svg.append(svgText({ x: k.x, y: H - 4, "text-anchor": "middle", class: "c-ax" }, k.text));
       });
       rows.forEach((r, i) => {
-        const cy = Tm + i * rh + rh / 2;
+        const cy = tops[i] + lay[i].h / 2;
         if (!single) {
           const shown = fitLabel(r.label, Lw - 12, 6.2);
           const t = svgText({ x: Lw - 8, y: cy + 3.5, "text-anchor": "end", class: "c-lab" }, shown);
@@ -593,13 +610,8 @@ Pure math (also exported in Node for tests): scale, extent, padExtent, timeTicks
         }
         if (r.low != null && r.high != null) svg.append(s("line", { x1: xs(r.low), x2: xs(r.high), y1: cy, y2: cy, class: "c-range" }));
         if (r.median != null) svg.append(s("line", { x1: xs(r.median), x2: xs(r.median), y1: cy - 7, y2: cy + 7, class: "c-med" }));
-        const pts = r.points.filter(p => p.value != null).sort((a, b) => a.value - b.value);
-        let lastX = -99, stack = 0;
-        for (const p of pts) {
-          const x = xs(p.value);
-          stack = x - lastX < 5 ? stack + 1 : 0; lastX = x;
-          const cyy = cy + (stack % 2 ? 1 : -1) * Math.ceil(stack / 2) * 5;
-          const c = s("circle", { cx: x, cy: cyy, r: 4, fill: p.color || "var(--accent)", class: "c-pt" });
+        for (const { p, x, lv } of lay[i].pts) {
+          const c = s("circle", { cx: x, cy: cy + lv * lay[i].step, r: R, fill: p.color || "var(--accent)", class: "c-pt" });
           const tipNodes = () => [hd("div", "ct-t", r.label || ""), row(p.label || p.key, vf(p.value), p.color), r.median != null ? row("median", vf(r.median)) : null].filter(Boolean);
           c.addEventListener("mousemove", e => f.tip(e.offsetX, e.offsetY, tipNodes()));
           c.addEventListener("mouseleave", () => f.hide());
