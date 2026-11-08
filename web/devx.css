@@ -144,7 +144,7 @@
 .dx-ag-side ul { margin: 0; padding-left: 16px; }
 .dx-ag-side li { margin: 2px 0; }
 .dx-ag-cap { display: flex; flex-direction: column; gap: 6px; }
-.dx-ag-cap button { text-align: left; }
+.dx-ag-cap button { text-align: left; height: auto; min-height: var(--ctl-h-sm); padding: 4px 11px; line-height: 1.35; white-space: normal; max-width: 100%; }
 .dx-ag-pick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .dx-ag-pc { border: 1px solid var(--line-2); border-radius: 3px; padding: 8px 10px; background: var(--surface); display: flex; flex-direction: column; gap: 3px; font-size: var(--fs-sm); min-width: 0; }
 .dx-ag-pc-l { font: 600 var(--fs-2xs) var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
