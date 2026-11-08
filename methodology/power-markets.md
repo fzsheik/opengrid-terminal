@@ -6,8 +6,8 @@ data in its own tables (`power_*`), and the data is analysed beside GPU prices a
 into them. Power data is never written into listings, rollups, indices, fixings or archived prices. It never votes
 in a GPU statistic, and nothing here says that a power price moved a GPU price.
 
-Kind: **observed** (the series), **derived** (the cross-analysis). Code: `power/`. Public API: `GET /v1/power/series`
-(public-tier series only). The admin reads are under `/v1/ops/power/`.
+Kind: **observed** (the series), **derived** (the cross-analysis). Code: `power/`. There is no public power route: every read is admin-only, under `/v1/ops/power/`
+(sources, status, series, map, cross/regional, cross/leadlag, shifts).
 
 ## Who may see what
 
@@ -27,14 +27,13 @@ for such a source.
 | **NYISO** (mis.nyiso.com public CSV) | Zonal day-ahead and real-time LBMP | per its module (`power/sources/nyiso.py`) | Recorded in the registry | None |
 | **MISO** | Hub LMPs | **not pulled** | MISO's website terms forbid automated access ("You agree not use any automated means ... to access, monitor, or copy any part of this Website"). The public-file module stays `DEFAULT_ON = False`. **Do not enable it.** The allowed route is MISO's Data Exchange API (data-exchange.misoenergy.org, subscription key), which is not implemented yet | Data Exchange API subscription |
 | **SPP** (marketplace files) | Hub LMPs | per its module | Recorded in the registry | None |
-| **ERCOT** | Hub and load-zone settlement point prices, day-ahead and real-time (15-minute) | per its module; off by default | ERCOT's Public API needs a free account | [ERCOT API Explorer](https://apiexplorer.ercot.com): register, subscribe to the "Public API" product, then set `ERCOT_API_SUBSCRIPTION_KEY`, `ERCOT_API_USERNAME` and `ERCOT_API_PASSWORD` |
+| **ERCOT** | Hub and load-zone settlement point prices, day-ahead and real-time (15-minute) | public; on by default | Read from ERCOT's keyless public MIS reports (no account) | None |
 | **PJM** (Data Miner 2) | Hub and zone LMPs | per its module; off by default | Needs a free API key | [PJM API portal](https://apiportal.pjm.com): register, subscribe to Data Miner 2, then set `PJM_API_KEY` |
 | **ISO-NE** (web services) | Hub and zone LMPs | per its module; off by default | Needs an ISO Express account | [ISO Express](https://www.iso-ne.com): register, then set `ISONE_USERNAME` and `ISONE_PASSWORD` (web services at webservices.iso-ne.com) |
 
 Internal-tier series are readable only by admins, with `Cache-Control: private, no-store`. They never appear on a
 public page, a public API or a keyed (non-admin) API. `tests/test_visibility.py` calls every public route and fails
-if an internal power value shows. The public `/v1/power/series` answers "unknown series" for an internal key, for
-admins too: its existence is not disclosed there. Other internal-only datasets kept by choice are documented
+if an internal power value shows. `tests/test_visibility.py` also asserts that no `/v1/power` route exists. Other internal-only datasets kept by choice are documented
 outside the public site.
 
 ## Granularity and time

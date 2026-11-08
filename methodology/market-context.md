@@ -19,10 +19,11 @@ Considered and **not** used:
 
 - **ENTSO-E** (European day-ahead power prices): no clear reuse licence on the platform, and day-ahead prices
   belong to the power exchanges.
-- **US market operators' wholesale prices (LMPs)**: each operator has its own terms, and some restrict
-  redistribution.
+- **US market operators' wholesale prices (LMPs)** in this context layer: each operator has its own terms, and
+  some restrict redistribution. Wholesale prices are read separately, by `power/` into its own tables, with a
+  visibility tier per series (methodology/power-markets.md); none of them is served by `/v1/macro/*`.
 
-The `market_area` field names a state's wholesale market only as a label. No wholesale price is read.
+The `market_area` field names a state's wholesale market only as a label here.
 
 ## Raw first
 

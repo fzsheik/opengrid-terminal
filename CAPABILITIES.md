@@ -990,7 +990,7 @@ Two products share one app, one account and one key; scopes decide what a key re
   schema at `/v1/openapi.json` (key required).
 - **OpenGrid Compute API** (routing, jobs, reservations, accounts, billing): same `/v1` prefix, keeps FastAPI's
   `{"detail": …}` errors for now.
-- **`DATA_API_HOST`** (meant for data.tryopengrid.com): a request to that host reaches only Data API routes and needs
+- **`DATA_API_HOST`** (set in production): a request to that host reaches only Data API routes and needs
   an API key (no site login, no anonymous reads); it answers CORS only for the docs origin. Unset, nothing changes.
   With `PUBLIC_PAGES` on, the main host serves the Data API's read-only areas to anonymous visitors.
 - **`/internal/*`**: the website's own reads (overview, tape, opportunities, heatmaps, compare, uptime, trust,

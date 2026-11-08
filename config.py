@@ -101,7 +101,7 @@ class Settings(BaseSettings):
     alpaca_data_secret_key: str | None = None
     equity_tickers: str | None = None            # comma-separated override of context/equities.TICKERS
     # Wholesale power markets (power/; methodology/power-markets.md). Own tables only, never GPU statistics.
-    # power_enabled turns on the daily power_forward job (and power_cross after it); the backfill is the CLI
+    # power_enabled turns on the 12-hourly power_forward job (and power_cross after it); the backfill is the CLI
     # (`python -m power backfill`), run detached. power_sources lists the sources to read (comma-separated; empty =
     # each source module's default: the no-signup ones). A source that needs a key stays off until its key is set.
     power_enabled: bool = False
