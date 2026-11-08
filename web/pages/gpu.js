@@ -448,7 +448,7 @@ Nothing is computed here that the API does not state, except display arithmetic 
             h("details", { class: "gp-more" }, h("summary", {}, "Why this listing"),
             h("table", { class: "gp-kv gp-fac" }, h("tbody", {}, factors.map(([k, f]) => h("tr", { title: f.note },
               h("th", {}, k.replace(/_/g, " ")), h("td", { class: "gp-barc" }, h("span", { class: "gp-bar" + (f.imputed ? " imp" : ""), style: `width:${Math.round((f.value == null ? 0.5 : f.value) * 100)}%` })),
-              h("td", { class: "n dim" }, "×" + f.weight), h("td", { class: "n" }, f.contribution.toFixed(3)), h("td", {}, f.imputed ? OG.badge("neutral", "warn", "no data: scored 0.5") : f.kind ? h("span", { class: "dim" }, f.kind) : ""))))),
+              h("td", { class: "n dim" }, "×" + f.weight), h("td", { class: "n" }, f.contribution.toFixed(3)), h("td", {}, f.imputed ? h("span", { class: "dim" }, "no data") : f.kind ? h("span", { class: "dim" }, f.kind) : ""))))),
             h("p", { class: "note" }, c0.explanation)),
             h("div", { class: "gp-best-a" }, routeBtn(routeHref, "Route this →", "btn pri"), h("a", { class: "lnk dim", href: "/methodology/best-execution" }, "how it is scored"))),
           b.candidates.length > 1 ? h("table", { class: "gp-kv gp-runners" }, h("tbody", {}, b.candidates.slice(1, 6).map(c => h("tr", {},

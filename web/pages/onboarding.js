@@ -194,7 +194,7 @@
           const factors = Object.entries(cc.factors || {}).filter(([, x]) => x && x.weight).sort((a, b) => (b[1].contribution || 0) - (a[1].contribution || 0));
           whyBox.replaceChildren(h("div", { class: "dx-ob-why" }, h("div", { class: "lbl" }, "Why this provider won"),
             h("ul", { class: "rt-why" }, factors.map(([k, x]) => h("li", { class: x.imputed ? "imp" : null }, h("b", {}, k.replace(/_/g, " ")), " ",
-              x.note || "", x.imputed ? OG.badge("imputed 0.5", "warn") : null, h("span", { class: "rt-contrib mono" }, `${(x.weight * 100).toFixed(0)}% × ${x.value != null ? x.value.toFixed(2) : "-"} = +${(x.contribution || 0).toFixed(3)}`)))),
+              x.note || "", x.imputed ? h("span", { class: "dim" }, "no data") : null, h("span", { class: "rt-contrib mono" }, `${(x.weight * 100).toFixed(0)}% × ${x.value != null ? x.value.toFixed(2) : "-"} = +${(x.contribution || 0).toFixed(3)}`)))),
             (d.alternatives || []).length ? h("p", { class: "note" }, "Runner-up: ", OG.providerName(d.alternatives[0].provider), " at ", fmt.price(d.alternatives[0].price_per_gpu_hour), "/GPU·h, score ", (d.alternatives[0].score || 0).toFixed(3), " vs ", cc.score.toFixed(3), ".") : null,
             h("p", { class: "note" }, "Reliability and performance carry no weight until OpenGrid has real execution records; nothing is invented. ", h("a", { class: "lnk", href: routeHref(body) }, "Full breakdown on Route →"))));
           if (!previewing) OG.api.soft("/v1/onboarding", { nocache: true }).then(s => { if (s && !previewing && ctx.alive()) { status = s; profile = s.profile || profile; draw(); } });

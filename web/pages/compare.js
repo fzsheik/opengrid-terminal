@@ -207,9 +207,7 @@ Mixed pairs: the API's 400 is shown as is. Different GPUs are different products
       ["Avg premium vs market", [rv(a, "premium_avg"), rr(a, "premium_avg")], [rv(b, "premium_avg"), rr(b, "premium_avg")], fmt.pct],
       ["Cheapest-provider share", [rv(a, "cheapest_share"), rr(a, "cheapest_share")], [rv(b, "cheapest_share"), rr(b, "cheapest_share")], v => fmt.pct(v).replace("+", "")],
       ["Availability (hours)", [rv(a, "availability"), rr(a, "availability")], [rv(b, "availability"), rr(b, "availability")], v => fmt.pct(v).replace("+", "")],
-      ["Feed failure rate 24h", [fh(a, "failure_rate_24h"), "no feed data"], [fh(b, "failure_rate_24h"), "no feed data"], v => fmt.pct(v).replace("+", "")],
-      ["Feed latency 24h", [fh(a, "avg_latency_ms_24h"), "no feed data"], [fh(b, "avg_latency_ms_24h"), "no feed data"], v => fmt.num(v, 0) + " ms"],
-      ["Last good fetch", [fh(a, "last_ok_fetch") ? OG.freshBadge(fh(a, "last_ok_fetch"), { provider: a.name }) : null, "never"], [fh(b, "last_ok_fetch") ? OG.freshBadge(fh(b, "last_ok_fetch"), { provider: b.name }) : null, "never"], v => v],
+      ["Prices last updated", [fh(a, "last_ok_fetch") ? OG.freshBadge(fh(a, "last_ok_fetch"), { provider: a.name }) : null, "never"], [fh(b, "last_ok_fetch") ? OG.freshBadge(fh(b, "last_ok_fetch"), { provider: b.name }) : null, "never"], v => v],
     ];
     const tbl = h("table", { class: "cmp-t" },
       h("thead", {}, h("tr", {}, h("th", {}, ""), h("th", { style: `color:${CA}` }, na), h("th", { style: `color:${CB}` }, nb))),

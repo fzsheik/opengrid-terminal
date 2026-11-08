@@ -635,7 +635,6 @@ In the menu, "Explore" (marked "Free to use, no account needed") holds "GPUs" wi
    - "Providers" (sub "N with live listings here")
    - "Live listings" (sub "N priced"; observed badge)
    - "GPU models" (sub "canonical, across providers")
-   - "Feeds healthy": "N/M", sub "last 24h of fetches"
    - "Rel. value": "N rated", or "n/a" with the reason "needs ≥ 24 compared hours in the last Nd; no provider has them yet"
    - "Routable (impl.)" (sub "L≥2 implemented · 0 verified live")
 3. Table titled "N providers · window Nd", with CSV. The last two columns stay visible when the table scrolls sideways. Rows with no live listings are greyed. Clicking a row opens /provider/{name}. Default sort is "Listings" descending. Columns:
@@ -651,8 +650,7 @@ In the menu, "Explore" (marked "Free to use, no account needed") holds "GPUs" wi
    - "Avail."
    - "Vol (1d)"
    - "Lifetime"
-   - "Feed": a dot "healthy" or "ok", or a badge such as "degraded", "idle" or "N% fail"
-   - "Last ok": a freshness badge, or "never"
+   - "Updated": a freshness badge, or "never"
 4. Note: observed badge, "coverage and feed health. Relative value: each provider vs the median of the other providers' lowest price ... Figures stay n/a (hover for the reason) until there are ≥ 24 compared hours. Greyed rows: no live listings on this server." Link "Methodology →".
 5. Two boxes side by side:
    - **"Facts"**: generated bullets. Who lists the most GPU models, who has the most live listings, how many providers span two or more region groups, how many publish no location, and "No live listings on this server from: ... (no API key configured here, or the feed has not run)." Then relative-value facts (8 shown, then a button "Show all N facts" / "Show fewer").
@@ -709,14 +707,14 @@ In the menu, "Explore" (marked "Free to use, no account needed") holds "GPUs" wi
    - **"Price history"**: a control bar with a "GPU" dropdown (each option shows its best price), a "Window" toggle ("24H", "7D" default, "30D") and a link "GPU market →". The chart has three lines: "Market lowest" (dotted), "Market median" (dashed) and "{name} lowest", with markers for events, price moves and news. Under it, context bullets ("Percentile vs its own history: ...") and a note.
    - **"Recent price changes"**: table titled "N listings whose price changed since first seen". Columns "When", "GPU", "Listing", "Tier", "From", "To", "Change".
 4. Right column:
-   - **"Routing integration"**: the integration level plus a "verified live" or "not verified live" badge, a sentence on what the adapter can do, and a key-value list:
+   - **"Routing integration"**: the integration level, a sentence on what the adapter can do, and a key-value list:
      - "Provider API documents" and "OpenGrid implements"
      - "Verified live" and "Avail. check live-verified"
      - "Routed via"
      - "Resource" and "Credential"
      - "Configured here" and "Stop supported"
      - "API docs"
-   - **"Source & feed health"**: a status word, a freshness badge and "polled every Nm". Then a key-value list:
+   - **"Source & feed health"**: a freshness badge and "polled every Nm". Then a key-value list:
      - "Source host", "Source type" and "Last ok fetch"
      - "Fetches 24h" and "Latency p50 / p95"
      - "Listings now / 24h ago"
@@ -801,7 +799,7 @@ Right column:
   - "GPUs listed", "Live listings", "Priced listings"
   - "Architectures", "Region groups"
   - "Avg premium vs market", "Cheapest-provider share", "Availability (hours)"
-  - "Feed failure rate 24h", "Feed latency 24h", "Last good fetch"
+  - "Prices last updated"
 - "Only one sells": GPU links per side
 
 **Region vs region layout**: two region cards ("region group", "N GPUs priced"). An optional focus line for ?gpu= ("X: cheapest US $... · Europe $... · B vs A ...", "all regions →"). A stat strip: "GPUs in both", "{A} cheaper on", "{B} cheaper on". Then a table titled "Same GPU across two region groups". Columns:
@@ -984,7 +982,7 @@ Empty states: "No common GPU to chart." and "These providers have no GPU in comm
      - a price chart ("Lowest", "Median provider") with markers, and an "Available listings (observed)" chart ("In stock", "Sold out")
      - "Markers in this window (N)": a list of the newest 30 markers
    - Right:
-     - **"Source health"**: "N enabled · N ok · N not ok", then a table with columns "Source", "Health", "Ok", "24h". Clicking a row filters to that source.
+     - **"Source health"**: "N sources", then a table with columns "Source" and "24h", most active first. Clicking a row filters to that source.
      - **"Topics · 30d"**: topic bars with counts (click to filter) and a note with "Methodology →".
 
 **States**: "Loading news…". Empty: "No stored news matches these filters.". Timeline with no GPU: "Pick one GPU variant: prices are per canonical variant, so a family (e.g. “H100”) cannot be charted.". Too little history: insufficient "History building". Side panels show "n/a" when topics or sources are unavailable. Feed failure shows the shared error box with "Try again".

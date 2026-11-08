@@ -924,7 +924,7 @@
       const x = fs[f.key];
       if (!x || !x.weight) return null;
       return h("li", { class: x.imputed ? "imp" : null }, h("i", { class: "sw", style: { background: f.color } }), h("b", {}, f.label), " ", String(x.note || "").replace(/ \(scored neutral 0\.5\)$/, ""),
-        x.imputed ? h("span", { class: "badge warn" }, "imputed 0.5") : null, h("span", { class: "rt-contrib mono" }, "+" + (+x.contribution || 0).toFixed(3)));
+        x.imputed ? h("span", { class: "dim" }, " (no data)") : null, h("span", { class: "rt-contrib mono" }, "+" + (+x.contribution || 0).toFixed(3)));
     }).filter(Boolean);
     if (!items.length) return c && c.explanation ? h("p", { class: "note" }, c.explanation) : h("p", { class: "note" }, "No score breakdown in the response.");
     const unused = fs.reliability && fs.reliability.weight ? "Performance" : "Reliability, performance";

@@ -248,7 +248,7 @@
         const can = c.level_implemented >= 3 ? `launch, check status and terminate${c.supports_stop ? ", stop" : ""} through the ${c.via || name} API`
           : c.level_implemented === 2 ? "launch through the API" : c.level_implemented === 1 ? "check availability live" : null;
         intEl.replaceChildren(
-          h("div", { class: "pd-int" }, V().integration ? V().integration(c, { long: true }) : lv(c.level_implemented), c.verified_live ? OG.badge("verified live", "good") : OG.badge("not verified live", "warn", "no adapter has made a real call against a provider account yet")),
+          h("div", { class: "pd-int" }, V().integration ? V().integration(c, { long: true }) : lv(c.level_implemented)),
           h("p", { class: "pd-can" }, can ? `OpenGrid can ${can}.${c.verified_live ? "" : " Tested against a simulated API only; not yet run against a real account."}`
             : `OpenGrid reads ${name}'s prices only. It cannot check stock live or launch here.`),
           h("details", { class: "pd-more" }, h("summary", {}, "Details"),
@@ -269,7 +269,7 @@
         const t = (trust || []).find(x => x.provider === p), fh = d && d.feed_health, m = (d && d.meta) || m0 || {};
         const life = d && d.listing_lifetime;
         feedEl.replaceChildren(
-          h("div", { class: "pd-int" }, V().feedStatus ? V().feedStatus(t, fh) : null, t || fh ? OG.freshBadge((t && t.last_ok_fetch) || (fh && fh.last_ok_fetch), { intervalSeconds: t && t.polling_interval_seconds, provider: p }) : null,
+          h("div", { class: "pd-int" }, t || fh ? OG.freshBadge((t && t.last_ok_fetch) || (fh && fh.last_ok_fetch), { intervalSeconds: t && t.polling_interval_seconds, provider: p }) : null,
             h("span", { class: "dim" }, t && t.polling_interval_seconds ? `polled every ${mins(t.polling_interval_seconds)}` : "")),
           kv([["Source", [m.source ? h("span", { class: "mono" }, m.source) : null, " ", h("span", { class: "dim" }, V().providerSourceLabel ? V().providerSourceLabel(m.source_type) : m.source_type)]],
             ["Last good read", (t && t.last_ok_fetch) || (fh && fh.last_ok_fetch) ? fmt.dateTime((t && t.last_ok_fetch) || fh.last_ok_fetch) + " · " + fmt.age((t && t.last_ok_fetch) || fh.last_ok_fetch) + " ago" : h("span", { class: "dim" }, "never")],

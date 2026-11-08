@@ -813,7 +813,6 @@ Full docs: web/README.md.
     h("span", { class: "mono dim", title: it.position + " the shift" }, shiftHours(it.hours_from_shift)),
     OG.badge(SHIFT_ITEM[it.item_type] || it.item_type, it.item_type === "market_event" ? (it.severity === "major" ? "bad" : "warn") : "",
       `related by ${it.match}, score ${Number(it.score).toFixed(2)} (${(it.score_components && it.score_components.formula) || ""})`),
-    it.backfilled ? OG.badge("backfilled", "", "recovered from an archive (" + (it.provenance || "archive") + "), not seen live") : null,
     h("span", {}, shiftHref(it.url) ? h("a", { class: "lnk", href: shiftHref(it.url), target: "_blank", rel: "external noopener" }, it.title) : it.title,
       it.source_name ? h("span", { class: "dim" }, " · " + it.source_name) : null));
   OG.shiftsPanel = (ctx, params, opts = {}) => {

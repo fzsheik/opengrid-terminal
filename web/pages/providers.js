@@ -3,7 +3,7 @@
    hourly rollup, so a figure is null + reason until it has enough compared hours), /v1/capabilities
    (integration level: what OpenGrid implements vs what is verified live, and verified_live is false
    everywhere and the page says so), /internal/trust/providers (soft: feed status from the quality layer).
-   Also exports OG.views.integration / OG.views.share / OG.views.feedStatus for pages/provider.js. */
+   Also exports OG.views.integration / OG.views.share for pages/provider.js. */
 (() => {
   const { h, fmt } = OG;
   const CLASSES = ["hyperscaler", "neocloud", "general_cloud", "marketplace", "decentralized", "unclassified"];
@@ -30,21 +30,8 @@
       impl > 0 && !cap.verified_live && !(opts && opts.long) ? h("span", { class: "pv-unv", title: "built and tested against a simulated provider API, not yet against a real account" }, " ·untested") : null,
       opts && opts.long && cap.via ? h("span", { class: "dim" }, " via " + cap.via) : null);
   }
-  // Feed status: the quality layer's word if we have it, else derived from the last 24h of fetches.
-  function feedStatus(trust, fh) {
-    if (trust && trust.status) {
-      const tone = trust.status === "healthy" ? "good" : trust.status === "degraded" ? "warn" : "bad";
-      const tip = (trust.status_reasons || []).join("; ") || `p50 ${fmt.num(trust.latency_ms_p50_24h, 0)} ms · ${trust.fetches_24h} fetches / 24h`;
-      // the normal case stays quiet (dot + word); only a problem gets a badge
-      return tone === "good" ? h("span", { class: "dotx good", title: tip }, trust.status) : OG.badge(trust.status, tone, tip);
-    }
-    if (!fh) return h("span", { class: "dim", title: "OpenGrid has no fetch recorded for this provider on this server" }, "no feed");
-    if (fh.failure_rate_24h == null) return OG.badge("idle", "warn", fh.reason || "no fetches in the last 24h");
-    return fh.failure_rate_24h === 0 ? h("span", { class: "dotx good", title: `${fh.fetches_24h} fetches / 24h, none failed` }, "ok")
-      : OG.badge(share(fh.failure_rate_24h) + " fail", fh.failure_rate_24h > 0.2 ? "bad" : "warn", `${fh.fetches_24h} fetches / 24h`);
-  }
   OG.views = OG.views || {};
-  Object.assign(OG.views, { integration, share, feedStatus, providerSourceLabel: s => SRC[s] || s || "-" });
+  Object.assign(OG.views, { integration, share, providerSourceLabel: s => SRC[s] || s || "-" });
 
   OG.page("/providers", {
     title: "Providers",
@@ -119,13 +106,11 @@
         const rows = st.cls === "all" ? all : all.filter(r => r.cls === st.cls);
         const live = all.filter(r => r.listings > 0);
         const gpuSet = new Set(st.data.flatMap(p => p.coverage.gpu_ids || []));
-        const healthy = all.filter(r => r.tr ? r.tr.status === "healthy" : r.fh && r.fh.failure_rate_24h === 0).length;
         const withPremium = all.filter(r => r.premium != null).length;
         statsEl.replaceChildren(OG.stats([
           { label: "Providers", value: String(all.length), sub: `${live.length} with live listings here` },
           { label: "Live listings", value: fmt.num(all.reduce((a, r) => a + r.listings, 0)), sub: fmt.num(all.reduce((a, r) => a + r.priced, 0)) + " priced", kind: "observed" },
           { label: "GPU models", value: String(gpuSet.size), sub: "canonical, across providers" },
-          { label: "Feeds healthy", value: `${healthy}/${all.filter(r => r.fh || r.tr).length}`, sub: "last 24h of fetches" },
           { label: "Price vs market", value: withPremium ? `${withPremium} rated` : null, reason: `needs 24+ compared hours in the last ${st.days}d; no provider has them yet`, sub: withPremium ? `of ${all.length}, last ${st.days}d` : null },
           { label: "OpenGrid can launch on", value: String(all.filter(r => r.level >= 2).length), sub: `${all.filter(r => r.level >= 2 && r.cap && r.cap.verified_live).length} verified live`, title: "providers where OpenGrid implements provisioning (level 2+)" },
         ]));
@@ -144,8 +129,7 @@
           { key: "vol", label: "Volatility", num: true, minor: 1, title: "Typical daily price change across its GPUs", fmt: (v, r) => OG.value(v, x => (x * 100).toFixed(1) + "%", r.vol_r) },
           { key: "life", label: "Listing life", num: true, minor: 1, value: r => r.lifetime && r.lifetime.median_hours, desc: true, title: "Median observed listing lifetime (first seen → last seen by OpenGrid; understates true lifetime)",
             fmt: (v, r) => r.lifetime ? OG.value(r.lifetime.median_hours, x => x < 48 ? x.toFixed(1) + "h" : (x / 24).toFixed(0) + "d", r.lifetime.reason) : "-" },
-          { key: "feed", label: "Feed", value: r => r.tr ? r.tr.status : r.fh ? (r.fh.failure_rate_24h === 0 ? "ok" : "x") : null, fmt: (v, r) => feedStatus(r.tr, r.fh) },
-          { key: "last_ok", label: "Last ok", num: true, value: r => r.last_ok ? -new Date(r.last_ok) : null, title: "Age of the last successful fetch", fmt: (v, r) => r.last_ok ? OG.freshBadge(r.last_ok, { intervalSeconds: r.tr && r.tr.polling_interval_seconds, provider: r.provider }) : h("span", { class: "dim" }, "never") },
+          { key: "last_ok", label: "Updated", num: true, value: r => r.last_ok ? -new Date(r.last_ok) : null, title: "When this provider's prices were last read", fmt: (v, r) => r.last_ok ? OG.freshBadge(r.last_ok, { intervalSeconds: r.tr && r.tr.polling_interval_seconds, provider: r.provider }) : h("span", { class: "dim" }, "never") },
         ];
         const key = st.days + "|" + st.cls;
         if (tbl && tblKey === key) { tbl.update(rows); drawFacts(all); return; }
@@ -154,7 +138,7 @@
           onSort: s => { st.sort = s.key; st.dir = s.dir; OG.qs.set({ sort: s.key === "listings" ? null : s.key, dir: s.dir === "desc" ? null : s.dir }); } });
         // CSV gets plain values, not display nodes
         const csvOf = { level: r => r.cap ? `L${r.level} ${r.cap.level_implemented_label}; verified_live=false` : "", regions: r => r.regions.join("; "),
-          feed: r => r.tr ? r.tr.status : r.fh ? `failure_rate_24h=${r.fh.failure_rate_24h}` : "", last_ok: r => r.last_ok, name: r => r.name,
+          last_ok: r => r.last_ok, name: r => r.name,
           life: r => r.lifetime && r.lifetime.median_hours };
         for (const c of cols) if (csvOf[c.key]) c.csv = csvOf[c.key];
         tbl = t; tblKey = key;

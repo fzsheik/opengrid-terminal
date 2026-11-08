@@ -57,8 +57,8 @@
     for (const kv of String(s).split(",")) { const [k, v] = kv.split(":"); if (FACTOR[k] && !FACTOR[k].nodata && isFinite(Number(v))) out[k] = Math.max(0, Math.min(100, Number(v))); }
     return Object.keys(out).length ? out : null;
   }
-  const levelBadge = lvl => lvl >= 2 ? OG.badge("OpenGrid can provision · L" + lvl, "good", "Integration level " + lvl + ": " + LEVEL[lvl])
-    : OG.badge("market data only · L" + (lvl || 0), "bad", "Integration level " + (lvl || 0) + ": OpenGrid reads prices here but cannot launch an instance");
+  const levelBadge = lvl => lvl >= 2 ? OG.badge("OpenGrid can provision", "good", LEVEL[lvl])
+    : OG.badge("market data only", "bad", "OpenGrid reads prices here but cannot launch an instance");
 
   /* ---------- score breakdown bar ---------- */
   function scoreBar(c, width) {
@@ -396,7 +396,7 @@
           if (f.nodata) { items.push(h("li", { class: "nodata" }, h("b", {}, f.label), ": no data, not used (no execution history yet)")); continue; }
           if (!x.weight) continue;
           items.push(h("li", { class: x.imputed ? "imp" : null }, h("i", { class: "sw", style: { background: f.color } }), h("b", {}, f.label), " ", x.note.replace(/ \(scored neutral 0\.5\)$/, ""),
-            x.imputed ? h("span", { class: "badge warn" }, "imputed 0.5") : null,
+            x.imputed ? h("span", { class: "dim" }, " (no data)") : null,
             h("span", { class: "rt-contrib mono" }, "+" + x.contribution.toFixed(3))));
         }
         return h("ul", { class: "rt-why" }, items);

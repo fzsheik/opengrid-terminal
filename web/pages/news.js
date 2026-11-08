@@ -197,14 +197,11 @@
       // ------------------------------------------------------------ side panels
       function drawSources() {
         const rows = (st.sources || []).filter(s => s.enabled);
-        const bad = rows.filter(s => s.health !== "ok");
-        srcEl.replaceChildren(h("div", { class: "dim nw-sh" }, `${rows.length} sources · ${bad.length} not reading right now`),
-          OG.table({ compact: true, limit: 60, rows, sort: { key: "health", dir: "asc" },
+        srcEl.replaceChildren(h("div", { class: "dim nw-sh" }, `${rows.length} sources`),
+          OG.table({ compact: true, limit: 60, rows, sort: { key: "new_items_24h", dir: "desc" },
             rowClass: s => (s.id === f.source ? "hl" : ""), onRow: s => setF({ source: f.source === s.id ? "" : s.id }),
             columns: [
-              { key: "name", label: "Source", cls: "wrap", fmt: (v, s) => h("span", { title: `${s.kind} · ${s.category} · ${s.trust_tier}${s.last_error ? "\n" + s.last_error : ""}` }, v) },
-              { key: "health", label: "Health", fmt: v => v === "ok" ? h("span", { class: "dotx good" }, "ok") : OG.badge(v, v === "failing" || v === "error" ? "bad" : "warn") },
-              { key: "last_ok_at", label: "Ok", num: true, value: s => s.last_ok_at ? -new Date(s.last_ok_at) : null, fmt: (v, s) => s.last_ok_at ? fmt.age(s.last_ok_at) : "never" },
+              { key: "name", label: "Source", cls: "wrap", fmt: (v, s) => h("span", {}, v) },
               { key: "new_items_24h", label: "24h", num: true, desc: true, title: "new items in the last 24h" },
             ] }));
       }
