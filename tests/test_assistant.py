@@ -449,7 +449,9 @@ def test_multi_turn_context():
     assert "Estimated memory: about" in r2["reply"] and "estimate" in r2["reply"]
     cheap = rec["options"][0]
     assert f"${cheap['price_per_gpu_hour']:.2f}" in r2["reply"] and "(observed" in r2["reply"]
-    assert "Launchable through OpenGrid: none for you right now (sign in / API key required)" in r2["reply"]
+    assert ("Launching through OpenGrid isn't available here: today it runs only the free demo training template. "
+            "Every option above can be rented directly from its provider.") in r2["reply"]
+    assert "sign in / API key required" not in r2["reply"], "no raw internal reason in the reply"
     qs = next(c for c in r2["cards"] if c["type"] == "questions")["data"]
     assert {q["field"] for q in qs} >= {"training.dataset_tokens", "constraints.budget_usd"}
     # a quick-reply answer refines the same workload

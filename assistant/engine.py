@@ -396,10 +396,19 @@ def _rec_reply(rec: dict, req: dict, intent: str) -> str:
         if o:
             lines.append(_opt_line(label, o))
             cheapest = cheapest or (o if key == "cheapest_market" else None)
-        elif key == "best_executable":
-            reason = next((r.get("reason") for o2 in opts.values()
-                           for r in ((o2.get("execution") or {}).get("reasons") or []) if r.get("reason")), None)
-            lines.append("Launchable through OpenGrid: none for you right now" + (f" ({reason})." if reason else "."))
+        elif key == "best_executable" and opts:
+            ex = [o2.get("execution") or {} for o2 in opts.values()]
+            codes = {str(r.get("code") or "") for e in ex for r in (e.get("reasons") or [])}
+            if "workload_not_supported" in codes or all(e.get("workload_supported") is False for e in ex):
+                why = "today it runs only the free demo training template"
+            elif any(re.search(r"auth|api_key|sign_in|signin|login|anonymous|scope", c, re.I) for c in codes):
+                why = "that needs an OpenGrid account (invite-only for now)"
+            elif "multi_gpu_not_supported" in codes:
+                why = "it launches single-GPU jobs only for now"
+            else:
+                why = "none of these options passes its launch checks right now"
+            lines.append(f"Launching through OpenGrid isn't available here: {why}. "
+                         "Every option above can be rented directly from its provider.")
         elif key == "cheapest_market":
             lines.append("No fresh listing that fits the estimate is available right now.")
     # the whole job, when the training work is known: more GPUs can cost more per hour and less overall

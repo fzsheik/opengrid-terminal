@@ -81,6 +81,17 @@
     if (rt.known !== true || !Number.isFinite(rt.hours)) return null;
     return { runtime_h: rt.hours, runtime_range: pair(rt.range_hours), job_usd: Number.isFinite(jc.usd) ? jc.usd : null, job_range: pair(jc.range_usd) };
   }
+  // Why no option can be launched through OpenGrid, in one plain sentence (the codes come from each option's
+  // execution.reasons, intelligence/recommend.py). The market picks above it still apply.
+  function launchWhy(opts) {
+    const codes = new Set();
+    opts.forEach(o => ((o.execution || {}).reasons || []).forEach(r => r && r.code && codes.add(r.code)));
+    if (codes.has("workload_not_supported") || opts.every(o => o.execution && o.execution.workload_supported === false)) return "Launching through OpenGrid isn't available for this workload yet: today it runs only the free demo training template. Rent any option above directly from its provider.";
+    if ([...codes].some(c => /auth|api_key|sign_in|signin|login|anonymous|scope/i.test(c))) return "Launching through OpenGrid needs an OpenGrid account (invite-only for now). Every option above can be rented directly from its provider.";
+    if (codes.has("multi_gpu_not_supported")) return "OpenGrid launches single-GPU jobs only for now; this workload needs more than one GPU. Rent any option above directly from its provider.";
+    return "None of these options can be launched through OpenGrid right now. Every option above can be rented directly from its provider.";
+  }
+
   function recView(rec) {
     rec = rec || {};
     const est = rec.estimate || {}, mem = est.memory || {};
@@ -90,13 +101,16 @@
       const ref = rec.picks && rec.picks[key];
       const option = ref && byId.get(ref.option_id) || null;
       return { key, label, option, reason: (ref && ref.reason) || null, perf: option ? perfOf(option) : null };
-    });
+    }).filter(p => p.option || p.key !== "best_executable");  // no empty "Launchable" tile: launchNote says why
+    const launchNote = opts.length && !picks.some(p => p.key === "best_executable") ? launchWhy(opts) : null;
     return {
+      launchNote,
       needsGpu: est.needs_gpu, needsGpuReason: est.needs_gpu_reason || null,
       memory: mem.recommended_gb != null ? { gb: mem.recommended_gb, range: mem.range_gb || null, confidence: mem.confidence || null, kind: "estimated", assumptions: (mem.assumptions || []).slice(0, 4) } : null,
       gpuCount: est.gpu_count && est.gpu_count.suggested || null,
       picks, top: opts.slice(0, 5), excluded: (rec.excluded || []).length,
-      questions: rec.questions || [], notes: (rec.notes || []).slice(0, 3),
+      questions: rec.questions || [],
+      notes: (rec.notes || []).filter(n => !(launchNote && /^No option is executable through OpenGrid/.test(String(n)))).slice(0, 3),
     };
   }
   // gpu_prices card -> table rows; a family card lists each variant's rows (never one merged market)
@@ -157,7 +171,7 @@
     if (!Object.keys(req).some(k => k !== "source")) return null;
     return boundContext({ requirements: req, pending: null, asked: [] });
   }
-  OG.assistant = { EXAMPLES, MAX_MESSAGE, PICKS, JOB_PICK, ACTIONS, perfOf, seedContext, CAPABILITIES, isUnknown, safeHref, cardKind, kindOf, findHref, optionLinks, recView, priceRows, compareRows, contextRows, questionButtons, boundContext, actionView, jobItems };
+  OG.assistant = { EXAMPLES, MAX_MESSAGE, PICKS, JOB_PICK, ACTIONS, perfOf, launchWhy, seedContext, CAPABILITIES, isUnknown, safeHref, cardKind, kindOf, findHref, optionLinks, recView, priceRows, compareRows, contextRows, questionButtons, boundContext, actionView, jobItems };
 
   if (typeof OG.page !== "function" || typeof document === "undefined" || !OG.h) return;   // node tests: pure part only
 
@@ -192,7 +206,7 @@
         h("span", { class: "ag-links" }, optionLinks(p.option).map(l => l.label === "Route preview" && !signedIn
           ? h("a", { class: "btn sm", href: safeHref(l.href), title: "Route previews need an OpenGrid account (invite-only for now)" }, h("i", { class: "lock", "aria-hidden": "true" }), " Route preview")
           : lnk(l, "btn sm")))]
-        : h("span", { class: "dim" }, p.key === "best_executable" ? "Nothing OpenGrid can launch for this workload today." : "Nothing available right now."));
+        : h("span", { class: "dim" }, "Nothing available right now."));
     const anyRuntime = v.picks.some(p => p.perf);
     const top = v.top.length ? tbl([
       { key: "gpu", label: "GPU", fmt: (x, r) => gpuA(r.gpu, r.gpu_slug) },
@@ -204,6 +218,7 @@
     ], v.top) : null;
     return h("div", { class: "ag-card" }, memLine,
       h("div", { class: "dx-ag-pick" }, v.picks.map(pick)),
+      v.launchNote ? h("p", { class: "dim ag-launch" }, v.launchNote) : null,
       top ? h("details", { class: "ag-more" }, h("summary", {}, `Top ${v.top.length} options`), top) : null,
       v.notes.length ? h("ul", { class: "ag-notes" }, v.notes.map(n => h("li", {}, String(n)))) : null,
       h("div", { class: "dx-ag-legend" }, "Prices are observed provider listings, not quotes. Memory and cost are estimates",

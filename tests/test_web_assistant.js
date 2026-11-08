@@ -27,7 +27,14 @@ const rec = {
   excluded: [{ code: "insufficient_vram" }], questions: [{ field: "training.method", question: "LoRA?" }], notes: ["Prices are observed list prices, not quotes."],
 };
 const v = A.recView(rec);
-eq(v.picks.map(p => [p.key, p.option && p.option.option_id]), [["cheapest_market", "o1"], ["best_for_workload", "o2"], ["best_executable", null]], "three picks resolved by option_id; a null pick stays empty");
+eq(v.picks.map(p => [p.key, p.option && p.option.option_id]), [["cheapest_market", "o1"], ["best_for_workload", "o2"]], "picks resolved by option_id; no empty 'Launchable' tile");
+ok(/^None of these options can be launched through OpenGrid right now\./.test(v.launchNote), "no executable pick: one plain sentence says so");
+const tmpl = JSON.parse(JSON.stringify(rec)); tmpl.options.forEach(o => { o.execution.workload_supported = false; o.execution.reasons = [{ code: "workload_not_supported", reason: "x" }, { code: "sign_in_required", reason: "y" }]; });
+ok(/only the free demo training template/.test(A.recView(tmpl).launchNote), "unsupported workload: the note names the real limit (the demo template), not sign-in");
+const anon = JSON.parse(JSON.stringify(rec)); anon.options.forEach(o => { o.execution.workload_supported = true; o.execution.reasons = [{ code: "sign_in_required", reason: "raw internal text" }]; });
+ok(/needs an OpenGrid account/.test(A.recView(anon).launchNote) && !/raw internal text/.test(A.recView(anon).launchNote), "signed out: account note, never the raw reason");
+const exe = JSON.parse(JSON.stringify(rec)); exe.picks.best_executable = { option_id: "o1", reason: "launchable" };
+ok(A.recView(exe).picks.some(p => p.key === "best_executable" && p.option) && A.recView(exe).launchNote === null, "an executable pick shows its tile and no note");
 ok(v.memory.gb === 29.2 && v.memory.kind === "estimated" && v.memory.assumptions.length === 4, "memory is labelled estimated; assumptions capped");
 ok(v.top.length === 5 && v.excluded === 1, "top 5 options, exclusions counted");
 ok(A.recView({ estimate: { needs_gpu: false, needs_gpu_reason: "no ML framework" } }).needsGpu === false, "needs_gpu=false is passed through");
@@ -40,8 +47,8 @@ const rec4 = JSON.parse(JSON.stringify(rec));
 rec4.options[1].performance = { runtime: { known: true, hours: 5.5, range_hours: [3.7, 10.6] }, job_cost: { usd: 27.2, range_usd: [18, 52] } };
 rec4.picks.lowest_estimated_job_cost = { option_id: "o2", reason: "lowest estimated cost for the whole job" };
 const v4 = A.recView(rec4);
-eq(v4.picks.map(p => p.key), ["cheapest_market", "best_for_workload", "best_executable", "lowest_estimated_job_cost"], "the whole-job pick is a fourth answer when the server returned it");
-eq([v4.picks[3].perf.runtime_h, v4.picks[3].perf.job_usd], [5.5, 27.2], "per-pick theoretical runtime and job cost come from option.performance");
+eq(v4.picks.map(p => p.key), ["cheapest_market", "best_for_workload", "lowest_estimated_job_cost"], "the whole-job pick is a fourth answer when the server returned it");
+eq([v4.picks[2].perf.runtime_h, v4.picks[2].perf.job_usd], [5.5, 27.2], "per-pick theoretical runtime and job cost come from option.performance");
 ok(A.perfOf({ performance: { runtime: { known: false, hours: 3 } } }) === null && A.perfOf({}) === null, "no known runtime: no runtime shown (never invented)");
 // the form's requirements seed a new conversation
 eq(A.seedContext({ source: "form", workload_type: "fine_tuning", model: { parameters_b: 8 } }), { requirements: { source: "form", workload_type: "fine_tuning", model: { parameters_b: 8 } }, pending: null, asked: [] }, "form requirements become the starting context");
