@@ -395,6 +395,10 @@ from api import power as power_api  # noqa: E402  (power markets; registers powe
 
 app.include_router(power_api.router)
 
+from api import instant_key as instant_key_api  # noqa: E402  (POST /v1/instant-key: the homepage's key button)
+
+app.include_router(instant_key_api.router)
+
 # The hosted MCP endpoint (/mcp; Bearer API key only). Before the page router; never fails startup (503 instead).
 mcp_gate = mcp_remote.install(app)
 

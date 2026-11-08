@@ -39,7 +39,10 @@ esc = markdown.esc
 # (pattern, nav title, description, indexable). Patterns use FastAPI {param} syntax; the client
 # registers the same paths with ":param" in web/pages/*.js.
 PAGES: list[tuple[str, str, str, bool]] = [
+    # "/" is the landing page (web/landing.html: the animated headline and "Generate API key"), not the app shell;
+    # the app's own home is /home.
     ("/", "Find and run GPU compute", "Compare live GPU cloud prices across providers, find compute suited to your workload, and run it with supervised, approval-gated execution.", True),
+    ("/home", "Find and run GPU compute", "Compare live GPU cloud prices across providers, find compute suited to your workload, and run it with supervised, approval-gated execution.", True),
     ("/markets", "GPU compute market", "Live GPU cloud prices, availability, indices and market events across providers.", True),
     ("/developers", "Developers", "Use OpenGrid from your terminal (CLI), your AI coding assistant (MCP) or your application (REST API).", True),
     ("/indices", "GPU price indices", "Transparent GPU compute price indices with published methodology and coverage.", True),
@@ -119,6 +122,8 @@ def is_public(request: Request) -> bool:
     read-only computations and anonymous product analytics."""
     if request.method == "POST" and request.url.path == "/v1/events/track":
         return True  # anonymous product analytics: rate-limited, no PII, writes only product_events
+    if request.method == "POST" and request.url.path == "/v1/instant-key":
+        return True  # the homepage's "Generate API key": a new free data:read key, capped per IP (api/instant_key.py)
     if request.method == "POST" and request.url.path in PUBLIC_POST:
         return True  # read-only computations (see PUBLIC_POST), rate-limited per IP
     if request.method not in ("GET", "HEAD"):
@@ -206,6 +211,20 @@ def shell(path: str, title: str, description: str, *, ssr: str = "", indexable: 
     page = page.replace('<div id="ssr" data-path="">', f'<div id="ssr" class="ssr" data-path="{esc(path)}">', 1)
     page = page.replace("<!--OG:SSR-->", ssr, 1).replace("<!--OG:BOOT-->", boot, 1)
     return HTMLResponse(page, status_code=status)
+
+
+def landing() -> HTMLResponse:
+    """GET /: the landing page. Its own small document (web/landing.html, landing.css, landing.js), not the app
+    shell: an animated headline, one "Generate API key" bar, then "Learn more" into the app at /home."""
+    f = WEB / "landing.html"
+    key = ("landing", f.stat().st_mtime, asset_version())
+    if _template_cache.get("landing_key") != key:
+        text = _ASSET.sub(lambda m: f'{m.group(1)}?v={key[2]}"', f.read_text(encoding="utf-8"))
+        base = settings.public_base_url.rstrip("/")
+        text = text.replace("<!--OG:CANONICAL-->", f'<link rel="canonical" href="{esc(base)}/">\n'
+                                                      f'<meta property="og:url" content="{esc(base)}/">', 1)
+        _template_cache.update(landing_key=key, landing=text)
+    return HTMLResponse(_template_cache["landing"])
 
 
 def _render(pattern: str, path: str, params: dict) -> HTMLResponse:
@@ -733,6 +752,8 @@ def sitemap():
 
 def _page_route(pattern: str):
     def endpoint(request: Request):
+        if pattern == "/":
+            return landing()
         try:
             return _render(pattern, request.url.path, dict(request.path_params))
         except HTTPException as e:

@@ -79,6 +79,11 @@ class Settings(BaseSettings):
     trusted_proxy_count: int = 1
     # Self-service keys: at most this many active keys per account.
     max_keys_per_account: int = 20
+    # The homepage's "Generate API key" button (POST /v1/instant-key, api/instant_key.py): a free account with one
+    # data:read key, no sign-up. Capped per client IP per day and site-wide per rolling 24 hours.
+    instant_keys_enabled: bool = True
+    instant_keys_per_ip_per_day: int = 3
+    instant_keys_per_day: int = 500
     # Per-ACCOUNT budgets per request class, on top of each key's own bucket (so extra keys add
     # nothing). An account's settings JSON may override with {"rate_limit_account": {"read": n, ...}}.
     account_rate_limit_read_per_minute: int = 600

@@ -37,7 +37,7 @@
     });
   }
 
-  OG.page("/", {
+  OG.page("/home", {
     title: "Find and run GPU compute",
     nav: "home",
     mount(el, params, query, ctx) {

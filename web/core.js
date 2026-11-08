@@ -775,7 +775,7 @@ Full docs: web/README.md.
         h("p", {}, x.text),
         h("div", { class: "st-acts" },
           signin ? h("a", { class: "btn sm", href: "/developers#access" }, "How to get an API key") : null,
-          signin ? h("a", { class: "btn sm", href: "/" }, "Explore free pages") : null,
+          signin ? h("a", { class: "btn sm", href: "/home" }, "Explore free pages") : null,
           signin ? h("a", { class: "lnk st-op", href: OG.loginHref() }, "OpenGrid staff: sign in") : null,
           retry && x.action === "retry" ? h("button", { class: "btn sm", type: "button", onclick: retry }, "Try again") : null),
         x.tech ? h("details", { class: "st-tech" }, h("summary", {}, "Technical details"), h("code", { class: "mono" }, x.tech)) : null));
@@ -1354,7 +1354,7 @@ Full docs: web/README.md.
       page.append(OG.head("Page not found", "There is no page at " + path),
         h("div", { class: "state empty" }, h("div", { class: "st-body" },
           h("p", {}, "The link may be old or mistyped. Try one of these, or press ", h("kbd", {}, "/"), " to search."),
-          h("div", { class: "st-acts" }, h("a", { class: "btn sm pri", href: "/" }, "Home"), h("a", { class: "btn sm", href: "/gpus" }, "GPU prices"), h("a", { class: "btn sm", href: "/find" }, "Find Compute")))));
+          h("div", { class: "st-acts" }, h("a", { class: "btn sm pri", href: "/home" }, "Home"), h("a", { class: "btn sm", href: "/gpus" }, "GPU prices"), h("a", { class: "btn sm", href: "/find" }, "Find Compute")))));
       return;
     }
     const t = typeof m.route.title === "function" ? m.route.title(m.params, ctx.query) : m.route.title;

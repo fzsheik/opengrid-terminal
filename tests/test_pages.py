@@ -55,6 +55,8 @@ def test_every_page_path_serves_the_shell():
     samples = {"/indices/{id}": "/indices/gpu-h100", "/gpu/{slug}": "/gpu/h100-80gb-sxm5", "/provider/{name}": "/provider/lambda",
                "/compare/{pair}": "/compare/h100-80gb-sxm5-vs-h200-141gb-sxm5", "/methodology/{name}": "/methodology/data-kinds"}
     for pattern, nav_title, _, indexable in pages.PAGES:
+        if pattern == "/":
+            continue  # the landing page is its own document (test_homepage_markets_and_developers_pages)
         path = samples.get(pattern, pattern)
         r = client.get(path)
         assert r.status_code == 200, f"{path} -> {r.status_code}"
@@ -371,8 +373,14 @@ def test_execution_pages_are_private_and_noindex():
 
 
 def test_homepage_markets_and_developers_pages():
-    """/ is the homepage, the market dashboard moved to /markets, /developers is new: all served, indexable, in the sitemap."""
-    home = client.get("/")
+    """/ is the landing page (animated headline + "Generate API key"); the app's home is /home; the market dashboard
+    moved to /markets, /developers is new: all served, indexable, in the sitemap."""
+    land = client.get("/")
+    assert land.status_code == 200 and "Cheapest GPUs" in land.text and 'id="lp-gen"' in land.text
+    assert "/static/landing.js?v=" in land.text and "/static/landing.css?v=" in land.text, "assets carry the content hash"
+    assert "/static/pages/home.js" not in land.text, "the landing page is its own document, not the app shell"
+    assert 'name="robots" content="noindex"' not in land.text and '<link rel="canonical" href="' + BASE + '/">' in land.text
+    home = client.get("/home")
     assert home.status_code == 200 and title_of(home.text) == "Find and run GPU compute | OpenGrid", title_of(home.text)
     assert 'name="robots" content="noindex"' not in home.text and "/static/pages/home.js" in home.text
     desc = re.search(r'<meta name="description" content="([^"]+)"', home.text).group(1)
@@ -384,12 +392,12 @@ def test_homepage_markets_and_developers_pages():
         assert f"/static/pages/{script}" in r.text, path
         assert pages.is_page_path(path) and any(p[0] == path and p[3] for p in pages.PAGES), f"{path}: indexable PAGES entry"
     locs = re.findall(r"<loc>([^<]+)</loc>", client.get("/sitemap.xml").text)
-    assert {f"{BASE}/", f"{BASE}/markets", f"{BASE}/developers"} <= set(locs)
+    assert {f"{BASE}/", f"{BASE}/home", f"{BASE}/markets", f"{BASE}/developers"} <= set(locs)
     robots = client.get("/robots.txt").text
     assert "Disallow: /markets" not in robots and "Disallow: /developers" not in robots
     web = Path(__file__).resolve().parent.parent / "web"
     assert 'OG.page("/markets"' in (web / "pages" / "overview.js").read_text(encoding="utf-8"), "the dashboard is the /markets page"
-    assert 'OG.page("/"' in (web / "pages" / "home.js").read_text(encoding="utf-8")
+    assert 'OG.page("/home"' in (web / "pages" / "home.js").read_text(encoding="utf-8")
 
 
 if __name__ == "__main__":
