@@ -83,7 +83,7 @@
       const denied = () => {
         stopped = true;
         root.replaceChildren(head0(), OG.accessNote("operator", "Sign in with the OpenGrid site login to use them."),
-          h("p", { class: "note" }, h("a", { class: "btn sm", href: OG.loginHref() }, "Operator sign-in"), " ", h("a", { class: "lnk", href: "/home" }, "Explore free pages")));
+          h("p", { class: "note" }, h("a", { class: "btn sm", href: OG.loginHref() }, "Operator sign-in"), " ", h("a", { class: "lnk", href: "/get-started" }, "Explore free pages")));
       };
       const me = await OG.me();
       if (!ctx.alive()) return;

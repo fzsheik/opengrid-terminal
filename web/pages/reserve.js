@@ -133,7 +133,7 @@
   const banner = () => h("div", { class: "rs-ban", role: "note" }, h("b", {}, "NOT A FINANCIAL CONTRACT"), h("span", {}, BANNER), h("a", { class: "lnk", href: "/methodology/reservations" }, "How price-lock requests work"));
   // Signed out: one plain access state before anything loads (never a raw HTTP 401).
   const signedOut = (title, sub) => h("div", {}, OG.head(title, sub), OG.accessNote("account", "Customers send price-lock requests with an API key (route:preview scope)."),
-    h("p", { class: "x-gate-a" }, h("a", { class: "btn sm", href: "/home" }, "Explore free pages"), " ", h("a", { class: "lnk", href: OG.loginHref() }, "OpenGrid staff: operator sign-in")));
+    h("p", { class: "x-gate-a" }, h("a", { class: "btn sm", href: "/get-started" }, "Explore free pages"), " ", h("a", { class: "lnk", href: OG.loginHref() }, "OpenGrid staff: operator sign-in")));
   const notYet = (what, e) => e && (e.status === 404 || e.status === 405) && !(e.body && e.body.detail && e.body.detail.code) ? OG.insufficient(what + " is not available on this server yet.", "Not available yet") : apiErr(e, what);
   function apiErr(e, what) {
     if (e && e.status === 401) return OG.error(e);   // the shared sign-in state, never "HTTP 401"

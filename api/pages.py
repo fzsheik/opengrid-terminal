@@ -40,9 +40,9 @@ esc = markdown.esc
 # registers the same paths with ":param" in web/pages/*.js.
 PAGES: list[tuple[str, str, str, bool]] = [
     # "/" is the landing page (web/landing.html: the animated headline and "Generate API key"), not the app shell;
-    # the app's own home is /home.
+    # the app's starting page is /get-started.
     ("/", "Find and run GPU compute", "Compare live GPU cloud prices across providers, find compute suited to your workload, and run it with supervised, approval-gated execution.", True),
-    ("/home", "Find and run GPU compute", "Compare live GPU cloud prices across providers, find compute suited to your workload, and run it with supervised, approval-gated execution.", True),
+    ("/get-started", "Get started", "Find the cheapest GPU for your job: live prices from every GPU cloud, an API key in one click, and the GPUs that fit your workload.", True),
     ("/markets", "GPU compute market", "Live GPU cloud prices, availability, indices and market events across providers.", True),
     ("/developers", "Developers", "Use OpenGrid from your terminal (CLI), your AI coding assistant (MCP) or your application (REST API).", True),
     ("/indices", "GPU price indices", "Transparent GPU compute price indices with published methodology and coverage.", True),
@@ -215,7 +215,7 @@ def shell(path: str, title: str, description: str, *, ssr: str = "", indexable: 
 
 def landing() -> HTMLResponse:
     """GET /: the landing page. Its own small document (web/landing.html, landing.css, landing.js), not the app
-    shell: an animated headline, one "Generate API key" bar, then "Learn more" into the app at /home."""
+    shell: an animated headline, one "Generate API key" bar, then "Learn more" into the app at /get-started."""
     f = WEB / "landing.html"
     key = ("landing", f.stat().st_mtime, asset_version())
     if _template_cache.get("landing_key") != key:

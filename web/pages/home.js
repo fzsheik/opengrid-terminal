@@ -1,5 +1,5 @@
-/* / (homepage) for a first-time visitor: the headline, what works today (and what does not), three actions that
-   each say what they need (free / simulation / invite only) and a compact live price board of the most-covered
+/* /get-started: where the landing page's "Learn more" goes. A plain headline, four numbered steps that each say
+   what they need (free / simulation / invite only) and a compact live price board of the most-covered
    GPUs. A visitor who picks the demo gets the invite-only explanation in place, never a sign-in error; a
    signed-in operator goes straight to /jobs/new. Everything else (indices, the market dashboard, methodology)
    is one click away in the menu.
@@ -37,9 +37,9 @@
     });
   }
 
-  OG.page("/home", {
-    title: "Find and run GPU compute",
-    nav: "home",
+  OG.page("/get-started", {
+    title: "Get started",
+    nav: "start",
     mount(el, params, query, ctx) {
       const root = h("div", { class: "pg-home" });
       el.append(root);
@@ -48,52 +48,45 @@
       const tbl = board();
       const boardBox = h("div", { class: "hm-board-b" }, OG.loading("Loading prices…"));
 
-      // Each action says up front what it needs: free, a simulation, or invite only.
-      const tag = (cls, text, lock) => h("span", { class: "hm-tag " + cls }, lock ? h("i", { class: "lock", "aria-hidden": "true" }) : null, text);
-      const action = (el, title, line, tags, pri) => {
-        el.className = "hm-act" + (pri ? " pri" : "");
-        el.append(h("span", { class: "hm-act-t" }, title, h("span", { class: "hm-act-arr", "aria-hidden": "true" }, "→")),
-          h("span", { class: "hm-act-l" }, line), h("span", { class: "hm-tags" }, tags));
+      // One quiet row per step: number, what it is, one line, and what it needs (free / simulation / invite only).
+      const step = (el, title, line, need) => {
+        el.className = "hm-step";
+        el.append(h("span", { class: "hm-step-n", "aria-hidden": "true" }),
+          h("span", { class: "hm-step-b" }, h("span", { class: "hm-step-t" }, title), h("span", { class: "hm-step-l" }, line)),
+          h("span", { class: "hm-step-need" }, need), h("span", { class: "hm-step-arr", "aria-hidden": "true" }, "→"));
         return el;
       };
       // The demo runs in an OpenGrid workspace (invite only): a visitor gets the explanation here instead of a
       // sign-in error one click later; a signed-in operator goes straight to it.
       const demoWhy = h("div", { class: "hm-why", id: "hm-demo-why", hidden: true },
         h("b", {}, "The demo is invite only"),
-        h("p", {}, "It runs in an OpenGrid workspace, and accounts are invite-only for now (no self-serve sign-up). A small model learns to read handwritten digits (MNIST). It is a simulation: no GPU is rented and nothing is charged."),
-        h("div", { class: "hm-why-a" }, h("a", { class: "lnk", href: "/developers#access" }, "How to get an API key →")));
+        h("p", {}, "It runs in an OpenGrid workspace, and workspaces are invite-only for now. A small model learns to read handwritten digits (MNIST). It is a simulation: no GPU is rented and nothing is charged."));
       const demoBtn = h("button", { type: "button", "aria-expanded": "false", "aria-controls": "hm-demo-why",
         onclick: () => { demoWhy.hidden = !demoWhy.hidden; demoBtn.setAttribute("aria-expanded", String(!demoWhy.hidden)); } });
-      const DEMO_T = "Try the free training demo", DEMO_L = "Watch a small AI model train, step by step.";
-      const demoTags = () => [tag("sim", "Simulation · free"), OG.signedIn() ? null : tag("acct", "Invite only", true)];
-      const demoAct = action(demoBtn, DEMO_T, DEMO_L, demoTags());
+      const DEMO_T = "Try the training demo", DEMO_L = "Watch a small AI model train, step by step. A simulation.";
+      const demoStep = step(demoBtn, DEMO_T, DEMO_L, OG.signedIn() ? "Free" : "Invite only");
       OG.me().then(me => {
         if (!me || !ctx.alive()) return;
-        demoAct.replaceWith(action(h("a", { href: DEMO }), DEMO_T, DEMO_L, demoTags()));
+        const a = h("a", { href: DEMO });
+        a.append(...demoStep.childNodes);
+        a.className = demoStep.className;
+        a.querySelector(".hm-step-need").textContent = "Free";
+        demoStep.replaceWith(a);
         demoWhy.remove();
       });
-      const today = (state, what, who) => h("li", { class: "hm-today-" + state }, h("span", { class: "hm-today-i", "aria-hidden": "true" }), h("span", {}, what), h("span", { class: "hm-today-w" }, who));
 
       root.append(
         h("section", { class: "hm-hero" },
-          h("div", { class: "hm-hero-l" },
-            h("h1", { class: "hm-h1" }, "Compare GPU prices. Find the right compute. Run supported workloads."),
-            h("p", { class: "hm-sub" }, "Live prices from ", provN, ", and the GPUs that fit your AI project."),
-            h("div", { class: "hm-today", "aria-label": "What works today" },
-              h("div", { class: "eyebrow" }, "What works today"),
-              h("ul", {},
-                today("yes", "Live GPU prices and comparisons", "free"),
-                today("yes", "GPU recommendations for your project", "free"),
-                today("part", "Training demo (a simulation, no charge)", "invite only"),
-                today("part", "Real GPU runs, each approved by OpenGrid", "early access"),
-                today("no", "Running your own code", "coming soon")))),
-          h("div", { class: "hm-acts" },
-            action(h("a", { href: "/gpus" }), "Explore GPU prices", "Every GPU, cheapest provider first, with price history.", [tag("free", "Free · no account")], true),
-            action(h("a", { href: "/find" }), "Find compute for my project", "Describe your model and job; get the GPUs that fit, ranked by price.", [tag("free", "Free · no account")]),
-            demoAct, demoWhy)),
+          h("h1", { class: "hm-h1" }, "Find the cheapest GPU for your job."),
+          h("p", { class: "hm-sub" }, "Live prices from ", provN, ". Free to use, no account needed.")),
+        h("nav", { class: "hm-steps", "aria-label": "Get started" },
+          step(h("a", { href: "/", rel: "external" }), "Get an API key", "One click. Read every price from your own code.", "Free"),
+          step(h("a", { href: "/gpus" }), "Explore GPU prices", "Every GPU, cheapest provider first, with price history.", "Free"),
+          step(h("a", { href: "/find" }), "Find compute for my project", "Describe your model and job; get the GPUs that fit, ranked by price.", "Free"),
+          demoStep, demoWhy),
         h("section", { class: "hm-board" },
-          h("header", { class: "hm-sh" }, h("h2", { class: "hm-h2" }, "GPU prices right now"), OG.kindBadge("observed"),
-            h("span", { class: "spacer" }), h("a", { class: "lnk hm-more", href: "/gpus" }, "All GPUs →"), h("a", { class: "lnk hm-more", href: "/markets" }, "Markets →")),
+          h("header", { class: "hm-sh" }, h("h2", { class: "hm-h2" }, "Cheapest right now"),
+            h("span", { class: "spacer" }), h("a", { class: "lnk hm-more", href: "/gpus" }, "All GPUs →")),
           boardBox));
 
       let spark = new Map(), last = null;

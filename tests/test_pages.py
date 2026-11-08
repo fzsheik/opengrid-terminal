@@ -373,18 +373,18 @@ def test_execution_pages_are_private_and_noindex():
 
 
 def test_homepage_markets_and_developers_pages():
-    """/ is the landing page (animated headline + "Generate API key"); the app's home is /home; the market dashboard
+    """/ is the landing page (animated headline + "Generate API key"); "Learn more" goes to /get-started; the market dashboard
     moved to /markets, /developers is new: all served, indexable, in the sitemap."""
     land = client.get("/")
     assert land.status_code == 200 and "Cheapest GPUs" in land.text and 'id="lp-gen"' in land.text
     assert "/static/landing.js?v=" in land.text and "/static/landing.css?v=" in land.text, "assets carry the content hash"
     assert "/static/pages/home.js" not in land.text, "the landing page is its own document, not the app shell"
     assert 'name="robots" content="noindex"' not in land.text and '<link rel="canonical" href="' + BASE + '/">' in land.text
-    home = client.get("/home")
-    assert home.status_code == 200 and title_of(home.text) == "Find and run GPU compute | OpenGrid", title_of(home.text)
+    home = client.get("/get-started")
+    assert home.status_code == 200 and title_of(home.text) == "Get started | OpenGrid", title_of(home.text)
     assert 'name="robots" content="noindex"' not in home.text and "/static/pages/home.js" in home.text
     desc = re.search(r'<meta name="description" content="([^"]+)"', home.text).group(1)
-    assert "supervised" in desc and "Compare live GPU cloud prices" in desc, desc
+    assert "cheapest GPU" in desc, desc
     for path, title, script in (("/markets", "GPU compute market", "overview.js"), ("/developers", "Developers", "developers.js")):
         r = client.get(path)
         assert r.status_code == 200, path
@@ -392,12 +392,12 @@ def test_homepage_markets_and_developers_pages():
         assert f"/static/pages/{script}" in r.text, path
         assert pages.is_page_path(path) and any(p[0] == path and p[3] for p in pages.PAGES), f"{path}: indexable PAGES entry"
     locs = re.findall(r"<loc>([^<]+)</loc>", client.get("/sitemap.xml").text)
-    assert {f"{BASE}/", f"{BASE}/home", f"{BASE}/markets", f"{BASE}/developers"} <= set(locs)
+    assert {f"{BASE}/", f"{BASE}/get-started", f"{BASE}/markets", f"{BASE}/developers"} <= set(locs)
     robots = client.get("/robots.txt").text
     assert "Disallow: /markets" not in robots and "Disallow: /developers" not in robots
     web = Path(__file__).resolve().parent.parent / "web"
     assert 'OG.page("/markets"' in (web / "pages" / "overview.js").read_text(encoding="utf-8"), "the dashboard is the /markets page"
-    assert 'OG.page("/home"' in (web / "pages" / "home.js").read_text(encoding="utf-8")
+    assert 'OG.page("/get-started"' in (web / "pages" / "home.js").read_text(encoding="utf-8")
 
 
 if __name__ == "__main__":

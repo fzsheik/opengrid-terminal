@@ -19,7 +19,7 @@ const navHtml = html.slice(html.indexOf('<nav class="nav"'), html.indexOf("</nav
 const K = OG.navKeyFor;
 ok(typeof K === "function", "navKeyFor is exported for Node");
 eq(K("/"), "home", "/ is the homepage");
-eq(K("/home"), "home", "/home is the app home (/ is the landing page)");
+eq(K("/get-started"), "start", "/get-started: where the landing page's Learn more goes");
 eq(K("/markets"), "markets", "/markets: the market dashboard");
 eq(K("/developers"), "developers", "/developers");
 eq(K("/find"), "find", "/find");
@@ -42,7 +42,7 @@ eq(K("/watchlists"), "watchlists", "other first segments map to themselves");
 const keys = [...navHtml.matchAll(/data-nav="([^"]+)"/g)].map(m => m[1]);
 eq(keys.length, new Set(keys).size, "every data-nav is unique (one link per key)");
 const primary = [...navHtml.matchAll(/<a href="([^"]+)" data-nav="[^"]+" class="nav-p"[^>]*>([^<]+)<\/a>/g)].map(m => [m[1], m[2]]);
-eq(primary, [["/home", "Home"], ["/gpus", "GPUs"], ["/find", "Find Compute"], ["/markets", "Markets"], ["/developers", "Developers"], ["/jobs", "My Jobs"]],
+eq(primary, [["/", "Home"], ["/get-started", "Get started"], ["/gpus", "GPUs"], ["/find", "Find Compute"], ["/markets", "Markets"], ["/developers", "Developers"], ["/jobs", "My Jobs"]],
   "Home, the four public destinations, then My Jobs (the workspace that needs an account)");
 const iExplore = navHtml.indexOf(">Explore</div>"), iWork = navHtml.indexOf("Your workspace</div>");
 ok(iExplore > 0 && iWork > iExplore && navHtml.indexOf('data-group="gpus"') > iExplore && navHtml.indexOf('data-group="developers"') < iWork && navHtml.indexOf('data-group="jobs"') > iWork,
@@ -65,7 +65,7 @@ ok(/class="nav-sec nav-admin"[^>]*hidden/.test(navHtml) && ["/admin/execution", 
 const ACCOUNT_PAGES = ["/jobs", "/deployments", "/reserve", "/route", "/watchlists", "/keys", "/onboarding"];
 const linkTag = href => (navHtml.match(new RegExp(`<a href="${href.replace(/\//g, "\\/")}"[^>]*>`)) || [""])[0];
 for (const href of ACCOUNT_PAGES) ok(/data-access="account"/.test(linkTag(href)), `${href}: nav link marked as needing an account`);
-for (const href of ["/home", "/gpus", "/compare", "/explorer", "/heatmaps", "/providers", "/find", "/assistant", "/markets", "/indices", "/opportunities", "/events", "/news", "/developers", "/api", "/methodology"])
+for (const href of ["/get-started", "/gpus", "/compare", "/explorer", "/heatmaps", "/providers", "/find", "/assistant", "/markets", "/indices", "/opportunities", "/events", "/news", "/developers", "/api", "/methodology"])
   ok(linkTag(href) && !/data-access/.test(linkTag(href)), `${href}: public, no lock`);
 ok(html.includes('href="/reserve"') && html.includes("/static/pages/reserve.js"), "reserve link + script (test_reservations relies on it)");
 ok(/id="nav-toggle"[^>]*aria-controls="main-nav"/.test(html) && html.includes('id="main-nav"'), "mobile menu button controls the nav");

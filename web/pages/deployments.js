@@ -96,7 +96,7 @@
   OG.operatorGate = (title, me) => h("div", { class: "x-gate" }, OG.head(title),
     OG.accessNote("operator", me ? "Your sign-in does not include operator access." : null),
     me ? null : h("p", { class: "x-gate-a" }, h("a", { class: "btn sm", href: OG.loginHref() }, "OpenGrid staff: operator sign-in"), " ",
-      h("a", { class: "lnk", href: "/home" }, "Explore free pages")));
+      h("a", { class: "lnk", href: "/get-started" }, "Explore free pages")));
   // A failed background refresh: keep the last good view (and its Terminate button) and say so in one line.
   X.refreshNote = (err, lastOkIso) => {
     const why = err && typeof err.status === "number" && err.status ? (err.status === 401 ? "sign-in required" : "HTTP " + err.status) : "no connection";

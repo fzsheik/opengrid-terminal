@@ -2,7 +2,7 @@
    1. The headline types "Cheapest GPUs", erases it, types "OpenGrid", and repeats. The grid mark beside it draws
       its lines in step with the letters and erases with them.
    2. "Generate API key" calls POST /v1/instant-key (api/instant_key.py) and shows the key in the bar; the round
-      button then copies it, and "Learn more" goes into the app (/home). */
+      button then copies it, and "Learn more" goes into the app (/get-started). */
 (() => {
   "use strict";
   const $ = id => document.getElementById(id);

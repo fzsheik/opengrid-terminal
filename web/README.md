@@ -207,7 +207,7 @@ Five primary destinations in `index.html`, each a `.nav-sec` group whose seconda
 Utility links (Methodology, Ops) sit below; the Admin group is shown only to admins. A group opens when its
 page is current (`OG.navKeyFor(path)` or the page's `nav`; every data-nav must be unique) or when its chevron
 is clicked. Under 820px the nav is a menu behind `#nav-toggle` and closes on navigation. `/` is the homepage
-(pages/home.js, nav key `home`: no nav link, the brand is home). Tests: `node tests/test_web_nav.js`.
+(pages/home.js at /get-started, nav key `start`; "Home" and the brand go to the landing page at /, web/landing.html). Tests: `node tests/test_web_nav.js`.
 
 ## Commands (terminal mode)
 

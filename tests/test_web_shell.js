@@ -98,12 +98,11 @@ for (const [theme, b] of [["dark", block(":root")], ["light", block(':root[data-
 
 // ---------- homepage: the first screen ----------
 const home = fs.readFileSync(path.join(WEB, "pages", "home.js"), "utf8");
-ok(home.includes('"Compare GPU prices. Find the right compute. Run supported workloads."'), "headline says what OpenGrid does");
-ok(["Explore GPU prices", "Find compute for my project", "Try the free training demo"].every(t => home.includes(`"${t}"`)), "the three primary actions (sentence case)");
-ok(/demoAct = action\(demoBtn/.test(home) && /OG\.me\(\)\.then\(me => \{\s*if \(!me/.test(home), "a visitor's demo action explains invite-only access in place; only a signed-in user gets the /jobs/new link");
-ok(home.includes('"Invite only"') && home.includes('"Simulation · free"') && (home.match(/"Free · no account"/g) || []).length === 2, "every action is tagged: free / simulation / invite only");
-ok(home.includes('"Running your own code", "coming soon"'), "what works today: says plainly what does not work yet");
-ok(home.includes('"GPU prices right now"') && !/hm-how|hm-stats|\/v1\/indices|hm-more-row/.test(home), "homepage: headline, what works today, three actions and the price board; nothing else");
+ok(home.includes('"Find the cheapest GPU for your job."'), "headline says what OpenGrid does");
+ok(["Get an API key", "Explore GPU prices", "Find compute for my project", "Try the training demo"].every(t => home.includes(`"${t}"`)), "the four steps (sentence case)");
+ok(/demoStep = step\(demoBtn/.test(home) && /OG\.me\(\)\.then\(me => \{\s*if \(!me/.test(home), "a visitor's demo step explains invite-only access in place; only a signed-in user gets the /jobs/new link");
+ok(home.includes('"Invite only"') && (home.match(/"Free"\)/g) || []).length === 3, "every step says what it needs: free / invite only");
+ok(home.includes('"Cheapest right now"') && !/hm-how|hm-stats|\/v1\/indices|hm-more-row|hm-today/.test(home), "get started: headline, four steps and the price board; nothing else");
 ok(!/[\u2013\u2014]/.test(home + ov), "no en or em dashes in the homepage or /markets copy");
 ok(!/arbitrary|any workload|run anything/i.test(home), "no claim that arbitrary workloads run today");
 
