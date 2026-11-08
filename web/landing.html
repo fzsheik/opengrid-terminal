@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenGrid: the cheapest GPUs, one API key</title>
-<meta name="description" content="One API key for every GPU cloud. OpenGrid finds the cheapest GPUs across providers from live market prices.">
+<meta name="description" content="Search live GPU prices across every GPU cloud and get an API key in one click. OpenGrid finds the cheapest GPU for your job from observed market prices.">
 <!--OG:CANONICAL-->
 <meta property="og:site_name" content="OpenGrid">
 <meta property="og:type" content="website">
 <meta property="og:title" content="OpenGrid: the cheapest GPUs, one API key">
-<meta property="og:description" content="One API key for every GPU cloud. OpenGrid finds the cheapest GPUs across providers from live market prices.">
+<meta property="og:description" content="Search live GPU prices across every GPU cloud and get an API key in one click.">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23131920'/%3E%3Cpath d='M6 6h12M6 12h12M6 18h12M6 6v12M12 6v12M18 6v12' stroke='%234d94ff' stroke-width='1.6' fill='none'/%3E%3C/svg%3E">
 <link rel="preload" href="/static/fonts/Figtree-var.woff2" as="font" type="font/woff2" crossorigin>
@@ -35,34 +35,61 @@
     <svg class="lp-mark" id="lp-mark" viewBox="0 0 48 48" fill="none" stroke-linecap="round" aria-hidden="true">
       <path d="M8 8h32"/><path d="M8 24h32"/><path d="M8 40h32"/>
       <path d="M8 8v32"/><path d="M24 8v32"/><path d="M40 8v32"/>
-      <circle class="lp-node" cx="24" cy="24" r="3.2"/>
+      <circle class="lp-node" cx="24" cy="24" r="3.6"/>
     </svg>
-    <span class="lp-type" id="lp-type" aria-hidden="true">Cheapest GPUs</span><span class="lp-caret" aria-hidden="true"></span>
-    <span class="lp-sr">Cheapest GPUs. OpenGrid.</span>
+    <span class="lp-type" id="lp-type" aria-hidden="true"><span class="lp-type-a">Cheapest GPUs</span><span class="lp-type-b"></span><span class="lp-caret"></span></span>
+    <span class="lp-sr">Cheapest GPUs, from every GPU cloud. OpenGrid.</span>
   </h1>
 
-  <div class="lp-bar" id="lp-bar" data-state="idle">
-    <span class="lp-ico" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2 20 3M16 7l3 3M14 9l2 2"/></svg>
-    </span>
-    <button type="button" class="lp-gen" id="lp-gen">Generate API key</button>
-    <code class="lp-key" id="lp-key" tabindex="0" hidden></code>
-    <button type="button" class="lp-go" id="lp-go" aria-label="Generate API key">
+  <form class="lp-bar" id="lp-form" role="search" autocomplete="off">
+    <label class="lp-sr" for="lp-q">Search a GPU or describe your job</label>
+    <svg class="lp-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+    <input class="lp-q" id="lp-q" name="q" type="text" enterkeyhint="search" spellcheck="false" maxlength="300"
+           placeholder="Search a GPU or describe your job">
+    <button type="submit" class="lp-go" id="lp-go" aria-label="Search">
       <svg class="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-      <svg class="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>
-      <svg class="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
       <span class="i-spin" aria-hidden="true"></span>
     </button>
+  </form>
+
+  <p class="lp-proof" id="lp-proof" hidden></p>
+
+  <div class="lp-try" id="lp-try" aria-label="Try a search">
+    <button type="button" data-q="H100 for 8 hours">H100 for 8 hours</button>
+    <button type="button" data-q="Cheapest A100">Cheapest A100</button>
+    <button type="button" data-q="Fine-tune Llama 3 8B">Fine-tune Llama 3 8B</button>
   </div>
 
-  <p class="lp-sub" id="lp-sub">One key. Access every GPU cloud.</p>
-  <p class="lp-err" id="lp-err" role="alert" hidden></p>
+  <section class="lp-res" id="lp-res" aria-live="polite" hidden></section>
 
-  <div class="lp-after" id="lp-after" hidden>
-    <p class="lp-note">Copy it now. OpenGrid keeps only a hash and can't show it again.</p>
-    <pre class="lp-curl" id="lp-curl"></pre>
-    <a class="lp-more" href="/get-started">Learn more <span aria-hidden="true">→</span></a>
-  </div>
+  <section class="lp-key" id="lp-key">
+    <div class="lp-key-ask" id="lp-key-ask">
+      <p>Get these prices from your own code.</p>
+      <button type="button" class="lp-btn" id="lp-gen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2 20 3M16 7l3 3M14 9l2 2"/></svg>
+        <span id="lp-gen-t">Generate API key</span>
+      </button>
+    </div>
+    <p class="lp-err" id="lp-err" role="alert" hidden></p>
+
+    <div class="lp-key-out" id="lp-key-out" hidden>
+      <div class="lp-key-h">
+        <h2>Your API key</h2>
+        <span class="lp-scope" title="This key reads OpenGrid market data. It cannot launch or pay for compute.">Read-only · market data</span>
+      </div>
+      <div class="lp-key-row">
+        <code class="lp-secret" id="lp-secret" tabindex="0" aria-label="Your API key"></code>
+        <button type="button" class="lp-copy" id="lp-copy">Copy</button>
+      </div>
+      <p class="lp-saved" id="lp-saved"></p>
+      <h3>Try it</h3>
+      <pre class="lp-code" id="lp-curl" tabindex="0"></pre>
+      <h3 id="lp-resp-h" hidden>Live response</h3>
+      <pre class="lp-code lp-resp" id="lp-resp" tabindex="0" hidden></pre>
+      <p class="lp-scope-note">This key reads live prices from every GPU cloud OpenGrid tracks. Running jobs through OpenGrid is early access.</p>
+      <a class="lp-more" href="/get-started">Learn more <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+    </div>
+  </section>
   <p class="lp-live" id="lp-live" aria-live="polite"></p>
 </main>
 </body>

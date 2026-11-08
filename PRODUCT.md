@@ -29,8 +29,9 @@ uptime, probes), which is what makes "cheapest" trustworthy.
 
 ## Operating Context
 
-- The front door is the landing page at `/`: an animated "Cheapest GPUs / OpenGrid" headline and one "Generate API
-  key" bar (`web/landing.html`). A key is issued in one click, no sign-up (`POST /v1/instant-key`, data:read only).
+- The front door is the landing page at `/` (`web/landing.html`): an animated headline that types "Cheapest GPUs",
+  live GPU prices and "OpenGrid"; one search bar answered by the OpenGrid Assistant (`POST /v1/assistant`, observed
+  prices only); and "Generate API key", issued in one click with no sign-up (`POST /v1/instant-key`, data:read only).
 - "Learn more" leads to `/get-started`, then the app: GPUs, Find Compute (workload → GPUs that fit), Markets,
   Developers (API docs, `/api`), My Jobs.
 - Developers use the key with curl, the Python examples, the CLI and the hosted MCP endpoint.

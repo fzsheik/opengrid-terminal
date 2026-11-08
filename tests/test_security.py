@@ -482,36 +482,38 @@ def test_platform_admin():
 
 def test_instant_key():
     """POST /v1/instant-key (the landing page's button): public, needs the browser header, makes a free account with
-    one data:read key that works and can do nothing else; capped per client IP per day and site-wide."""
+    one data:read key that works and can do nothing else; capped per client IP per rolling day (counted in the DB, so
+    a restart forgives nothing) and site-wide."""
     from api import instant_key
 
     setup()
-    instant_key.reset()
     saved = (settings.public_pages, settings.instant_keys_per_ip_per_day, settings.instant_keys_per_day)
     settings.public_pages = True
     try:
         assert client.post("/v1/instant-key").status_code == 403, "no X-OpenGrid-Request header: refused"
+        assert client.post("/v1/instant-key", headers={**HDR, **bearer("opg_live_nope")}).status_code == 401
         settings.instant_keys_per_ip_per_day = 2
         r = client.post("/v1/instant-key", headers=HDR)
         assert r.status_code == 201, r.text
         d = r.json()["data"]
         assert d["secret"].startswith("opg_") and d["scopes"] == ["data:read"]
         acct = accounts.get_account(d["account_id"])
-        assert acct["plan"] == "free" and acct["settings"] == {"source": "instant_key"} and not acct.get("is_operator")
+        assert acct["plan"] == "free" and acct["settings"]["source"] == "instant_key" and not acct.get("is_operator")
+        assert "testclient" not in str(acct["settings"]), "the client IP itself is never stored"
         assert client.get("/v1/gpus", headers=bearer(d["secret"])).status_code == 200, "the key reads market data"
         for path in ("/v1/keys", "/v1/admin/accounts", "/v1/deployments"):
             assert client.get(path, headers=bearer(d["secret"])).status_code == 403, path
         assert client.post("/v1/keys", headers=bearer(d["secret"]), json={"scopes": ["data:read"]}).status_code == 403
         assert client.post("/v1/instant-key", headers=HDR).status_code == 201
         r = client.post("/v1/instant-key", headers=HDR)
-        assert r.status_code == 429 and "Try again tomorrow" in msg(r), "per-IP daily cap"
-        instant_key.reset()
+        assert r.status_code == 429 and "Try again in 24 hours" in msg(r), msg(r)
+        assert 80_000 < int(r.headers["retry-after"]) <= 86_400, "Retry-After matches the message (about a day)"
+        settings.instant_keys_per_ip_per_day = 50
         settings.instant_keys_per_day = 2
         r = client.post("/v1/instant-key", headers=HDR)
-        assert r.status_code == 503, "site-wide daily cap (two instant accounts already made)"
+        assert r.status_code == 503 and "browse live prices" in msg(r), "site-wide daily cap"
     finally:
         settings.public_pages, settings.instant_keys_per_ip_per_day, settings.instant_keys_per_day = saved
-        instant_key.reset()
 
 
 if __name__ == "__main__":
