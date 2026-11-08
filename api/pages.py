@@ -143,11 +143,31 @@ def is_public(request: Request) -> bool:
 _template_cache: dict = {}
 
 
+def asset_version() -> str:
+    """A short hash of every .css / .js file under web/: it changes whenever one of them does."""
+    import hashlib
+
+    files = sorted(f for f in WEB.rglob("*") if f.suffix in (".css", ".js") and f.is_file())
+    stamp = tuple((str(f), f.stat().st_mtime_ns, f.stat().st_size) for f in files)
+    if _template_cache.get("asset_stamp") != stamp:
+        h = hashlib.sha256()
+        for f in files:
+            h.update(f.relative_to(WEB).as_posix().encode() + b"\0" + f.read_bytes())
+        _template_cache.update(asset_stamp=stamp, asset_v=h.hexdigest()[:12])
+    return _template_cache["asset_v"]
+
+
+_ASSET = re.compile(r'((?:href|src)="/static/[^"?]+\.(?:css|js))"')
+
+
 def _template() -> str:
+    # The shell's css and js carry ?v=<asset_version()>: a deploy that changes one gets a new URL, so neither a
+    # browser nor Cloudflare (which keeps /static/* for hours) serves the old file.
     f = WEB / "index.html"
-    mtime = f.stat().st_mtime
-    if _template_cache.get("mtime") != mtime:
-        _template_cache.update(mtime=mtime, text=f.read_text(encoding="utf-8"))
+    key = (f.stat().st_mtime, asset_version())
+    if _template_cache.get("key") != key:
+        text = _ASSET.sub(lambda m: f'{m.group(1)}?v={key[1]}"', f.read_text(encoding="utf-8"))
+        _template_cache.update(key=key, text=text)
     return _template_cache["text"]
 
 
@@ -161,6 +181,7 @@ def _boot() -> dict:
         "gpus": sorted([s, n] for s, n in gpu_slugs().items()),
         "providers": [provider_meta.as_dict(n) for n in names],
         "methodology": methodology_names(),
+        "asset_v": asset_version(),
     }
 
 

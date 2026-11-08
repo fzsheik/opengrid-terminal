@@ -149,7 +149,7 @@ opengrid providers --limit 10`,
   // ------------------------------------------------------------ feature stylesheet (once per document)
   if (!document.querySelector('link[data-dx-css]')) {
     const l = document.createElement("link");
-    l.rel = "stylesheet"; l.href = "/static/devx.css"; l.dataset.dxCss = "1";
+    l.rel = "stylesheet"; l.href = "/static/devx.css" + (OG.boot && OG.boot.asset_v ? "?v=" + OG.boot.asset_v : ""); l.dataset.dxCss = "1";
     document.head.append(l);
   }
 
