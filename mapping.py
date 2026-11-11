@@ -556,7 +556,7 @@ AWS = ProviderMapping(
                "GET spot-bid-advisor.s3.amazonaws.com/spot-advisor-data.json":
                    "Spot Advisor interruption band and savings per GPU type, region and OS; stored raw only",
                "POST ec2.<region>.amazonaws.com DescribeSpotPriceHistory":
-                   "effective Linux spot price now per GPU type and AZ, six regions (read-only IAM key, SigV4)",
+                   "effective Linux spot price now per GPU type and AZ, 15 regions (read-only IAM key, SigV4)",
                "POST ec2.us-east-1.amazonaws.com GetSpotPlacementScores":
                    "capacity only (capacity tables): 1-10 score per region, five GPU types, every 2 h (key)",
                "POST ec2.us-east-1.amazonaws.com DescribeCapacityBlockOfferings":
@@ -591,7 +591,7 @@ AWS = ProviderMapping(
         "On-demand: only us-east-1 Linux. Polled hourly; list prices change rarely.",
         "Spot (with the read-only key): DescribeSpotPriceHistory as a change log, StartTime = the previous "
         "successful poll, EndTime = now: the price in effect at the start plus every change since, per type and AZ, "
-        "in us-east-1, us-east-2, us-west-2, eu-west-2, eu-north-1 and ap-northeast-1. The listing is the newest "
+        "in the 15 SPOT_REGIONS (US, Canada, Brazil, Europe, Japan, Korea, Australia, India). The listing is the newest "
         "price; each earlier change is its own history row with AWS's exact timestamp (methodology/freshness.md). "
         "A region answer with no GPU row is a failed fetch.",
         "The Spot Advisor feed (interruption band r 0-4 = <5% .. >20%, savings s %) is stored raw with its "

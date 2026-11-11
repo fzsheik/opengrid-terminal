@@ -133,7 +133,7 @@ Exoscale 1 h. Lium is also read live from its public WebSocket (section 3.7).
 
 | Provider | Class | How OpenGrid reads prices |
 |---|---|---|
-| AWS | hyperscaler | public pricing file (on-demand, us-east-1); with a read-only IAM key, the EC2 API for spot prices per AZ in six regions and spot placement scores (capacity tiers) |
+| AWS | hyperscaler | public pricing file (on-demand, us-east-1); with a read-only IAM key, the EC2 API for spot prices per AZ in 15 regions and spot placement scores (six regions) (capacity tiers) |
 | Google Cloud | hyperscaler | Cloud Billing Catalog API, in every region Compute Engine offers the shape (read-only service account; us-central1 without it; attachable T4/V100 are GPU-only and kept out of market statistics) |
 | Microsoft Azure | hyperscaler | public API (Retail Prices, eastus + eastus2) |
 | Oracle Cloud | hyperscaler | public pricing file (global list prices) |

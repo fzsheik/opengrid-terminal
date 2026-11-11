@@ -5,6 +5,28 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-10 — AWS spot prices in 15 regions (was 6)
+
+### What shipped
+- **`SPOT_REGIONS` widened from 6 to 15** (`providers/aws.py`). Added: us-west-1, ca-central-1, sa-east-1,
+  eu-west-1, eu-west-3, eu-central-1, ap-northeast-2, ap-southeast-2 and ap-south-1. Each was checked in a live
+  read-only DescribeSpotPriceHistory sweep on 2026-11-10 and returned GPU spot rows (A100 p4d/p4de, H100/H200
+  p5/p5e/p5en, B200/B300 p6). Countries: CA, BR, IE, FR, DE, KR, AU, IN.
+- **Placement scores stay on the original six regions** (`PLACEMENT_REGIONS`). Each placement type is one fixed
+  request configuration, and AWS may throttle new configurations per 24 h.
+- **`SPOT_CONCURRENCY` raised from 2 to 4.** A live 15-region poll took 2.1 s, well inside the 60 s poll timeout.
+  That is one page per region every 5 minutes, and each region has its own EC2 request bucket.
+
+### Not shipped
+- **eu-south-2 (Spain) and ap-southeast-3 (Jakarta).** Both are opt-in regions that are not enabled on the
+  read-only account (AuthFailure). To add them, enable them in the AWS console, then add them to `SPOT_REGIONS`.
+
+### Deploy notes
+- No migration. Each new region starts with a cold window (the last hour), then becomes a change log on the
+  next poll.
+
+---
+
 ## 2026-11-06 (fourth release) — Power markets, natural gas and power stocks (internal), beside GPU prices, never mixed
 
 ### What shipped

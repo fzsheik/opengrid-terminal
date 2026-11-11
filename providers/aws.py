@@ -26,7 +26,7 @@ With AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (an IAM user allowed only read-on
 launching is denied) the same poll adds three SigV4-signed EC2 Query API calls (providers/aws_sigv4.py, POST
 form bodies to https://ec2.<region>.amazonaws.com/, API version 2016-11-15). Without the key nothing changes.
 
-    DescribeSpotPriceHistory   every GPU_INSTANCES type, Linux/UNIX, in SPOT_REGIONS, paginated, two regions at a
+    DescribeSpotPriceHistory   every GPU_INSTANCES type, Linux/UNIX, in SPOT_REGIONS, paginated, four regions at a
                                time, as a CHANGE LOG: StartTime = the previous successful poll of that region (EndTime
                                then), EndTime = now. AWS returns, per type and AZ, "the last price change before the
                                start time, which is the effective price as of the start time", plus every change
@@ -40,7 +40,7 @@ form bodies to https://ec2.<region>.amazonaws.com/, API version 2016-11-15). Wit
                                prices in the window become history rows of their own (models.PriceChange,
                                normalize._superseded) with the AWS timestamp as provider_changed_at (changed_at.py).
     GetSpotPlacementScores     PLACEMENT_TYPES, one fixed request configuration each (one instance of that type,
-                               regional scores over SPOT_REGIONS), refreshed every PLACEMENT_TTL, not every poll: new
+                               regional scores over PLACEMENT_REGIONS), refreshed every PLACEMENT_TTL, not every poll: new
                                accounts get a low target-capacity limit and AWS may throttle new configurations per
                                24 h, so the set is small and never changes between polls. Stored per type; read by
                                normalize_capacity() as a tier for the spot listings (sku "<type>:spot", region code;
@@ -128,15 +128,23 @@ SPOT_ADVISOR = "https://spot-bid-advisor.s3.amazonaws.com/spot-advisor-data.json
 
 # --- read-only EC2 market calls (need the key; see the module docstring) ---
 EC2_VERSION = "2016-11-15"
-# Regions polled for spot prices and scored for placement -> ISO country. Chosen 2026-11-01 from a live
-# DescribeSpotPriceHistory sweep of every enabled region: the six with spot prices for H100, H200 and/or B200.
-SPOT_REGIONS = {"us-east-1": "US", "us-east-2": "US", "us-west-2": "US", "eu-west-2": "GB", "eu-north-1": "SE",
-                "ap-northeast-1": "JP"}
+# Regions polled for spot prices -> ISO country. The first six were chosen 2026-11-01 from a live
+# DescribeSpotPriceHistory sweep of every enabled region (the six with spot prices for H100, H200 and/or B200).
+# Widened 2026-11-10 to every enabled region that returned GPU spot rows in a second live sweep (p4d/p4de A100,
+# p5/p5e/p5en H100/H200, p6 B200/B300): 15. Not included: eu-south-2 and ap-southeast-3, opt-in regions not
+# enabled on the account (AuthFailure); enable them in the AWS console first, then add them here.
+SPOT_REGIONS = {"us-east-1": "US", "us-east-2": "US", "us-west-1": "US", "us-west-2": "US", "ca-central-1": "CA",
+                "sa-east-1": "BR", "eu-west-1": "IE", "eu-west-2": "GB", "eu-west-3": "FR", "eu-central-1": "DE",
+                "eu-north-1": "SE", "ap-northeast-1": "JP", "ap-northeast-2": "KR", "ap-southeast-2": "AU",
+                "ap-south-1": "IN"}
+# Regions scored for spot placement: the original six, unchanged. Each placement type is one FIXED request
+# configuration, and AWS may throttle new configurations per 24 h, so this set does not follow SPOT_REGIONS.
+PLACEMENT_REGIONS = ("us-east-1", "us-east-2", "us-west-2", "eu-west-2", "eu-north-1", "ap-northeast-1")
 SPOT_PRODUCT = "Linux/UNIX"
-SPOT_CONCURRENCY = 2            # regions fetched at once; each region has its own EC2 request bucket anyway
+SPOT_CONCURRENCY = 4            # regions fetched at once; each region has its own EC2 request bucket anyway
 SPOT_MAX_PAGES = 10
 # The change-log window: never longer than a day (pages stay few; AWS keeps 90 days), and on a cold start with no
-# stored poll, the last hour. A typical window (5 min to 1 h) is one page per region: 6 requests per poll against
+# stored poll, the last hour. A typical window (5 min to 1 h) is one page per region: 15 requests per poll against
 # EC2's Describe* bucket of 100 refilling at 20/s per account and region.
 SPOT_MAX_WINDOW = timedelta(hours=24)
 SPOT_COLD_WINDOW = timedelta(hours=1)
@@ -209,7 +217,7 @@ def _keep(row: dict) -> dict:
 class AwsProvider(Provider):
     name = "aws"
     # The price file and the Spot Advisor change rarely and are large: hourly (the price cadence). With the key the loop
-    # runs every 5 minutes for the spot change log (6 regions, ~1 page each, well inside EC2's Describe* bucket);
+    # runs every 5 minutes for the spot change log (15 regions, ~1 page each, well inside EC2's Describe* bucket);
     # placement scores are the capacity cadence (PLACEMENT_TTL). Without the key: hourly, nothing else.
     polling = PollingPolicy(interval_seconds=3600, timeout_seconds=60, tier="medium", poll_seconds=300,
                             capacity_interval_seconds=int(PLACEMENT_TTL.total_seconds()))
@@ -339,10 +347,10 @@ class AwsProvider(Provider):
                         request=params)
 
     async def _placement(self, itype: str) -> RawResponse:
-        """One fixed configuration: PLACEMENT_TARGET instance(s) of `itype`, regional scores over SPOT_REGIONS."""
+        """One fixed configuration: PLACEMENT_TARGET instance(s) of `itype`, regional scores over PLACEMENT_REGIONS."""
         params = {"InstanceType.1": itype, "TargetCapacity": str(PLACEMENT_TARGET), "TargetCapacityUnitType": "units",
                   "SingleAvailabilityZone": "false",
-                  **{f"RegionName.{i}": r for i, r in enumerate(SPOT_REGIONS, 1)}}
+                  **{f"RegionName.{i}": r for i, r in enumerate(PLACEMENT_REGIONS, 1)}}
         endpoint = ec2_endpoint(CAPACITY_BLOCK_REGION, "GetSpotPlacementScores", InstanceType=itype)
         raw, _code = await self._ec2(CAPACITY_BLOCK_REGION, "GetSpotPlacementScores", params, endpoint)
         if not raw.ok:

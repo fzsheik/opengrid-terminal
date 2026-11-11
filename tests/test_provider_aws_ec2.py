@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import httpx  # noqa: E402
 
 import providers.aws as aws  # noqa: E402
-from providers.aws import (CAPACITY_BLOCKS, ENDPOINT, PLACEMENT_TYPES, REGION_NAME, SPOT_REGIONS,  # noqa: E402
+from providers.aws import (CAPACITY_BLOCKS, ENDPOINT, PLACEMENT_REGIONS, PLACEMENT_TYPES, REGION_NAME, SPOT_REGIONS,  # noqa: E402
                            AwsProvider, placement_tier)
 
 FIX = Path(__file__).resolve().parent / "fixtures_providers"
@@ -213,7 +213,7 @@ def test_placement_scores_as_tiers():
     assert ("p6-b200.48xlarge:spot", "eu-west-2") not in caps, "a region AWS did not score gets no row"
     forms = [f for _, f, _ in m.calls if f["Action"] == "GetSpotPlacementScores"]
     assert all(f["TargetCapacity"] == "1" and f["TargetCapacityUnitType"] == "units" for f in forms)
-    assert {v for k, v in forms[0].items() if k.startswith("RegionName.")} == set(SPOT_REGIONS)
+    assert {v for k, v in forms[0].items() if k.startswith("RegionName.")} == set(PLACEMENT_REGIONS)
 
 
 def test_placement_tier_mapping():
