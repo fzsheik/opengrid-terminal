@@ -102,11 +102,17 @@ class GpuAiProvider(Provider):
             return []
         fetched_at = max(s.fetched_at for s in snaps)
         listings = []
+        seen: set[str] = set()
         for r in _rows(snaps):
             name, n, oid = r.get("gpu_type"), r.get("gpu_count"), r.get("offering_id")
             price = to_decimal(r.get("price_per_hour"))
             if not name or not oid or not isinstance(n, int) or n < 1 or price is None or price <= 0:
                 continue
+            # Offset paging: when the list shifts between page requests, an offering can come back on two pages
+            # (seen 2026-11-11: four RTX PRO 6000 offerings on pages 1 and 2, identical). Keep the first.
+            if str(oid) in seen:
+                continue
+            seen.add(str(oid))
             if r.get("tier") != "on_demand":
                 log.warning("gpuai: offering %s has tier %r; skipped", oid, r.get("tier"))
                 continue

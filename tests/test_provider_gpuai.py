@@ -76,6 +76,10 @@ def test_normalize():
     assert all(x.country == "US" for x in out.values() if (x.region or "").startswith("us-"))
     assert all(x.country is None for x in out.values() if (x.region or "").startswith("eu-"))
     assert not any(x.canonical_gpu_name for x in out.values() if x.raw_gpu_name.startswith("rtx_pro"))
+    # Offset paging can return an offering on two pages (2026-11-11): one listing, not two.
+    page2 = {**body(), "data": body()["data"][:4]}
+    both = GpuAiProvider.normalize({EP: [snap(body())], f"{PRICING}?limit=200&page=2": [snap(page2)]})
+    assert len(both) == 66 and len({l.listing_id for l in both}) == 66, len(both)
 
 
 def test_capacity():
