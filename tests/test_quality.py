@@ -5,6 +5,7 @@ Run:  .venv/Scripts/python tests/test_quality.py
 Everything runs in a scratch database (og_test_quality); every provider and price is synthetic.
 """
 
+import json
 import os
 import random
 import sys
@@ -567,10 +568,16 @@ def _latest_raw_old(session, provider):
     ).scalars()
     by_endpoint = defaultdict(list)
     newest_seen = {}
+    taken = set()
     for row in rows:
         first = newest_seen.setdefault(row.endpoint, row.fetched_at)
         if (first - row.fetched_at).total_seconds() > 120:
             continue
+        # The same call (endpoint and request) seen again, older: an earlier round, not this one.
+        key = (row.endpoint, json.dumps(row.request, sort_keys=True, default=str))
+        if key in taken:
+            continue
+        taken.add(key)
         by_endpoint[row.endpoint].append(row)
     return by_endpoint
 
@@ -590,8 +597,9 @@ def test_latest_raw_equivalence():
                             continue  # endpoint skipped this round
                         for k in range(rng.choice([1, 1, 3])):  # Salad-style many calls per round
                             jitter = timedelta(seconds=rng.choice([0, 0, 5, 59, 119, 120, 121, 200]))
+                            # Salad-style calls carry their own request (one per class), as in production
                             s.add(RawSnapshot(provider=p, endpoint=ep, fetched_at=t + jitter, ok=rng.random() > 0.15,
-                                              payload={"r": round_, "k": k}))
+                                              payload={"r": round_, "k": k}, request={"k": k} if k else None))
                 # an endpoint that only ever failed
                 s.add(RawSnapshot(provider=p, endpoint="/never-ok", fetched_at=t, ok=False))
                 # identical timestamps: id breaks the tie

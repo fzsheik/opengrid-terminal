@@ -5,6 +5,28 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-11 — Deploys no longer fail providers' normalize; Together prices flow again
+
+### What shipped
+- **Two fetch rounds within 120 s are no longer read as one** (`normalize._latest_raw`). During a deploy the old
+  container's last poll and the new one's first land about a minute apart (03:39:43 and 03:40:46 on 2026-11-11).
+  Both rounds were read together, every listing came out twice, and the `compute_listings` upsert failed with
+  `CardinalityViolation` (seen for DigitalOcean, Hydrahost and gpuai; also on the 2026-11-07 deploy). Now an
+  (endpoint, request) already taken from a newer fetch is skipped. Rows of one round that share an endpoint carry
+  different requests (Salad per class, Vast per page, checked in production) and are all kept.
+- **`normalize.save` drops duplicate listings** (keeping the newest) and logs them, rather than failing the whole
+  provider.
+- **Together: the price cells now carry a live-availability placeholder** ("$3.99 Checking…"), which the strict
+  parser rejected. Together listings had been stale since 2026-11-10 21:54 UTC. Only that exact placeholder is
+  dropped; any other added text still fails loudly.
+
+### Not shipped
+- **AWS Capacity Block prices.** AWS answers `CapacityBlockDescribeLimitExceeded: Your existing service limits for
+  this AWS account are not sufficient to use EC2 Capacity Blocks`. That is an account quota, not code. The
+  read-only key cannot read Service Quotas (AccessDenied), so the account owner has to raise it.
+
+---
+
 ## 2026-11-10 — AWS spot prices in 15 regions (was 6)
 
 ### What shipped

@@ -55,6 +55,7 @@ _TD = re.compile(r"<td[^>]*>(?P<c>.*?)</td>", re.S)
 _TH = re.compile(r"<th[^>]*>(?P<c>.*?)</th>", re.S)
 _TAGS = re.compile(r"<[^>]+>")
 _PRICE = re.compile(r"^\$(\d+(?:,\d{3})*(?:\.\d+)?)$")
+_AVAILABILITY_PLACEHOLDER = re.compile(r"\s*Checking(?:…|\.\.\.)$")
 _TD_SPAN = re.compile(r"<td(?P<a>[^>]*)>(?P<c>.*?)</td>", re.S)
 _COLSPAN = re.compile(r'colspan="?(\d+)')
 _TERM = re.compile(r"^(?P<lo>\d+)(?:-(?P<hi>\d+)|(?P<plus>\+)) days$")
@@ -134,8 +135,12 @@ def extract(html: str) -> dict:
 
 
 def _price(cell: str) -> Decimal | None:
-    """'$3.99' -> 3.99; a dash or 'Contact us' -> None. A digit in any other shape raises."""
-    m = _PRICE.match(cell.strip())
+    """'$3.99' -> 3.99; a dash or 'Contact us' -> None. A digit in any other shape raises.
+
+    Since 2026-11-10 each cell also carries the page's live-availability badge, rendered client-side; the
+    server HTML holds only its placeholder, so a cell reads '$3.99 Checking…'. That placeholder (and only it)
+    is dropped. Any other added text still raises, so a real change of shape is not read silently."""
+    m = _PRICE.match(_AVAILABILITY_PLACEHOLDER.sub("", cell.strip()))
     if m is None:
         if re.search(r"\d", cell):
             raise ValueError(f"together: price cell is not '$x.xx': {cell!r}")

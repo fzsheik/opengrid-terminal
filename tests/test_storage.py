@@ -75,6 +75,36 @@ class StorageTests(unittest.TestCase):
         fetch.save([response({"changed": True})])
         self.assertEqual(schema_watch.scan()["snapshots"], 1)
 
+    def test_two_rounds_within_the_window_read_as_the_newest_only(self):
+        """A deploy: the old container polls, the new one polls ~1 min later. Only the newer round is read; rows of
+        one round that share an endpoint (different requests) all stay."""
+        old = NOW - timedelta(seconds=63)
+        fetch.save([response({"round": "old"}, at=old, endpoint="/one"),
+                    response({"round": "new"}, endpoint="/one"),
+                    response({"c": "a", "round": "old"}, at=old, endpoint="/per_class", request={"class": "a"}),
+                    response({"c": "b", "round": "old"}, at=old, endpoint="/per_class", request={"class": "b"}),
+                    response({"c": "a", "round": "new"}, endpoint="/per_class", request={"class": "a"}),
+                    response({"c": "b", "round": "new"}, at=NOW - timedelta(seconds=2), endpoint="/per_class",
+                             request={"class": "b"})])
+        with db.SessionLocal() as s:
+            latest = normalize._latest_raw(s, "storage_test")
+            self.assertEqual([r.payload for r in latest["/one"]], [{"round": "new"}])
+            self.assertEqual(sorted((r.payload["c"], r.payload["round"]) for r in latest["/per_class"]),
+                             [("a", "new"), ("b", "new")])
+
+    def test_save_drops_duplicate_listings_instead_of_failing(self):
+        from models import ComputeListing
+        def listing(at, price):
+            return ComputeListing(provider="storage_test", listing_id="x", sku="x", raw_gpu_name="H100",
+                                  canonical_gpu_name=None, gpu_count=1, region=None, country=None,
+                                  price_per_gpu_hour=price, price_per_instance_hour=price, market_type="on_demand",
+                                  provider_tier=None, interruptible=False, available=None, capacity=None,
+                                  capacity_unit=None, vcpu=None, ram_gb=None, storage_gb=None, observed_at=at)
+        self.assertEqual(normalize.save([listing(NOW - timedelta(seconds=60), 1), listing(NOW, 2)]), 1)
+        with db.SessionLocal() as s:
+            row = s.query(ComputeListingRow).filter_by(provider="storage_test", listing_id="x").one()
+            self.assertEqual(row.price_per_gpu_hour, 2)
+
     def test_legacy_backfill_is_lossless_and_idempotent(self):
         with db.SessionLocal.begin() as s:
             for payload in [{"a": 1, "b": 2}, {"b": 2, "a": 1}, {}, [], None]:

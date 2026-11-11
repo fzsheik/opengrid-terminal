@@ -8,9 +8,10 @@ Normalizers read stored raw snapshots rather than the network, so the whole
 pipeline can be re-run over history whenever a mapping improves.
 """
 
+import json
 import logging
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from decimal import Decimal
 
@@ -97,11 +98,21 @@ def _latest_raw(session, provider: str, as_of: datetime | None = None) -> dict[s
 
     by_endpoint: dict[str, list[RawSnapshot]] = defaultdict(list)
     newest_seen: dict[str, datetime] = {}
+    taken: set[tuple[str, str]] = set()
     for row in rows:
         # Rows arrive newest first; keep only the newest fetch round per endpoint.
         first = newest_seen.setdefault(row.endpoint, row.fetched_at)
         if (first - row.fetched_at).total_seconds() > 120:
             continue
+        # Within the window, an (endpoint, request) already taken from a newer fetch is an EARLIER round, not
+        # part of this one. That happens when two fetches land within 120 s: a deploy (the old container's last
+        # poll and the new one's first, about a minute apart) or a manual poll. Reading both rounds would emit
+        # every listing twice and fail the upsert (CardinalityViolation). Rows of ONE round that share an
+        # endpoint carry different requests (Salad per class, Vast per page), so they are all kept.
+        key = (row.endpoint, json.dumps(row.request, sort_keys=True, default=str))
+        if key in taken:
+            continue
+        taken.add(key)
         by_endpoint[row.endpoint].append(row)
     return by_endpoint
 
@@ -144,6 +155,19 @@ def save(listings: list[ComputeListing]) -> int:
     """Upsert current state. `first_seen_at` is set once and never overwritten."""
     if not listings:
         return 0
+    # One row per (provider, listing_id): Postgres rejects an upsert that touches a row twice. A normalizer should
+    # never emit a listing twice; if one does, keep the newest and say so rather than lose the whole provider.
+    unique: dict[tuple[str, str], ComputeListing] = {}
+    for listing in listings:
+        key = (listing.provider, listing.listing_id)
+        if key not in unique or listing.observed_at >= unique[key].observed_at:
+            unique[key] = listing
+    if len(unique) < len(listings):
+        counts = Counter((l.provider, l.listing_id) for l in listings)
+        dupes = sorted({p for (p, _), n in counts.items() if n > 1})
+        log.warning("save: %d duplicate listing(s) dropped (kept the newest): %s", len(listings) - len(unique),
+                    ", ".join(dupes))
+        listings = list(unique.values())
     rows = []
     for listing in listings:
         row = listing.model_dump()

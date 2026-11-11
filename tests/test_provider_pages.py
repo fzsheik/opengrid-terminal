@@ -137,6 +137,10 @@ def test_together():
     # The table must still say it prices per GPU, and keep its column layout.
     assert raises(together.extract, text("together_pricing.html").replace("All prices are per GPU per hour.", ""))
     assert raises(together.extract, text("together_pricing.html").replace(">Preemptible Compute<", ">Spot<"))
+    # 2026-11-10: each cell carries the live-availability badge's placeholder; only that text is dropped.
+    assert together._price("$3.99 Checking…") == D("3.99") and together._price("$1.99 Checking...") == D("1.99")
+    assert together._price("— Checking…") is None
+    assert raises(together._price, "$3.99 Sold out"), "any other added text is a change of shape"
 
 
 def test_together_reserved_raw_only():
