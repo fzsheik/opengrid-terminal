@@ -54,9 +54,12 @@ Other published GPU rental indices measure different quantities:
   by ICE and Ornn as built "only from printed transactions".
 
 The levels therefore differ, and a difference is **not** an error in either index. On 2026-10-13 the
-OpenGrid H100 80GB SXM5 hourly fixing for 12:00 UTC was **$3.44 / GPU-hour**. The Silicon Data and
-Ornn H100 figures shown on their public sites in the same days were about **$2.53** and **$2.65**
-(as reported on those sites; OpenGrid does not reproduce or verify them).
+OpenGrid H100 80GB SXM5 hourly fixing for 12:00 UTC was **$3.44 / GPU-hour**. In the same days, the
+Silicon Data H100 index (SDH100RT) chart on Silicon Data's site showed about **$2.85** (2026-10-12; low
+$2.81 on 2026-10-15), and the Ornn H100 figure on Ornn's site was about **$2.65**. These are as reported
+on those sites; OpenGrid does not reproduce or verify them. (An earlier version of this section gave
+$2.53 for Silicon Data. That number comes from the FAQ text on Silicon Data's page, which still read
+$2.53 on 2026-11-10 while the chart read $3.06, so it is not a current reading.)
 
 What OpenGrid's own data says about the gap, as of 2026-10-13:
 - **It is not driven by hyperscalers.** Restricted to neoclouds, the H100 SXM index was *higher*:
