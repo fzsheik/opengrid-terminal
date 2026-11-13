@@ -464,7 +464,7 @@ def test_doctor():
     checks = {c["check"]: c for c in d["checks"]}
     assert checks["health"]["ok"] and checks["auth"]["scopes"] and checks["mcp"]["ok"], checks
     assert checks["capabilities"]["capabilities"]["route:preview"] is True
-    assert len(checks["mcp"]["tools"]) == 15
+    assert len(checks["mcp"]["tools"]) == 16
     code, out, err = run_cli(["doctor"], MockAPI())
     assert "anonymous" in out
     code, out, err = run_cli(["doctor"], MockAPI(), key=BAD_KEY)
