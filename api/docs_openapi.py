@@ -24,7 +24,7 @@ os.environ.setdefault("OPENGRID_NO_JOBS", "1")
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs-site" / "openapi.json"
 DATA_HOST = "data.tryopengrid.com"
-PUBLIC_POST = ("/v1/costs/estimate",)
+PUBLIC_POST = ("/v1/costs/estimate", "/v1/costs/rl-estimate")
 
 # First path segment -> sidebar group, in reading order.
 TAGS = {
@@ -93,6 +93,8 @@ TITLES = {
     "GET /v1/costs/sources": "Cost sources",
     "GET /v1/costs/presets": "Reference jobs",
     "POST /v1/costs/estimate": "Estimate a job's cost",
+    "GET /v1/costs/rl-presets": "RL reference jobs",
+    "POST /v1/costs/rl-estimate": "Estimate an RL job's cost",
     "GET /v1/fx/rates": "Current FX rates",
     "GET /v1/fx/rates/history": "FX rate history",
     "GET /v1/reliability/providers": "Provider reliability",
@@ -278,6 +280,42 @@ def estimate_body() -> dict:
     }, "example": {"gpu": "nvidia-h100-80gb-sxm5", "count": 8, "hours": 24, "egress_tb": 2}}}}
 
 
+def rl_body() -> dict:
+    """POST /v1/costs/rl-estimate reads its body by hand (cost/rl.parse): described from the same limits."""
+    from api import cost
+
+    num = lambda lo, hi, **kw: {"type": "number", "minimum": lo, "maximum": hi, **kw}  # noqa: E731
+    integer = lambda lo, hi, **kw: {"type": "integer", "minimum": lo, "maximum": hi, **kw}  # noqa: E731
+    return {"required": True, "content": {"application/json": {"schema": {
+        "type": "object", "additionalProperties": False,
+        "description": f"An RL post-training job. Start from a `preset` and override fields (nested ones too), or give "
+                       f"`trainer`, `rollouts`, `weights_gb`, `syncs_per_hour` and `hours`. GB are decimal. Body at "
+                       f"most {cost.MAX_BODY} bytes. Methodology: /methodology/rl-cost.",
+        "properties": {
+            "preset": {"type": "string", "enum": list(cost.rl.PRESETS), "description": "`GET /v1/costs/rl-presets`."},
+            "trainer": {"type": "object", "additionalProperties": False, "properties": {
+                "gpu": {"type": "string", "example": "nvidia-h100-80gb-sxm5"},
+                "count": integer(1, 64, description="GPUs per trainer node."), "nodes": integer(1, 128, default=1)}},
+            "rollouts": {"type": "object", "additionalProperties": False, "properties": {
+                "gpu": {"type": "string", "default": "auto", "description": '"auto" or a GPU id.'},
+                "count": integer(1, 4096, description="Rollout GPUs in total."),
+                "min_vram_gb": num(0, 1024, default=0), "interruptible": {"type": "boolean", "default": False},
+                "interruption_overhead": num(1, 5, default=cost.rl.DEFAULT_OVERHEAD),
+                "rank_by": {"type": "string", "enum": list(cost.rl.RANK_BY), "default": "price"}}},
+            "sandboxes": {"type": ["object", "null"], "additionalProperties": False, "properties": {
+                "vcpu": num(0, 1024), "ram_gb": num(0, 8192), "count": integer(0, 100_000),
+                "price_per_hour": num(0, 1_000_000, description="Your price for every sandbox together, per hour.")}},
+            "weights_gb": num(0.001, 100_000, description="GB sent per weight sync."),
+            "syncs_per_hour": num(0, 3600), "hours": num(round(1 / 60, 6), 24 * 365),
+            "sync_fanout": integer(1, 1024, description="Copies per sync leaving the trainer's provider. Default: one "
+                                                        "per rollout provider."),
+            "storage_gb": num(0, 10_000_000), "storage_tb": num(0, 10_000, description="Give `storage_tb` or `storage_gb`."),
+            "storage_class": {"type": "string", "enum": list(cost.est.STORAGE_ORDER), "default": "auto"},
+            "same_cluster_only": {"type": "boolean", "default": False},
+        },
+    }, "example": {"preset": "RL1", "rollouts": {"interruptible": True}}}}}
+
+
 def _refs(v, out: set) -> set:
     if isinstance(v, dict):
         if isinstance(v.get("$ref"), str):
@@ -347,6 +385,7 @@ def build() -> dict:
                 "parameters": params + [version_param],
                 **out,
                 **({"requestBody": estimate_body()} if path == "/v1/costs/estimate" else {}),
+                **({"requestBody": rl_body()} if path == "/v1/costs/rl-estimate" else {}),
                 "responses": responses,
             }
     paths = dict(sorted(paths.items(), key=lambda kv: (TAG_ORDER.index(TAGS[kv[0][4:].split("/", 1)[0]]), kv[0])))

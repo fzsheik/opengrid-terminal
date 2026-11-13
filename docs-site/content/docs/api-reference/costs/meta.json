@@ -5,6 +5,8 @@
   "cost-components",
   "estimate-a-job-s-cost",
   "reference-jobs",
+  "estimate-an-rl-job-s-cost",
+  "rl-reference-jobs",
   "cost-sources"
  ]
 }

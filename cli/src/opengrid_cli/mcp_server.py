@@ -5,7 +5,7 @@
           acting with the caller's Bearer key. Tools that read local files (opengrid_analyze_project,
           recommend's project_path, the size_my_project prompt) exist only in the local server.
 
-Tools are small and composable. All are read-only except:
+Tools are small and composable. All are read-only (opengrid_rl_estimate is a server-side computation) except:
   opengrid_preview_route  writes a preview ticket + quote record on the server (audit); never provisions
   opengrid_start_demo     creates a SANDBOX MNIST job: SIMULATED end to end, no provider, no GPU, no spend
   opengrid_cancel_job     spend-reducing; needs confirm=true and sends an Idempotency-Key
@@ -88,6 +88,7 @@ def instructions(*, remote: bool, site: str) -> str:
     return f"""OpenGrid: GPU market data and workload-aware compute recommendations.
 Sizing: {start} -> opengrid_estimate_requirements -> opengrid_recommend_compute.
 Market: opengrid_search_gpus, opengrid_get_gpu_specs, opengrid_compare_gpus, opengrid_get_market_context.
+RL cost: opengrid_rl_estimate (trainer + rollouts + weight syncs, one cloud vs split).
 Jobs: opengrid_list_jobs, opengrid_get_job_status, opengrid_get_job_logs.
 {PRICE_NOTE} {DATA_NOTE}
 Nothing here provisions compute or spends money. The only writes: opengrid_preview_route (an audit ticket),
@@ -196,6 +197,24 @@ class RecommendationResult(_Out):
     truncated: bool = False
     real_run_url: str | None = Field(None, description="where the user can start a real, paid run (they confirm "
                                                        "it on the website; no tool can)")
+
+
+class RLEstimate(_Out):
+    same_cluster: dict[str, Any] | None = Field(None, description="everything on one provider (the baseline)")
+    split: dict[str, Any] | None = Field(None, description="cheapest trainer + cheapest rollout GPUs anywhere")
+    best: dict[str, Any] | None = Field(None, description="the cheapest plan found")
+    comparison: dict[str, Any] = Field(default_factory=dict, description="savings vs the baseline, with their bound")
+    break_even: dict[str, Any] = Field(default_factory=dict, description="transfer $/GB or syncs/hour where split "
+                                                                         "stops saving")
+    sensitivity: dict[str, Any] | None = None
+    rollout_ranking: dict[str, Any] = Field(default_factory=dict, description="memory bandwidth per dollar: a "
+                                                                              "theoretical heuristic, not measured")
+    caveats: list[str] = Field(default_factory=list, description="the known gaps that apply to this estimate")
+    unavailable: dict[str, Any] = Field(default_factory=dict)
+    job: dict[str, Any] = Field(default_factory=dict, description="the job as the server read it")
+    kind: str = "estimated"
+    truncated: bool = False
+    as_of: str | None = None
 
 
 class RoutePreview(_Out):
@@ -367,6 +386,11 @@ def descriptions(*, remote: bool, site: str) -> dict[str, str]:
                                       f"and job-cost range. Spec-sheet estimates, not benchmarks. {rec_input} "
                                       f"Never launches; a "
                                       f"real run is started by the user at real_run_url. {PRICE_NOTE} {DATA_NOTE}",
+        "opengrid_rl_estimate": f"Estimate an RL post-training job's cost: trainer GPUs + rollout GPUs + sandboxes + "
+                                f"weight-sync transfer, all on one provider vs split across clouds, plus the best plan "
+                                f"found, the break-even transfer price / sync rate, and a sensitivity table. List "
+                                f"prices (observed listings), not quotes; unpublished prices are named as unknown "
+                                f"(total = lower bound), never $0. Read `caveats`. {DATA_NOTE}",
         "opengrid_preview_route": f"Dry-run routing for one GPU. NOT read-only: records a preview ticket "
                                   f"(route_request_id) and a quote record for audit. Never provisions, never spends. "
                                   f"Needs scope route:preview. {PRICE_NOTE} {DATA_NOTE}",
@@ -593,6 +617,57 @@ def build_server(client_factory: Callable[[], Client] | None = None, *, remote: 
             else:
                 req = workload.compact(requirements.model_dump(mode="json", exclude_none=True))
             return _recommend(req, limit, analysis)
+
+    # ------------------------------------------------------------ RL cost (server-side, read-only computation)
+
+    @tool("opengrid_rl_estimate", "Estimate an RL post-training job's cost", **RO)
+    def opengrid_rl_estimate(
+        preset: Annotated[Literal["RL1", "RL2", "RL3"] | None, Field(description="reference job; other arguments "
+                                                                     "override it")] = None,
+        trainer_gpu: Annotated[GpuArg | None, Field(description="trainer GPU slug, e.g. h100-80gb-sxm5")] = None,
+        trainer_gpus_per_node: Annotated[int | None, Field(ge=1, le=64)] = None,
+        trainer_nodes: Annotated[int | None, Field(ge=1, le=128)] = None,
+        rollout_gpu: Annotated[str | None, Field(max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9 ._\-]*$",
+                                                 description='"auto" or a GPU slug')] = None,
+        rollout_gpus: Annotated[int | None, Field(ge=1, le=4096, description="rollout GPUs in total")] = None,
+        rollout_min_vram_gb: Annotated[float | None, Field(ge=0, le=1024)] = None,
+        interruptible: Annotated[bool | None, Field(description="allow spot rollout GPUs")] = None,
+        interruption_overhead: Annotated[float | None, Field(ge=1, le=5, description="cost multiplier on spot "
+                                                             "rollouts for lost work (default 1.15, an assumption)")] = None,
+        weights_gb: Annotated[float | None, Field(gt=0, le=100_000, description="GB sent per weight sync")] = None,
+        syncs_per_hour: Annotated[float | None, Field(ge=0, le=3600)] = None,
+        sync_fanout: Annotated[int | None, Field(ge=1, le=1024, description="copies per sync leaving the trainer's "
+                                                 "cloud (default: one per rollout provider)")] = None,
+        hours: Annotated[float | None, Field(gt=0, le=8760)] = None,
+        storage_gb: Annotated[float | None, Field(ge=0, le=10_000_000, description="checkpoints on the trainer's "
+                                                  "provider")] = None,
+        sandbox_count: Annotated[int | None, Field(ge=0, le=100_000)] = None,
+        sandbox_vcpu: Annotated[float | None, Field(ge=0, le=1024, description="vCPU per sandbox")] = None,
+        sandbox_ram_gb: Annotated[float | None, Field(ge=0, le=8192, description="RAM per sandbox")] = None,
+        sandbox_price_per_hour: Annotated[float | None, Field(ge=0, le=1_000_000, description="your $/hour for all "
+                                                              "sandboxes (no CPU price dataset yet)")] = None,
+        same_cluster_only: Annotated[bool | None, Field(description="price only the one-provider plan")] = None,
+    ) -> RLEstimate:
+        drop = lambda d: {k: v for k, v in d.items() if v is not None}  # noqa: E731
+        body = drop({"preset": preset, "weights_gb": weights_gb, "syncs_per_hour": syncs_per_hour,
+                     "sync_fanout": sync_fanout, "hours": hours, "storage_gb": storage_gb,
+                     "same_cluster_only": same_cluster_only,
+                     "trainer": drop({"gpu": trainer_gpu, "count": trainer_gpus_per_node, "nodes": trainer_nodes}) or None,
+                     "rollouts": drop({"gpu": rollout_gpu, "count": rollout_gpus, "min_vram_gb": rollout_min_vram_gb,
+                                       "interruptible": interruptible,
+                                       "interruption_overhead": interruption_overhead}) or None,
+                     "sandboxes": drop({"count": sandbox_count, "vcpu": sandbox_vcpu, "ram_gb": sandbox_ram_gb,
+                                        "price_per_hour": sandbox_price_per_hour}) or None})
+        if not preset and not body.get("trainer"):
+            raise ToolError("give a preset (RL1, RL2, RL3) or the trainer, rollouts, weights_gb, syncs_per_hour and hours")
+        with api("RL estimate") as c:
+            r = c.post("/v1/costs/rl-estimate", body, anonymous_ok=True)
+        data, truncated = shrink(r.data or {})
+        meta = r.meta or {}
+        return RLEstimate(**{k: v for k, v in data.items() if k in RLEstimate.model_fields}, job=meta.get("job") or {},
+                          truncated=truncated, as_of=meta.get("as_of"), request_id=r.request_id,
+                          notes=[*(meta.get("notes") or []), "estimates, not quotes or measured runs"]
+                          + (["result was truncated"] if truncated else []))
 
     # ------------------------------------------------------------ route preview (writes a ticket; never provisions)
 

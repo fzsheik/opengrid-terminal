@@ -77,12 +77,13 @@ def test_full_cost_reads_vast_fields_as_stored():
     listings = [dict(provider=l.provider, listing_id=l.listing_id, sku=l.sku, provider_tier=l.provider_tier)
                 for l in VastProvider.normalize({VAST_ENDPOINT: [snap]})]
     comps = {c["component"]: c for c in est.vast_components({"vast": {VAST_ENDPOINT: [snap]}}, listings)}
-    assert set(comps) == {"block_storage", "egress_internet"}, comps
+    assert set(comps) == {"block_storage", "egress_internet", "ingress_internet"}, comps  # ingress: the RL estimator
     cheapest = next(x["listing_id"] for x in listings if x["provider_tier"] == "cheapest")
     assert all(c["listing_id"] == cheapest for c in comps.values())
     assert float(comps["block_storage"]["tiers"][0]["price"]) == offer["storage_cost"], comps["block_storage"]
     assert float(comps["egress_internet"]["tiers"][0]["price"]) == offer["inet_up_cost"], comps["egress_internet"]
     assert str(offer["inet_down_cost"])[:6] in comps["egress_internet"]["notes"]
+    assert float(comps["ingress_internet"]["tiers"][0]["price"]) == offer["inet_down_cost"], comps["ingress_internet"]
 
 
 def _lium_raw():

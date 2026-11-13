@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 GIB = Decimal("1.073741824")
 HOURS_PER_MONTH = Decimal(730)
 
-TRANSFER = ("egress_internet", "egress_inter_zone")
+TRANSFER = ("egress_internet", "egress_inter_zone", "ingress_internet")  # ingress: used by the RL estimator (cost/rl.py)
 STORAGE = ("block_storage", "shared_fs", "object_storage")
 COMPONENTS = TRANSFER + STORAGE + ("object_requests_write", "object_requests_read", "public_ip")
 UNIT = {**{c: "usd_per_gb" for c in TRANSFER}, **{c: "usd_per_gb_month" for c in STORAGE},
@@ -311,6 +311,9 @@ def vast_offer_components(offer: dict, listing_id: str, as_of=None) -> list[dict
                              listing_id=listing_id, notes="billed while the instance exists, even stopped"))
     down = _d(offer.get("inet_down_cost"))
     up = _d(offer.get("inet_up_cost"))
+    if down is not None:
+        out.append(component("vast", "ingress_internet", "Download to the host (per offer)", [(0, None, down)], "GB",
+                             origin="provider", source=src, as_of=as_of, listing_id=listing_id))
     if up is not None:
         out.append(component("vast", "egress_internet", "Upload from the host (per offer)", [(0, None, up)], "GB",
                              origin="provider", source=src, as_of=as_of, listing_id=listing_id,
@@ -325,7 +328,7 @@ def manual_components() -> list[dict]:
     for m in manual.COMPONENTS:
         out.append(component(m["provider"], m["component"], m["product"], m["tiers"], m["raw_unit"], origin="manual",
                              source=m["source"], status=m.get("status", "checked"), kind="manual",
-                             as_of=date.fromisoformat(manual.V), region=m.get("region"),
+                             as_of=date.fromisoformat(m.get("verified_at", manual.V)), region=m.get("region"),
                              allowance_scope=m.get("allowance_scope"),
                              billed_when_stopped=m.get("billed_when_stopped"), notes=m.get("notes")))
     return out
