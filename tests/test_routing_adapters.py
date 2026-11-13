@@ -127,15 +127,23 @@ def lambda_spec():
 
 
 def runpod_spec():
-    pod = {"id": "pod1", "name": NAME, "desiredStatus": "RUNNING", "costPerHr": 0.69, "gpu": {"count": 1}}
+    # REST v2 Pod (api.runpod.io/v2/openapi.json, 2026-11-13)
+    pod = {"id": "pod1", "name": NAME, "status": "RUNNING", "cost": 0.69, "gpu": {"id": "NVIDIA A40", "count": 1},
+           "cloud": "SECURE", "dataCenterId": "EU-RO-1", "createdAt": "2026-11-13T10:00:00Z",
+           "startedAt": "2026-11-13T10:01:00Z", "actions": ["stop", "restart", "terminate"],
+           "ssh": {"proxy": None, "direct": {"host": "198.51.100.3", "port": 10341, "username": "root",
+                                             "command": "ssh root@198.51.100.3 -p 10341"}}}
     return dict(
         cls=RunPodAdapter, creds={"api_key": SECRET}, offer=offer("runpod", raw_gpu_name="NVIDIA A40"),
         avail=Availability(True, True), launch=LaunchSpec(image="runpod/pytorch:test"),
-        create=("POST", "/v1/pods"), create_ok=(201, pod), create_empty=(201, {"desiredStatus": "RUNNING"}),
-        status=("GET", "/v1/pods/pod1"), status_ok=(200, pod),
-        terminate=("DELETE", "/v1/pods/pod1"), terminate_ok=(204, None),
-        terminate_missing=(404, {"error": "pod not found"}),
-        list=("GET", "/v1/pods"), list_ok=(200, [pod, {**pod, "id": "other", "name": "theirs"}]),
+        create=("POST", "/v2/pods"), create_ok=(201, {**pod, "status": "PROVISIONING"}),
+        create_empty=(201, {"status": "PROVISIONING"}),
+        status=("GET", "/v2/pods/pod1"), status_ok=(200, pod),
+        terminate=("DELETE", "/v2/pods/pod1"), terminate_ok=(204, None),
+        terminate_missing=(404, {"title": "Not Found", "status": 404, "detail": "pod not found"}),
+        list=("GET", "/v2/pods"),
+        list_ok=(200, {"pods": [pod, {**pod, "id": "other", "name": "theirs"}],
+                       "pagination": {"nextCursor": None, "hasNextPage": False}}),
         iid="pod1", running="running")
 
 
@@ -401,7 +409,7 @@ def test_stop_semantics():
     for cls in (DigitalOceanAdapter, HyperstackAdapter, VerdaAdapter, LambdaAdapter):
         r = cls({"api_key": "k", "client_id": "a", "client_secret": "b"}, transport=Mock({}).transport()).stop("x")
         assert r.outcome == "failed" and r.error_kind == "not_supported", cls
-    m = Mock({("POST", "/v1/pods/pod1/stop"): (200, {"id": "pod1", "desiredStatus": "EXITED"}),
+    m = Mock({("POST", "/v2/pods/pod1/action"): (200, {"id": "pod1", "status": "EXITED"}),
               ("PUT", "/api/v0/instances/7/"): (200, {"success": True})})
     assert RunPodAdapter({"api_key": "k"}, transport=m.transport()).stop("pod1").outcome == "accepted"
     assert VastAdapter({"api_key": "k"}, transport=m.transport()).stop("7").outcome == "accepted"
@@ -436,7 +444,7 @@ def test_lambda_specifics():
     a = LambdaAdapter({"api_key": "k"}, transport=m.transport())
     o = offer("lambda", sku="gpu_1x_h100_sxm5", region="us-east-1")
     av = a.check_availability(o)
-    assert m.requests[0].url.host == "cloud.lambda.ai", "the non-deprecated host"
+    assert m.requests[0].url.host == "cloud.lambda.com", "the non-deprecated host (spec v1.10.0)"
     assert av.available and av.list_price_per_gpu_hour == 3.29 and a.quote(o, av).basis == "live_provider_api"
     assert a.check_availability(offer("lambda", sku="gpu_1x_h100_sxm5", want_region_group="Europe")).available is False
     r = a.provision(o, av, LaunchSpec(ssh_key="opengrid", startup_script="#cloud-config"), NAME)
@@ -476,30 +484,72 @@ def test_lambda_specifics():
 
 
 def test_runpod_specifics():
-    def graphql(req):
-        return httpx.Response(200, json={"data": {"gpuTypes": [{"id": "NVIDIA A40", "lowestPrice": {
-            "uninterruptablePrice": 0.98, "stockStatus": "High"}}]}})
-
-    m = Mock({("POST", "/graphql"): graphql, ("POST", "/v1/pods"): (201, {"id": "p", "desiredStatus": "RUNNING"})})
+    # REST v2 (v1 is retired 2026-11-15): catalog price is per SINGLE GPU (GpuType.price)
+    catalog = {"gpus": [{"id": "NVIDIA A40", "name": "A40", "price": {"secure": 0.49, "community": 0.35},
+                         "availability": "HIGH", "dataCenters": [{"id": "EU-RO-1", "name": "RO", "availability": "HIGH"}]}]}
+    m = Mock({("GET", "/v2/catalog/gpus"): (200, catalog),
+              ("POST", "/v2/pods"): (201, {"id": "p", "status": "PROVISIONING"})})
     a = RunPodAdapter({"api_key": "k"}, transport=m.transport())
     o = offer("runpod", raw_gpu_name="NVIDIA A40", gpu_count=2)
     av = a.check_availability(o)
-    assert av.list_price_per_gpu_hour == 0.49, "lowestPrice is the pod total"
+    q = m.requests[0].url.params
+    assert (q["include"], q["product"], q["count"], q["cloud"]) == ("AVAILABILITY", "POD", "2", "SECURE")
+    assert av.available and av.list_price_per_gpu_hour == 0.49 and a.quote(o, av).price_per_instance_hour == 0.98
     r = a.provision(o, av, LaunchSpec(image="img", ssh_public_key="ssh-ed25519 AAAA", env={"HF_TOKEN": "secret-value"}), NAME)
     b = m.body()
-    assert r.outcome == "accepted" and b["name"] == NAME and b["env"]["SSH_PUBLIC_KEY"] == "ssh-ed25519 AAAA"
-    assert b["volumeInGb"] == 0 and b["interruptible"] is False and b["cloudType"] == "SECURE"
+    assert r.outcome == "accepted" and b["name"] == NAME and b["env"]["PUBLIC_KEY"] == "ssh-ed25519 AAAA"
+    assert b["gpu"] == {"id": "NVIDIA A40", "count": 2} and b["cloud"] == "SECURE" and b["ports"] == ["22/tcp"]
+    assert "startSsh" not in b, "startSsh would inject the ACCOUNT's keys"
+    for v1 in ("imageName", "gpuTypeIds", "gpuCount", "cloudType", "computeType", "interruptible", "volumeInGb"):
+        assert v1 not in b, f"v1 field {v1} is rejected by v2 (unevaluatedProperties: false)"
     assert "secret-value" not in json.dumps(r.raw_redacted), "env values are never kept"
-    # capacity text in a 500 is ambiguous: never a definite rejection
-    m = Mock({("POST", "/v1/pods"): (500, {"error": "There are no longer any instances available"})})
+    # stock NONE -> unavailable
+    m = Mock({("GET", "/v2/catalog/gpus"): (200, {"gpus": [{**catalog["gpus"][0], "availability": "NONE"}]})})
+    assert RunPodAdapter({"api_key": "k"}, transport=m.transport()).check_availability(o).available is False
+    # volume: mounts.persistent (>= 10 GB) at /workspace; below the minimum is refused before any call
+    m = Mock({("POST", "/v2/pods"): (201, {"id": "p", "status": "PROVISIONING"})})
+    RunPodAdapter({"api_key": "k"}, transport=m.transport()).provision(
+        o, av, LaunchSpec.merged({"image": "i"}, {"volume_gb": 20}), NAME)
+    assert m.body()["mounts"] == {"persistent": {"size": 20, "path": "/workspace"}}
+    assert "volume_gb" in " ".join(RunPodAdapter({"api_key": "k"}).missing_launch(LaunchSpec.merged({"image": "i"}, {"volume_gb": 5}), o))
+    # a queued answer (202 QueuedPod, status QUEUED) is never adopted as a pod id
+    m = Mock({("POST", "/v2/pods"): (202, {"id": "q1", "status": "QUEUED", "podId": None})})
     assert RunPodAdapter({"api_key": "k"}, transport=m.transport()).provision(o, av, LaunchSpec(image="i"), NAME).outcome == "unknown"
+    # capacity text in a 500 is ambiguous: never a definite rejection; a 400 (rule OR placement) is a rejection
+    m = Mock({("POST", "/v2/pods"): (500, {"title": "x", "status": 500, "detail": "There are no longer any instances available"})})
+    assert RunPodAdapter({"api_key": "k"}, transport=m.transport()).provision(o, av, LaunchSpec(image="i"), NAME).outcome == "unknown"
+    m = Mock({("POST", "/v2/pods"): (400, {"title": "Bad Request", "status": 400, "detail": "could not be placed"})})
+    r = RunPodAdapter({"api_key": "k"}, transport=m.transport()).provision(o, av, LaunchSpec(image="i"), NAME)
+    assert r.outcome == "rejected" and r.error_kind != "capacity", "v2 has no machine-readable capacity code"
+    m = Mock({("POST", "/v2/pods"): (402, {"title": "Payment Required", "status": 402, "detail": "Insufficient balance"})})
+    r = RunPodAdapter({"api_key": "k"}, transport=m.transport()).provision(o, av, LaunchSpec(image="i"), NAME)
+    assert r.outcome == "rejected" and r.error_kind == "quota"
     assert "startup_script" in " ".join(RunPodAdapter({"api_key": "k"}).missing_launch(LaunchSpec(image="i", startup_script="x"), o))
-    m = Mock({("GET", "/v1/billing/pods"): (200, [{"amount": 0.25, "podId": "p", "time": "2026-10-07T10:00:00Z"},
-                                                  {"amount": 0.5, "podId": "p", "time": "2026-10-07T11:00:00Z"}])})
+    # ERROR is "an unrecoverable error state": tracked as error, never terminal
+    m = Mock({("GET", "/v2/pods/p"): (200, {"id": "p", "status": "ERROR"})})
+    st = RunPodAdapter({"api_key": "k"}, transport=m.transport()).status("p")
+    assert st.state == "error" and st.alive
+    # list follows pagination.nextCursor while hasNextPage
+    pages = {None: {"pods": [{"id": "a", "name": NAME, "status": "RUNNING"}],
+                    "pagination": {"nextCursor": "c2", "hasNextPage": True}},
+             "c2": {"pods": [{"id": "b", "name": "x", "status": "EXITED"}],
+                    "pagination": {"nextCursor": None, "hasNextPage": False}}}
+    m = Mock({("GET", "/v2/pods"): lambda req: httpx.Response(200, json=pages[req.url.params.get("cursor")])})
+    rows = RunPodAdapter({"api_key": "k"}, transport=m.transport()).list_instances()
+    assert [r.instance_id for r in rows] == ["a", "b"] and rows[1].state == "stopped"
+    m = Mock({("GET", "/v2/pods"): (200, {"pods": [], "pagination": {"nextCursor": None, "hasNextPage": True}})})
+    assert kind_of(RunPodAdapter({"api_key": "k"}, transport=m.transport()).list_instances) == "parse"
+    m = Mock({("GET", "/v2/billing/pods"): (200, {"records": [
+        {"podId": "p", "totalAmount": 0.25, "gpuAmount": 0.2, "cpuAmount": 0, "diskAmount": 0.05,
+         "startTime": "2026-10-07T10:00:00Z", "endTime": "2026-10-07T11:00:00Z"},
+        {"podId": "p", "totalAmount": 0.5, "gpuAmount": 0.45, "cpuAmount": 0, "diskAmount": 0.05,
+         "startTime": "2026-10-07T11:00:00Z", "endTime": "2026-10-07T12:00:00Z"}], "metadata": {}})})
     from datetime import datetime, timezone
     t0, t1 = datetime(2026, 10, 7, 10, tzinfo=timezone.utc), datetime(2026, 10, 7, 12, tzinfo=timezone.utc)
     rep = RunPodAdapter({"api_key": "k"}, transport=m.transport()).reported_cost("p", t0, t1)
-    assert rep.amount_usd == 0.75 and m.requests[0].url.params["podId"] == "p"
+    p = m.requests[0].url.params
+    assert rep.amount_usd == 0.75 and p["podId"] == "p" and p["startTime"] == "2026-10-07T10:00:00+00:00"
+    assert "grouping" not in p, "v2 billing has no grouping parameter"
 
 
 def test_hyperstack_specifics():
@@ -542,13 +592,25 @@ def test_hyperstack_specifics():
     # paging and search
     vm = spec["list_ok"][1]["instances"][0]
 
-    def page(req):
-        n = int(req.url.params["page"])
-        rows = [{**vm, "id": i} for i in range((n - 1) * 100, min(n * 100, 150))]
-        return httpx.Response(200, json={"status": True, "instances": rows, "count": 150, "page": n, "page_size": 100})
+    def page(total):
+        def answer(req):
+            n = int(req.url.params["page"])
+            rows = [{**vm, "id": i} for i in range((n - 1) * 100, min(n * 100, total))]
+            # count is "Number of items returned in the current page" (spec), not a total
+            return httpx.Response(200, json={"status": True, "instances": rows, "count": len(rows), "page": n,
+                                             "page_size": 100})
+        return answer
 
-    m = Mock({spec["list"]: page})
-    assert len(HyperstackAdapter({"api_key": "k"}, transport=m.transport()).list_instances()) == 150
+    for total in (150, 200):     # 200: a full page then an empty one; count=100 must not end the walk early
+        m = Mock({spec["list"]: page(total)})
+        assert len(HyperstackAdapter({"api_key": "k"}, transport=m.transport()).list_instances()) == total, total
+    m = Mock({spec["status"]: (200, {"instance": {"id": 123, "status": "STOPPING"}})})
+    assert HyperstackAdapter({"api_key": "k"}, transport=m.transport()).status("123").state == "stopping"
+    # keypairs list is paged like the VM list
+    m = Mock({("GET", "/v1/core/keypairs"): (200, {"status": True, "keypairs": [{"id": 5, "name": NAME, "fingerprint": "ab:cd"}],
+                                                   "count": 1, "page": 1, "page_size": 100})})
+    keys = HyperstackAdapter({"api_key": "k"}, transport=m.transport()).list_ssh_keys()
+    assert [k.key_id for k in keys] == ["5"] and m.requests[0].url.params["pageSize"] == "100"
     m = Mock({spec["list"]: spec["list_ok"]})
     HyperstackAdapter({"api_key": "k"}, transport=m.transport()).find_instance(NAME)
     assert m.requests[0].url.params["search"] == NAME
@@ -587,6 +649,7 @@ def test_digitalocean_specifics():
     m = Mock({spec["list"]: page})
     a = DigitalOceanAdapter({"api_key": "k"}, transport=m.transport())
     assert [r.instance_id for r in a.list_instances()] == ["1", "2"]
+    assert m.requests[0].url.params["type"] == "gpus", "GET /v2/droplets lists only non-GPU Droplets by default"
     assert a.find_instance(NAME).instance_id == "3164444" and m.requests[-1].url.params["tag_name"] == NAME
     # incomplete paging (meta.total says more) is an error, never a partial list
     m = Mock({spec["list"]: (200, {"droplets": [d], "links": {}, "meta": {"total": 5}})})
@@ -616,16 +679,30 @@ def test_shadeform_specifics():
     assert st.state == "terminating" and st.ended_at is not None and st.ended_at.hour == 11
     m = Mock({spec["status"]: spec["status_ok"]})
     rep = ShadeformAdapter({"api_key": "k"}, transport=m.transport(), provider="crusoe").reported_cost("sf-1", None, None)
-    assert rep.amount_usd == 1.75 and "UNVERIFIED" in rep.basis
+    assert rep.amount_usd == 1.75 and "USD" in rep.basis
+    # instances / ssh_keys are "array | null": null is an empty account, a missing key is still an error
+    m = Mock({("GET", "/v1/instances"): (200, {"instances": None, "total": 0}), ("GET", "/v1/sshkeys"): (200, {"ssh_keys": None})})
+    a = ShadeformAdapter({"api_key": "k"}, transport=m.transport(), provider="crusoe")
+    assert a.list_instances() == [] and a.list_ssh_keys() == []
+    m = Mock({("GET", "/v1/instances"): (200, {"total": 0})})
+    assert kind_of(ShadeformAdapter({"api_key": "k"}, transport=m.transport(), provider="crusoe").list_instances) == "parse"
+    # delete while `creating` answers 409: a retryable failure (never termination_failed)
+    m = Mock({spec["terminate"]: (409, {"error": "instance is creating", "error_code": "invalid_state"})})
+    t = ShadeformAdapter({"api_key": "k"}, transport=m.transport(), provider="crusoe").terminate("sf-1")
+    assert t.outcome == "failed" and t.retryable and t.error_kind == "still_creating"
+    # documented limits: name <= 50, envs <= 20
+    assert ShadeformAdapter.NAME_MAX == 50
+    many = LaunchSpec(ssh_key="k", env={f"K{i}": "v" for i in range(21)})
+    assert "env" in " ".join(ShadeformAdapter({"api_key": "k"}, provider="crusoe").missing_launch(many, spec["offer"]))
 
 
 def test_vast_specifics():
     def bundles(req):
-        q = json.loads(req.url.params["q"])
+        q = json.loads(req.content)       # POST /api/v0/bundles/ with the query as the JSON body (spec)
         assert q["allocated_storage"] == 32, "the quote includes the storage the launch will request"
         return httpx.Response(200, json={"offers": [{"id": 111, "num_gpus": 1, "dph_total": 0.35, "geolocation": "Texas, US"}]})
 
-    m = Mock({("GET", "/api/v0/bundles/"): bundles, ("PUT", "/api/v0/asks/111/"): (200, {"success": True, "new_contract": 7}),
+    m = Mock({("POST", "/api/v0/bundles/"): bundles, ("PUT", "/api/v0/asks/111/"): (200, {"success": True, "new_contract": 7}),
               ("POST", "/api/v0/instances/7/ssh/"): (200, {"success": True})})
     a = VastAdapter({"api_key": "vk"}, transport=m.transport())
     o = offer("vast", sku="RTX 4090")
@@ -634,7 +711,8 @@ def test_vast_specifics():
     assert r.outcome == "accepted" and m.body(1)["label"] == NAME and m.body(1)["onstart"] == "echo hi"
     assert m.body(2) == {"ssh_key": "ssh-ed25519 AAAA"}, "the key is attached to THIS instance only"
     for status, body, kind in ((410, {"success": False, "error": "no_such_ask"}, "capacity"),
-                               (404, {"success": False, "error": "invalid_args", "msg": "no_such_ask Instance type by id"}, "capacity"),
+                               (404, {"success": False, "error": "invalid_args", "msg": "error 404/3603: no_such_ask "
+                                      "Instance type by id 111 is not available.", "ask_id": 111}, "capacity"),
                                (400, {"success": False, "error": "invalid_args"}, "validation")):
         m = Mock({("PUT", "/api/v0/asks/111/"): (status, body)})
         r = VastAdapter({"api_key": "k"}, transport=m.transport()).provision(o, av, LaunchSpec(image="i"), NAME)
@@ -646,6 +724,22 @@ def test_vast_specifics():
     assert VastAdapter({"api_key": "k"}, transport=m.transport()).status("7").state == "not_found"
     m = Mock({("GET", "/api/v0/instances/7/"): (200, {"instances": {"id": 7, "actual_status": "offline"}})})
     assert VastAdapter({"api_key": "k"}, transport=m.transport()).status("7").state == "error"
+    # 'exited' "will never reach running" (spec Key Quirks): error, unless OpenGrid stopped it
+    m = Mock({("GET", "/api/v0/instances/7/"): (200, {"instances": {"id": 7, "actual_status": "exited",
+                                                                    "intended_status": "running"}})})
+    assert VastAdapter({"api_key": "k"}, transport=m.transport()).status("7").state == "error"
+    m = Mock({("GET", "/api/v0/instances/7/"): (200, {"instances": {"id": 7, "actual_status": "exited",
+                                                                    "intended_status": "stopped"}})})
+    assert VastAdapter({"api_key": "k"}, transport=m.transport()).status("7").state == "stopped"
+    # without a key the search uses the legacy public GET ?q= (as providers/vast.py does)
+    m = Mock({("GET", "/api/v0/bundles/"): (200, {"offers": [{"id": 111, "num_gpus": 1, "dph_total": 0.35}]})})
+    assert VastAdapter({}, transport=m.transport()).check_availability(o).available
+    assert json.loads(m.requests[0].url.params["q"])["gpu_name"] == {"eq": "RTX 4090"}
+    # an SSH attach answered success:false is surfaced on the accepted launch
+    m = Mock({("PUT", "/api/v0/asks/111/"): (200, {"success": True, "new_contract": 7}),
+              ("POST", "/api/v0/instances/7/ssh/"): (200, {"success": False, "msg": "bad key"})})
+    r = VastAdapter({"api_key": "k"}, transport=m.transport()).provision(o, av, LaunchSpec(image="i", ssh_public_key="ssh-ed25519 A"), NAME)
+    assert r.outcome == "accepted" and "refused" in r.message
     m = Mock({("DELETE", "/api/v0/instances/7/"): (200, {"success": False, "msg": "host offline"})})
     assert VastAdapter({"api_key": "k"}, transport=m.transport()).terminate("7").outcome == "failed"
     pages = {None: {"instances": [{"id": 1, "label": NAME}], "next_token": "t2", "total_instances": 2},
@@ -663,6 +757,15 @@ def test_vast_specifics():
 def test_verda_specifics():
     spec = verda_spec()
     tok = spec["extra_routes"]
+    # quote: the chosen location's location_prices entry (2026-11-12), else the deprecated default price
+    types = [{"instance_type": "1H100.80S.30V", "price_per_hour": "2.19", "gpu": {"number_of_gpus": 1},
+              "location_prices": [{"location_code": "FIN-01", "price_per_hour": "2.49", "spot_price": "0.9"},
+                                  {"location_code": "ICE-01", "price_per_hour": "2.19", "spot_price": "0.8"}]}]
+    for loc, want in (("FIN-01", 2.49), ("FIN-03", 2.19)):
+        m = Mock({**tok, ("GET", "/v1/instance-availability"): (200, [{"location_code": loc, "availabilities": ["1H100.80S.30V"]}]),
+                  ("GET", "/v1/instance-types"): (200, types)})
+        av = VerdaAdapter(spec["creds"], transport=m.transport()).check_availability(spec["offer"])
+        assert av.region == loc and av.list_price_per_gpu_hour == want, (loc, av)
     # documented capacity: 503 + {"code":"service_unavailable"} -> rejected capacity; any other 503 -> unknown
     m = Mock({**tok, spec["create"]: (503, {"code": "service_unavailable", "message": "No capacity available"})})
     r = VerdaAdapter(spec["creds"], transport=m.transport()).provision(spec["offer"], spec["avail"], spec["launch"], NAME)

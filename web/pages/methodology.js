@@ -13,7 +13,7 @@
     ["Indices & settlement", ["indices", "settlement"]],
     ["Market signals", ["events", "shifts", "opportunities", "news", "news-history", "provider-value", "capacity", "reliability", "uptime", "probes"]],
     ["Recommendations", ["recommendations", "workloads", "best-execution"]],
-    ["Running jobs", ["jobs", "execution-safety", "runner", "routing", "routing-quality", "provider-capabilities", "reservations", "first-live-route"]],
+    ["Running jobs", ["jobs", "execution-safety", "runner", "routing", "routing-quality", "provider-capabilities", "adapter-contract-audit", "reservations", "first-live-route"]],
     ["Accounts, billing & security", ["security", "billing", "reconciliation", "economics", "alerts"]],
   ];
   const groupOf = name => (GROUPS.find(g => g[1].includes(name)) || ["Other"])[0];

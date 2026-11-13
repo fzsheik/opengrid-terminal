@@ -41,20 +41,20 @@ OPENGRID_MANAGED, BYO, COMMERCIAL = "opengrid_managed_key", "byo", "commercial_a
 
 _REG: dict[str, dict] = {
     "lambda": dict(
-        api=3, resource="vm", docs="https://cloud.lambda.ai/api/v1/openapi.json", docs_checked="docs (fetched 2026-10)",
+        api=3, resource="vm", docs="https://cloud.lambda.com/api/v1/openapi.json", docs_checked="docs (fetched 2026-11-13)",
         credential=OPENGRID_MANAGED, settings=["lambda_api_key"],
         notes="Launch needs region_name, instance_type_name and ssh_key_names (keys registered in the Lambda "
               "account). Status booting/active/unhealthy/terminating/terminated/preempted. No stop endpoint "
               "(terminate or restart only). Capacity error code instance-operations/launch/insufficient-capacity. "
-              "Host cloud.lambda.ai (cloud.lambdalabs.com is deprecated). Name + tags set at launch; no billing API."),
+              "Host cloud.lambda.com (cloud.lambda.ai and cloud.lambdalabs.com are deprecated). Name + tags set at launch; no billing API."),
     "runpod": dict(
-        api=3, resource="container pod", docs="https://docs.runpod.io/api-reference",
-        docs_checked="docs (fetched 2026-10)", credential=OPENGRID_MANAGED, settings=["runpod_api_key"],
-        notes="Pods are containers, not VMs: a container image is required. REST v1 (rest.runpod.io) creates, "
-              "gets, stops and deletes pods; stock comes from the GraphQL lowestPrice the poller already reads. "
-              "Only SECURE cloud is routed (community cloud is interruptible and excluded from the market). "
-              "desiredStatus is RunPod's target state, not proof the container is up. Deploying needs at least one "
-              "hour's worth of credits. Stopped pods bill volume storage only. /billing/pods reports per-pod cost."),
+        api=3, resource="container pod", docs="https://api.runpod.io/v2/openapi.json",
+        docs_checked="docs (fetched 2026-11-13)", credential=OPENGRID_MANAGED, settings=["runpod_api_key"],
+        notes="Pods are containers, not VMs: a container image is required. REST v2 (api.runpod.io/v2) creates, "
+              "gets, stops and deletes pods and serves stock (/v2/catalog/gpus); REST v1 is retired 2026-11-15 and "
+              "GraphQL in early 2027. Only SECURE cloud is routed (community cloud is excluded from the market). "
+              "v2 status is the actual pod state. Deploying needs at least one hour's worth of credits (402 "
+              "otherwise). Stopped pods bill volume storage only. /v2/billing/pods reports per-pod cost."),
     "hyperstack": dict(
         api=3, resource="vm", docs="https://docs.hyperstack.cloud/openapi/hyperstack.json",
         docs_checked="docs (fetched 2026-10)", credential=OPENGRID_MANAGED, settings=["hyperstack_api_key"],

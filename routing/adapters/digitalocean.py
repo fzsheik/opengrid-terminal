@@ -4,7 +4,11 @@
     POST   /v2/account/keys                {name, public_key} -> 201 ssh_key{id, fingerprint}
     POST   /v2/droplets                    {name, region, size, image, ssh_keys[], tags[], user_data?}
                                            -> 202 droplet{id, status}
-    GET    /v2/droplets?tag_name=&per_page=   {droplets[], links{pages{next}}, meta{total}}
+    GET    /v2/droplets?type=gpus&per_page=   {droplets[], links{pages{next}}, meta{total}}  "By default, only
+                                           non-GPU Droplets are returned" (droplets_list, spec fetched 2026-11-13):
+                                           list_instances sends type=gpus. tag_name "Can not be combined with
+                                           `name` or `type`": find sends tag_name alone, and an empty answer is
+                                           re-checked against the type=gpus list (Adapter.find_instances)
     GET    /v2/droplets/{id}               droplet{status new|active|off|archive, name, tags, created_at,
                                                    networks, size{price_hourly, gpu_info}}
     DELETE /v2/droplets/{id}               204; 404 {"id":"not_found", ...}
@@ -54,7 +58,7 @@ class DigitalOceanAdapter(Adapter):
         minimum_commitment=("NO", "may charge the card partway through the cycle for new customers"),
         interruptible=("NO (on-demand sizes)", "spot exists for some AMD/B300 sizes, not routed"),
         name_tag_at_launch=("YES", "name (hostname chars) + tags ['opengrid', og-<dep>]"),
-        list_instances=("YES", "GET /v2/droplets (paginated, links.pages.next)"),
+        list_instances=("YES", "GET /v2/droplets?type=gpus (paginated, links.pages.next; GPU Droplets only)"),
         idempotency_token=("NO", "none documented"),
         stopped_billing=("full", "powered-off GPU droplets are billed (droplets/details/pricing)"),
         find_by_name=("YES", "GET /v2/droplets?tag_name=og-<dep>"),
@@ -153,7 +157,8 @@ class DigitalOceanAdapter(Adapter):
         raise AdapterError("parse", "digitalocean: more than 100 pages of droplets; refusing a partial list", sent=True)
 
     def _list(self):
-        return self._droplets({})
+        # GPU Droplets only appear with type=gpus; OpenGrid launches nothing else on DigitalOcean.
+        return self._droplets({"type": "gpus"})
 
     def _find(self, name):
         return self._droplets({"tag_name": name})

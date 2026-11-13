@@ -1,4 +1,4 @@
-"""Lambda Cloud: launch / inspect / terminate VMs. Spec: https://cloud.lambda.ai/api/v1/openapi.json
+"""Lambda Cloud: launch / inspect / terminate VMs. Spec: https://cloud.lambda.com/api/v1/openapi.json
 
     GET  /instance-types                    data{type: {instance_type{price_cents_per_hour, specs{gpus}},
                                                          regions_with_capacity_available[{name}]}}
@@ -19,11 +19,12 @@
     POST /instance-operations/terminate     {instance_ids[]} -> data{terminated_instances[]};
                                             404 global/object-does-not-exist for an unknown id
     errors {error{code, message, suggestion}}; 400 instance-operations/launch/insufficient-capacity,
-           400 global/quota-exceeded, 400 global/invalid-parameters, 401 global/invalid-api-key, 429 rate-limited
+           400 global/quota-exceeded, 400 global/invalid-parameters, 401 global/invalid-api-key,
+           403 global/account-inactive | global/invalid-address, 429 global/rate-limited (Retry-After)
 
-Host: cloud.lambda.ai ("Production server"); cloud.lambdalabs.com is listed as "Secondary production
-server (deprecated)" in the spec. No stop endpoint: Lambda offers terminate and restart only.
-No billing API in the spec.
+Host: cloud.lambda.com ("Production server", spec v1.10.0 fetched 2026-11-13); cloud.lambda.ai is now
+"Secondary production server (deprecated)" and cloud.lambdalabs.com "Tertiary ... (deprecated)".
+No stop endpoint: Lambda offers terminate and restart only. No billing API in the spec.
 
 Billing (docs.lambda.ai/public-cloud/billing/, fetched 2026-10-07): "Billing begins the moment you launch an
 instance and the instance passes health checks, and ends the moment you terminate the instance";
@@ -41,12 +42,12 @@ from routing.adapters.base import (
 )
 from routing.adapters.results import PER_DEPLOYMENT, ActionResult, ProviderKey, ProviderKeyRef
 
-BASE_URL = "https://cloud.lambda.ai/api/v1"
+BASE_URL = "https://cloud.lambda.com/api/v1"
 STATE = {"booting": "pending", "active": "running", "terminating": "terminating", "terminated": "terminated",
          "preempted": "terminated"}
 ERROR_STATES = {"unhealthy"}
 CAPACITY_CODE = "instance-operations/launch/insufficient-capacity"
-L = "https://cloud.lambda.ai/api/v1/openapi.json"
+L = "https://cloud.lambda.com/api/v1/openapi.json"
 
 
 def _code(body) -> str | None:

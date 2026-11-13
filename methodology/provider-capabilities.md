@@ -9,15 +9,15 @@ The full matrix (the founder's rows, each with its evidence URL) lives on each a
 (`routing/adapters/<provider>.py`) and is served by `routing/capabilities.py` (`capability(p)["matrix"]`),
 together with `validation_status` (code: always SIMULATED) and `adapter_status` (DB: simulated | validated).
 
-## Summary (docs fetched 2026-10)
+## Summary (docs fetched 2026-10; re-audited call by call 2026-11-13, see methodology/adapter-contract-audit.md)
 
 | Provider | Launch errors | Name/tag at launch | List / find | Stop | Stopped billing | Billing unit | Provider cost API |
 |---|---|---|---|---|---|---|---|
-| Lambda (cloud.lambda.ai) | good: `error.code` (insufficient-capacity, quota-exceeded) | name + tags | GET /instances; client match | none | n/a | per minute | none |
-| RunPod | weak: create documents 201/400 only | name only | GET /pods?name= | yes | storage only | per second | /billing/pods |
+| Lambda (cloud.lambda.com) | good: `error.code` (insufficient-capacity, quota-exceeded) | name + tags | GET /instances; client match | none | n/a | per minute | none |
+| RunPod (REST v2; v1 retired 2026-11-15) | medium: RFC 9457; 400 mixes rule violations and capacity, 402 balance | name only | GET /v2/pods (cursor pages), client match | yes | storage only | per second | /v2/billing/pods |
 | Hyperstack | medium: capacity undocumented | name + labels | ?search= + paging | disabled (SHUTOFF bills all) | full | per minute | billing history per VM |
-| DigitalOcean | good: {id, message}; 422 text undocumented | name (hostname chars) + tags | ?tag_name= + paging | disabled (powered-off bills) | full | per second (60 s min) | none used |
-| Crusoe / Denvr / Latitude via Shadeform | poor: only 200 documented | name + tags | GET /instances (non-deleted) | none | n/a | per second | cost_estimate (unit unverified) |
+| DigitalOcean | good: {id, message}; 422 text undocumented | name (hostname chars) + tags | ?type=gpus / ?tag_name= + paging | disabled (powered-off bills) | full | per second (60 s min) | none used |
+| Crusoe / Denvr / Latitude via Shadeform | medium: 400 text, 404, 409 {error, error_code}; no capacity code | name (<=50) + tags | GET /instances (non-deleted) | none | n/a | per second | cost_estimate (decimal USD) |
 | Vast.ai | good: 410 no_such_ask, 400 invalid_args | label | /api/v1/instances, next_token | yes | storage only | per second | /api/v0/charges |
 | Verda | good: {code}; 503 service_unavailable = no capacity | hostname + tags | ?tag=opengrid=<name> | disabled (shutdown bills) | full | 10 min prepaid, refunded | none |
 
@@ -83,7 +83,7 @@ deletes after confirmed termination (`routing/adapters/resources.py`, methodolog
 | Provider | forces_account_ssh_key | Evidence (fetched 2026-10-07) | Registration / key object |
 |---|---|---|---|
 | Lambda | NO | launch `ssh_key_names`: "Currently, exactly one SSH key must be specified"; the Instance reports `ssh_key_names` ("The names of the SSH keys that are allowed to access the instance"); no default-key injection in the OpenAPI spec. Runtime check: the tracker alerts `unexpected_ssh_key` if an instance lists any other key | per_deployment; POST / GET / DELETE /ssh-keys |
-| RunPod | YES | "Runpod will attempt to automatically inject the public SSH keys added in your account settings"; SSH_PUBLIC_KEY overrides "the default" but replacement is not stated | per-pod env, no key object |
+| RunPod | UNKNOWN (was YES) | v1 docs: "Runpod will attempt to automatically inject the public SSH keys added in your account settings". v2 spec (2026-11-13): `startSsh` "injects a `PUBLIC_KEY` environment variable carrying your account's registered SSH public keys, unless the request already sets one"; OpenGrid sets `PUBLIC_KEY` and never sends `startSsh`. Still not `NO` until a live pod shows only the customer key | per-pod `PUBLIC_KEY` env, no key object |
 | Vast.ai | YES | "Adding a key to your account keys only applies to new instances" (account keys go on every new instance) | per-instance attach, no key object |
 | Shadeform (Crusoe / Denvr / Latitude) | UNKNOWN | the account has a default key used when none is given; whether it is also installed when one is given is not documented | per_deployment; /sshkeys/add, /sshkeys, /sshkeys/{id}/delete (unvalidated) |
 | DigitalOcean | UNKNOWN | the API reference could not be re-fetched to confirm the absence of default-key injection | per_deployment; /v2/account/keys (unvalidated) |

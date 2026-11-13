@@ -85,7 +85,7 @@ separate; none is merged into another:
 |---|---|---|
 | `quote` | per GPU-hour and total, from the consumed quote | quote |
 | `expected_cost` | quote price x metered billable GPU-hours | estimated |
-| `provider_reported_cost` | `adapter.reported_cost()` where the provider exposes billing (RunPod `/billing/pods`, Hyperstack billing history, Vast charges, Shadeform `cost_estimate` [unit unverified]); else null + reason. Re-asked hourly for 48 h while provider billing lags. | provider-reported |
+| `provider_reported_cost` | `adapter.reported_cost()` where the provider exposes billing (RunPod `/v2/billing/pods`, Hyperstack billing history, Vast charges, Shadeform `cost_estimate` [decimal USD string]); else null + reason. Re-asked hourly for 48 h while provider billing lags. | provider-reported |
 | `opengrid_transaction_cost` | sum of the deployment's usage records (provider cost passed through); OpenGrid fee lines reported next to it | transaction |
 | `quote_error` | transaction cost - expected cost (USD and %) | derived |
 | `effective_hourly_rate` | per GPU-hour, from transaction cost and (separately) provider cost | derived |

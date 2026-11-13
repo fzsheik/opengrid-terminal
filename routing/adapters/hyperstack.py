@@ -2,11 +2,16 @@
 
     GET    /core/flavors?region=R          data[{flavors[{name, region_name, gpu, gpu_count, stock_available}]}]
     GET    /pricebook                      [{name, value}]  (value is a STRING, per GPU-hour, keyed by GPU name)
-    POST   /core/keypairs                  {environment_name, name (<=50), public_key} -> keypair{id, name}
+    POST   /core/keypairs                  {environment_name, name (<=50), public_key}
+                                           -> keypair{id, name, fingerprint, ...}
     POST   /core/virtual-machines          {name (<=50), environment_name, image_name, flavor_name, key_name, count,
                                             assign_floating_ip, labels[str], security_rules[...]}
                                            -> 200 {status: true, instances[{id, status, ...}]}
     GET    /core/virtual-machines?page=&pageSize=&search=   {instances[...], count, page, page_size}
+                                           (count = "Number of items returned in the current page", NOT a
+                                           total: paging stops on a short or empty page)
+    GET    /core/keypairs?page=&pageSize=  {keypairs[{id, name, fingerprint, created_at}], count, page, page_size}
+    DELETE /core/keypair/{id}              (singular path) 200 {status: true}
     GET    /core/virtual-machines/{id}     {status, instance{id, name, status, labels, created_at, floating_ip,
                                             flavor{gpu, gpu_count}, environment{name, region}}}
     DELETE /core/virtual-machines/{id}     200 {status: true}; 400 "... is currently being created and cannot be
@@ -37,7 +42,7 @@ from routing.adapters.base import (
 from routing.adapters.results import PER_DEPLOYMENT, ActionResult, ProviderKey, ProviderKeyRef
 
 STATE = {"CREATING": "pending", "BUILD": "pending", "STARTING": "pending", "REBOOTING": "pending",
-         "RESTORING": "pending", "ACTIVE": "running", "SHUTOFF": "stopped", "STOPPED": "stopped",
+         "RESTORING": "pending", "ACTIVE": "running", "STOPPING": "stopping", "SHUTOFF": "stopped", "STOPPED": "stopped",
          "HIBERNATING": "stopping", "HIBERNATED": "stopped", "DELETING": "terminating", "DELETED": "terminated"}
 ERROR_STATES = {"ERROR"}
 PAGE = 100
@@ -176,22 +181,23 @@ class HyperstackAdapter(Adapter):
                                    200, raw_redacted=r)
         return TerminateResult("accepted", "hyperstack: VM is being deleted", 200, raw_redacted=r)
 
-    def _pages(self, params: dict) -> list[dict]:
+    def _pages(self, params: dict, path: str = "/core/virtual-machines", key: str = "instances") -> list[dict]:
+        # `count` is the size of THIS page (spec: "Number of items returned in the current page"), so it is
+        # never read as a total: stop on a short/empty page, or when the server ignores paging (page null).
         out, seen = [], set()
         for page in range(1, 51):
-            body = self.request("GET", "/core/virtual-machines", params={**params, "page": page, "pageSize": PAGE}) or {}
-            if not isinstance(body, dict) or not isinstance(body.get("instances"), list):
-                raise AdapterError("parse", "hyperstack: list returned no instances array", body=body, sent=True)
-            vms = body["instances"]
+            body = self.request("GET", path, params={**params, "page": page, "pageSize": PAGE}) or {}
+            if not isinstance(body, dict) or not isinstance(body.get(key), list):
+                raise AdapterError("parse", f"hyperstack: list returned no {key} array", body=body, sent=True)
+            vms = body[key]
             new = [v for v in vms if v.get("id") not in seen]
             if vms and not new:      # the server ignores paging and repeats the full list
                 return out
             seen.update(v.get("id") for v in new)
             out.extend(new)
-            count = body.get("count")
-            if len(vms) < PAGE or (isinstance(count, int) and len(out) >= count) or body.get("page") is None:
+            if len(vms) < PAGE or body.get("page") is None:
                 return out
-        raise AdapterError("parse", "hyperstack: more than 50 pages of VMs; refusing a partial list", sent=True)
+        raise AdapterError("parse", f"hyperstack: more than 50 pages of {key}; refusing a partial list", sent=True)
 
     def _list(self):
         return [self._state(v) for v in self._pages({})]
@@ -226,16 +232,14 @@ class HyperstackAdapter(Adapter):
         k = (r or {}).get("keypair") if isinstance(r, dict) else None
         if not isinstance(k, dict) or not k.get("name"):
             raise AdapterError("parse", "hyperstack: keypair registration returned no keypair", sent=True)
-        return ProviderKeyRef(key_id=str(k.get("id") or ""), name=k["name"], fingerprint=None)
+        return ProviderKeyRef(key_id=str(k.get("id") or ""), name=k["name"], fingerprint=k.get("fingerprint"))
 
     def _delete_ssh_key(self, key_id):
         self.request("DELETE", f"/core/keypair/{key_id}")
         return ActionResult("accepted", "hyperstack: keypair deleted", 200)
 
     def _list_ssh_keys(self):
-        body = self.request("GET", "/core/keypairs")
-        if not isinstance(body, dict) or not isinstance(body.get("keypairs"), list):
-            raise AdapterError("parse", "hyperstack: keypairs list returned no keypairs array", sent=True)
+        rows = self._pages({}, "/core/keypairs", "keypairs")     # paged like the VM list (page/pageSize)
         return [ProviderKey(key_id=str(k.get("id")), name=k.get("name"), fingerprint=k.get("fingerprint"),
                             created_at=parse_time(k.get("created_at")))
-                for k in body["keypairs"] if isinstance(k, dict) and k.get("id") is not None]
+                for k in rows if isinstance(k, dict) and k.get("id") is not None]

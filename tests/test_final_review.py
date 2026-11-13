@@ -1,6 +1,6 @@
 """Final independent review: regressions for the problems found before the first real (Lambda) launch,
 plus an end-to-end validation cycle through the REAL Lambda adapter against a simulated Lambda API
-(httpx.MockTransport shaped on https://cloud.lambda.ai/api/v1/openapi.json). No real provider is called.
+(httpx.MockTransport shaped on https://cloud.lambda.com/api/v1/openapi.json). No real provider is called.
 
     1  the operator's default ssh_public_key never reaches a customer machine
     2  POST /v1/route: a crashed / stale attempt that already created a deployment is never re-run

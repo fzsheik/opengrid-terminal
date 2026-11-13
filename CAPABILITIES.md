@@ -1234,7 +1234,7 @@ exceed the 10-minute timeout on a busy machine.
 ## 19. Methodology documents
 
 Every number OpenGrid publishes traces to a document in `methodology/` (also served at
-`/methodology` in the terminal and listed at `GET /v1/methodology`). The 45 documents:
+`/methodology` in the terminal and listed at `GET /v1/methodology`). The 46 documents:
 
 - **Market data:** `data-kinds` · `data-quality` · `data-trust` · `data-visibility` · `freshness` · `capacity` ·
   `live-feeds` · `families` · `hardware` · `fx` · `gcp-regions`
@@ -1242,7 +1242,7 @@ Every number OpenGrid publishes traces to a document in `methodology/` (also ser
   `provider-value` · `events` · `shifts` · `opportunities` · `reserved-prices` · `full-cost`
 - **News and context:** `news` · `news-history` · `market-context` · `power-markets`
 - **Reliability:** `uptime` · `probes` · `reliability`
-- **Execution:** `routing` · `best-execution` · `execution-safety` · `reconciliation` · `provider-capabilities` ·
+- **Execution:** `routing` · `best-execution` · `execution-safety` · `reconciliation` · `provider-capabilities` · `adapter-contract-audit` ·
   `first-live-route` · `routing-quality` · `economics` · `billing`
 - **Jobs, workloads and reservations:** `jobs` · `workloads` · `runner` · `recommendations` · `reservations`
 - **Operations:** `alerts` · `security`

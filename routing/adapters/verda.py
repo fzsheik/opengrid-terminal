@@ -3,7 +3,9 @@
     POST /v1/oauth2/token                  {grant_type: client_credentials, client_id, client_secret}
                                            -> {access_token, token_type: Bearer, expires_in}
     GET  /v1/instance-availability         [{location_code, availabilities[instance_type]}]
-    GET  /v1/instance-types                [{instance_type, price_per_hour, gpu{number_of_gpus}}]   (public)
+    GET  /v1/instance-types                [{instance_type, price_per_hour (string; deprecated 2026-11-12: the
+                                            default), location_prices[{location_code, price_per_hour}],
+                                            gpu{number_of_gpus}}]   (public; the quote uses the chosen location's)
     POST /v1/ssh-keys                      {name, key} -> 201 "<uuid>"
     POST /v1/instances                     {instance_type, image, hostname, location_code, ssh_key_ids[],
                                             description, is_spot: false, tags[{key, value}] (<=10)}
@@ -21,7 +23,8 @@
 Delete passes the OS volume and every attached volume: "If not providing a volume_ids array, only the OS
 volume will be deleted and the rest detached" (spec) and detached storage keeps charging (docs.verda.com,
 shutdown-hibernate-and-delete). Stop is NOT offered: "Using shutdown will keep charging your account" (spec).
-The spec marks a user-agent header as required; the base adapter sends one.
+The base adapter sends a user-agent header (an older spec marked it required; the 2026-11-13 spec does not
+mention it).
 """
 
 from providers.verda import BASE_URL
@@ -48,7 +51,8 @@ class VerdaAdapter(Adapter):
     SSH_KEY_REGISTRATION = PER_DEPLOYMENT
     SSH_KEY_RESOURCE = True
     CAPABILITIES = Capabilities(
-        quote=("YES", f"GET /v1/instance-types price_per_hour (whole instance) ({VE})"),
+        quote=("YES", f"GET /v1/instance-types location_prices[location].price_per_hour, else the default "
+                      f"price_per_hour (whole instance) ({VE})"),
         live_availability=("YES", "GET /v1/instance-availability (authenticated)"),
         launch=("YES", f"POST /v1/instances -> 202 id string ({VE})"),
         ssh_key_injection=("YES", "ssh_key_ids (UUIDs); POST /v1/ssh-keys registers one"),
@@ -131,9 +135,16 @@ class VerdaAdapter(Adapter):
         price = None
         types = self.request("GET", "/v1/instance-types") or []
         for t in types if isinstance(types, list) else []:
-            if t.get("instance_type") == offer.sku and t.get("price_per_hour") is not None:
+            if t.get("instance_type") != offer.sku:
+                continue
+            # location_prices (2026-11-12 changelog) is the price in the chosen location; the type's own
+            # price_per_hour is now deprecated and is only "the default price" for locations without one.
+            here = next((lp.get("price_per_hour") for lp in t.get("location_prices") or []
+                         if isinstance(lp, dict) and region and lp.get("location_code") == region), None)
+            each = here if here is not None else t.get("price_per_hour")
+            if each is not None:
                 n = (t.get("gpu") or {}).get("number_of_gpus") or offer.gpu_count
-                price = float(t["price_per_hour"]) / n
+                price = float(each) / n
         return Availability(available=region is not None, live=True, region=region, list_price_per_gpu_hour=price,
                             note="locations with stock: " + (", ".join(locations) or "none"),
                             metadata={"locations": locations})

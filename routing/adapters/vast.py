@@ -1,11 +1,14 @@
 """Vast.ai: rent one host's ask (a docker instance). Docs: https://docs.vast.ai/api-reference
 
-    GET    /api/v0/bundles/?q={...}        offers[{id, num_gpus, dph_total, geolocation, ...}]  (public search;
+    POST   /api/v0/bundles/  {...query}    offers[{id, num_gpus, dph_total, geolocation, ...}]  (the only search
+                                           form in the spec, 2026-11-13; without a key the legacy public
+                                           GET /api/v0/bundles/?q={...} is used, as providers/vast.py does;
                                            dph_total includes storage for allocated_storage, default 8 GB)
     PUT    /api/v0/asks/{ask_id}/          {client_id: "me", image, disk, label, runtype, env, onstart?}
                                            -> 200 {success: true, new_contract: <instance id>}
                                            errors {success:false, error, msg}: 410 no_such_ask, 404 invalid_args
-                                           "no_such_ask ...", 400 invalid_args / no_ssh_key_for_vm, 429
+                                           "error 404/3603: no_such_ask ...", 400 invalid_args /
+                                           no_ssh_key_for_vm, 429
     GET    /api/v1/instances?limit=25&after_token=   {instances[...], next_token, total_instances}
     GET    /api/v0/instances/{id}/         {instances: {actual_status, label, dph_total, num_gpus, start_date, ...}}
                                            (an empty/null `instances` means the id is not on the account)
@@ -19,7 +22,9 @@
 OpenGrid's Vast listing is the MEDIAN ask across verified hosts. Routing searches live for the cheapest
 verified, rentable ask of the exact GPU count, with allocated_storage = the disk the launch will request,
 so the quote includes that storage. Bandwidth ($/GB, inet_up/down_cost) is NOT in the quote.
-actual_status 'unknown' / 'offline': "will never reach running" (show-instance docs) -> degraded tracking.
+actual_status 'exited' / 'unknown' / 'offline': "it will never reach `running` -- destroy and retry" (spec
+"Key Quirks", fetched 2026-11-13) -> degraded tracking. 'exited' while intended_status is 'stopped' (after
+an OpenGrid stop) stays 'stopped'.
 Stopped instances keep billing for disk storage only ("Stopping an instance does not avoid storage
 costs", docs.vast.ai billing) -> stopped_billing storage_only.
 """
@@ -35,7 +40,7 @@ from routing.adapters.results import PER_DEPLOYMENT, ActionResult, ProviderKey, 
 
 STATE = {"created": "pending", "loading": "pending", "scheduling": "pending", "running": "running",
          "exited": "stopped", "stopped": "stopped"}
-ERROR_STATES = {"unknown", "offline"}
+ERROR_STATES = {"unknown", "offline", "exited"}
 DISK_GB = 32
 VA = "https://docs.vast.ai/api-reference/instances/create-instance"
 
@@ -56,7 +61,7 @@ class VastAdapter(Adapter):
         launch=("YES", f"PUT /api/v0/asks/{{id}}/ -> new_contract ({VA})"),
         ssh_key_injection=("PARTIAL", "POST /api/v0/instances/{id}/ssh/ after create; runtype ssh"),
         startup_script=("YES", "onstart (<=4048 chars)"),
-        status=("YES", "actual_status; unknown/offline never reach running"),
+        status=("YES", "actual_status; exited/unknown/offline never reach running"),
         stop=("YES", "PUT /api/v0/instances/{id}/ {state: stopped}"),
         terminate=("YES", "DELETE /api/v0/instances/{id}/ {success}; confirmed by status/list"),
         region_selection=("PARTIAL", "by choosing an ask (geolocation)"),
@@ -89,13 +94,18 @@ class VastAdapter(Adapter):
     def is_capacity_error(self, status, body):
         err = body.get("error") if isinstance(body, dict) else None
         msg = str(body.get("msg") or "") if isinstance(body, dict) else ""
-        return (status == 410 or err == "no_such_ask" or (status == 404 and msg.startswith("no_such_ask")))
+        # 404 msg is "error 404/3603: no_such_ask Instance type by id ... is not available." (create-instance)
+        return (status == 410 or err == "no_such_ask" or (status == 404 and "no_such_ask" in msg))
 
     def check_availability(self, offer: Offer) -> Availability:
         q = {"verified": {"eq": True}, "rentable": {"eq": True}, "type": "on-demand",
              "gpu_name": {"eq": offer.sku}, "num_gpus": {"eq": offer.gpu_count},
              "allocated_storage": DISK_GB, "order": [["dph_total", "asc"]], "limit": 20}
-        offers = (self.request("GET", "/api/v0/bundles/", params={"q": json.dumps(q)}) or {}).get("offers") or []
+        if self.credentials.get("api_key"):
+            found = self.request("POST", "/api/v0/bundles/", json=q)
+        else:
+            found = self.request("GET", "/api/v0/bundles/", params={"q": json.dumps(q)})
+        offers = (found or {}).get("offers") or []
         offers = [o for o in offers if o.get("dph_total") and o.get("num_gpus") == offer.gpu_count]
         if offer.want_region_group:
             try:
@@ -136,7 +146,9 @@ class VastAdapter(Adapter):
         note = ""
         if launch.ssh_public_key:
             try:
-                self.request("POST", f"/api/v0/instances/{iid}/ssh/", json={"ssh_key": launch.ssh_public_key})
+                k = self.request("POST", f"/api/v0/instances/{iid}/ssh/", json={"ssh_key": launch.ssh_public_key})
+                if isinstance(k, dict) and k.get("success") is False:
+                    note = f"instance created but attaching the SSH key was refused: {self.scrub(str(k.get('msg')))[:160]}"
             except AdapterError as exc:
                 note = f"instance created but attaching the SSH key failed: {self.scrub(exc.message)[:160]}"
         return self.accepted(iid, {"request": body, "response": r, "ask_id": ask}, message=note)
@@ -144,7 +156,7 @@ class VastAdapter(Adapter):
     def _state(self, d: dict, instance_id=None) -> InstanceState:
         st = d.get("actual_status")
         price = d.get("dph_total")
-        err = st in ERROR_STATES
+        err = st in ERROR_STATES and not (st == "exited" and d.get("intended_status") == "stopped")
         state = "error" if err else STATE.get(st, "pending" if st is None and d.get("intended_status") == "running"
                                                      else "unknown")
         return InstanceState(
