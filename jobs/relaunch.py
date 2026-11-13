@@ -45,6 +45,13 @@ Decision (consider(job_id); the `job_relaunch` background job every settings.job
        Both carry evidence.relaunch_event for the jobs feed (alerts/channels.py). An internal error -> `blocked`,
        retried next pass, ops alert relaunch_blocked (alerts/ops.py)
 
+A batch shard (jobs/batches.py) relaunches through exactly this path; the batch adds an OUTER ceiling: no relaunch
+once the batch is cancelled / stopping (stop batch_stopped), the remaining chain budget is also capped by the batch's
+remaining budget, the successor's routing follows the batch's provider allow / deny lists (not the first attempt's
+placement pin), and a reservation in the batch ledger is taken under the batch's Postgres lock BEFORE the submission
+(stop batch_budget_exhausted otherwise; released if the submission is refused) and attached to the successor in the
+job-creating transaction.
+
 Reliability (routing/reliability.py) reads deployments, never jobs: the interrupted attempt's deployment is counted
 once (its own interruption), the successor is a NEW deployment counted like any other launch.
 """
@@ -356,6 +363,9 @@ def _dec(v):
 
 
 def _stop(job, exc: Stop, ctx: dict) -> dict:
+    if ctx.get("batch_attempt_id"):      # a batch reservation that no successor will use (jobs/batches.py)
+        from jobs import batches as B
+        B.release(ctx["batch_attempt_id"])
     _decide(job.job_id, "stopped", code=exc.code, reason=exc.message, detail=S._jsonable({**ctx, **exc.detail}),
             excluded_providers=ctx.get("excluded_providers"), spend_so_far_usd=_dec(ctx.get("spend_so_far_usd")),
             max_total_usd=_dec(ctx.get("max_total_usd")), est_next_usd=_dec(ctx.get("est_next_usd")),
@@ -493,11 +503,24 @@ def _relaunch(job, ctx: dict) -> dict:
     if remaining <= 0:
         raise Stop("retry_budget_exhausted", f"retry budget exhausted: ${spend['usd']:.2f} spent of the "
                                              f"${p['max_total_usd']:.2f} ceiling")
+    from jobs import batches as B
+    bt = B.relaunch_terms(job)          # None unless a batch shard; raises Stop when the batch forbids it
+    budget_code = "retry_budget_exhausted"
+    if bt is not None:
+        ctx.update(batch_id=bt["batch_id"], batch_remaining_usd=bt["remaining_usd"])
+        if bt["remaining_usd"] < remaining:
+            budget_code = "batch_budget_exhausted"     # the batch, not the shard's retry policy, is the binding limit
+        remaining = min(remaining, bt["remaining_usd"])
+        if remaining <= 0:
+            raise Stop("batch_budget_exhausted", f"batch {bt['batch_id']} budget exhausted: "
+                                                 f"${bt['committed_usd']:.2f} committed of ${bt['max_total_usd']:.2f}")
     epochs = int((root.config or {}).get("epochs") or 1)
     resume, rnotes = pick_resume(job, chain, epochs)
     ctx.update(resume_from=resume, resume_notes=rnotes)
     body = _body(root.spec, exclude=exclude, resume=resume, max_total=remaining,
                  ssh_public_key=_customer_key(job, prev_dep))
+    if bt is not None:
+        B.shape_relaunch_body(bt, body, remaining=remaining)
     # The estimate for the next attempt: the same workload-aware selection submit() runs (no provider call).
     try:
         sel = W.select(body, who)
@@ -508,9 +531,9 @@ def _relaunch(job, ctx: dict) -> dict:
     if not ready:
         by = sel.get("exclusions_by_code") or {}
         if by.get("over_budget") and sel.get("market_best") is None:
-            raise Stop("retry_budget_exhausted", f"retry budget exhausted: no eligible GPU fits the remaining "
-                                                 f"${remaining:.2f} (spent ${spend['usd']:.2f} of "
-                                                 f"${p['max_total_usd']:.2f})", exclusions_by_code=by)
+            raise Stop(budget_code, f"{budget_code.split('_')[0]} budget exhausted: no eligible GPU fits the "
+                                    f"remaining ${remaining:.2f} (spent ${spend['usd']:.2f} of "
+                                    f"${p['max_total_usd']:.2f})", exclusions_by_code=by)
         r = O.refusal_for(sel)
         raise Stop("no_eligible_provider", f"{STOP_TEXT['no_eligible_provider']} ({', '.join(exclude) or 'none'} "
                                            f"excluded): {r.message}"[:2000], refusal_code=r.code,
@@ -520,6 +543,10 @@ def _relaunch(job, ctx: dict) -> dict:
     if spend["usd"] + est > p["max_total_usd"] + 1e-9:
         raise Stop("retry_budget_exhausted", f"retry budget exhausted: ${spend['usd']:.2f} spent + up to ${est:.2f} "
                                              f"for the next attempt > ${p['max_total_usd']:.2f}")
+    batch_ref = None
+    if bt is not None:      # the batch ledger reservation under the batch lock (raises Stop batch_budget_exhausted);
+        batch_ref = B.reserve_relaunch(bt, job.job_id, est=est, body=body)     # _stop() releases it on a refusal
+        ctx.update(batch_attempt_id=batch_ref["attempt_id"], batch_reserved_usd=batch_ref["reserved_usd"])
     cause = CAUSE.get(job.failure_code, job.failure_code)
     from_txt = (f"resuming from epoch {resume['epoch']} of {resume['job_id']}" if resume else
                 "starting from scratch (no stored checkpoint to resume from)")
@@ -529,7 +556,7 @@ def _relaunch(job, ctx: dict) -> dict:
 
     def run():
         try:
-            code, out = O.submit(body, who, chain=chain_info)
+            code, out = O.submit(body, who, chain=chain_info, batch=batch_ref)
         except O.JobRefused as r:
             raise HTTPException(r.status, r.detail()) from None
         return code, {"job_id": out["job_id"], "status": out["status"],

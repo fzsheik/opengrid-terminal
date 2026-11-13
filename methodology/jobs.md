@@ -323,3 +323,6 @@ termination shows as `resource.termination_unconfirmed` with `disposition = poss
 
 Keys see their own account's jobs; the operator sees all. Discord: job transitions are posted to the
 deployments channel (`alerts/channels.py`, feed `jobs`), next to the deployment's own lifecycle posts.
+
+Many jobs at once under one budget, one approval and one status (a sweep): methodology/batches.md. Each shard is an
+ordinary job; its `GET /v1/jobs/{id}` carries `batch: {batch_id, shard_index, ...}`.

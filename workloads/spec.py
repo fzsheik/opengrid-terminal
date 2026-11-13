@@ -14,8 +14,9 @@ resume_from {job_id, artifact?} is shape-checked here; ownership, storage and sh
 retry {max_attempts 1..3 (default 1 = never relaunched), max_total_usd (REQUIRED when max_attempts > 1: the ceiling
 across ALL attempts, >= limits.max_total_cost_usd)} is the automatic-relaunch policy (jobs/relaunch.py); it only
 acts when settings.job_auto_relaunch_enabled is on. routing.exclude_providers [provider ids] removes providers
-from the selection (a relaunch fills it with every provider that interrupted / lost an attempt of the chain).
-Both keys appear in the validated request only when given, so an ordinary request keeps exactly its old shape.
+from the selection (a relaunch fills it with every provider that interrupted / lost an attempt of the chain);
+routing.include_providers [provider ids] restricts it to those providers (a batch shard is pinned to its placement
+this way, jobs/batches.py). These keys appear in the validated request only when given, so an ordinary request keeps exactly its old shape.
 """
 
 from __future__ import annotations
@@ -73,6 +74,7 @@ class Routing(_M):
     strategy: str = "BALANCED"
     weights: dict[str, float] | None = None
     exclude_providers: list[str] | None = None
+    include_providers: list[str] | None = None
 
 
 class Retry(_M):
@@ -358,6 +360,15 @@ def validate(body) -> Validated:
                                                              f"{MAX_EXCLUDED_PROVIDERS} provider ids [a-z0-9_-]",
                                 field="routing.exclude_providers")
         exclude = sorted(set(ex))
+    include = None
+    if s.routing.include_providers is not None:
+        inc = [str(p).strip().lower() for p in s.routing.include_providers]
+        bad = [p for p in inc if not PROVIDER_RE.match(p)]
+        if bad or not inc or len(inc) > MAX_EXCLUDED_PROVIDERS:
+            raise WorkloadError("invalid_include_providers", f"routing.include_providers must be 1 to "
+                                                             f"{MAX_EXCLUDED_PROVIDERS} provider ids [a-z0-9_-]",
+                                field="routing.include_providers")
+        include = sorted(set(inc))
     retry = None
     if s.retry is not None:
         n = s.retry.max_attempts
@@ -403,6 +414,8 @@ def validate(body) -> Validated:
         request["resume_from"] = resume
     if exclude:
         request["routing"]["exclude_providers"] = exclude
+    if include:
+        request["routing"]["include_providers"] = include
     if retry is not None:
         request["retry"] = retry
     requirements = {**req0, "min_vram_gb": vram, "min_vcpu": vcpu, "min_ram_gb": ram, "min_disk_gb": disk,

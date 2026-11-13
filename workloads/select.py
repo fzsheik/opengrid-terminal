@@ -10,7 +10,9 @@ Pipeline
        max_price, mode=strategy, weights, strict_region); candidates merged, exclusions kept with reasons
     4. workload filters: vCPU / RAM / disk minimums where the listing reports them, single-instance only;
        request.routing.exclude_providers (a relaunch: every provider that interrupted / lost an attempt) ->
-       excluded with code provider_excluded, and passed on to the route as preferences.exclude_providers
+       excluded with code provider_excluded, and passed on to the route as preferences.exclude_providers;
+       request.routing.include_providers (a batch shard's placement) -> every other provider excluded with code
+       provider_not_included
     5. cost bounds: billed minutes = runtime ceiling rounded UP to the provider's billing unit, at least its
        minimum commitment (adapter CAPABILITIES; unknown -> per-hour assumed, said so);
        est_max_total = price x gpu_count x billed hours (> max_total_cost -> excluded, with the numbers)
@@ -390,7 +392,9 @@ def _public(c: dict | None, top: dict | None = None) -> dict | None:
 # select
 # --------------------------------------------------------------------------
 
-def select(spec, who, *, now: datetime | None = None) -> dict:
+def select(spec, who, *, now: datetime | None = None, all_candidates: bool = False) -> dict:
+    """all_candidates: also return `candidates`, every kept candidate in rank order (the batch placement plan,
+    jobs/batches.py, spreads shards over them); the default shape is unchanged."""
     v: Validated = validate(spec)
     R, req, tmpl = v.request, v.requirements, v.template
     now = now or datetime.now(timezone.utc)
@@ -437,10 +441,15 @@ def select(spec, who, *, now: datetime | None = None) -> dict:
     kept = []
     bills: dict[str, dict] = {}
     excluded_providers = set(rt.get("exclude_providers") or ())
+    included_providers = set(rt["include_providers"]) if rt.get("include_providers") else None
     for c in pool:
         if c["provider"] in excluded_providers:
             excl.append(_excl(c, c["gpu"], "provider_excluded", f"{c['provider']} is excluded by "
                                                                 "routing.exclude_providers"))
+            continue
+        if included_providers is not None and c["provider"] not in included_providers:
+            excl.append(_excl(c, c["gpu"], "provider_not_included", f"{c['provider']} is not in "
+                                                                    "routing.include_providers"))
             continue
         c["resources"], fails = _resource_check(c, rows.get((c["provider"], c["listing_id"])), req)
         if fails:
@@ -580,6 +589,7 @@ def select(spec, who, *, now: datetime | None = None) -> dict:
         "price_concepts": {"candidate prices": OBSERVED_MARKET_PRICE, "estimate": ESTIMATED,
                            "quote": "issued by the route at submission, re-validated live before launch"},
         "methodology": METHODOLOGY,
+        **({"candidates": [_public(c) for c in kept]} if all_candidates else {}),
     }
 
 
