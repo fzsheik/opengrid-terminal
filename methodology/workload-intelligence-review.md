@@ -47,7 +47,7 @@ deployed. The [validation checklist](#validation-checklist) at the end lists wha
 
 ## What changed
 
-### Measured performance (`intelligence/measured.py`, migration `0037_measured_performance`)
+### Measured performance (`intelligence/measured.py`, migration `0038_measured_performance`)
 
 - **Hook.** `jobs/sync.complete()` calls `measured.record_safely(job_id)` after a real (non-sandbox) job succeeds.
   It never raises. For past jobs, run `python -m intelligence.measured backfill`. The hook lives in `jobs/sync.py`
@@ -179,7 +179,7 @@ deployed. The [validation checklist](#validation-checklist) at the end lists wha
 - **The local analyzer does not emit `training.max_steps` yet.** The server must ship first, because
   `extra="forbid"` rejects unknown fields on an older server. The CLI's human-readable output does not show the new
   pick.
-- **Migration 0037 is chained after 0035.** Branch 0036 is reserved, so re-chain `down_revision` onto it at merge.
+- **Migration 0038** (renumbered at merge) is chained after 0037_job_resume_move.
 
 ## Competitors
 
@@ -204,7 +204,7 @@ Owner: Fawwaaz. Nothing below was run in this pass.
 **1. Static checks.**
 
 ```
-.venv/bin/python -m py_compile intelligence/*.py routing/disclosure.py jobs/sync.py store/intelligence.py migrations/versions/0037_measured_performance.py
+.venv/bin/python -m py_compile intelligence/*.py routing/disclosure.py jobs/sync.py store/intelligence.py migrations/versions/0038_measured_performance.py
 node --check web/pages/find.js && node --check web/core.js
 ```
 
@@ -231,7 +231,7 @@ Database checks:
 | `test_db_recommend_prefers_measured` | The L4 option carries `performance.measured` (no provider names), a measured runtime, `job_cost_measured` and the `lowest_estimated_job_cost` and `shortest_estimated_runtime` picks, with "measured" in the reason and notes. The T4 option still says "no measured benchmark". |
 | `test_db_deadline_and_explanation` | A tiny deadline flags L4 `meets_deadline: "no"`. Others are `"unknown"`. The explanation is consistent with `best_for_workload`. |
 | `test_db_llm_scale_up_blocks` | An 8B LoRA run gives an H100 1 -> 2 pair with `fsdp`, a known communication block and a listing-sourced NVLink link. |
-| `test_migration_0037` | Upgrade adds the columns and the unique index. Downgrade to 0035 removes them and keeps the 0020 columns. |
+| `test_migration_0038` | Upgrade adds the columns and the unique index. Downgrade to 0037 removes them and keeps the 0020 columns. |
 
 **3. Regression files that must stay green.** These files touch changed code:
 
@@ -250,7 +250,7 @@ Watch especially:
   real succeeded jobs in those scratch databases.
 - `tests/test_web_find.js`: the existing runtime-label assertions.
 
-**4. Staging migration.** Re-chain 0037 onto the 0036 revision, then run `alembic upgrade head`, check
+**4. Staging migration.** Run `alembic upgrade head`, check
 `\d performance_observations`, then `alembic downgrade -1` and `upgrade head` again.
 
 **5. Live checks, on the first real (non-sandbox) MNIST job:**

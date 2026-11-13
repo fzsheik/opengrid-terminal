@@ -15,7 +15,7 @@ Database (scratch og_test_workload_intel):
     lookup: zero data -> {} ; consent=false rows never read
     recommend: zero data -> nothing labelled measured; with a measurement -> measured runtime and job cost, labelled,
                preferred for that option; explanation / decision / multi_gpu blocks present; deadline flags
-    migration 0037 upgrades and downgrades cleanly
+    migration 0038 upgrades and downgrades cleanly
 
 Run:  .venv/bin/python tests/test_workload_intelligence.py
 """
@@ -509,8 +509,8 @@ def test_db_llm_scale_up_blocks():
     assert any(pr["gpu"] == H100 and pr["from"] == 1 and pr["to"] == 2 and pr["job_cost_ratio"] for pr in pairs), pairs
 
 
-def test_migration_0037():
-    """0037 applies on top of 0035 and downgrades cleanly (additive only)."""
+def test_migration_0038():
+    """0038 applies on top of 0037_job_resume_move and downgrades cleanly (additive only)."""
     from alembic import command
     from sqlalchemy import create_engine, text
 
@@ -521,7 +521,7 @@ def test_migration_0037():
     settings.database_url = url
     try:
         cfg = dbmod._alembic_config()
-        command.upgrade(cfg, "0037_measured_performance")
+        command.upgrade(cfg, "0038_measured_performance")
         eng = create_engine(url)
         cols = "SELECT column_name FROM information_schema.columns WHERE table_name = 'performance_observations'"
         with eng.connect() as c:
@@ -529,7 +529,7 @@ def test_migration_0037():
             assert {"workload_signature", "throughput", "throughput_unit", "overhead_s", "data_kind",
                     "provider", "observed_at"} <= have, have
             assert c.execute(text("SELECT count(*) FROM pg_indexes WHERE indexname = 'ux_perfobs_completed_job'")).scalar() == 1
-        command.downgrade(cfg, "0035_power_markets")
+        command.downgrade(cfg, "0037_job_resume_move")
         with eng.connect() as c:
             have = {r[0] for r in c.execute(text(cols))}
             assert "workload_signature" not in have and "gpu" in have, "0020 columns untouched"
@@ -544,7 +544,7 @@ PURE = [test_link_bandwidth, test_interconnect_evidence, test_parallelism, test_
         test_observation_rules, test_measured_runtime_and_confidence, test_confidence_levels, test_deltas,
         test_max_steps_and_deadline, test_mnist_catalog_entry, test_disclosure_of_new_blocks]
 DBT = [test_db_zero_data_is_graceful, test_db_record_jobs, test_db_recommend_prefers_measured,
-       test_db_deadline_and_explanation, test_db_llm_scale_up_blocks, test_migration_0037]
+       test_db_deadline_and_explanation, test_db_llm_scale_up_blocks, test_migration_0038]
 
 
 def main():

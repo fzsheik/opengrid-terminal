@@ -790,7 +790,7 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
   FLOPs, 35% utilization, range 20-50%) and a whole-job cost range at its billing unit. Never a benchmark, always
   labelled; without the dataset size runtime stays unknown and cost is scenarios. "Executable" needs the readiness checks and a
   supported workload (today only the MNIST template).
-- **Measured performance** (`intelligence/measured.py`, migration 0037): every completed REAL job (never sandbox /
+- **Measured performance** (`intelligence/measured.py`, migration 0038): every completed REAL job (never sandbox /
   simulated metrics / a mismatched GPU) becomes a consented `measured` observation keyed by workload signature; the
   recommender prefers it over the theoretical runtime for that GPU and labels it. No data yet: until real runs
   complete, every runtime stays theoretical. Backfill: `python -m intelligence.measured backfill`.

@@ -12,7 +12,7 @@ theoretical estimate for the same GPU and workload signature, and labels which o
 'measured_benchmark' or 'completed_job' rows with consent=true ever count as measured. account_id is a plain
 integer (no cross-domain foreign key).
 
-Migration 0037_measured_performance added the measurement columns (provider, workload signature, throughput and its
+Migration 0038_measured_performance added the measurement columns (provider, workload signature, throughput and its
 unit, the work measured, overhead, observed_at, data_kind) and a partial unique index so one job is recorded once.
 """
 
@@ -61,7 +61,7 @@ class PerformanceObservation(Base):
     job_id: Mapped[str | None] = mapped_column(String(64))
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    # 0037_measured_performance
+    # 0038_measured_performance
     provider: Mapped[str | None] = mapped_column(String(64))
     workload_signature: Mapped[str | None] = mapped_column(String(200))  # intelligence.measured.signature(...)
     micro_batch_size: Mapped[int | None] = mapped_column(Integer)

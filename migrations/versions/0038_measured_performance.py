@@ -2,18 +2,16 @@
 (intelligence/measured.py; methodology/recommendations.md "Measured performance"). Additive only: new nullable
 columns, one index, one partial unique index (one observation per job). No existing row or column changes.
 
-Revision ID: 0037_measured_performance
-Revises: 0035_power_markets
-NOTE: 0036 is reserved by a parallel branch. At merge, re-chain this revision's down_revision onto that 0036
-revision id so the history stays linear (single head).
+Revision ID: 0038_measured_performance
+Revises: 0037_job_resume_move
 """
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "0037_measured_performance"
-down_revision: Union[str, Sequence[str], None] = "0035_power_markets"  # re-chain onto 0036 at merge
+revision: str = "0038_measured_performance"
+down_revision: Union[str, Sequence[str], None] = "0037_job_resume_move"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
