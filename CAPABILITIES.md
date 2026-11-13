@@ -678,6 +678,22 @@ One real workload end to end: **"Train Your First AI Model: PyTorch MNIST"** (al
   approval / cost-guard path, as the original owner, on another provider, resuming from the latest checkpoint,
   with all attempts within `max_total_usd`; at most one successor per attempt (`UNIQUE(retry_of)`); "Attempt 2 of
   3" on the job page and My Jobs.
+- **Batches** (`jobs/batches.py`, `api/batches.py`, migration `0036_batches`; methodology/batches.md): many
+  independent jobs (a sweep from an explicit shard list or a grid, at most `BATCH_MAX_SHARDS` = 64) as one batch with
+  one budget, one approval and one status. Every shard is an ORDINARY job through `jobs.orchestrator.submit` (same
+  quote, route, guards, single provision call, idempotency). A **placement plan** from the live market spreads shards
+  by best-execution rank (price, availability, listed capacity, reliability where data exists) under a
+  **diversification cap** (default 50% per provider) and provider / region allow + deny lists, with per-shard price
+  and estimate and the total vs all on one cloud. **Budget** `max_total_usd` over all shards AND relaunches: each
+  submission reserves its ceiling in a ledger under a Postgres advisory lock (no overspend under concurrency), and the
+  reservation is the shard's cost limit, so the launch price cap binds it. **One approval** (`POST
+  /v1/batches/{id}/approve`, admin) approves every shard's exact quote via the existing `engine.approve`; a later shard
+  launches under it only within the approved provider + price tolerance, else waits for re-approval. Concurrency limit
+  with a queue (`batch_advance` pass, `BATCH_QUEUE_ENABLED`), `continue` / `stop_on_first_failure`, cancel through
+  the jobs cancel path, interrupted shards relaunched by `jobs/relaunch.py` inside the batch budget, a SIMULATED
+  sandbox mode. Web `/batches`, `/batch/<id>`; CLI `opengrid batch`; MCP `opengrid_preview_batch` /
+  `opengrid_batch_status`. Not a distributed training run and not inference load-balancing: N separate jobs placed,
+  paid for and reported together. Tested against fake provider APIs only; no real batch has run.
 - **Runner** (`runner/`): a cloud-init bootstrap (≈ 197 KB) installs hash-locked torch 2.4.1+cu121, checks
   nvidia-smi and CUDA, trains a small CNN, uploads `model.pt`, `config.json`, `metrics.json`, `env.json`,
   `manifest.json` (sha256-verified) and calls back with a per-job HMAC-derived token (never stored).
@@ -744,16 +760,17 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
   limits, never reads secrets/weights/datasets, never executes code, redacts secret-looking values, flags
   prompt-injection text; only the structured requirements ever leave the machine. Dry-run mode.
 - **CLI** (`cli/`, `uv tool install ./cli`): doctor, gpu search/show/compare/market, providers, analyze,
-  estimate, recommend, route preview, jobs list/status/logs/cancel, demo train (sandbox only), mcp; `--json`.
-  No command can provision.
+  estimate, recommend, route preview, jobs list/status/logs/cancel, batch preview/list/status/cancel/sandbox
+  (sandbox only), demo train (sandbox only), mcp; `--json`. No command can provision.
 - **MCP server**, one tool set (`cli/src/opengrid_cli/mcp_server.py`) in two deployments:
   - **hosted** at `<server>/mcp` (`api/mcp_remote.py`): streamable HTTP, stateless, JSON responses; connect with
     only the URL and `Authorization: Bearer opg_...` (never the site login, never anonymous, cross-site Origin
     refused). Tools call `/v1` in-process with the caller's key, so scopes, ownership, rate limits and usage
-    logging are the API's own. 12 tools (no local-file access) and 2 prompts. `/mcp` answers 503 (the site
+    logging are the API's own. 14 tools (no local-file access; incl. `opengrid_preview_batch`, which writes
+    nothing, and `opengrid_batch_status`) and 2 prompts. `/mcp` answers 503 (the site
     still starts) if the MCP SDK cannot be imported;
   - **local** (`opengrid mcp`, stdio; optional loopback HTTP; zero-install via
-    `uvx --from 'git+https://github.com/fzsheik/opengrid-terminal#subdirectory=cli' opengrid mcp`): 13 tools
+    `uvx --from 'git+https://github.com/fzsheik/opengrid-terminal#subdirectory=cli' opengrid mcp`): 15 tools
     (adds the local project analyzer) and 3 prompts.
   Tools are read-only except a non-provisioning route preview, the free MNIST sandbox demo
   (`opengrid_start_demo`: simulated, no provider, no GPU, no spend) and a confirm-gated job cancel; no tool can

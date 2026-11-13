@@ -92,7 +92,7 @@ Full docs: web/README.md.
     const seg0 = parts[1] || "";
     if (seg0 === "admin") return parts[2] ? "admin-" + parts[2] : "admin-execution";
     return { "": "home", gpu: "gpus", gpus: "gpus", provider: "providers", indices: "indices", compare: "compare", methodology: "methodology",
-      markets: "markets", overview: "markets", job: "jobs", jobs: "jobs", deployment: "deployments", developers: "developers" }[seg0] ?? seg0;
+      markets: "markets", overview: "markets", job: "jobs", jobs: "jobs", batch: "batches", deployment: "deployments", developers: "developers" }[seg0] ?? seg0;
   }
 
   // Old hash URLs from the first web UI -> new paths

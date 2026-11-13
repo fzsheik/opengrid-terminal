@@ -20,3 +20,4 @@ from store import live  # noqa: F401  (0031_stream_events: change-only events fr
 from store import context  # noqa: F401  (0032_context_series + 0033_equities: market context; internal equity bars)
 from store import shifts  # noqa: F401  (0029_news_history: major shifts + their related items)
 from store import power  # noqa: F401  (0035_power_markets: wholesale power series; never GPU data)
+from store import batches  # noqa: F401  (0036_batches: batch fan-out of ordinary jobs)

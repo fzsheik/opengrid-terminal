@@ -998,6 +998,7 @@
       root.replaceChildren(
         OG.head("My Jobs", "Your training jobs, simulated and real: where each one runs, how it's going and what it cost.",
           h("button", { class: "btn sm", type: "button", onclick: () => load() }, "Refresh"),
+          h("a", { class: "btn sm", href: "/batches?new=1", title: "Many jobs at once (a sweep), spread across clouds under one budget" }, "Run as a batch"),
           h("a", { class: "btn pri", href: "/jobs/new" }, "Start a job")),
         holder, advd, ask);
 

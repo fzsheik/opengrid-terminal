@@ -182,6 +182,10 @@ def resolve_key(key: str | None = None) -> tuple[str | None, str]:
 # The scope each private endpoint needs, so a 401/403 can say exactly what is missing.
 _SCOPES = (
     ("POST", re.compile(r"^/v1/route/preview$"), "route:preview"),
+    ("POST", re.compile(r"^/v1/batches/[^/]+/cancel$"), "route:execute"),
+    ("POST", re.compile(r"^/v1/batches$"), "route:execute"),
+    ("POST", re.compile(r"^/v1/batches/preview$"), "route:preview"),
+    ("GET", re.compile(r"^/v1/batches(/.*)?$"), "deployments:read"),
     ("POST", re.compile(r"^/v1/jobs/[^/]+/cancel$"), "route:execute"),
     ("POST", re.compile(r"^/v1/jobs$"), "route:execute"),
     ("POST", re.compile(r"^/v1/jobs/preview$"), "route:preview"),

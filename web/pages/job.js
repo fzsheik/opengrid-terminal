@@ -114,6 +114,8 @@
             h("button", { class: "btn sm", type: "button", onclick: () => load(), title: "Reload the job now" }, "Refresh")),
           resumeNote(),
           chainNote(),
+          job.batch ? h("p", { class: "note", role: "note" }, `Shard ${job.batch.shard_index} of ${job.batch.shards_total || "?"} in batch `,
+            h("a", { class: "lnk", href: "/batch/" + encodeURIComponent(job.batch.batch_id) }, job.batch.name || job.batch.batch_id)) : null,
           sandbox() ? h("div", { class: "jb-simban", role: "note" }, h("b", {}, "SIMULATED"), h("span", {}, "No GPU was used and nothing was charged. Every number on this page is synthetic.")) : null,
           flash,
           billingAlarm(),

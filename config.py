@@ -258,6 +258,10 @@ class Settings(BaseSettings):
     # route / approval / cost-guard path, as the job's original owner, within the job's retry.max_total_usd.
     job_auto_relaunch_enabled: bool = False
     job_relaunch_interval_seconds: int = 60      # the job_relaunch background pass
+    # Batch fan-out (jobs/batches.py; methodology/batches.md): N ordinary jobs under one budget / approval / status.
+    batch_max_shards: int = 64                   # hard cap on shards per batch (explicit list or expanded sweep)
+    batch_queue_enabled: bool = True             # OFF: no queued shard is submitted (status, approval, cancel still run)
+    batch_advance_interval_seconds: int = 30     # the batch_advance background pass
     # --- OpenGrid Assistant (assistant/, api/assistant.py; POST /v1/assistant) ---
     # The deterministic engine always works. An LLM is OPTIONAL and off unless BOTH a provider and its key are
     # set: ASSISTANT_LLM_PROVIDER=anthropic + ANTHROPIC_API_KEY (and `uv sync --extra llm` for the SDK).

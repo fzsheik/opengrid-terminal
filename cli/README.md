@@ -9,13 +9,17 @@ workload-aware compute recommendations, and read-only job status. It is packaged
 **No command and no MCP tool can spend money.** There is deliberately no `launch`, `route execute` or real
 `jobs submit` command, and no MCP tool (local or hosted) that provisions paid compute, submits a real job or
 executes code. A real, paid run is started by a person on the website (`<server>/jobs/new?preset=mnist`),
-where they confirm it; tool results link there. Only three things write anything on the server:
+where they confirm it; tool results link there. Only these write anything on the server:
 
 | what | writes | spends |
 |---|---|---|
 | `opengrid route preview` / `opengrid_preview_route` | a preview ticket + quote record (audit) | never |
 | `opengrid jobs cancel --yes` / `opengrid_cancel_job confirm=true` | cancels (rejects the approval, or terminates the GPU) | reduces spend |
 | `opengrid demo train` / `opengrid_start_demo` | a SANDBOX MNIST job: simulated, no provider called, no GPU | never |
+| `opengrid batch sandbox` | a SANDBOX batch (sandbox=true forced): simulated shards, no provider called | never |
+| `opengrid batch cancel --yes` | cancels a batch's queued and submitted shards | reduces spend |
+
+`opengrid batch preview` / `opengrid_preview_batch` and `opengrid_batch_status` write nothing.
 
 ## Connect an assistant in one step
 
@@ -128,6 +132,10 @@ opengrid jobs status <job-id>
 opengrid jobs logs <job-id> [--follow] [--after ID] [--limit 500]
 opengrid jobs cancel <job-id> --yes [--idempotency-key KEY]
 opengrid demo train [--epochs 3] [--follow]        # SANDBOX only
+opengrid batch preview --file batch.json           # the placement plan; writes nothing
+opengrid batch list | status <bat-id>
+opengrid batch cancel <bat-id> --yes
+opengrid batch sandbox --file batch.json           # SANDBOX only
 
 opengrid mcp                                       # run the MCP server on stdio
 opengrid mcp --http [--host 127.0.0.1] [--port 8765] [--allow-origin ORIGIN]

@@ -105,7 +105,9 @@ https://developer.nvidia.com/cuda-gpus; *CUDA C++ Programming Guide*, "Compute C
    with their codes and reasons. Multi-instance shapes are excluded (`multi_instance`).
 4. Apply the workload filters: vCPU, RAM and disk where the listing reports them (`insufficient_vcpu`,
    `insufficient_ram`, `insufficient_disk`). Then the cost bound (section 5), which excludes with
-   `over_budget`.
+   `over_budget`. `routing.exclude_providers` excludes those providers (`provider_excluded`);
+   `routing.include_providers` keeps only those (`provider_not_included`; a batch shard is pinned to its placement
+   this way, methodology/batches.md).
 5. **Cross-GPU price factor.** `rank_listings` scores price against *one GPU's* market median. Merging those
    scores across GPUs as they are would let a popular, expensive GPU (an H100 sitting at the H100 median)
    tie a cheap compatible GPU. For a job any compatible GPU can run, that is wrong. So the merged list

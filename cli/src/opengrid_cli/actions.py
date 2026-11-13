@@ -3,8 +3,8 @@
 Safety boundary (deliberate, see README "What this client can never do"):
   - nothing here provisions compute, submits a real job, or executes code;
   - the only mutations are: a route PREVIEW (writes an audit/preview ticket server-side, spends nothing),
-    a job CANCEL (spend-reducing, Idempotency-Key, explicit confirmation by the caller), and the MNIST
-    SANDBOX demo (simulated: no provider is called, no GPU exists, nothing is billed).
+    a job or batch CANCEL (spend-reducing, Idempotency-Key, explicit confirmation by the caller), the MNIST
+    SANDBOX demo and a SANDBOX batch (simulated: no provider is called, no GPU exists, nothing is billed).
 """
 
 from __future__ import annotations
@@ -201,4 +201,101 @@ def demo_train(c: Client, *, epochs: int = 3, idempotency_key: str | None = None
                             f"(`opengrid jobs status {d.get('job_id')}`) and cancel it if needed",
                             code="sandbox_not_confirmed", request_id=r.request_id)
     return {"job": job_summary(d), "idempotency_key": key, "simulated": True,
+            "replayed": (r.headers or {}).get("idempotent-replayed") == "true", "request_id": r.request_id}
+
+
+# ---------------------------------------------------------------- batches (preview, read, cancel; sandbox submit)
+
+BATCH_ID = re.compile(r"^bat-[0-9a-f]{8,32}\Z")
+_BATCH = ("batch_id", "name", "template", "status", "outcome", "finished", "sandbox", "simulated", "simulated_note",
+          "shards_total", "counts", "created_at", "finished_at")
+
+
+def check_batch_id(batch_id: str) -> str:
+    batch_id = (batch_id or "").strip()
+    if not BATCH_ID.match(batch_id):
+        raise RefusedError(f"not a batch id: {clip(batch_id, 60)!r} (expected bat-<hex>)", code="invalid_batch_id")
+    return batch_id
+
+
+def batch_summary(b: dict, *, shards: bool = True) -> dict:
+    out = {k: clip(b.get(k)) if not isinstance(b.get(k), dict) else b.get(k) for k in _BATCH if k in b}
+    for k in ("budget", "best"):
+        if b.get(k) is not None:
+            out[k] = b[k]
+    ap = b.get("approval") or {}
+    if ap:
+        out["approval"] = {k: ap.get(k) for k in ("status", "required", "approved_by", "approved_at")}
+        out["approval"]["waiting"] = len(ap.get("waiting") or [])
+    if b.get("providers"):
+        out["providers"] = [{k: p.get(k) for k in ("provider", "shards", "by_state", "committed_usd", "spent_usd")}
+                            for p in b["providers"]]
+    if shards and b.get("shards"):
+        rows, truncated = bound(b["shards"], 64)
+        out["shards"] = [{k: r.get(k) for k in ("shard_index", "config", "status", "provider", "job_id", "attempts",
+                                                 "metric", "reason_code")} for r in rows]
+        out["shards_truncated"] = truncated
+    if "cancel" in b:
+        out["cancel"] = {k: v for k, v in (b["cancel"] or {}).items() if k != "jobs"}
+    return out
+
+
+def batch_preview(c: Client, body: dict) -> dict:
+    """POST /v1/batches/preview: validation + the placement plan. Writes nothing, spends nothing."""
+    if not isinstance(body, dict):
+        raise RefusedError("the batch request must be a JSON object", code="invalid_request")
+    r = c.post("/v1/batches/preview", body)
+    d = r.data or {}
+    p = d.get("plan") or {}
+    shards, truncated = bound(p.get("shards") or [], 64)
+    return {"submission": d.get("submission"), "totals": p.get("totals"), "cap": p.get("cap"),
+            "alternatives": p.get("alternatives"), "warnings": p.get("warnings") or [], "would": p.get("would"),
+            "providers": [{k: x.get(k) for k in ("provider", "shards", "price_per_gpu_hour", "est_max_total_usd",
+                                                  "listed_capacity_shards", "approval_mode")}
+                          for x in p.get("providers") or []],
+            "shards": [{k: x.get(k) for k in ("shard_index", "config", "provider", "price_per_gpu_hour",
+                                               "est_max_total_usd", "reservation_usd", "reason")} for x in shards],
+            "shards_truncated": truncated, "unplaced": len(p.get("unplaced") or []),
+            "request_id": r.request_id, "as_of": (r.meta or {}).get("as_of")}
+
+
+def batches_list(c: Client, *, status: str | None = None, limit: int = 20) -> dict:
+    r = c.get("/v1/batches", params={"status": status, "limit": max(1, min(limit, 200))})
+    rows = r.data if isinstance(r.data, list) else []
+    return {"items": [batch_summary(b, shards=False) for b in rows], "returned": len(rows),
+            "request_id": r.request_id}
+
+
+def batch_status(c: Client, batch_id: str) -> dict:
+    batch_id = check_batch_id(batch_id)
+    r = c.get(f"/v1/batches/{seg(batch_id)}")
+    return {"batch": batch_summary(r.data or {}), "request_id": r.request_id,
+            "simulated": bool((r.meta or {}).get("simulated"))}
+
+
+def batch_cancel(c: Client, batch_id: str, *, confirm: bool, idempotency_key: str | None = None) -> dict:
+    """Cancel only: queued shards cancelled, submitted ones through the jobs cancel path. Spend-reducing."""
+    batch_id = check_batch_id(batch_id)
+    if confirm is not True:
+        raise RefusedError(f"cancelling {batch_id} needs explicit confirmation (CLI: --yes)",
+                           code="confirmation_required")
+    key = check_idempotency_key(idempotency_key)
+    r = c.post(f"/v1/batches/{seg(batch_id)}/cancel", {}, idempotency_key=key)
+    return {"batch": batch_summary(r.data or {}), "idempotency_key": key,
+            "replayed": (r.headers or {}).get("idempotent-replayed") == "true", "request_id": r.request_id}
+
+
+def batch_sandbox(c: Client, body: dict, *, idempotency_key: str | None = None) -> dict:
+    """A batch as a SANDBOX: sandbox=true is forced here and the server must confirm it; never a real run."""
+    if not isinstance(body, dict):
+        raise RefusedError("the batch request must be a JSON object", code="invalid_request")
+    key = check_idempotency_key(idempotency_key)
+    body = {**body, "sandbox": True}
+    r = c.post("/v1/batches", body, idempotency_key=key)
+    d = r.data or {}
+    if not (d.get("sandbox") or (r.meta or {}).get("simulated")):
+        raise OpenGridError(f"the server did not confirm batch {d.get('batch_id')} as a SANDBOX run; check it now "
+                            f"(`opengrid batch status {d.get('batch_id')}`) and cancel it if needed",
+                            code="sandbox_not_confirmed", request_id=r.request_id)
+    return {"batch": batch_summary(d), "idempotency_key": key, "simulated": True,
             "replayed": (r.headers or {}).get("idempotent-replayed") == "true", "request_id": r.request_id}

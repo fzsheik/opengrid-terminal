@@ -64,6 +64,8 @@ PAGES: list[tuple[str, str, str, bool]] = [
     ("/jobs", "Jobs", "Your training jobs: state, outcome, cost and results.", False),
     ("/jobs/new", "New job", "Start a training job: preview the route, submit for approval.", False),
     ("/jobs/{id}", "Job", "One training job: lifecycle, progress, logs, artifacts and cost.", False),
+    ("/batches", "Batches", "Batches of jobs: sweeps and shards spread across GPU clouds under one budget.", False),
+    ("/batch/{id}", "Batch", "One batch: shards, placement, budget, approval and the best result.", False),
     ("/reserve", "Reserve", "Reserved-compute price-lock requests: request, indicative reference, offer, accept.", False),
     ("/reserve/{id}", "Price-lock request", "One price-lock request: status, indicative reference, offer and history.", False),
     ("/route", "Route", "Best-execution routing for GPU workloads.", False),
@@ -107,7 +109,7 @@ PUBLIC_V1 = ("gpus", "markets", "listings", "indices", "events", "news", "provid
 # issues no quote, calls no provider); POST only because the question and context are a body.
 PUBLIC_POST = ("/v1/recommend/estimate", "/v1/recommend", "/v1/assistant", "/v1/costs/estimate")
 # Never public, whatever else matches: money, private data, operator functions.
-PRIVATE_V1 = ("route", "deployments", "keys", "admin", "ops", "me", "usage", "billing", "watchlists", "alerts", "credentials", "jobs", "quotes",
+PRIVATE_V1 = ("route", "deployments", "keys", "admin", "ops", "me", "usage", "billing", "watchlists", "alerts", "credentials", "jobs", "batches", "quotes",
               "reservations")
 # /internal areas readable without the site password when PUBLIC_PAGES is on (UI-only views that were public at
 # /v1). Not "live" (operator-only, as before).

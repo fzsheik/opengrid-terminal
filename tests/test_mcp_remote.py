@@ -157,7 +157,7 @@ def test_initialize_list_tools_and_prompts():
         assert "opengrid_analyze_project" not in names, names                      # reads local files: local only
         assert {"opengrid_get_job_logs", "opengrid_start_demo", "opengrid_search_gpus", "opengrid_cancel_job",
                 "opengrid_recommend_compute"} <= names, names
-        assert len(names) == 12, names
+        assert len(names) == 14, names
         rec = next(t for t in tools if t.name == "opengrid_recommend_compute")
         assert "project_path" not in rec.input_schema["properties"], rec.input_schema
         for t in tools:
