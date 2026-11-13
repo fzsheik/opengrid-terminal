@@ -495,6 +495,14 @@ def complete(job_id: str, body: dict, *, token_id: int | None = None, source: st
         status, out_outcome = job.status, job.outcome
     if not sim:
         sync_job(job_id, enforce=True)
+    if not sim and out_outcome == "succeeded":
+        # a completed REAL job becomes a measured performance observation (intelligence/measured.py); it re-checks
+        # every rule itself and never raises, so completion can never fail because of it
+        try:
+            from intelligence import measured
+            measured.record_safely(job_id)
+        except Exception:  # noqa: BLE001
+            pass
     return {"replayed": False, "job_status": status, "outcome": out_outcome}
 
 

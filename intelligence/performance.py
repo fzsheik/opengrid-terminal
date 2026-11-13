@@ -150,13 +150,26 @@ def work(req, profile: dict) -> dict:
     elif tr is not None and tr.dataset_samples and tr.seq_len:
         tokens = float(tr.dataset_samples) * tr.seq_len
         basis = f"{tr.dataset_samples:,.0f} samples x {tr.seq_len:,} tokens per sample"
+    steps = getattr(tr, "max_steps", None) if tr is not None else None
+    if tokens is None and steps and tr.seq_len and tr.global_batch_size:
+        # a step-bounded run: max_steps x global batch x sequence length tokens, whatever the epochs
+        tokens = float(steps) * tr.global_batch_size * tr.seq_len
+        basis = (f"{steps:,} steps x {tr.global_batch_size:,} sequences per step x {tr.seq_len:,} tokens "
+                 "(max_steps; every sequence assumed packed to the full length)")
+        A.append("tokens from max_steps x global batch x sequence length: shorter, unpacked sequences mean fewer")
+        return _work_out(tokens, 1.0, basis, A, method, m, profile, n_params)
     if tokens is None:
         return {"tokens": None, "flops": None,
-                "reason": "the amount of training data is unknown (dataset tokens, or samples and sequence length)"}
+                "reason": "the amount of training data is unknown (dataset tokens, samples and sequence length, or "
+                          "max_steps with global batch size and sequence length)"}
     epochs = tr.epochs if tr.epochs else 1.0
     if not tr.epochs:
         A.append("1 epoch assumed (epochs not stated)")
-    tokens *= epochs
+    return _work_out(tokens * epochs, epochs, basis, A, method, m, profile, n_params)
+
+
+def _work_out(tokens: float, epochs: float, basis: str, A: list, method: str, m: dict, profile: dict,
+              n_params: float) -> dict:
     k = 6 if method == "training_full" else 4
     ck = (profile.get("ckpt") or (None, None, None))
     ckpt = ck[1] if isinstance(ck, (list, tuple)) else ck

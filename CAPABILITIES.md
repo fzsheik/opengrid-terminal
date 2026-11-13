@@ -789,8 +789,17 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
   With the training dataset size (tokens x epochs) each option gets a theoretical runtime range (6/4/8 x N x T
   FLOPs, 35% utilization, range 20-50%) and a whole-job cost range at its billing unit. Never a benchmark, always
   labelled; without the dataset size runtime stays unknown and cost is scenarios. "Executable" needs the readiness checks and a
-  supported workload (today only the MNIST template). `performance_observations` table (0020) is ready for
-  measured benchmarks; no data yet.
+  supported workload (today only the MNIST template).
+- **Measured performance** (`intelligence/measured.py`, migration 0037): every completed REAL job (never sandbox /
+  simulated metrics / a mismatched GPU) becomes a consented `measured` observation keyed by workload signature; the
+  recommender prefers it over the theoretical runtime for that GPU and labels it. No data yet: until real runs
+  complete, every runtime stays theoretical. Backfill: `python -m intelligence.measured backfill`.
+- **Suitability, whole-job cost and explanations** (`intelligence/workload_fit.py`, `explain.py`): listing / spec
+  interconnect evidence and node fabric, parallelism strategy, communication vs compute per step, an inference
+  decode roofline against tokens/s and latency targets with cost per million tokens; ranking by whole-job cost
+  (+ measured provider time to capacity when known), `deadline_hours`, `shortest_estimated_runtime`; per-option
+  confidence with its weakest evidence and factor-by-factor deltas vs the recommended option; `multi_gpu` advice
+  (when not to go multi-GPU). Review: methodology/workload-intelligence-review.md.
 - **Local analyzer** (`cli/src/opengrid_cli/analyze`): allowlisted files only, `.gitignore`, symlink and size
   limits, never reads secrets/weights/datasets, never executes code, redacts secret-looking values, flags
   prompt-injection text; only the structured requirements ever leave the machine. Dry-run mode.
@@ -1300,7 +1309,7 @@ Every number OpenGrid publishes traces to a document in `methodology/` (also ser
 - **Reliability:** `uptime` · `probes` · `reliability`
 - **Execution:** `routing` · `best-execution` · `execution-safety` · `reconciliation` · `provider-capabilities` · `adapter-contract-audit` ·
   `first-live-route` · `routing-quality` · `economics` · `billing`
-- **Jobs, workloads and reservations:** `jobs` · `workloads` · `runner` · `recommendations` · `reservations`
+- **Jobs, workloads and reservations:** `jobs` · `workloads` · `runner` · `recommendations` · `workload-intelligence-review` · `reservations`
 - **Operations:** `alerts` · `security`
 
 Two internal-only methodology notes (`methodology/internal/equities.md`, `methodology/internal/natural-gas.md`) are
