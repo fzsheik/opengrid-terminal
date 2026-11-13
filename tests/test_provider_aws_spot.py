@@ -46,7 +46,9 @@ def provider(spot_status=200, spot_body=None):
 
 
 def fetch(prov):
-    return asyncio.run(prov.fetch())
+    """(us-east-1's price file, the Spot Advisor) of one poll; the other regions' files are 404s here."""
+    by = {r.endpoint: r for r in asyncio.run(prov.fetch())}
+    return by[ENDPOINT], by[SPOT_ADVISOR]
 
 
 def test_feed_stored_raw_gpu_rows_only():

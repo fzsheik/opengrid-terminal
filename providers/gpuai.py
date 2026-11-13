@@ -70,7 +70,9 @@ def _count(v) -> int | None:
 
 class GpuAiProvider(Provider):
     name = "gpuai"
-    polling = PollingPolicy(interval_seconds=900, timeout_seconds=30)
+    # Every 5 min (15 until 2026-11-13): prices moved on 68% of 15-minute polls (7,300 price moves over 3 days), so
+    # the slower loop was stamping several moves per poll. Two or three small public pages per poll.
+    polling = PollingPolicy(interval_seconds=300, timeout_seconds=30)
 
     def __init__(self, client: httpx.AsyncClient | None = None):
         super().__init__(

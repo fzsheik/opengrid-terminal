@@ -136,6 +136,11 @@ def build_fetchers() -> list[Provider]:
     if settings.clore_api_key:
         fetchers.append(CloreProvider(settings.clore_api_key))
 
+    # Alibaba Cloud spot: only with an AccessKey (no public spot price exists).
+    if settings.alibaba_access_key_id and settings.alibaba_access_key_secret:
+        from providers.alibaba import AlibabaProvider
+        fetchers.append(AlibabaProvider(settings.alibaba_access_key_id, settings.alibaba_access_key_secret))
+
     # Public price file + Spot Advisor feed; an IAM key pair (read-only EC2 market calls) adds spot listings,
     # spot placement scores (capacity tiers) and Capacity Block offerings (providers/aws.py).
     fetchers.append(AwsProvider(access_key_id=settings.aws_access_key_id,

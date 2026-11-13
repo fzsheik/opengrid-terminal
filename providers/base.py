@@ -54,6 +54,10 @@ class PollingPolicy:
         rate_limit                 (requests, per_seconds) this provider's calls may spend, a share of its
                                    documented limit; a token bucket in Provider.call() enforces it. None: no
                                    budget beyond the provider's own pacing.
+        align_offset_seconds       run the loop on the wall clock: at every multiple of the loop period plus this
+                                   offset (AWS: spot prices change exactly on the hour, so a 5-minute loop at
+                                   :00:30, :05:30, ... reads each change about 30 s after it). None: the loop period
+                                   counted from the last cycle's start.
 
     Each poll is told which cadences are due (Provider.due) so a provider whose price and capacity endpoints are
     separate can skip the one that is not; one that cannot split fetches both on the faster cadence.
@@ -65,6 +69,7 @@ class PollingPolicy:
     poll_seconds: float | None = None
     tier: str = ""
     rate_limit: tuple[int, float] | None = None
+    align_offset_seconds: float | None = None
 
     def __post_init__(self):
         if not self.tier:
@@ -86,6 +91,20 @@ class PollingPolicy:
 
     def cadence(self, stream: str) -> float:
         return self.capacity_seconds if stream == CAPACITY else float(self.interval_seconds)
+
+    def next_wait(self, started_monotonic: float, now_monotonic: float, now_wall: float) -> float:
+        """Seconds to sleep before the next cycle. Aligned: until the first wall-clock slot (period x n + offset)
+        after the one the cycle that just ran started in, or after now if that cycle overran it. Otherwise: the
+        period from the start of that cycle, so a slow fetch does not drift."""
+        period = self.loop_seconds
+        if self.align_offset_seconds is None:
+            return max(0.0, period - (now_monotonic - started_monotonic))
+        off = self.align_offset_seconds % period
+        started_wall = now_wall - (now_monotonic - started_monotonic)
+        nxt = ((started_wall - off) // period + 1) * period + off
+        while nxt <= now_wall:
+            nxt += period
+        return nxt - now_wall
 
 
 # A call waits inline for a rate-limit window at most this long; beyond it the call is not made this poll.

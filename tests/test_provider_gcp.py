@@ -12,6 +12,10 @@ Fixtures:
                                      shape fields only), trimmed to the MACHINES types + a4-highgpu-8g, 2026-11-01
     gcp_compute_accelerator_types.json  aggregated acceleratorTypes as stored (nvidia-* only), 2026-11-01
     gcp_calendar_advice_unavailable.json  the calendar-mode advice answer for this new project, 2026-11-01
+    gcp_catalog_spot_skus.json       the API's Spot component SKUs (GPU, the families' core/RAM, Local SSD) and every
+                                     A4 B200 slice SKU, fetched 2026-11-13
+    gcp_page_spot_prices_us_central1.json  the page's "Current Spot pricing" column for Iowa, fetched 2026-11-13: every
+                                     Spot shape is PROVEN by reproducing it from the Spot components
 
 The last test pushes the catalogue through raw storage, normalize + quality screening, the hourly rollup and the
 index vote in a scratch database.
@@ -57,8 +61,9 @@ def snap(payload, at=NOW):
     return SimpleNamespace(payload=payload, request=None, fetched_at=at)
 
 
-def listings(payload):
-    return {l.listing_id: l for l in GcpProvider.normalize({ENDPOINT: [snap(payload)]})}
+def listings(payload, market="on_demand"):
+    """The listings of one market (the on-demand proofs below predate Spot listings)."""
+    return {l.listing_id: l for l in GcpProvider.normalize({ENDPOINT: [snap(payload)]}) if l.market_type == market}
 
 
 def raises(fn, *a):
@@ -196,7 +201,7 @@ def with_zones(payload=None, mt=None, at=None, zones_at=NOW):
 
 def test_regions_from_compute_engine():
     iowa = listings(catalogue())
-    out = {l.listing_id: l for l in GcpProvider.normalize(with_zones())}
+    out = {l.listing_id: l for l in GcpProvider.normalize(with_zones()) if l.market_type == "on_demand"}
     regions = {l.region for l in out.values()}
     assert len(out) == 369 and len(regions) == 34, (len(out), len(regions))
     # Iowa keeps its ids and prices; only P100 goes: Compute Engine offers it in no zone at all any more.
@@ -215,7 +220,8 @@ def test_regions_from_compute_engine():
     # Offered but not priced on demand there (H200 in the Netherlands has only DWS / calendar SKUs): no listing.
     assert "europe-west4" in gcp.offered(with_zones()).machines["a3-ultragpu-8g"]
     assert "a3-ultragpu-8g:europe-west4" not in out
-    # A type that is not a proven shape (a4-highgpu-8g) never becomes a listing.
+    # A type with no proven on-demand shape (a4-highgpu-8g) never becomes an on-demand listing (its Spot price is
+    # proven: test_spot_proven_against_googles_page).
     assert not any(l.sku.startswith("a4-") for l in out.values())
 
 
@@ -231,10 +237,11 @@ def test_zone_shape_must_match():
 
 def test_zone_lists_stale_or_reshaped_fall_back_to_iowa():
     iowa = set(listings(catalogue()))
-    old = {l.listing_id for l in GcpProvider.normalize(with_zones(zones_at=NOW - timedelta(days=3)))}
+    ids = lambda by: {l.listing_id for l in GcpProvider.normalize(by) if l.market_type == "on_demand"}
+    old = ids(with_zones(zones_at=NOW - timedelta(days=3)))
     assert old == iowa, "zone lists older than COMPUTE_FRESH are not used"
-    assert {l.listing_id for l in GcpProvider.normalize(with_zones(mt={"oops": 1}))} == iowa
-    assert {l.listing_id for l in GcpProvider.normalize(with_zones(mt={"machineTypes": []}))} == iowa
+    assert ids(with_zones(mt={"oops": 1})) == iowa
+    assert ids(with_zones(mt={"machineTypes": []})) == iowa
 
 
 def test_regions_proven_against_googles_page():
@@ -378,7 +385,7 @@ def test_fetch_with_service_account():
             assert "authorization" not in r.headers
     # The stored zone lists make the normalizer open the regions.
     by_endpoint = {r.endpoint: [snap(r.payload, r.fetched_at)] for r in raw if r.ok}
-    assert len(GcpProvider.normalize(by_endpoint)) == 369
+    assert sum(l.market_type == "on_demand" for l in GcpProvider.normalize(by_endpoint)) == 369
     # Within 6 hours, the next poll is the catalogue only (one token, cached; zone lists and advice not due).
     again = asyncio.run(prov.fetch())
     assert [r.endpoint for r in again] == [ENDPOINT]
@@ -439,7 +446,8 @@ def test_pipeline():
             listed = s.execute(sql("SELECT count(*) FROM compute_listings WHERE provider = 'gcp'")).scalar()
             held = s.execute(sql("SELECT listing_id, rule FROM quality_quarantine WHERE status = 'pending'")).all()
         assert stored == 2 and bodies == 1, "the identical second body is stored once"
-        assert listed == 28, listed
+        assert listed == 33, listed  # 28 on-demand + 5 Spot (a4-highgpu-8g, four attachable GPUs; this older
+        # catalogue predates storing the Spot core/RAM SKUs, so no assembled Spot VM)
         assert not held, f"nothing held on clean data: {held}"
 
         rollups.rebuild()
@@ -452,7 +460,10 @@ def test_pipeline():
         h100 = votes[indices.gpu_index_id("NVIDIA H100 80GB SXM5") + ".hyperscaler"]
         assert set(h100) == {"gcp"} and abs(h100["gcp"][0] - 11.06125) < 1e-6, "cheapest A3: High, not Mega"
         assert "gcp" not in votes.get(indices.gpu_index_id("NVIDIA H100 80GB SXM5") + ".neocloud", {})
-        assert not any(k.endswith(".spot") and "gcp" in v for k, v in votes.items()), "no spot listings"
+        spot_votes = {k for k, v in votes.items() if k.endswith(".spot") and "gcp" in v}
+        assert spot_votes == {indices.gpu_index_id("NVIDIA B200 180GB SXM", "spot")}, spot_votes
+        b200 = votes[indices.gpu_index_id("NVIDIA B200 180GB SXM", "spot")]["gcp"][0]
+        assert abs(b200 - float(gcp.by_region(catalogue()["skus"], gcp.SPOT_B200_SLICE, spot=True)["us-central1"])) < 1e-9
 
         # A third poll with the service account: the zone lists open 34 regions; nothing is held by screening.
         prov, _ = _serve_all()
@@ -466,15 +477,69 @@ def test_pipeline():
                               {"t": responses[0].fetched_at}).scalar()
             held = s.execute(sql("SELECT listing_id, rule FROM quality_quarantine WHERE status = 'pending'")).all()
             failed = s.execute(sql("SELECT endpoint FROM raw_snapshots WHERE provider = 'gcp' AND NOT ok")).scalars().all()
-        assert (fresh, regions) == (369, 34), (fresh, regions)
+        assert (fresh, regions) == (416, 34), (fresh, regions)  # 369 on-demand + 47 Spot (see above)
         assert not held, f"nothing held: {held[:5]}"
         assert failed == [gcp.CALENDAR_ADVICE], "the advice answer is stored raw, as a failed call"
     finally:
         scratchdb.drop(db)
 
 
+def spot_catalogue():
+    return json.loads((FIX / "gcp_catalog_spot_skus.json").read_text())["skus"]
+
+
+def test_spot_proven_against_googles_page():
+    """Iowa Spot VM prices assembled from the Spot component SKUs equal Google's page exactly, for every A2/A3
+    shape and the B200 A4 (priced as eight all-inclusive GPU slices)."""
+    ref = json.loads((FIX / "gcp_page_spot_prices_us_central1.json").read_text())["machines"]
+    out = {l.sku: l for l in gcp.spot_listings(spot_catalogue(), None, NOW) if l.region == "us-central1"}
+    assert len(ref) == 13
+    for mtype, price in ref.items():
+        assert abs(out[mtype].price_per_instance_hour - D(price)) < D("0.000001"), (mtype, out[mtype].price_per_instance_hour, price)
+    a3 = out["a3-highgpu-8g"]
+    assert a3.listing_id == "a3-highgpu-8g:us-central1:spot" and a3.market_type == "spot" and a3.interruptible
+    assert a3.provider_tier == "hyperscaler" and a3.canonical_gpu_name == "NVIDIA H100 80GB SXM5"
+    assert a3.provider_changed_at == datetime(2026, 11, 12, 8, tzinfo=timezone.utc), "Google's effectiveTime"
+    # Spot-only shapes: H100 x1/x2/x4 are the same A3 components at 1/8, 1/4, 1/2 of the x8 shape.
+    for n in (1, 2, 4):
+        assert abs(out[f"a3-highgpu-{n}g"].price_per_instance_hour * 8 / n - a3.price_per_instance_hour) < D("0.000001")
+    assert out["a4-highgpu-8g"].canonical_gpu_name == "NVIDIA B200 180GB SXM" and out["a4-highgpu-8g"].gpu_count == 8
+    assert out["nvidia-tesla-t4"].provider_tier == "gpu-attachment", "an attachable GPU alone never votes"
+
+
+def test_spot_never_reads_other_usage():
+    skus = spot_catalogue()
+    base = {l.listing_id: l.price_per_instance_hour for l in gcp.spot_listings(skus, None, NOW)}
+    # DWS, calendar and commitment SKUs of the same B200 slice sit in the fixture and are not read as Spot.
+    assert any("DWS" in s["description"] and "B200" in s["description"] for s in skus)
+    assert any(s["category"]["usageType"] == "Commit1Yr" and "B200" in s["description"] for s in skus)
+    # An on-demand price never leaks into Spot, nor Spot into on-demand.
+    noisy = skus + [_sku("Nvidia H100 80GB GPU running in Americas", "us-central1", 99)]
+    assert {l.listing_id: l.price_per_instance_hour for l in gcp.spot_listings(noisy, None, NOW)} == base
+    # A second, different Spot H100 price for Iowa: the region is skipped, never guessed.
+    clash = skus + [_sku("Nvidia H100 80GB GPU attached to Spot Preemptible VMs running in Americas", "us-central1",
+                         99, usage="Preemptible")]
+    ids = {l.listing_id for l in gcp.spot_listings(clash, None, NOW)}
+    assert "a3-highgpu-8g:us-central1:spot" not in ids and "a2-highgpu-1g:us-central1:spot" in ids
+    # The catalogue filter keeps every Spot component, so the stored body can always be re-read.
+    for desc in ("Spot Preemptible A3 Instance Core running in Americas", "Spot Preemptible G2 Instance Ram running in Belgium",
+                 "SSD backed Local Storage attached to Spot Preemptible VMs in Iowa"):
+        assert gcp._KEEP.search(desc), desc
+    assert not gcp._KEEP.search("Spot Preemptible Z3 Instance Core running in Americas"), "not a GPU family"
+
+def test_spot_follows_offered_regions():
+    m, a = compute_lists()
+    where = gcp.offered(with_zones())
+    out = {l.listing_id: l for l in gcp.spot_listings(spot_catalogue(), where, NOW)}
+    for l in out.values():
+        sold = where.accelerators.get(l.sku, set()) if l.provider_tier == "gpu-attachment" else where.machines.get(l.sku, set())
+        assert l.region in sold, l.listing_id
+    assert "a3-highgpu-8g:europe-west4:spot" in out and out["a3-highgpu-8g:europe-west4:spot"].country == "NL"
+
+
 if __name__ == "__main__":
-    for t in (test_shapes_reproduce_googles_page_prices, test_normalize, test_conflicts_and_missing_components,
+    for t in (test_spot_proven_against_googles_page, test_spot_never_reads_other_usage, test_spot_follows_offered_regions,
+              test_shapes_reproduce_googles_page_prices, test_normalize, test_conflicts_and_missing_components,
               test_fail_closed, test_fetch, test_registry, test_regions_from_compute_engine, test_zone_shape_must_match,
               test_zone_lists_stale_or_reshaped_fall_back_to_iowa, test_regions_proven_against_googles_page,
               test_commitments_follow_offered_regions, test_calendar_advice_raw_only, test_fetch_with_service_account,

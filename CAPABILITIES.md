@@ -127,26 +127,27 @@ Each provider is one module with `fetch()` (network) and `normalize()` (pure, re
 Every provider polls on its own schedule; a slow or failing provider never holds up the others. Polling is
 tiered (methodology/freshness.md): each provider has a price and a capacity cadence and a request budget (a token
 bucket at about half of each documented limit), and rate-limit answers are stored as `throttled`, not as failures.
-Fast: Lambda, Hyperstack, RunPod 2 min, Vast 5 min; medium: Salad, DigitalOcean, Linode 5 min, AWS and Nebius spot
-every 5 min, most others 15 min; slow: Azure, GCP, Oracle, IBM, OVHcloud, E2E, Mithril 6 h, scraped pages, Vultr and
+Fast: Lambda, Hyperstack, RunPod 2 min, Vast 5 min; medium: Salad, DigitalOcean, Linode, GPU.ai 5 min, AWS spot every
+5 min on the clock (:00:30, :05:30: AWS reprices on the hour), Nebius spot 5 min, most others 15 min; slow: GCP 1 h
+(Spot), Azure, Oracle, IBM, OVHcloud, E2E, Mithril 6 h, scraped pages, Vultr and
 Exoscale 1 h. Lium is also read live from its public WebSocket (section 3.7).
 
 | Provider | Class | How OpenGrid reads prices |
 |---|---|---|
-| AWS | hyperscaler | public pricing file (on-demand, us-east-1); with a read-only IAM key, the EC2 API for spot prices per AZ in 15 regions and spot placement scores (six regions) (capacity tiers) |
-| Google Cloud | hyperscaler | Cloud Billing Catalog API, in every region Compute Engine offers the shape (read-only service account; us-central1 without it; attachable T4/V100 are GPU-only and kept out of market statistics) |
+| AWS | hyperscaler | public pricing files (on-demand in 15 regions; Compute Savings Plans, reserved section only); with a read-only IAM key, the EC2 API for spot prices per AZ in 15 regions and spot placement scores (six regions) (capacity tiers) |
+| Google Cloud | hyperscaler | Cloud Billing Catalog API, in every region Compute Engine offers the shape (read-only service account; us-central1 without it; attachable T4/V100 are GPU-only and kept out of market statistics); on-demand and Spot (Spot proven against Google's page; H100 x1/2/4 and B200 Spot-only shapes) |
 | Microsoft Azure | hyperscaler | public API (Retail Prices, eastus + eastus2) |
 | Oracle Cloud | hyperscaler | public pricing file (global list prices) |
 | IBM Cloud | general cloud | public API (Global Catalog; on-demand and spot) |
 | Lambda | neocloud | authenticated API |
-| RunPod | neocloud | authenticated API |
+| RunPod | neocloud | authenticated API (pods); serverless pools' flex and active prices from the same GraphQL (listed, never in market statistics) |
 | Hyperstack | neocloud | authenticated API |
 | Thunder Compute | neocloud | authenticated API (account key, as its terms require; live stock) |
 | DigitalOcean | general cloud | authenticated API |
 | Salad | decentralized | authenticated API |
 | Vast.ai | marketplace | public API |
 | Hyperbolic | marketplace | public API |
-| Lium | decentralized | public API |
+| Lium | decentralized | public API: free machines, plus the whole fleet incl. rented machines (rented stay listed, unavailable, at their current price; capacity = real utilisation) and Lium's 30-day paid-price stats (raw) |
 | Nosana | decentralized | public API |
 | SimplePod | marketplace | public API (open on-demand offers, Docker and VM) |
 | Clore.ai | marketplace | authenticated API (USD price per server per day plus the renter fee; median and cheapest ask) |
@@ -186,8 +187,8 @@ Exoscale 1 h. Lium is also read live from its public WebSocket (section 3.7).
 
 Candidates checked and **not** added (2026-10-13): Paperspace (its own page contradicts the aggregator),
 Thunder Compute (terms forbid anonymous automated access), TensorWave ("starting at" floors only), Fluidstack,
-Nscale and Sesterce (no public prices), Genesis Cloud (unreachable). Also declined: Alibaba Cloud (price API needs an
-AccessKey; robots.txt disallows the page's data files), TensorDock (key-only API, "from" floors), Cudo Compute (public
+Nscale and Sesterce (no public prices), Genesis Cloud (unreachable). Alibaba Cloud: built 2026-11-13 on the keyed ECS API (spot per zone + pay-as-you-go), dormant until an AccessKey
+is set (its public pages carry no spot price; robots.txt disallows the page's data files, which are not read). TensorDock (key-only API, "from" floors), Cudo Compute (public
 on-demand closed 2026-03-31), SF Compute (login; robots disallows /api), Akash (estimates from stale bids, variants mixed),
 io.net and Oblivus (terms forbid scraping), Prime Intellect (auth; an aggregator),
 Exoscale (no GPU model in the keyless feed), Gcore (EUR only without a key), Seeweb (EUR only), and
@@ -436,7 +437,7 @@ Structured events detected every hour, idempotent, with severities and the numbe
 
 ### 4.7 Reserved prices (`reserved.py`, methodology/reserved-prices.md)
 What providers charge for a commitment term, in their own section: page `/reserved`, `GET /v1/reserved` and
-`/v1/reserved/summary`. Six providers: Azure reserved instances (1 / 3 / 5 years), GCP committed use (1 / 3 years,
+`/v1/reserved/summary`. Seven providers: AWS Compute Savings Plans (1 / 3 years x No / Partial / All Upfront, 15 regions), Azure reserved instances (1 / 3 / 5 years), GCP committed use (1 / 3 years,
 every region Compute Engine offers the GPU), Jarvislabs (1 / 3 / 6 months, 1 / 2 years), Latitude (month, year),
 Together AI GPU Clusters (3-30 to 181+ days) and Verda's commitment ladder. **The hard rule:** none of these is a
 listing. They are computed on read from raw responses already stored (under labels no on-demand normalizer reads),

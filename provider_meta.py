@@ -43,6 +43,9 @@ class ProviderMeta:
 
 _ALL = [
     ProviderMeta("aws", "AWS", "hyperscaler", "public_pricing_file", "b0.p.awsstatic.com", "https://aws.amazon.com/ec2/pricing/"),
+    ProviderMeta("alibaba", "Alibaba Cloud", "hyperscaler", "authenticated_api", "ecs.<region>.aliyuncs.com",
+                 "https://www.alibabacloud.com/product/ecs-pricing-list",
+                 "GPU spot per zone and the pay-as-you-go price it is stated against; needs an AccessKey"),
     ProviderMeta("lambda", "Lambda", "neocloud", "authenticated_api", "cloud.lambdalabs.com", "https://lambda.ai"),
     ProviderMeta("runpod", "RunPod", "neocloud", "authenticated_api", "api.runpod.io", "https://www.runpod.io",
                  "secure cloud and community cloud are listed separately"),

@@ -109,8 +109,9 @@ async def poll_provider(provider: Provider) -> None:
             raise
         except Exception:
             log.exception("%s: poll failed", provider.name)
-        # Measure from the start of the cycle so a slow fetch does not drift; never call before a requested wait.
-        wait = max(0.0, policy.loop_seconds - (time.monotonic() - started))
+        # Measure from the start of the cycle (or to the next wall-clock slot, for an aligned policy) so a slow fetch
+        # does not drift; never call before a requested wait.
+        wait = policy.next_wait(started, time.monotonic(), time.time())
         hold = getattr(provider, "blocked_until", 0.0) - time.time()
         if hold > wait:
             log.info("%s: rate limited; next poll in %.0fs", provider.name, hold)

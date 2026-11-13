@@ -72,8 +72,10 @@ def test_retuned_providers_stay_within_documented_limits():
     assert (pol["nebius"].poll_seconds, pol["nebius"].interval_seconds) == (300, 3600)
     assert pol["salad"].interval_seconds == 300 and pol["salad"].rate_limit[0] <= 120          # 240/min
     # slow: list prices that change by announcement poll less, not more
-    for n in ("azure", "gcp", "oracle", "ibm"):
+    for n in ("azure", "oracle", "ibm"):
         assert pol[n].interval_seconds == 21600 and pol[n].tier == "slow", n
+    # GCP hourly since Spot listings (Spot moves at most daily; an unchanged catalogue is stored once)
+    assert pol["gcp"].interval_seconds == 3600 and pol["gcp"].tier == "slow"
     assert pol["azure"].rate_limit == (5, 60.0)                                                # ~10/min
     for n in ("coreweave", "together", "modal", "replicate", "baseten", "beam"):
         assert pol[n].interval_seconds == 3600 and pol[n].tier == "slow", n
@@ -81,8 +83,9 @@ def test_retuned_providers_stay_within_documented_limits():
     assert pol["lium"].interval_seconds == 900 and pol["denvr"].interval_seconds == 900
     # providers/batch-nokey: public no-key catalogues with undocumented limits stay medium (15 min); Exoscale's
     # price list changes by announcement and polls hourly
-    for n in ("akash", "cudo", "gpuai", "huggingface", "hydrahost", "paperspace"):
+    for n in ("akash", "cudo", "huggingface", "hydrahost", "paperspace"):
         assert pol[n].interval_seconds == 900 and pol[n].tier == "medium", n
+    assert pol["gpuai"].interval_seconds == 300 and pol["gpuai"].tier == "medium", "its prices move most polls"
     assert pol["exoscale"].interval_seconds == 3600 and pol["exoscale"].tier == "slow"
     for n in ("gcore", "fireworks", "ionos", "hetzner", "yotta", "sakura"):   # providers/batch-pages: price pages, hourly
         assert pol[n].interval_seconds == 3600 and pol[n].tier == "slow", n
@@ -319,6 +322,22 @@ def test_throttled_is_neither_failure_nor_silence():
     finally:
         fetch_mod.SessionLocal, normalize.SessionLocal = saved
         scratchdb.drop(db)
+
+
+def test_aws_loop_is_aligned_to_the_clock():
+    """AWS spot prices change exactly on the hour: the loop runs at :00:30, :05:30, ... whatever the cycle length,
+    never skips the slot after the one it started in, and a cycle that overran a slot goes to the next one."""
+    from providers.aws import AwsProvider
+    from providers.base import PollingPolicy
+
+    pol = AwsProvider.polling
+    assert pol.align_offset_seconds == 30 and pol.loop_seconds == 300
+    hour = 1_800_000_000.0  # a whole hour (and five minutes) in Unix time
+    for start, took, slot in ((0, 2, 30), (29, 0.5, 30), (30, 3, 330), (200, 3, 330), (299, 0.5, 330), (30, 400, 630)):
+        wait = pol.next_wait(start, start + took, hour + start + took)
+        assert abs(hour + start + took + wait - (hour + slot)) < 1e-6, (start, took, wait)
+    assert PollingPolicy(interval_seconds=120).next_wait(10, 15, 0) == 115, "unaligned: the period from the start"
+    assert AwsProvider().polling.align_offset_seconds == 30, "kept when the provider drops to hourly (no key)"
 
 
 if __name__ == "__main__":

@@ -1,4 +1,13 @@
-"""AWS EC2: on-demand list prices for GPU instances (public), plus spot prices and capacity signals with a read-only key.
+"""AWS EC2: on-demand list prices and Compute Savings Plan rates for GPU instances (public), plus spot prices and
+capacity signals with a read-only key.
+
+On-demand: the public price file of every region in SPOT_REGIONS (15; us-east-1 only until 2026-11-13), Linux,
+listing_id "<type>:<region>" (us-east-1's ids unchanged). One file per region, each stored as its own snapshot.
+
+Compute Savings Plans (since 2026-11-13; raw, read by reserved.py, never a listing): the public file behind
+aws.amazon.com/savingsplans/compute-pricing for every (term, payment option) in SAVINGS_PLAN_TERMS and every region
+in SPOT_REGIONS, GPU types only, every SAVINGS_PLAN_TTL. Per type and region: the plan's effective hourly rate
+(`price`) and the on-demand rate it discounts (`ec2:PricePerUnit`). savings_plan_prices() reads them.
 
 The public price file lists every EC2 instance type for one region and one
 operating system. It carries vCPU, memory and price but NOT the GPU model or
@@ -62,6 +71,7 @@ import time
 import urllib.parse
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, replace
+from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
@@ -79,13 +89,36 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 BASE_URL = "https://b0.p.awsstatic.com"
-# us-east-1, Linux, shared tenancy, no extra software.
-ENDPOINT = (
-    "/pricing/2.0/meteredUnitMaps/ec2/USD/current/ec2-ondemand-without-sec-sel/"
-    "US%20East%20%28N.%20Virginia%29/Linux/index.json"
-)
-REGION_NAME = "US East (N. Virginia)"
+# The name each region goes by in AWS's price files.
+REGION_NAMES = {
+    "us-east-1": "US East (N. Virginia)", "us-east-2": "US East (Ohio)", "us-west-1": "US West (N. California)",
+    "us-west-2": "US West (Oregon)", "ca-central-1": "Canada (Central)", "sa-east-1": "South America (Sao Paulo)",
+    "eu-west-1": "EU (Ireland)", "eu-west-2": "EU (London)", "eu-west-3": "EU (Paris)", "eu-central-1": "EU (Frankfurt)",
+    "eu-north-1": "EU (Stockholm)", "ap-northeast-1": "Asia Pacific (Tokyo)", "ap-northeast-2": "Asia Pacific (Seoul)",
+    "ap-southeast-2": "Asia Pacific (Sydney)", "ap-south-1": "Asia Pacific (Mumbai)",
+}
+_REGION_CODE = {v: k for k, v in REGION_NAMES.items()}
+ON_DEMAND = "/pricing/2.0/meteredUnitMaps/ec2/USD/current/ec2-ondemand-without-sec-sel/"
+
+
+def price_endpoint(region: str) -> str:
+    """One region's on-demand price file (Linux, shared tenancy, no extra software)."""
+    return f"{ON_DEMAND}{urllib.parse.quote(REGION_NAMES[region])}/Linux/index.json"
+
+
 REGION = "us-east-1"
+REGION_NAME = REGION_NAMES[REGION]
+ENDPOINT = price_endpoint(REGION)  # us-east-1, the only region before 2026-11-13
+
+# Compute Savings Plans: (years, payment option) as the file paths spell them.
+SAVINGS_PLANS = "/pricing/2.0/meteredUnitMaps/computesavingsplan/USD/current/compute-savings-plan-ec2/"
+SAVINGS_PLAN_TERMS = tuple((y, p) for y in (1, 3) for p in ("No Upfront", "Partial Upfront", "All Upfront"))
+SAVINGS_PLAN_TTL = timedelta(hours=2)  # AWS reprices rarely; 90 small files. Under reserved.py's stale mark (3 x 1 h)
+
+
+def savings_plan_endpoint(years: int, payment: str, region: str) -> str:
+    return (f"{SAVINGS_PLANS}{urllib.parse.quote(f'{years} year')}/{urllib.parse.quote(payment)}/"
+            f"{urllib.parse.quote(REGION_NAMES[region])}/Linux/Shared/index.json")
 
 # Sizes of the small GPU families: GPUs per size.
 _SMALL = {"xlarge": 1, "2xlarge": 1, "4xlarge": 1, "8xlarge": 1, "16xlarge": 1, "12xlarge": 4, "24xlarge": 4, "48xlarge": 8}
@@ -207,6 +240,10 @@ def parse_ec2(text: str) -> tuple[dict | None, str | None, str | None]:
     return body, None, None
 
 
+_SP_FIELDS = ("ec2:InstanceType", "price", "ec2:PricePerUnit", "LeaseContractLength", "PurchaseOption", "ec2:Tenancy",
+              "ec2:OperatingSystem", "rateCode")
+
+
 def _keep(row: dict) -> dict:
     return {
         k: row.get(k)
@@ -219,8 +256,10 @@ class AwsProvider(Provider):
     # The price file and the Spot Advisor change rarely and are large: hourly (the price cadence). With the key the loop
     # runs every 5 minutes for the spot change log (15 regions, ~1 page each, well inside EC2's Describe* bucket);
     # placement scores are the capacity cadence (PLACEMENT_TTL). Without the key: hourly, nothing else.
+    # Aligned to the clock: AWS moves GPU spot prices exactly on the hour (every change in the 2026-10-30 week was
+    # stamped hh:00:00), so the loop runs at :00:30, :05:30, ... and reads each change about 30 s after AWS makes it.
     polling = PollingPolicy(interval_seconds=3600, timeout_seconds=60, tier="medium", poll_seconds=300,
-                            capacity_interval_seconds=int(PLACEMENT_TTL.total_seconds()))
+                            capacity_interval_seconds=int(PLACEMENT_TTL.total_seconds()), align_offset_seconds=30)
 
     def __init__(self, client: httpx.AsyncClient | None = None, access_key_id: str | None = None,
                  secret_access_key: str | None = None):
@@ -249,8 +288,13 @@ class AwsProvider(Provider):
                 self._spot_since.setdefault(region, t)
 
     async def fetch(self) -> list[RawResponse]:
-        # The price file and Spot Advisor on the price cadence; spot (a change log) on every loop.
-        out = [*await self._prices(), await self._spot_advisor()] if PRICE in self.due else []
+        # The price files and Spot Advisor on the price cadence (Savings Plans every SAVINGS_PLAN_TTL); spot (a change
+        # log) on every loop.
+        out = []
+        if PRICE in self.due:
+            out = [*await self._prices(), await self._spot_advisor()]
+            if self._due("savings_plans", SAVINGS_PLAN_TTL, datetime.now(timezone.utc)):
+                out += await self._savings_plans()
         if self._keys:
             out += await self._ec2_market()
         return out
@@ -407,25 +451,51 @@ class AwsProvider(Provider):
                            duration_ms=int((time.perf_counter() - started) * 1000))
 
     async def _prices(self) -> list[RawResponse]:
-        raw = await self.get(ENDPOINT)
+        """Every region's on-demand price file, four at a time; each stored on its own (one failing region never
+        takes the others down)."""
+        return list(await gather_limited([lambda r=r: self._region_prices(r) for r in SPOT_REGIONS],
+                                         limit=SPOT_CONCURRENCY))
+
+    async def _region_prices(self, region: str) -> RawResponse:
+        name = REGION_NAMES[region]
+        raw = await self.get(price_endpoint(region))
         regions = (raw.payload or {}).get("regions") if isinstance(raw.payload, dict) else None
-        if not isinstance(regions, dict) or REGION_NAME not in regions:
-            return [raw] if not raw.ok else [raw.model_copy(update={"ok": False, "error": "aws: region missing from price file", "payload": None})]
+        if not isinstance(regions, dict) or name not in regions:
+            return raw if not raw.ok else raw.model_copy(update={"ok": False, "error": "aws: region missing from price file", "payload": None})
         # Keep the GPU instances only: the rest is 1,300 unrelated rows.
-        rows = [_keep(r) for r in regions[REGION_NAME].values() if r.get("Instance Type") in GPU_INSTANCES]
+        rows = [_keep(r) for r in regions[name].values() if r.get("Instance Type") in GPU_INSTANCES]
         # An unlisted GPU family is a new product to add to the table, not to guess.
-        for r in regions[REGION_NAME].values():
+        for r in regions[name].values():
             t = r.get("Instance Type", "")
             if re.match(r"^(p\d|g\d|dl\d|trn|inf)", t) and t not in GPU_INSTANCES and t.split(".")[0] not in _SEEN_UNLISTED:
                 _SEEN_UNLISTED.add(t.split(".")[0])
                 log.info("aws: instance family %s is not in GPU_INSTANCES; skipped", t.split(".")[0])
-        return [reshaped(raw, {"region": REGION_NAME, "rows": rows})]
+        return reshaped(raw, {"region": name, "rows": rows})
+
+    async def _savings_plans(self) -> list[RawResponse]:
+        """Compute Savings Plan rates, every (term, payment option) x region, GPU types only. A region AWS sells no
+        GPU plan in is a successful empty file (eu-west-3 today), not a failure."""
+        jobs = [(y, pay, r) for y, pay in SAVINGS_PLAN_TERMS for r in SPOT_REGIONS]
+        return list(await gather_limited([lambda j=j: self._savings_plan(*j) for j in jobs], limit=SPOT_CONCURRENCY))
+
+    async def _savings_plan(self, years: int, payment: str, region: str) -> RawResponse:
+        name = REGION_NAMES[region]
+        raw = await self.get(savings_plan_endpoint(years, payment, region))
+        regions = (raw.payload or {}).get("regions") if isinstance(raw.payload, dict) else None
+        if not raw.ok:
+            return raw
+        if not isinstance(regions, dict) or name not in regions:
+            return _failed(raw, "aws: region missing from savings plan file")
+        rows = [{k: r.get(k) for k in _SP_FIELDS} for r in regions[name].values()
+                if r.get("ec2:InstanceType") in GPU_INSTANCES and r.get("ec2:Tenancy") == "Shared"]
+        return reshaped(raw, {"region": name, "plan": "compute", "years": years, "payment": payment,
+                              "rows": sorted(rows, key=lambda r: str(r.get("ec2:InstanceType")))})
 
     @staticmethod
     def normalize(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:
         """One GPU instance type becomes one on-demand listing; with the key, one spot listing per type and AZ."""
         on_demand = _on_demand(by_endpoint)
-        # vCPU and memory are the instance type's, the same in every region: taken from the price file.
+        # vCPU and memory are the instance type's, the same in every region: taken from the price files.
         specs = {l.sku: (l.vcpu, l.ram_gb) for l in on_demand}
         return [*on_demand, *spot_listings(by_endpoint, specs)]
 
@@ -481,12 +551,22 @@ _CAPACITY_BLOCK_LOGGED = False
 
 
 def _on_demand(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:
-    rows = find_endpoint(by_endpoint, ENDPOINT)
-    if not rows:
-        return []
-    snapshot = rows[0]
+    """One listing per GPU type in each region's newest price file."""
     listings = []
-    for row in (snapshot.payload or {}).get("rows") or []:
+    for endpoint, snaps in sorted(by_endpoint.items()):
+        if ON_DEMAND not in endpoint or not snaps:
+            continue
+        listings += _region_on_demand(snaps[0])
+    return listings
+
+
+def _region_on_demand(snapshot) -> list[ComputeListing]:
+    payload = snapshot.payload if isinstance(snapshot.payload, dict) else {}
+    region = _REGION_CODE.get(payload.get("region"))
+    if region is None:
+        return []
+    listings = []
+    for row in payload.get("rows") or []:
         itype = row.get("Instance Type")
         spec = GPU_INSTANCES.get(itype)
         price = to_decimal(row.get("price"))
@@ -498,12 +578,12 @@ def _on_demand(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListi
             ComputeListing(
                 provider="aws",
                 sku=itype,
-                listing_id=f"{itype}:{REGION}",
+                listing_id=f"{itype}:{region}",
                 raw_gpu_name=raw_name,
                 canonical_gpu_name=canonical.canonical_gpu_name(raw_name),
                 gpu_count=count,
-                region=REGION,
-                country="US",
+                region=region,
+                country=SPOT_REGIONS.get(region),
                 price_per_gpu_hour=price / count,
                 price_per_instance_hour=price,
                 currency="USD",
@@ -563,6 +643,47 @@ def spot_listings(by_endpoint: "dict[str, list[RawSnapshot]]",
                 # A spot price says nothing about stock; placement scores are capacity rows of their own.
                 available=None, capacity=None, capacity_unit=None, vcpu=vcpu, ram_gb=ram, storage_gb=None,
                 observed_at=snap.fetched_at))
+    return out
+
+
+@dataclass(frozen=True)
+class SavingsPlanPrice:
+    """One Compute Savings Plan rate: what one instance of `instance_type` costs per hour under the plan."""
+
+    instance_type: str
+    region: str
+    years: int
+    payment: str            # No Upfront | Partial Upfront | All Upfront
+    price_per_instance_hour: Decimal
+    on_demand_per_instance_hour: Decimal | None
+    gpu_count: int
+    raw_gpu_name: str
+    canonical_gpu_name: str | None
+    observed_at: object
+
+
+def savings_plan_prices(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[SavingsPlanPrice]:
+    """Every stored Compute Savings Plan rate for a GPU type, newest file per (term, payment, region). Pure and
+    read-only: reserved.py reads it; normalize() never does (a commitment is never a listing)."""
+    out = []
+    for endpoint, snaps in sorted(by_endpoint.items()):
+        if SAVINGS_PLANS not in endpoint or not snaps:
+            continue
+        snap = snaps[0]
+        body = snap.payload if isinstance(snap.payload, dict) else {}
+        region, years, payment = _REGION_CODE.get(body.get("region")), body.get("years"), body.get("payment")
+        if region is None or (years, payment) not in SAVINGS_PLAN_TERMS:
+            continue
+        for row in body.get("rows") or []:
+            itype = row.get("ec2:InstanceType")
+            spec = GPU_INSTANCES.get(itype)
+            price = to_decimal(row.get("price"))
+            if spec is None or price is None or price <= 0:
+                continue
+            count, raw_name = spec
+            od = to_decimal(row.get("ec2:PricePerUnit"))
+            out.append(SavingsPlanPrice(itype, region, years, payment, price, od if od and od > 0 else None, count,
+                                        raw_name, canonical.canonical_gpu_name(raw_name), snap.fetched_at))
     return out
 
 

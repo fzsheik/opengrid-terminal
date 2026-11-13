@@ -11,9 +11,27 @@ the N x N link matrix are dropped.
 
 Capacity: each executor reports `gpu_count` and `available_gpu_count`. Summed per
 (machine type, city) they are true counts, the only provider here that gives them.
+
+Rented machines (since 2026-11-13). /api/executors lists only machines with a free GPU; a fully rented one simply
+vanishes from it. Lium's public nodes feed (NODES, `include_rented=true`, no key) lists the whole fleet with each
+machine's price, the same ids as /api/executors. So:
+    * a fully rented machine stays one listing at its current price, available false, capacity 0: the price a renter
+      is paying right now, and a rental starts or ends as an availability change of the same listing (history);
+    * capacity counts the whole fleet (free out of ALL GPUs, not out of the free machines' GPUs), so utilisation is
+      real: about 77% rented on 2026-11-13, where the executors list alone read about 8%.
+Only machines the nodes feed shows FULLY rented and that are absent from the (fresher) executors list are added; a
+machine it shows free but the executors list has dropped was rented or went offline since, and is left to the next
+poll. The nodes feed names a GPU "H200" or "RTX 5090"; the executors list names it the nvidia-smi way ("NVIDIA H200",
+"NVIDIA GeForce RTX 5090"). A rented-only machine takes the name another machine of the same model carries in the
+executors list of this round, else machine_name() (checked against every pair seen on 2026-11-13).
+
+Lium's public market statistics (STATS, no key; refreshed every 5 min by Lium): per GPU model the GPUs listed and
+rented, the cheapest ask, the 30-day median PAID price and utilisation, and 30 days of daily GMV, GPU-hours and
+rental counts. Raw only (market_stats() reads it); `generated_at` is dropped so an unchanged answer is stored once.
 """
 
 import logging
+import re
 from typing import TYPE_CHECKING
 
 import httpx
@@ -30,6 +48,18 @@ log = logging.getLogger(__name__)
 
 BASE_URL = "https://lium.io"
 ENDPOINT = "/api/executors"
+NODES = "/api/public/v1/nodes"
+STATS = "/api/public/v1/stats"
+_NODE_FIELDS = ("id", "gpu_model", "gpu_count", "available_gpu_count", "available_now", "price_per_gpu_hour",
+                "min_rentable_gpu_count", "tier", "country_code", "city", "cpu_count", "ram_gb", "disk_gb",
+                "gpu_memory_gb", "gpu_interconnect")
+_GEFORCE = re.compile(r"^RTX \d{4}(?: Ti| SUPER| Ti SUPER)?$")
+
+
+def machine_name(gpu_model: str) -> str:
+    """The executors list's (nvidia-smi) name for a nodes-feed GPU model: "RTX 5090" -> "NVIDIA GeForce RTX 5090",
+    "H200" -> "NVIDIA H200", "RTX 6000 Ada Generation" -> "NVIDIA RTX 6000 Ada Generation"."""
+    return "NVIDIA " + ("GeForce " if _GEFORCE.match(gpu_model) else "") + gpu_model
 
 KIB_PER_GIB = 1024 * 1024
 
@@ -105,7 +135,19 @@ class LiumProvider(Provider):
         raw = await self.get(ENDPOINT)
         if isinstance(raw.payload, list):
             raw = reshaped(raw, [_keep(e) for e in raw.payload])
-        return [raw]
+        nodes = await self.get(NODES, params={"include_rented": "true"})
+        body = nodes.payload.get("nodes") if nodes.ok and isinstance(nodes.payload, dict) else None
+        if nodes.ok:
+            nodes = (reshaped(nodes, sorted(({k: n.get(k) for k in _NODE_FIELDS} for n in body if isinstance(n, dict)),
+                                            key=lambda n: str(n.get("id"))))
+                     if isinstance(body, list) else
+                     nodes.model_copy(update={"ok": False, "payload": None, "error": "lium: nodes reshaped"}))
+        stats = await self.get(STATS)
+        if stats.ok:
+            stats = (reshaped(stats, {k: v for k, v in stats.payload.items() if k != "generated_at"})
+                     if isinstance(stats.payload, dict) and isinstance(stats.payload.get("models"), list) else
+                     stats.model_copy(update={"ok": False, "payload": None, "error": "lium: stats reshaped"}))
+        return [raw, nodes, stats]
 
     @staticmethod
     def normalize(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:
@@ -158,16 +200,18 @@ class LiumProvider(Provider):
                     changed_at_basis="exact" if stream_times.get(str(e["id"])) else None,
                 )
             )
-        return listings
+        return listings + rented_listings(by_endpoint, snapshot.payload)
 
     @staticmethod
     def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
-        """Executors summed per (machine type, city): free GPUs out of all GPUs."""
+        """The whole fleet (executors + the machines the nodes feed shows fully rented) summed per (machine type,
+        city): free GPUs out of all GPUs."""
         rows = find_endpoint(by_endpoint, ENDPOINT)
         if not rows or not isinstance(rows[0].payload, list):
             return []
+        fleet = [*rows[0].payload, *(_as_executor(n, names) for n, names in _rented_nodes(by_endpoint, rows[0].payload))]
         sums: dict[tuple, list[int]] = {}
-        for e in rows[0].payload:
+        for e in fleet:
             name, total, free = e.get("machine_name"), e.get("gpu_count"), e.get("available_gpu_count")
             if not name or not isinstance(total, int) or total < 1 or not isinstance(free, int):
                 continue
@@ -181,3 +225,58 @@ class LiumProvider(Provider):
             in_stock=free > 0, available_count=free, total_count=total, count_unit="gpu",
             raw_value=f"{free}/{total}", source=ENDPOINT, observed_at=rows[0].fetched_at)
             for (name, city, country), (free, total, per_host) in sums.items()]
+
+
+def _rented_nodes(by_endpoint: "dict[str, list[RawSnapshot]]", executors: list) -> list[tuple[dict, dict]]:
+    """(node, model -> executors name) for every machine the newest nodes snapshot shows fully rented and the
+    executors list does not carry. Empty without a nodes snapshot or when it is reshaped."""
+    snaps = by_endpoint.get(NODES) or []
+    nodes = snaps[0].payload if snaps else None
+    if not isinstance(nodes, list):
+        return []
+    listed = {str(e.get("id")) for e in executors if isinstance(e, dict)}
+    by_id = {str(e.get("id")): e for e in executors if isinstance(e, dict)}
+    names = {n.get("gpu_model"): by_id[str(n.get("id"))].get("machine_name") for n in nodes
+             if isinstance(n, dict) and str(n.get("id")) in by_id and by_id[str(n.get("id"))].get("machine_name")}
+    return [(n, names) for n in nodes if isinstance(n, dict) and n.get("id") and str(n["id"]) not in listed
+            and n.get("gpu_model") and isinstance(n.get("gpu_count"), int) and n["gpu_count"] > 0
+            and n.get("available_gpu_count") == 0]
+
+
+def _as_executor(node: dict, names: dict) -> dict:
+    """A rented node in the executors list's shape (the fields capacity and listings read)."""
+    return {"id": node["id"], "machine_name": names.get(node["gpu_model"]) or machine_name(node["gpu_model"]),
+            "gpu_count": node["gpu_count"], "available_gpu_count": 0, "city": node.get("city"),
+            "country_code": node.get("country_code"), "tier": node.get("tier"), "price_per_gpu": node.get("price_per_gpu_hour"),
+            "is_spot": node.get("tier") == "spot", "cpu_count": node.get("cpu_count"), "ram_gb": node.get("ram_gb"),
+            "disk_gb": node.get("disk_gb")}
+
+
+def rented_listings(by_endpoint: "dict[str, list[RawSnapshot]]", executors: list) -> list[ComputeListing]:
+    """One listing per fully rented machine (module docstring): its current price, available false, capacity 0,
+    observed when the nodes feed was read."""
+    snaps = by_endpoint.get(NODES) or []
+    out = []
+    for node, names in _rented_nodes(by_endpoint, executors):
+        e = _as_executor(node, names)
+        per_gpu = to_decimal(e["price_per_gpu"])
+        if per_gpu is None or per_gpu <= 0:
+            continue
+        out.append(ComputeListing(
+            provider="lium", sku=e["machine_name"], listing_id=str(e["id"]), raw_gpu_name=e["machine_name"],
+            canonical_gpu_name=canonical.canonical_gpu_name(e["machine_name"]), gpu_count=e["gpu_count"],
+            region=e["city"], country=e["country_code"], price_per_gpu_hour=per_gpu,
+            price_per_instance_hour=per_gpu * e["gpu_count"], currency="USD",
+            market_type="spot" if e["is_spot"] else "on_demand", provider_tier=e["tier"], interruptible=e["is_spot"],
+            available=False, capacity=0, capacity_unit="gpu", vcpu=e["cpu_count"],
+            ram_gb=e["ram_gb"], storage_gb=e["disk_gb"], observed_at=snaps[0].fetched_at))
+    return out
+
+
+def market_stats(by_endpoint: "dict[str, list[RawSnapshot]]") -> dict | None:
+    """Lium's own market statistics from the newest stored STATS snapshot (raw, as Lium publishes them), with the
+    time OpenGrid read them. None without one."""
+    snaps = by_endpoint.get(STATS) or []
+    if not snaps or not isinstance(snaps[0].payload, dict):
+        return None
+    return {**snaps[0].payload, "observed_at": snaps[0].fetched_at}

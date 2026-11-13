@@ -159,6 +159,10 @@ class Settings(BaseSettings):
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
     aws_default_region: str = "us-east-1"
+    # Alibaba Cloud AccessKey (international-site account, RAM user with read-only ECS Describe* only) for GPU spot
+    # prices (providers/alibaba.py). Signature v1; sent only to ecs.<region>.aliyuncs.com, never stored or logged.
+    alibaba_access_key_id: str | None = None
+    alibaba_access_key_secret: str | None = None
     # Per-provider launch defaults (JSON), e.g. {"lambda": {"ssh_key": "opengrid"},
     # "hyperstack": {"ssh_key": "k", "image": "Ubuntu Server 22.04 LTS R535 CUDA 12.2",
     # "environments": {"CANADA-1": "default-CANADA-1"}}}. See routing/adapters/*.py.

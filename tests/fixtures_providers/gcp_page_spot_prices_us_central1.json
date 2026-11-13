@@ -1,0 +1,18 @@
+{
+ "source": "cloud.google.com/products/compute/pricing/accelerator-optimized, 'Current Spot pricing (USD)' column, Iowa (us-central1), fetched 2026-11-13",
+ "machines": {
+  "a2-highgpu-1g": "2.188015",
+  "a2-highgpu-2g": "4.37603",
+  "a2-highgpu-4g": "8.75206",
+  "a2-highgpu-8g": "17.50412",
+  "a2-megagpu-16g": "33.20056",
+  "a2-ultragpu-1g": "3.036224795",
+  "a2-ultragpu-2g": "6.072449589",
+  "a2-ultragpu-4g": "12.144899178",
+  "a2-ultragpu-8g": "24.289798356",
+  "a3-highgpu-8g": "52.700460712",
+  "a3-megagpu-8g": "50.232828712",
+  "a3-ultragpu-8g": "50.871161425",
+  "a4-highgpu-8g": "43.5968"
+ }
+}

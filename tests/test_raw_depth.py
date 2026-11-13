@@ -89,10 +89,10 @@ def _lium_raw():
     body = json.loads((FIX / "lium_executor_8x.json").read_text())
 
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json=body)
+        return httpx.Response(200, json=body) if request.url.path == "/api/executors" else httpx.Response(404)
 
     prov = LiumProvider(httpx.AsyncClient(base_url="https://lium.io", transport=httpx.MockTransport(handler)))
-    (raw,) = asyncio.run(prov.fetch())
+    raw = asyncio.run(prov.fetch())[0]  # the executors list (the nodes and stats feeds are 404s here)
     return raw, body[0]
 
 

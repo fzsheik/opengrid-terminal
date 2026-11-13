@@ -38,9 +38,21 @@ SKUs, not checked against a page (methodology/gcp-regions.md).
 
 Calendar-mode advice (capacity): see `calendar_advice` below. Raw only for now; no capacity rows.
 
-Raw: only the SKUs that matter (GPU resource group, the machine families' core and RAM, Local SSD) are stored, with
-every usage type, so Spot, 1- and 3-year commitments and Calendar Mode can be read later without refetching.
-Listings: on-demand only for now.
+Raw: only the SKUs that matter (GPU resource group, the machine families' core and RAM, on-demand and Spot, Local
+SSD) are stored, with every usage type, so 1- and 3-year commitments and Calendar Mode can be read later without
+refetching.
+
+Listings: on-demand, and Spot (since 2026-11-13). A Spot VM price is the same assembly from the Spot SKUs of each
+component ("... attached to Spot Preemptible VMs", "Spot Preemptible A3 Instance Core", Spot Local SSD), listed
+`<machine type>:<region>:spot`, market spot, interruptible. Proven like on-demand: assembled for Iowa it reproduces
+the "Current Spot pricing" column of Google's page exactly for every A2 and A3 shape and for a4-highgpu-8g
+(tests/test_provider_gcp.py). Google changes Spot prices at most once a day (pricingInfo.effectiveTime, kept as
+provider_changed_at). Two kinds of shape are Spot only:
+    a4-highgpu-8g          B200 x8: Google prices it as 8 "A4 Nvidia B200 (1 gpu slice)" SKUs, everything included;
+                           the page prints its Spot price (proven) but no on-demand one, so on-demand stays out.
+    a3-highgpu-1g/2g/4g    H100 x1/2/4, sold only as Spot or Flex-start: the same A3 components, with the shape
+                           Compute Engine itself reports (vCPUs, memory, Local SSD partitions); the page prints no
+                           price for them, so they are assembled, not page-checked.
 
 These are list prices, which is why the provider class is "hyperscaler". Replaced the price-page scraper 2026-10-30.
 """
@@ -119,7 +131,23 @@ FAMILY = {f: (rf"^{f} Instance Core running in ", rf"^{f} Instance Ram running i
           for f in ("A3", "A3Plus", "A3Ultra", "A2", "G2", "G4")}
 SSD = r"^SSD backed Local Storage(?: in .+)?$"
 _ONDEMAND_ONLY = re.compile(r"Spot|Preemptible|DWS|Calendar|Reserved|Commitment|Sole Tenancy|Custom", re.I)
-_KEEP = re.compile("|".join([*GPU.values(), *(p for pair in FAMILY.values() for p in pair), SSD]))
+
+# Spot components. GPU SKUs say "<GPU> attached to Spot Preemptible VMs running in ..."; core and RAM SKUs
+# "Spot Preemptible <family> Instance Core running in ..."; Local SSD "SSD backed Local Storage attached to Spot
+# Preemptible VMs". Google files most of them under usageType Preemptible, the A4 slice under OnDemand: the
+# description decides, not the usage type.
+SPOT_GPU = {k: p.replace(r" GPU running in ", r" GPU attached to Spot Preemptible VMs running in ")
+            .replace(r"^RTX 6000 96GB running in ", r"^RTX 6000 96GB attached to Spot Preemptible VMs running in ")
+            for k, p in GPU.items()}
+SPOT_FAMILY = {f: (rf"^Spot Preemptible {f} Instance Core running in ", rf"^Spot Preemptible {f} Instance Ram running in ")
+               for f in FAMILY}
+SPOT_SSD = r"^SSD backed Local Storage attached to Spot Preemptible VMs(?: in .+)?$"
+SPOT_B200_SLICE = r"^Spot Preemptible A4 Nvidia B200 \(1 gpu slice\) running in "
+_NOT_SPOT = re.compile(r"DWS|Calendar|Reserved|Commitment|Sole Tenancy|Custom|Defined Duration", re.I)
+
+_KEEP = re.compile("|".join([*GPU.values(), *(p for pair in FAMILY.values() for p in pair), SSD,
+                             *SPOT_GPU.values(), *(p for pair in SPOT_FAMILY.values() for p in pair), SPOT_SSD,
+                             SPOT_B200_SLICE]))
 
 # machine type -> (GPUs, GPU key, accelerator type, core/RAM family, vCPUs, RAM GiB, bundled Local SSD GiB)
 # Proven against Google's Iowa page prices (see the module docstring). A3 High's page prints 1,871 GB of memory;
@@ -137,6 +165,13 @@ MACHINES: dict[str, tuple[int, str, str, str, int, int, int]] = {
     "g2-standard-48": (4, "l4", "nvidia-l4", "G2", 48, 192, 0),
     "g2-standard-96": (8, "l4", "nvidia-l4", "G2", 96, 384, 0),
 }
+# Spot-only machine types (see the module docstring), same tuple. a3-highgpu-1g/2g/4g: the shapes Compute Engine
+# reports (26/52/104 vCPUs, 239,616/479,232/958,464 MB, 2/4/8 Local SSD partitions), checked per zone by _shape_ok.
+SPOT_MACHINES: dict[str, tuple[int, str, str, str, int, int, int]] = {
+    f"a3-highgpu-{n}g": (n, "h100", "nvidia-h100-80gb", "A3", 26 * n, 234 * n, 750 * n) for n in (1, 2, 4)}
+# a4-highgpu-8g: priced as GPU slices with everything included (no core, RAM or SSD components).
+SPOT_SLICED = {"a4-highgpu-8g": (8, "nvidia-b200", 224, 3968, 12000)}  # GPUs, accelerator, vCPUs, GiB, Local SSD GiB
+
 # attachable GPU key -> accelerator type (the GPU alone, per GPU)
 ATTACHABLE = {"t4": "nvidia-tesla-t4", "p4": "nvidia-tesla-p4", "v100": "nvidia-tesla-v100", "p100": "nvidia-tesla-p100"}
 
@@ -214,7 +249,10 @@ def _region(zone: str) -> str:
 
 def _shape_ok(mtype: str, m: dict) -> bool:
     """The zone's machine type is exactly the proven shape (so the proven price assembly applies there)."""
-    count, _, accel, _, vcpu, ram, lssd = MACHINES[mtype]
+    if mtype in SPOT_SLICED:
+        count, accel, vcpu, ram, lssd = SPOT_SLICED[mtype]
+    else:
+        count, _, accel, _, vcpu, ram, lssd = MACHINES.get(mtype) or SPOT_MACHINES[mtype]
     accels = [(a.get("guestAcceleratorType"), a.get("guestAcceleratorCount")) for a in m.get("accelerators") or []]
     partitions = (m.get("bundledLocalSsds") or {}).get("partitionCount") or 0
     return (m.get("guestCpus") == vcpu and m.get("memoryMb") == ram * 1024 and accels == [(accel, count)]
@@ -259,7 +297,7 @@ def offered(by_endpoint: "dict[str, list[RawSnapshot]]") -> Offered | None:
     machines: dict[str, set[str]] = {}
     for m in machines_raw:
         name, zone = m.get("name"), m.get("zone")
-        if name not in MACHINES or not zone:
+        if name not in MACHINES and name not in SPOT_MACHINES and name not in SPOT_SLICED or not zone:
             continue
         if _shape_ok(name, m):
             machines.setdefault(name, set()).add(_region(zone))
@@ -285,25 +323,32 @@ def unit_price(sku: dict) -> Decimal | None:
     return Decimal(str(p.get("units") or 0)) + Decimal(p.get("nanos") or 0) / Decimal(10**9)
 
 
-def _on_demand_skus(skus: list[dict], pattern: str):
-    """The priced on-demand SKUs of one component: (sku, unit price)."""
+def _on_demand_skus(skus: list[dict], pattern: str, spot: bool = False):
+    """The priced on-demand (or, with spot, Spot) SKUs of one component: (sku, unit price). Spot SKUs are told by
+    their description (the Spot patterns), whatever usage type Google files them under; commitments never match."""
     rx = re.compile(pattern)
     for s in skus:
         d = s.get("description") or ""
-        if (s.get("category") or {}).get("usageType") != "OnDemand" or not rx.search(d) or _ONDEMAND_ONLY.search(d):
+        usage = (s.get("category") or {}).get("usageType")
+        if not rx.search(d):
+            continue
+        if spot:
+            if usage not in ("Preemptible", "OnDemand") or _NOT_SPOT.search(d) or "Spot" not in d:
+                continue
+        elif usage != "OnDemand" or _ONDEMAND_ONLY.search(d):
             continue
         price = unit_price(s)
         if price is not None:
             yield s, price
 
 
-def effective_by_region(skus: list[dict], pattern: str) -> dict[str, datetime]:
+def effective_by_region(skus: list[dict], pattern: str, spot: bool = False) -> dict[str, datetime]:
     """Per region, the newest `pricingInfo.effectiveTime` among one component's on-demand SKUs (changed_at.py).
     Google reports it within the queried range, so it is a lower bound: the price was in force by then."""
     import changed_at
 
     out: dict[str, datetime] = {}
-    for s, _price in _on_demand_skus(skus, pattern):
+    for s, _price in _on_demand_skus(skus, pattern, spot):
         t = changed_at.parse_time(((s.get("pricingInfo") or [{}])[0] or {}).get("effectiveTime"))
         if t is None:
             continue
@@ -312,10 +357,11 @@ def effective_by_region(skus: list[dict], pattern: str) -> dict[str, datetime]:
     return out
 
 
-def by_region(skus: list[dict], pattern: str) -> dict[str, Decimal]:
-    """On-demand price per region for one component. A region priced twice with different values is dropped."""
+def by_region(skus: list[dict], pattern: str, spot: bool = False) -> dict[str, Decimal]:
+    """On-demand (or Spot) price per region for one component. A region priced twice with different values is
+    dropped."""
     out, conflict = {}, set()
-    for s, price in _on_demand_skus(skus, pattern):
+    for s, price in _on_demand_skus(skus, pattern, spot):
         for region in s.get("serviceRegions") or []:
             if region in out and out[region] != price:
                 conflict.add(region)
@@ -326,12 +372,13 @@ def by_region(skus: list[dict], pattern: str) -> dict[str, Decimal]:
     return out
 
 
-def _listing(sku, accel, count, price, region, observed_at, tier, vcpu=None, ram=None, **changed) -> ComputeListing:
+def _listing(sku, accel, count, price, region, observed_at, tier, vcpu=None, ram=None, spot=False,
+             **changed) -> ComputeListing:
     return ComputeListing(
         **changed,
         provider="gcp",
         sku=sku,
-        listing_id=f"{sku}:{region}",
+        listing_id=f"{sku}:{region}:spot" if spot else f"{sku}:{region}",
         raw_gpu_name=accel,
         canonical_gpu_name=canonical.canonical_gpu_name(accel),
         gpu_count=count,
@@ -340,9 +387,9 @@ def _listing(sku, accel, count, price, region, observed_at, tier, vcpu=None, ram
         price_per_gpu_hour=price / count,
         price_per_instance_hour=price,
         currency="USD",
-        market_type="on_demand",
+        market_type="spot" if spot else "on_demand",
         provider_tier=tier,
-        interruptible=False,
+        interruptible=spot,
         available=None,  # a price list says nothing about capacity
         capacity=None,
         capacity_unit=None,
@@ -355,9 +402,10 @@ def _listing(sku, accel, count, price, region, observed_at, tier, vcpu=None, ram
 
 class GcpProvider(Provider):
     name = "gcp"
-    # List prices change rarely; the catalogue is ~7 pages, the Compute Engine zone lists ~5 more every 6 hours.
-    # Slow tier: the Catalog is 'up to 12 h old' by Google's own account, so every 6 h loses nothing.
-    polling = PollingPolicy(interval_seconds=21600, timeout_seconds=180, tier="slow")
+    # The catalogue is ~7 pages, the Compute Engine zone lists ~5 more every 6 hours. Hourly since Spot listings
+    # (2026-11-13): Google moves Spot prices at most once a day, at a stated effectiveTime; an hourly read has the new
+    # price within the hour of Google publishing it, and an unchanged catalogue is stored once (deduplicated).
+    polling = PollingPolicy(interval_seconds=3600, timeout_seconds=180, tier="slow")
 
     def __init__(self, api_key: str, client: httpx.AsyncClient | None = None,
                  service_account: "gcp_auth.ServiceAccount | None" = None, project_id: str | None = None,
@@ -535,7 +583,50 @@ class GcpProvider(Provider):
                 if region in sold:
                     listings.append(_listing(accel, accel, 1, g, region, snapshot.fetched_at, "gpu-attachment",
                                              **since(region, GPU[key])))
-        return listings
+        return listings + spot_listings(skus, where, snapshot.fetched_at)
+
+
+def spot_listings(skus: list[dict], where: "Offered | None", observed_at) -> list[ComputeListing]:
+    """One Spot listing per (machine type, region) and per (attachable GPU, region), from the Spot SKUs of the same
+    components and the same offered regions as on-demand; plus the Spot-only shapes (module docstring)."""
+    gpu = {k: by_region(skus, p, spot=True) for k, p in SPOT_GPU.items()}
+    fam = {f: (by_region(skus, c, spot=True), by_region(skus, r, spot=True)) for f, (c, r) in SPOT_FAMILY.items()}
+    ssd = {r: p / HOURS_PER_MONTH for r, p in by_region(skus, SPOT_SSD, spot=True).items()}
+    slices = by_region(skus, SPOT_B200_SLICE, spot=True)
+    patterns = {*SPOT_GPU.values(), *(x for cr in SPOT_FAMILY.values() for x in cr), SPOT_SSD, SPOT_B200_SLICE}
+    eff = {p: effective_by_region(skus, p, spot=True) for p in patterns}
+
+    def since(region: str, *pats: str) -> dict:
+        times = [eff[p].get(region) for p in pats]
+        if not times or any(t is None for t in times):
+            return {}
+        # Spot prices take effect at a stated time (at most daily), not "by" a time: the catalogue reports when.
+        return {"provider_changed_at": max(times), "changed_at_basis": "lower_bound"}
+
+    out = []
+    for mtype, (count, key, accel, family, vcpu, ram, lssd) in {**MACHINES, **SPOT_MACHINES}.items():
+        cores, mem = fam[family]
+        sold = where.machines.get(mtype, set()) if where else set(FALLBACK_REGIONS)
+        for region, g in sorted(gpu[key].items()):
+            if region not in sold or region not in cores or region not in mem or (lssd and region not in ssd):
+                continue
+            price = count * g + vcpu * cores[region] + ram * mem[region] + (lssd * ssd[region] if lssd else 0)
+            parts = (SPOT_GPU[key], *SPOT_FAMILY[family]) + ((SPOT_SSD,) if lssd else ())
+            out.append(_listing(mtype, accel, count, price, region, observed_at, "hyperscaler", vcpu=vcpu,
+                                ram=float(ram), spot=True, **since(region, *parts)))
+    for mtype, (count, accel, vcpu, ram, _lssd) in SPOT_SLICED.items():
+        sold = where.machines.get(mtype, set()) if where else set(FALLBACK_REGIONS)
+        for region, g in sorted(slices.items()):
+            if region in sold:
+                out.append(_listing(mtype, accel, count, count * g, region, observed_at, "hyperscaler", vcpu=vcpu,
+                                    ram=float(ram), spot=True, **since(region, SPOT_B200_SLICE)))
+    for key, accel in ATTACHABLE.items():
+        sold = where.accelerators.get(accel, set()) if where else set(FALLBACK_REGIONS)
+        for region, g in sorted(gpu[key].items()):
+            if region in sold:
+                out.append(_listing(accel, accel, 1, g, region, observed_at, "gpu-attachment", spot=True,
+                                    **since(region, SPOT_GPU[key])))
+    return out
 
 
 # --------------------------------------------------------------------------- commitments (read on demand, never a listing)

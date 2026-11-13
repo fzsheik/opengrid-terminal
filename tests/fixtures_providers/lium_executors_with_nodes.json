@@ -1,0 +1,849 @@
+[
+ {
+  "id": "6c5f66c8-d6ba-4f87-8466-b728520e9095",
+  "machine_name": "NVIDIA H200",
+  "price_per_gpu": 4.08,
+  "pending_price_per_hour": null,
+  "price_change_effective_date": null,
+  "validator_hotkey": "5F7X5UpKSr26KU3jKfpLmT8kuKtBNyHhEnfS8xtxPCqCb13p",
+  "gpu_count": 8,
+  "available_gpu_count": 8,
+  "specs": {
+   "os": "Debian GNU/Linux 13 (trixie)",
+   "cpu": {
+    "count": 127,
+    "model": "Intel(R) Xeon(R) Platinum 8468"
+   },
+   "gpu": {
+    "count": 8,
+    "driver": "580.173.02",
+    "details": [
+     {
+      "cuda": "9.0",
+      "name": "NVIDIA H200",
+      "capacity": 143771,
+      "power_limit": 490,
+      "power_max_limit": 700,
+      "power_min_limit": 200,
+      "power_default_limit": 700
+     },
+     {
+      "cuda": "9.0",
+      "name": "NVIDIA H200",
+      "capacity": 143771,
+      "power_limit": 490,
+      "power_max_limit": 700,
+      "power_min_limit": 200,
+      "power_default_limit": 700
+     },
+     {
+      "cuda": "9.0",
+      "name": "NVIDIA H200",
+      "capacity": 143771,
+      "power_limit": 490,
+      "power_max_limit": 700,
+      "power_min_limit": 200,
+      "power_default_limit": 700
+     },
+     {
+      "cuda": "9.0",
+      "name": "NVIDIA H200",
+      "capacity": 143771,
+      "power_limit": 490,
+      "power_max_limit": 700,
+      "power_min_limit": 200,
+      "power_default_limit": 700
+     },
+     {
+      "cuda": "9.0",
+      "name": "NVIDIA H200",
+      "capacity": 143771,
+      "power_limit": 490,
+      "power_max_limit": 700,
+      "power_min_limit": 200,
+      "power_default_limit": 700
+     },
+     {
+      "cuda": "9.0",
+      "name": "NVIDIA H200",
+      "capacity": 143771,
+      "power_limit": 490,
+      "power_max_limit": 700,
+      "power_min_limit": 200,
+      "power_default_limit": 700
+     },
+     {
+      "cuda": "9.0",
+      "name": "NVIDIA H200",
+      "capacity": 143771,
+      "power_limit": 490,
+      "power_max_limit": 700,
+      "power_min_limit": 200,
+      "power_default_limit": 700
+     },
+     {
+      "cuda": "9.0",
+      "name": "NVIDIA H200",
+      "capacity": 143771,
+      "power_limit": 490,
+      "power_max_limit": 700,
+      "power_min_limit": 200,
+      "power_default_limit": 700
+     }
+    ],
+    "cuda_driver": 13000
+   },
+   "ram": {
+    "total": 1651343712.0,
+    "tenant_ceiling": 1591969397.0,
+    "pod_reserve": 59374315
+   },
+   "kernel": "6.8.0-1067-nvidia",
+   "is_spot": false,
+   "network": {
+    "upload_speed": null,
+    "download_speed": null,
+    "ema_upload_speed": null,
+    "ema_download_speed": null,
+    "verifyx_upload_speed": null,
+    "verifyx_download_speed": null,
+    "ema_verifyx_upload_speed": 7973.247195277432,
+    "ema_verifyx_download_speed": 6840.5037015455655
+   },
+   "hard_disk": {
+    "free": 1872457676,
+    "used": 76941364,
+    "total": 1949399040,
+    "disk_type": "unknown",
+    "utilization": 3.946927356648334,
+    "engy_cache_used_gb": 0,
+    "engy_cache_released_gb": null
+   },
+   "port_range": null,
+   "split_disk": null,
+   "disk_health": {
+    "read_only_mounts": [],
+    "write_probe": "ok"
+   },
+   "gpu_metrics": {
+    "n": 4096,
+    "cc": "9.0",
+    "device": "NVIDIA H200",
+    "vram_gb": 150.1,
+    "sm_count": 132,
+    "clock_mhz": 1980,
+    "fp32_tflops": 8.12,
+    "fp32_cov_pct": 0.001,
+    "fp32_median_tflops": 8.12
+   },
+   "interconnect": {
+    "p2p": true,
+    "matrix": [
+     [
+      "X",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18"
+     ],
+     [
+      "NV18",
+      "X",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18"
+     ],
+     [
+      "NV18",
+      "NV18",
+      "X",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18"
+     ],
+     [
+      "NV18",
+      "NV18",
+      "NV18",
+      "X",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18"
+     ],
+     [
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "X",
+      "NV18",
+      "NV18",
+      "NV18"
+     ],
+     [
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "X",
+      "NV18",
+      "NV18"
+     ],
+     [
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "X",
+      "NV18"
+     ],
+     [
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "NV18",
+      "X"
+     ]
+    ],
+    "nvlink": true,
+    "gpu_count": 8,
+    "gpu_pairs": 28,
+    "p2p_pairs": 28,
+    "pcie_class": null,
+    "nvlink_links": 18,
+    "nvlink_pairs": 28,
+    "p2p_ok_pairs": 28,
+    "nvlink_active_links": 18
+   },
+   "job_batch_id": "2026-11-13 03:22:24",
+   "port_mappings": null,
+   "sysbox_runtime": true,
+   "tdx_host_supported": true,
+   "available_port_maps": null,
+   "kernel_scrape_error": null,
+   "available_port_count": 302,
+   "ncu_profiling_access": "unrestricted",
+   "gpu_power_cap_capable": true,
+   "power_cap_probe_error": null,
+   "tdx_attestation_passed": false,
+   "infiniband_scrape_error": "/sys/class/infiniband lists no devices",
+   "storage_limit_supported": true,
+   "interconnect_scrape_error": null,
+   "ncu_profiling_scrape_error": null
+  },
+  "active": null,
+  "is_responsive": null,
+  "uptime_in_minutes": 6540,
+  "miner_hotkey": "5Dq59iZtpC2NiMffCHbvE8Eb3UBNxqhDYVSVCV1a9xY7Ks3S",
+  "location": {
+   "id": "61270438-f58b-4f30-a0c6-dcfaf4f6badb",
+   "created_at": "2026-11-13T03:50:39.711287",
+   "updated_at": "2026-11-13T03:50:39.711288",
+   "country": "Finland",
+   "country_code": "FI",
+   "region": "18",
+   "region_name": "Uusimaa",
+   "city": "Helsinki",
+   "zip": "00100",
+   "lat": 60.1719,
+   "lon": 24.9347,
+   "timezone": "Europe/Helsinki",
+   "source": "ip-api,ipinfo,ipapi"
+  },
+  "is_slow_machine": false,
+  "effective_upload_speed_mbps": 7973.247195277432,
+  "effective_download_speed_mbps": 6840.5037015455655,
+  "interconnect": {
+   "gpu_count": 8,
+   "gpu_pairs": 28,
+   "nvlink": true,
+   "nvlink_links": 18,
+   "nvlink_pairs": 28,
+   "nvlink_active_links": 18,
+   "pcie_class": null,
+   "p2p": true,
+   "p2p_pairs": 28,
+   "p2p_ok_pairs": 28,
+   "matrix": [
+    [
+     "X",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18"
+    ],
+    [
+     "NV18",
+     "X",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18"
+    ],
+    [
+     "NV18",
+     "NV18",
+     "X",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18"
+    ],
+    [
+     "NV18",
+     "NV18",
+     "NV18",
+     "X",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18"
+    ],
+    [
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "X",
+     "NV18",
+     "NV18",
+     "NV18"
+    ],
+    [
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "X",
+     "NV18",
+     "NV18"
+    ],
+    [
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "X",
+     "NV18"
+    ],
+    [
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "NV18",
+     "X"
+    ]
+   ]
+  },
+  "tier": "secure",
+  "offers_bare_metal": false,
+  "last_verified_at": "2026-11-13T03:44:15.259100Z",
+  "reliability_score": 99.2,
+  "node_reliability_pct": null,
+  "node_reliability_new": false,
+  "provider_spot_avg_uptime_hours": null,
+  "frequent_rent_failures": false,
+  "provider_rating": null,
+  "provider_notes": [
+   "Data in the pod volume (usually /root) and attached Volumes survives a reboot"
+  ],
+  "provider_key": "5Dq59iZtpC2NiMffCHbvE8Eb3UBNxqhDYVSVCV1a9xY7Ks3S",
+  "gpu_power_limited": false,
+  "gpu_power_limit_w": 700,
+  "gpu_power_limit_default_w": 700,
+  "distance_mile": null,
+  "is_bookmarked": false,
+  "min_gpu_count_for_rental": null,
+  "min_gpu_count_for_ssh_only_rental": null,
+  "max_cuda_version": 13.0,
+  "is_whole_host_free": true,
+  "has_no_pending_rental": true,
+  "infiniband_fabric_rentable": false,
+  "roce_fabric_rentable": false,
+  "efa_fabric_rentable": false,
+  "operated_by_lium": false,
+  "provider_display_name": null,
+  "scheduled_notice": null,
+  "removal_at": null,
+  "ncu_profiling_enabled": true,
+  "disk_health_ok": true,
+  "on_infiniband_fabric": false,
+  "on_roce_fabric": false,
+  "on_efa_fabric": false,
+  "nvlink": true,
+  "gpu_class": "NVIDIA H200",
+  "gpu_class_display": "NVIDIA H200"
+ },
+ {
+  "id": "735eaf10-f00f-4c1e-a350-664838640ce6",
+  "machine_name": "NVIDIA RTX 6000 Ada Generation",
+  "price_per_gpu": 0.91,
+  "pending_price_per_hour": null,
+  "price_change_effective_date": null,
+  "validator_hotkey": "5F7X5UpKSr26KU3jKfpLmT8kuKtBNyHhEnfS8xtxPCqCb13p",
+  "gpu_count": 1,
+  "available_gpu_count": 1,
+  "specs": {
+   "os": "Debian GNU/Linux 13 (trixie)",
+   "cpu": {
+    "count": 11,
+    "model": "Intel(R) Xeon(R) Platinum 8352Y CPU @ 2.20GHz"
+   },
+   "gpu": {
+    "count": 1,
+    "driver": "580.126.09",
+    "details": [
+     {
+      "cuda": "8.9",
+      "name": "NVIDIA RTX 6000 Ada Generation",
+      "capacity": 49140,
+      "power_limit": 276,
+      "power_max_limit": 300,
+      "power_min_limit": 100,
+      "power_default_limit": 300
+     }
+    ],
+    "cuda_driver": 13000
+   },
+   "ram": {
+    "total": 74196496.0,
+    "tenant_ceiling": 68874466.0,
+    "pod_reserve": 5322030
+   },
+   "kernel": "6.8.0-90-generic",
+   "is_spot": false,
+   "network": {
+    "upload_speed": 288.0475989186725,
+    "download_speed": 1496.6006081737853,
+    "ema_upload_speed": 397.09088232697695,
+    "ema_download_speed": 1759.1753926168562,
+    "verifyx_upload_speed": null,
+    "verifyx_download_speed": null,
+    "ema_verifyx_upload_speed": 2149.038185022333,
+    "ema_verifyx_download_speed": 2988.805392357422
+   },
+   "hard_disk": {
+    "free": 260060972,
+    "used": 84943976,
+    "total": 359958360,
+    "disk_type": "unknown",
+    "utilization": 23.59827842309316,
+    "engy_cache_used_gb": 0,
+    "engy_cache_released_gb": null
+   },
+   "port_range": "40000-65535",
+   "split_disk": null,
+   "disk_health": {
+    "read_only_mounts": [],
+    "write_probe": "ok"
+   },
+   "gpu_metrics": {
+    "n": 4096,
+    "cc": "8.9",
+    "device": "NVIDIA RTX 6000 Ada Generation",
+    "vram_gb": 50.9,
+    "sm_count": 142,
+    "clock_mhz": 2505,
+    "fp32_tflops": 7.69,
+    "fp32_cov_pct": 1.569,
+    "fp32_median_tflops": 7.69
+   },
+   "interconnect": {
+    "p2p": null,
+    "matrix": [
+     [
+      "X"
+     ]
+    ],
+    "nvlink": null,
+    "gpu_count": 1,
+    "gpu_pairs": 0,
+    "p2p_pairs": 0,
+    "pcie_class": null,
+    "nvlink_links": null,
+    "nvlink_pairs": 0,
+    "p2p_ok_pairs": 0,
+    "nvlink_active_links": null
+   },
+   "job_batch_id": "2026-11-13 03:22:24",
+   "port_mappings": null,
+   "sysbox_runtime": true,
+   "tdx_host_supported": false,
+   "available_port_maps": null,
+   "kernel_scrape_error": null,
+   "available_port_count": 301,
+   "ncu_profiling_access": "restricted",
+   "gpu_power_cap_capable": true,
+   "power_cap_probe_error": null,
+   "tdx_attestation_passed": false,
+   "infiniband_scrape_error": "/sys/class/infiniband does not exist",
+   "storage_limit_supported": false,
+   "interconnect_scrape_error": null,
+   "ncu_profiling_scrape_error": null
+  },
+  "active": null,
+  "is_responsive": null,
+  "uptime_in_minutes": 233490,
+  "miner_hotkey": "5DhzqmmkD99d8MFbEEFgtQYSUWyYHRLNJKpVjYQFn5d6hJsv",
+  "location": {
+   "id": "8f8e854d-6499-4571-9db1-4d7d99cfcb23",
+   "created_at": "2026-11-13T03:50:39.712100",
+   "updated_at": "2026-11-13T03:50:39.712101",
+   "country": "United States",
+   "country_code": "US",
+   "region": "IA",
+   "region_name": "Iowa",
+   "city": "Des Moines",
+   "zip": "50309",
+   "lat": 41.5876,
+   "lon": -93.6194,
+   "timezone": "America/Chicago",
+   "source": null
+  },
+  "is_slow_machine": false,
+  "effective_upload_speed_mbps": 2149.038185022333,
+  "effective_download_speed_mbps": 2988.805392357422,
+  "interconnect": {
+   "gpu_count": 1,
+   "gpu_pairs": 0,
+   "nvlink": null,
+   "nvlink_links": null,
+   "nvlink_pairs": 0,
+   "nvlink_active_links": null,
+   "pcie_class": null,
+   "p2p": null,
+   "p2p_pairs": 0,
+   "p2p_ok_pairs": 0,
+   "matrix": [
+    [
+     "X"
+    ]
+   ]
+  },
+  "tier": "secure",
+  "offers_bare_metal": false,
+  "last_verified_at": "2026-11-13T03:44:33.566635Z",
+  "reliability_score": 99.0,
+  "node_reliability_pct": null,
+  "node_reliability_new": false,
+  "provider_spot_avg_uptime_hours": null,
+  "frequent_rent_failures": false,
+  "provider_rating": {
+   "average": 4.0,
+   "count": 21
+  },
+  "provider_notes": [],
+  "provider_key": "5DhzqmmkD99d8MFbEEFgtQYSUWyYHRLNJKpVjYQFn5d6hJsv",
+  "gpu_power_limited": true,
+  "gpu_power_limit_w": 276,
+  "gpu_power_limit_default_w": 300,
+  "distance_mile": null,
+  "is_bookmarked": false,
+  "min_gpu_count_for_rental": null,
+  "min_gpu_count_for_ssh_only_rental": null,
+  "max_cuda_version": 13.0,
+  "is_whole_host_free": true,
+  "has_no_pending_rental": true,
+  "infiniband_fabric_rentable": false,
+  "roce_fabric_rentable": false,
+  "efa_fabric_rentable": false,
+  "operated_by_lium": false,
+  "provider_display_name": null,
+  "scheduled_notice": null,
+  "removal_at": null,
+  "ncu_profiling_enabled": false,
+  "disk_health_ok": true,
+  "on_infiniband_fabric": false,
+  "on_roce_fabric": false,
+  "on_efa_fabric": false,
+  "nvlink": null,
+  "gpu_class": "NVIDIA RTX 6000 Ada Generation",
+  "gpu_class_display": "NVIDIA RTX 6000 Ada Generation"
+ },
+ {
+  "id": "fe08c607-a603-4b73-b09d-6be8db4d7ab0",
+  "machine_name": "NVIDIA GeForce RTX 3090",
+  "price_per_gpu": 0.25,
+  "pending_price_per_hour": null,
+  "price_change_effective_date": null,
+  "validator_hotkey": "5F7X5UpKSr26KU3jKfpLmT8kuKtBNyHhEnfS8xtxPCqCb13p",
+  "gpu_count": 4,
+  "available_gpu_count": 2,
+  "specs": {
+   "os": "Debian GNU/Linux 13 (trixie)",
+   "cpu": {
+    "count": 63,
+    "model": "Intel(R) Xeon(R) CPU E5-2682 v4 @ 2.50GHz"
+   },
+   "gpu": {
+    "count": 4,
+    "driver": "595.71.05",
+    "details": [
+     {
+      "cuda": "8.6",
+      "name": "NVIDIA GeForce RTX 3090",
+      "capacity": 24576,
+      "power_limit": 245,
+      "power_max_limit": 400,
+      "power_min_limit": 100,
+      "power_default_limit": 350
+     },
+     {
+      "cuda": "8.6",
+      "name": "NVIDIA GeForce RTX 3090",
+      "capacity": 24576,
+      "power_limit": 245,
+      "power_max_limit": 400,
+      "power_min_limit": 100,
+      "power_default_limit": 350
+     },
+     {
+      "cuda": "8.6",
+      "name": "NVIDIA GeForce RTX 3090",
+      "capacity": 24576,
+      "power_limit": 325,
+      "power_max_limit": 400,
+      "power_min_limit": 100,
+      "power_default_limit": 350
+     },
+     {
+      "cuda": "8.6",
+      "name": "NVIDIA GeForce RTX 3090",
+      "capacity": 24576,
+      "power_limit": 325,
+      "power_max_limit": 400,
+      "power_min_limit": 100,
+      "power_default_limit": 350
+     }
+    ],
+    "cuda_driver": 13020
+   },
+   "ram": {
+    "total": 98852936.0,
+    "tenant_ceiling": 90310288.0,
+    "pod_reserve": 8542648
+   },
+   "kernel": "6.8.0-124-generic",
+   "is_spot": false,
+   "network": {
+    "upload_speed": 134.71106300956953,
+    "download_speed": 66.63977775137384,
+    "ema_upload_speed": 180.84578774325269,
+    "ema_download_speed": 162.92922496084714,
+    "verifyx_upload_speed": null,
+    "verifyx_download_speed": null,
+    "ema_verifyx_upload_speed": 476.9737505881934,
+    "ema_verifyx_download_speed": 525.0119104090475
+   },
+   "hard_disk": {
+    "free": 760203948,
+    "used": 1005446464,
+    "total": 1765650412,
+    "disk_type": "nvme",
+    "utilization": 56.94482085279291,
+    "engy_cache_used_gb": 0,
+    "engy_cache_released_gb": null
+   },
+   "port_range": "9200-9299",
+   "split_disk": {
+    "free_split_count": 2,
+    "listable_gpu_count": 2,
+    "listable_split_count": 2
+   },
+   "disk_health": {
+    "read_only_mounts": [],
+    "write_probe": "ok"
+   },
+   "gpu_metrics": {
+    "n": 4096,
+    "cc": "8.6",
+    "device": "NVIDIA GeForce RTX 3090",
+    "vram_gb": 25.3,
+    "sm_count": 82,
+    "clock_mhz": 1695,
+    "fp32_tflops": 1.1,
+    "fp32_cov_pct": 0.259,
+    "fp32_median_tflops": 1.09
+   },
+   "interconnect": {
+    "p2p": false,
+    "matrix": [
+     [
+      "X",
+      "PHB",
+      "SYS",
+      "SYS"
+     ],
+     [
+      "PHB",
+      "X",
+      "SYS",
+      "SYS"
+     ],
+     [
+      "SYS",
+      "SYS",
+      "X",
+      "PHB"
+     ],
+     [
+      "SYS",
+      "SYS",
+      "PHB",
+      "X"
+     ]
+    ],
+    "nvlink": false,
+    "gpu_count": 4,
+    "gpu_pairs": 6,
+    "p2p_pairs": 6,
+    "pcie_class": "SYS",
+    "nvlink_links": null,
+    "nvlink_pairs": 0,
+    "p2p_ok_pairs": 0,
+    "nvlink_active_links": 0
+   },
+   "job_batch_id": "2026-11-13 03:22:24",
+   "port_mappings": null,
+   "sysbox_runtime": true,
+   "tdx_host_supported": false,
+   "available_port_maps": null,
+   "kernel_scrape_error": null,
+   "available_port_count": 90,
+   "ncu_profiling_access": "restricted",
+   "gpu_power_cap_capable": true,
+   "power_cap_probe_error": null,
+   "tdx_attestation_passed": false,
+   "infiniband_scrape_error": "/sys/class/infiniband lists no devices",
+   "storage_limit_supported": true,
+   "interconnect_scrape_error": null,
+   "ncu_profiling_scrape_error": null
+  },
+  "active": null,
+  "is_responsive": null,
+  "uptime_in_minutes": 426465,
+  "miner_hotkey": "5FZ32Hs29mNJ94cAU1J6kRaU7dij3ACqQ6ZqqZ1Hi7Qi6tAX",
+  "location": {
+   "id": "bfabcb99-2ed0-4c40-a472-ed3c9819908f",
+   "created_at": "2026-11-13T03:50:39.712803",
+   "updated_at": "2026-11-13T03:50:39.712804",
+   "country": "Belarus",
+   "country_code": "BY",
+   "region": "HM",
+   "region_name": "Minsk City",
+   "city": "Minsk",
+   "zip": "220034",
+   "lat": 53.901,
+   "lon": 27.5707,
+   "timezone": "Europe/Minsk",
+   "source": null
+  },
+  "is_slow_machine": false,
+  "effective_upload_speed_mbps": 476.9737505881934,
+  "effective_download_speed_mbps": 525.0119104090475,
+  "interconnect": {
+   "gpu_count": 4,
+   "gpu_pairs": 6,
+   "nvlink": false,
+   "nvlink_links": null,
+   "nvlink_pairs": 0,
+   "nvlink_active_links": 0,
+   "pcie_class": "SYS",
+   "p2p": false,
+   "p2p_pairs": 6,
+   "p2p_ok_pairs": 0,
+   "matrix": [
+    [
+     "X",
+     "PHB",
+     "SYS",
+     "SYS"
+    ],
+    [
+     "PHB",
+     "X",
+     "SYS",
+     "SYS"
+    ],
+    [
+     "SYS",
+     "SYS",
+     "X",
+     "PHB"
+    ],
+    [
+     "SYS",
+     "SYS",
+     "PHB",
+     "X"
+    ]
+   ]
+  },
+  "tier": "secure",
+  "offers_bare_metal": false,
+  "last_verified_at": "2026-11-13T03:44:12.767610Z",
+  "reliability_score": 86.9,
+  "node_reliability_pct": null,
+  "node_reliability_new": false,
+  "provider_spot_avg_uptime_hours": null,
+  "frequent_rent_failures": false,
+  "provider_rating": {
+   "average": 3.3,
+   "count": 7
+  },
+  "provider_notes": [],
+  "provider_key": "5FZ32Hs29mNJ94cAU1J6kRaU7dij3ACqQ6ZqqZ1Hi7Qi6tAX",
+  "gpu_power_limited": true,
+  "gpu_power_limit_w": 325,
+  "gpu_power_limit_default_w": 350,
+  "distance_mile": null,
+  "is_bookmarked": false,
+  "min_gpu_count_for_rental": 1,
+  "min_gpu_count_for_ssh_only_rental": 1,
+  "max_cuda_version": 13.1,
+  "is_whole_host_free": false,
+  "has_no_pending_rental": true,
+  "infiniband_fabric_rentable": false,
+  "roce_fabric_rentable": false,
+  "efa_fabric_rentable": false,
+  "operated_by_lium": false,
+  "provider_display_name": null,
+  "scheduled_notice": null,
+  "removal_at": null,
+  "ncu_profiling_enabled": false,
+  "disk_health_ok": true,
+  "on_infiniband_fabric": false,
+  "on_roce_fabric": false,
+  "on_efa_fabric": false,
+  "nvlink": false,
+  "gpu_class": "NVIDIA GeForce RTX 3090",
+  "gpu_class_display": "NVIDIA GeForce RTX 3090"
+ }
+]

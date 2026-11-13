@@ -12,6 +12,7 @@ from providers.base import (
     to_decimal,
 )
 from providers.akash import AkashProvider
+from providers.alibaba import AlibabaProvider
 from providers.arkane import ArkaneProvider
 from providers.atlanticnet import AtlanticNetProvider
 from providers.aws import AwsProvider
@@ -89,6 +90,7 @@ PROVIDERS: dict[str, type[Provider]] = {
         MassedComputeProvider,
         DigitalOceanProvider,
         AwsProvider,
+        AlibabaProvider,
         VerdaProvider,
         CrusoeProvider,
         LatitudeProvider,

@@ -32,7 +32,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 import scratchdb  # noqa: E402  (isolates the process from real providers before config loads)
 import reserved  # noqa: E402
 from models import RawResponse  # noqa: E402
-from providers import PROVIDERS, azure, gcp, jarvislabs, shadeform, together, verda  # noqa: E402
+from providers import PROVIDERS, aws, azure, gcp, jarvislabs, shadeform, together, verda  # noqa: E402
 
 FP, FC = ROOT / "tests" / "fixtures_providers", ROOT / "tests" / "fixtures_capacity"
 T = datetime(2026, 11, 1, 12, tzinfo=timezone.utc)
@@ -55,13 +55,22 @@ def stored(at=T) -> dict[str, dict[str, object]]:
     out["verda"] = {verda.ENDPOINT: _j(FP / "verda_instance_types.json"), verda.LADDER: _j(FP / "verda_long_term_periods_instances.json")}
     out["gcp"] = {gcp.ENDPOINT: _j(FP / "gcp_catalog_skus.json")}
     out["jarvislabs"] = {jarvislabs.ENDPOINT: _j(FP / "jarvislabs_server_meta.json")}
+    out["aws"] = {}
+    for pay in ("No Upfront", "Partial Upfront", "All Upfront"):  # Sydney, 3 years, as the provider stores them
+        name = aws.REGION_NAMES["ap-southeast-2"]
+        rows = [{k: r.get(k) for k in aws._SP_FIELDS}
+                for r in _j(FP / f"aws_savings_plan_3y_{pay.split()[0].lower()}_ap-southeast-2.json")["regions"][name].values()
+                if r.get("ec2:InstanceType") in aws.GPU_INSTANCES]
+        out["aws"][aws.savings_plan_endpoint(3, pay, "ap-southeast-2")] = {
+            "region": name, "plan": "compute", "years": 3, "payment": pay, "rows": rows}
     out["latitude"] = {**{ep: p[0] for ep, p in _j(FC / "latitude.json").items()}, shadeform.LATITUDE_PLANS: _j(FC / "latitude_plans.json")}
     return out
 
 
 # Endpoints that hold ONLY reserved data (GCP and Jarvislabs keep theirs inside the on-demand body).
 RESERVED_ONLY = {(p, ep) for p in ("azure",) for ep in (azure.endpoint(r, azure.RESERVATION) for r in azure.REGIONS)} | {
-    ("together", together.RESERVED_ENDPOINT), ("verda", verda.LADDER), ("latitude", shadeform.LATITUDE_PLANS)}
+    ("together", together.RESERVED_ENDPOINT), ("verda", verda.LADDER), ("latitude", shadeform.LATITUDE_PLANS)} | {
+    ("aws", aws.savings_plan_endpoint(3, pay, "ap-southeast-2")) for pay in ("No Upfront", "Partial Upfront", "All Upfront")}
 
 
 def by_endpoint(payloads: dict, at=T) -> dict:
@@ -348,7 +357,7 @@ def test_hard_rule_and_api():
         assert not any(k.startswith("_") for k in r0), "internal hints are never served"
         az = client.get("/v1/reserved", params={"provider": "azure", "term": "5y", "gpu": "h100-80gb-sxm5"}).json()["data"]
         assert az and all(r["provider"] == "azure" and r["term_bucket"] == "5y" and r["gpu"] == "nvidia-h100-80gb-sxm5" for r in az)
-        assert client.get("/v1/reserved", params={"provider": "aws"}).status_code == 404
+        assert client.get("/v1/reserved", params={"provider": "lambda"}).status_code == 404
         assert client.get("/v1/reserved", params={"term": "7y"}).status_code == 422
         assert client.get("/v1/reserved", params={"gpu": "not-a-gpu"}).status_code == 404
         s = client.get("/v1/reserved/summary", params={"gpu": "h100-80gb-sxm5"}).json()

@@ -74,7 +74,11 @@ class Aws:
         if host == "spot-bid-advisor.s3.amazonaws.com":
             return httpx.Response(200, text=fx("aws_spot_advisor.json"), headers={"content-type": "application/json"})
         if host == "b0.p.awsstatic.com":
-            return httpx.Response(200, json=PRICES)
+            # Every region's file names its own region; only us-east-1 has rows here (and no Savings Plans).
+            name = next(x for x in urllib.parse.unquote(request.url.raw_path.decode()).split("/")
+                        if x in aws.REGION_NAMES.values())
+            return httpx.Response(200, json=PRICES if name == REGION_NAME and aws.ON_DEMAND in request.url.path
+                                  else {"regions": {name: {}}})
         region = host.split(".")[1]
         form = dict(urllib.parse.parse_qsl(request.content.decode()))
         self.calls.append((region, form, request))
@@ -115,7 +119,9 @@ def test_no_key_no_calls():
     fresh()
     m = Aws()
     out = run(m.provider(keys=False).fetch())
-    assert m.calls == [] and len(out) == 2, "without the key: the price file and the Spot Advisor only"
+    assert m.calls == [] and len(out) == 1 + len(SPOT_REGIONS) * (1 + len(aws.SAVINGS_PLAN_TERMS)), \
+        "without the key: the price files, the Spot Advisor and the Savings Plan files only"
+    assert all(r.ok for r in out), "a region with no GPU rows is an empty file, not a failure"
     eps = by_endpoint(out)
     assert AwsProvider.normalize_capacity(eps) == []
     assert [l.listing_id for l in AwsProvider.normalize(eps)] == ["p5.48xlarge:us-east-1"]

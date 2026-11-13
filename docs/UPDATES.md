@@ -5,6 +5,47 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-13 — GCP Spot, RunPod serverless, AWS in 15 regions + Savings Plans, Lium rented machines, Alibaba (dormant)
+
+Against a competitor's 7-day enterprise feed (AWS spot / Capacity Blocks / Savings Plans, GCP spot, RunPod
+serverless, Lium trades, Alibaba spot), every feed it had that we lacked is now read, except where noted.
+
+### What shipped
+- **GCP Spot listings** (`providers/gcp.py`): the on-demand assembly applied to each component's Spot SKUs,
+  `<type>:<region>:spot`. Proven: Iowa reproduces the "Current Spot pricing" column of Google's page exactly for all
+  12 A2/A3 shapes and a4-highgpu-8g (B200 x8, 8 x the all-inclusive slice). Spot-only shapes added: a3-highgpu-1g/2g/4g
+  (shape from Compute Engine) and a4-highgpu-8g. The raw catalogue now keeps the Spot core/RAM/SSD SKUs. Polled
+  hourly (was 6 h); `provider_changed_at` = Google's effectiveTime.
+- **RunPod serverless** (`providers/runpod.py`): the console's `gpuPools` query (no key), 13 pools x flex / active
+  per GPU-hour, `serverless:<pool>:flex|active`. Tiers `serverless_flex` / `serverless_active` never enter market
+  math (market.py, rollups, routing validation): RunPod's pods already vote.
+- **AWS on-demand in all 15 regions** (was us-east-1 only; us-east-1 ids unchanged) and **Compute Savings Plans**
+  (1/3 years x No/Partial/All Upfront x 15 regions, every 2 h) in the reserved section (`reserved.py` reader
+  `aws`). Sydney p5e matches the competitor to the cent (on-demand 82.2848; 3-year 60.48239 / 56.00221 / 54.88217).
+- **AWS spot loop on the clock**: :00:30, :05:30, ... (`PollingPolicy.align_offset_seconds`). AWS reprices on the
+  hour, so each change is read about 30 s after it (was up to 5 min).
+- **Lium rented machines** (`providers/lium.py`): the public nodes feed (`include_rented=true`) keeps a fully rented
+  machine as one listing at its current price (available false), so rentals show as availability changes, and
+  capacity counts the whole fleet: about 73% rented (Lium's own figure 72%), where the free-only list read about 8%.
+  Lium's public stats (30-day median paid price and utilisation per GPU, daily GMV / GPU-hours / rentals) stored raw.
+- **Alibaba Cloud ECS spot** (`providers/alibaba.py`): signed ECS API (signature checked against Alibaba's published
+  example), GPU catalogue, spot per zone + pay-as-you-go per region. **Dormant** until `ALIBABA_ACCESS_KEY_ID` /
+  `ALIBABA_ACCESS_KEY_SECRET` (international-site account, read-only RAM policy) are set; no real answer seen yet.
+- **GPU.ai polled every 5 min** (was 15): prices moved on 68% of polls.
+
+### Not shipped
+- **Lium per-rental trades**: Lium sells them to data partners only (`/api/data-partners/*`). The rented-machine
+  listings and public stats are the substitute.
+- **AWS Capacity Blocks**: still the account quota. **eu-south-2, ap-southeast-3, Local Zones**: need enabling on the
+  AWS account (opt-in regions / zone groups).
+- **GCP a3-edgegpu-8g and the *-nolssd shapes**: no proven price.
+
+### Next
+- Broken page parsers found while checking intervals: Hot Aisle, Baseten, Fireworks (100% failing), Together
+  (header now `Hardware | Preemptible | ON-Demand | Reserved`: a new preemptible column).
+
+---
+
 ## 2026-11-11 — Deploys no longer fail providers' normalize; Together prices flow again
 
 ### What shipped

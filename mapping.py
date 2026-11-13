@@ -210,6 +210,8 @@ RUNPOD = ProviderMapping(
     endpoints={
         "POST /graphql  { gpuTypes { ... } }": "catalogue: per-GPU price per cloud, VRAM, manufacturer",
         "POST /graphql  lowestPrice(gpuCount, secureCloud)": "price, stock status and pod minimums per cloud per size",
+        "POST /graphql  { gpuPools { ... } }": "serverless GPU pools: flex and active price per GPU-hour (no key "
+                                                "needed; stored as graphql#gpuPools)",
     },
     fields=[
         FieldMap("provider", CONSTANT, '"runpod"'),
@@ -239,6 +241,12 @@ RUNPOD = ProviderMapping(
         "GraphQL only. The REST API at rest.runpod.io/v1 has no GPU pricing "
         "endpoint, and introspection is disabled, so every field was validated "
         "by querying it against the live endpoint.",
+        "SERVERLESS (gpuPools, since 2026-11-13): listings serverless:{pool}:flex|active, gpu_count 1, price = "
+        "flexHourlyCost | activeHourlyCost per GPU-hour, provider_tier serverless_flex | serverless_active. "
+        "Flex is the scale-to-zero price printed on runpod.io/pricing; active is the always-on worker list price. "
+        "Never in market math: RunPod's pods already vote. A pool holding several GPU models (ADA_80_PRO = H100 "
+        "SXM, NVL and PCIe) keeps its own label as raw_gpu_name and no canonical name; MIG slices are ignored when "
+        "deciding whether a pool is one model.",
         "NO SPOT MARKET IN THE DATA. secureSpotPrice == securePrice for all 50 "
         "types, communitySpotPrice == communityPrice for all 50, and "
         "minimumBidPrice == uninterruptablePrice in every priced combo. "
@@ -364,7 +372,11 @@ VOLTAGEPARK = ProviderMapping(
 LIUM = ProviderMapping(
     provider="lium",
     display_name="Lium (marketplace)",
-    endpoints={"GET /api/executors": "every host machine for rent; about 1 MB, mostly live telemetry"},
+    endpoints={"GET /api/executors": "every host machine with a free GPU; about 1 MB, mostly live telemetry",
+               "GET /api/public/v1/nodes?include_rented=true": "the whole fleet, rented machines too, with each "
+                                                              "machine's price (no key)",
+               "GET /api/public/v1/stats": "Lium's market statistics: 30-day median paid price and utilisation per "
+                                           "GPU model, daily GMV / GPU-hours / rentals (raw only)"},
     fields=_fields(
         "lium",
         sku=(RAW, "machine_name"),
@@ -378,8 +390,8 @@ LIUM = ProviderMapping(
         market_type=(DERIVED, "specs.is_spot ? spot : on_demand"),
         provider_tier=(RAW, "tier", "secure | spot"),
         interruptible=(DERIVED, "= specs.is_spot"),
-        available=(DERIVED, "available_gpu_count > 0"),
-        capacity=(RAW, "available_gpu_count"),
+        available=(DERIVED, "available_gpu_count > 0", "false for a fully rented machine (nodes feed)"),
+        capacity=(RAW, "available_gpu_count", "0 for a fully rented machine"),
         capacity_unit=(CONSTANT, '"gpu"'),
         vcpu=(RAW, "specs.cpu.count"),
         ram_gb=(DERIVED, "specs.ram.total / 1024^2", "units look like KiB; unverified"),
@@ -391,6 +403,16 @@ LIUM = ProviderMapping(
         "fields are stored; the rest is not kept.",
         "ram and disk totals are assumed to be KiB: they only make sense as KiB for a "
         "192-core host, but the API does not say.",
+
+        "RENTED MACHINES (since 2026-11-13): /api/executors drops a machine once every GPU is rented. The public "
+        "nodes feed lists the whole fleet with the same ids, so a fully rented machine stays one listing at its "
+        "current price with available false and capacity 0 (never in market math: not a price you can pay now), "
+        "and capacity counts free GPUs out of the WHOLE fleet. Only machines the nodes feed shows fully rented and "
+        "the executors list does not carry are added. Their raw_gpu_name is the executors name another machine "
+        "of the same model carries this round, else providers.lium.machine_name() ('RTX 5090' -> 'NVIDIA GeForce "
+        "RTX 5090'); ram_gb and storage_gb are the nodes feed's GB.",
+        "Lium sells completed-rental (trade) data to data partners only (/api/data-partners/*, a partner key); "
+        "not read. Its public stats give the 30-day median paid price per GPU model instead.",
     ],
 )
 
@@ -549,10 +571,53 @@ DIGITALOCEAN = ProviderMapping(
 )
 
 
+ALIBABA = ProviderMapping(
+    provider="alibaba",
+    display_name="Alibaba Cloud ECS (hyperscaler spot)",
+    endpoints={"GET ecs.us-east-1.aliyuncs.com DescribeInstanceTypes": "GPU instance types (GPUSpec, GPUAmount, "
+                                                                        "GPUMemorySize), daily; AccessKey, signature v1",
+               "GET ecs.<region>.aliyuncs.com DescribeAvailableResource": "types sold as spot per zone, daily",
+               "GET ecs.<region>.aliyuncs.com DescribeSpotPriceHistory": "spot price per zone, hourly points over the "
+                                                                          "last 3 h, per GPU type, every 15 min"},
+    fields=_fields(
+        "alibaba",
+        sku=(RAW, "InstanceType", 'e.g. "ecs.gn7e-c16g1.4xlarge"'),
+        listing_id=(DERIVED, "{type}:{zone}:spot | {type}:{region}"),
+        raw_gpu_name=(DERIVED, '"{GPUSpec} {GPUMemorySize}GB"', 'e.g. "NVIDIA A100 80GB"; sliced vGPU types skipped'),
+        gpu_count=(RAW, "GPUAmount"),
+        region=(RAW, "ZoneId (spot) | RegionId (on demand)", "spot per zone, like AWS"),
+        country=(LOOKUP, "REGIONS in providers/alibaba.py"),
+        price_per_gpu_hour=(DERIVED, "= price / GPUAmount"),
+        price_per_instance_hour=(RAW, "SpotPrice | OriginPrice", "whole instance, USD (international-site account)"),
+        currency=(RAW, "Currency", "USD only; a CNY answer is skipped, never converted"),
+        market_type=(DERIVED, "SpotPrice -> spot, OriginPrice -> on_demand"),
+        interruptible=(DERIVED, "= (market_type == spot)"),
+        provider_tier=(CONSTANT, '"hyperscaler"'),
+        available=(ABSENT, "-", "a price says nothing about stock"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(RAW, "CpuCoreCount"),
+        ram_gb=(RAW, "MemorySize", "GiB"),
+        storage_gb=(ABSENT, "-"),
+    ),
+    quirks=[
+        "Needs an AccessKey: Alibaba publishes no spot price without one (researched 2026-11-13: its price pages and "
+        "calculator carry pay-as-you-go and subscription prices only). Not polled until ALIBABA_ACCESS_KEY_ID and "
+        "ALIBABA_ACCESS_KEY_SECRET are set.",
+        "SpotDuration 1: the one-hour protected spot (no interruption in the first hour), the price the market quotes.",
+        "OriginPrice is the pay-as-you-go price the spot row is stated against; a region whose zones disagree on it "
+        "gets no on-demand listing.",
+    ],
+)
+
+
 AWS = ProviderMapping(
     provider="aws",
     display_name="AWS EC2 (hyperscaler list price)",
-    endpoints={"GET awsstatic price file": "every EC2 type in us-east-1, Linux; no credentials",
+    endpoints={"GET awsstatic price file": "every EC2 type, Linux, one file per region (15 regions); no credentials",
+               "GET awsstatic compute-savings-plan-ec2 files": "Compute Savings Plan rates, 1/3 years x No / Partial / "
+                                                               "All Upfront x 15 regions, every 2 h; raw, read by "
+                                                               "reserved.py (never a listing)",
                "GET spot-bid-advisor.s3.amazonaws.com/spot-advisor-data.json":
                    "Spot Advisor interruption band and savings per GPU type, region and OS; stored raw only",
                "POST ec2.<region>.amazonaws.com DescribeSpotPriceHistory":
@@ -564,12 +629,12 @@ AWS = ProviderMapping(
     fields=_fields(
         "aws",
         sku=(RAW, "Instance Type / instanceType", 'e.g. "p5.48xlarge"'),
-        listing_id=(DERIVED, "{Instance Type}:us-east-1 | {instanceType}:{availabilityZone}:spot",
-                    "one on-demand listing per type; one spot listing per type and AZ"),
+        listing_id=(DERIVED, "{Instance Type}:{region} | {instanceType}:{availabilityZone}:spot",
+                    "one on-demand listing per type and region; one spot listing per type and AZ"),
         raw_gpu_name=(LOOKUP, "GPU_INSTANCES in providers/aws.py", "the price file has no GPU model; ours does"),
         gpu_count=(LOOKUP, "GPU_INSTANCES in providers/aws.py", "the price file has no GPU count either"),
-        region=(DERIVED, '"us-east-1" | availabilityZone', "one region per price file; spot is per AZ"),
-        country=(LOOKUP, "SPOT_REGIONS in providers/aws.py", '"US" for the price file'),
+        region=(DERIVED, "the price file's region (REGION_NAMES) | availabilityZone", "spot is per AZ"),
+        country=(LOOKUP, "SPOT_REGIONS in providers/aws.py"),
         price_per_gpu_hour=(DERIVED, "= price / gpu_count"),
         price_per_instance_hour=(RAW, "price | spotPrice", "on-demand: Linux, shared tenancy; spot: Linux/UNIX"),
         market_type=(DERIVED, "price file -> on_demand, DescribeSpotPriceHistory -> spot"),
@@ -898,13 +963,15 @@ GCP = ProviderMapping(
     fields=_fields(
         "gcp",
         sku=(RAW, "machine type | attachable accelerator type", 'e.g. "a3-highgpu-8g"; "nvidia-tesla-t4"'),
-        listing_id=(DERIVED, "{sku}:{region}"),
-        raw_gpu_name=(LOOKUP, "MACHINES / ATTACHABLE in providers/gcp.py", 'the GCP accelerator type, e.g. "nvidia-h100-80gb"'),
+        listing_id=(DERIVED, "{sku}:{region} | {sku}:{region}:spot"),
+        raw_gpu_name=(LOOKUP, "MACHINES / SPOT_MACHINES / SPOT_SLICED / ATTACHABLE in providers/gcp.py", 'the GCP accelerator type, e.g. "nvidia-h100-80gb"'),
         gpu_count=(LOOKUP, "MACHINES in providers/gcp.py", "1 for an attachable GPU"),
         region=(RAW, "Compute Engine zone lists: a region with a zone offering the proven shape (and every component "
                      "priced there)", '"us-central1" only without the service account (FALLBACK_REGIONS)'),
         country=(LOOKUP, "COUNTRY in providers/gcp.py", '"US" for us-* regions'),
         price_per_gpu_hour=(DERIVED, "= VM price / gpu_count | the attachable GPU SKU"),
+        market_type=(DERIVED, '"on_demand" | "spot" (Spot component SKUs)'),
+        interruptible=(DERIVED, "= (market_type == spot)"),
         price_per_instance_hour=(DERIVED, "GPUs x GPU SKU + vCPUs x core SKU + GiB x RAM SKU + SSD GiB x SSD SKU / 730",
                                  "each shape reproduces Google's Iowa page price exactly, and G2/G4 its per-region "
                                  "page prices in every region the page embeds (tests/test_provider_gcp.py)"),
@@ -922,8 +989,14 @@ GCP = ProviderMapping(
         "SKU names vary by region (the H100 Mega GPU is 'Mega' in most regions, 'Plus' in Americas), so each "
         "component is matched by a pattern; a region priced twice with different values is skipped.",
         "Attachable GPUs (T4, P4, V100, P100 on N1) are the GPU alone; the N1 host is billed on top.",
-        "Left out: g4-standard-6/12/24 (fractional cards) and a4-highgpu-8g (no on-demand page price to prove its shape).",
-        "Spot, 1- and 3-year commitment and DWS Calendar Mode SKUs are stored raw, not yet listings.",
+        "Left out: g4-standard-6/12/24 (fractional cards) and a4-highgpu-8g on demand (no on-demand page price to "
+        "prove its shape).",
+        "SPOT (since 2026-11-13): the same assembly from the Spot SKUs of each component, listed {sku}:{region}:spot, "
+        "market spot, interruptible, provider_changed_at = the SKUs' effectiveTime (Google moves Spot prices at most "
+        "daily). Proven: Iowa reproduces the page's 'Current Spot pricing' for all 12 A2/A3 shapes and a4-highgpu-8g "
+        "(8 x the all-inclusive B200 slice). Spot only: a3-highgpu-1g/2g/4g (shape from Compute Engine, not on the "
+        "page) and a4-highgpu-8g. Not listed: a3-edgegpu-8g and the *-nolssd variants (no proven price).",
+        "1- and 3-year commitment and DWS Calendar Mode SKUs are stored raw, not listings.",
     ],
 )
 
@@ -2176,7 +2249,7 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
     for m in (
         SALAD, HYPERSTACK, LAMBDA, RUNPOD,
         HYPERBOLIC, VOLTAGEPARK, LIUM, VAST, NEBIUS, MASSEDCOMPUTE,
-        DIGITALOCEAN, AWS,
+        DIGITALOCEAN, AWS, ALIBABA,
         VERDA, CRUSOE, LATITUDE, DENVR, BOOSTRUN, HORIZON, PHYNTEC, PAPERSPACE,
         COREWEAVE, TOGETHER, JARVISLABS, HOTAISLE, VULTR,
         GCP,

@@ -16,6 +16,8 @@ One row per (provider, GPU, GPU count, region, term):
                              True: OpenGrid applied the provider's published discount % to its on-demand price
 
 Sources (methodology/reserved-prices.md):
+    aws         Compute Savings Plans, 1/3 years x No / Partial / All Upfront, every SPOT_REGIONS region: the plan's
+                effective hourly rate per instance / GPUs, compared with the same file's on-demand rate
     azure       1/3/5-year reservations; retailPrice is the whole term:  term price / (8,760 h x years) / GPUs
     gcp         1/3-year commitments of the GPU SKU ALONE (vCPU, RAM, SSD on top): scope "gpu_only", compared with the
                 same GPU SKU on demand, never with a whole-VM listing
@@ -51,6 +53,10 @@ BUCKET_LABEL = {k: label for k, _, label in TERM_BUCKETS}
 
 # provider -> (endpoint read, how the effective price is obtained). Shown with every row and on the page.
 SOURCES: dict[str, dict[str, str]] = {
+    "aws": {"source": "AWS Compute Savings Plans price files (b0.p.awsstatic.com), 1 and 3 years, No / Partial / All "
+                      "Upfront, Linux, shared tenancy, 15 regions",
+            "method": "the plan's effective hourly rate (upfront amortised by AWS) / GPUs per instance; compared with "
+                      "the on-demand rate printed in the same file"},
     "azure": {"source": "Azure Retail Prices API, priceType 'Reservation' (eastus, eastus2)",
               "method": "whole-term price / (8,760 h x years) / GPUs per VM"},
     "gcp": {"source": "Cloud Billing Catalog API, Commit1Yr / Commit3Yr GPU SKUs, in the regions "
@@ -127,6 +133,22 @@ def _azure(by_endpoint: dict, listings: list[dict], notes: list[str]) -> list[di
             term_price=rp.term_price, term_hours=rp.term_hours, listing_hint=f"{rp.sku}:{rp.region}"))
     if foreign:
         notes.append(f"azure: reservations priced in {', '.join(sorted(foreign))} skipped (no currency conversion)")
+    return out
+
+
+def _aws(by_endpoint: dict, listings: list[dict], notes: list[str]) -> list[dict]:
+    from providers import aws
+
+    out = []
+    for sp in aws.savings_plan_prices(by_endpoint):
+        out.append(_row(
+            "aws", gpu=sp.canonical_gpu_name, raw_gpu_name=sp.raw_gpu_name, gpu_count=sp.gpu_count, region=sp.region,
+            sku=sp.instance_type,
+            term_label=f"{sp.years} Year{'s' if sp.years > 1 else ''} Compute Savings Plan, {sp.payment}",
+            term_months=Decimal(12 * sp.years), price_per_gpu_hour=sp.price_per_instance_hour / sp.gpu_count,
+            observed_at=sp.observed_at, listing_hint=f"{sp.instance_type}:{sp.region}",
+            same_source_on_demand=(sp.on_demand_per_instance_hour / sp.gpu_count
+                                   if sp.on_demand_per_instance_hour else None)))
     return out
 
 
@@ -220,7 +242,7 @@ def _verda(by_endpoint: dict, listings: list[dict], notes: list[str]) -> list[di
     return out
 
 
-READERS = {"azure": _azure, "gcp": _gcp, "jarvislabs": _jarvislabs, "latitude": _latitude, "together": _together,
+READERS = {"aws": _aws, "azure": _azure, "gcp": _gcp, "jarvislabs": _jarvislabs, "latitude": _latitude, "together": _together,
            "verda": _verda}
 assert set(READERS) == set(SOURCES)
 

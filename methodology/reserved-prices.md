@@ -16,6 +16,7 @@ A price counts as reserved when the provider publishes it for a stated commitmen
 
 | Provider | What OpenGrid reads | Terms |
 |---|---|---|
+| AWS | Compute Savings Plan rates per instance type from AWS's public price files (`compute-savings-plan-ec2`), Linux, shared tenancy, No / Partial / All Upfront, 15 regions; the effective hourly rate AWS states (upfront amortised by AWS) | 1, 3 years |
 | Azure | Reserved-instance prices from the public Retail Prices API (`priceType eq 'Reservation'`), eastus and eastus2 | 1, 3, 5 years |
 | GCP | Committed-use prices for the GPU SKU from the Cloud Billing Catalog (`Commit1Yr`, `Commit3Yr`), in every region Compute Engine offers the GPU (us-central1 without the service account) | 1, 3 years |
 | Jarvislabs | `reserved_pricing` in the `misc/server_meta` catalogue, per GPU-hour | 1, 3, 6 months; 1, 2 years |
@@ -27,6 +28,9 @@ These are **not** reserved prices:
 
 - Spot or preemptible prices. They are cheaper because the machine can be taken back, not because you commit to a term.
 - Azure savings plans. A savings plan commits a dollar amount per hour across VM sizes, not one size.
+  AWS Compute Savings Plans are the same kind of commitment, but they are included (since 2026-11-13) because AWS
+  publishes the rate each instance type gets under each term and payment option, which is what buyers compare.
+  This is a judgment call; Azure savings plans could be added the same way.
 - GCP Calendar Mode and DWS. These reserve a fixed window of capacity, which is a different product.
 - Latitude's `hour` price, which is pay-as-you-go. It is used as the on-demand comparison for the same plan.
 - Any cell printed as "Contact us", or a dash.
@@ -84,4 +88,4 @@ The model reads the newest successful raw response for each provider: the same r
 - `GET /v1/reserved`: one row per provider, GPU, GPUs per machine, region and term. Filters: `gpu` (slug or canonical name), `provider`, `term` (column key).
 - `GET /v1/reserved/summary`: per GPU, the cheapest whole-machine row in each term, plus the cheapest on-demand price compared. Filter: `gpu`.
 
-Both endpoints are public with public pages on, like `/v1/capacity`, and keys need `data:read`. Code: `reserved.py`, `api/reserved.py`. The per-provider readers are `providers/azure.py` (`reserved_prices`), `providers/gcp.py` (`commitment_prices`), `providers/jarvislabs.py` (`reserved_prices`), `providers/shadeform.py` (`latitude_plan_prices`), `providers/together.py` (`reserved_prices`) and `providers/verda.py` (`commitment_ladder`).
+Both endpoints are public with public pages on, like `/v1/capacity`, and keys need `data:read`. Code: `reserved.py`, `api/reserved.py`. The per-provider readers are `providers/aws.py` (`savings_plan_prices`), `providers/azure.py` (`reserved_prices`), `providers/gcp.py` (`commitment_prices`), `providers/jarvislabs.py` (`reserved_prices`), `providers/shadeform.py` (`latitude_plan_prices`), `providers/together.py` (`reserved_prices`) and `providers/verda.py` (`commitment_ladder`).
