@@ -15,9 +15,10 @@
     resume_from                 submit/preview pin {job_id, artifact, epoch, sha256, size} via
                                 jobs/artifacts.resolve_resume (same account, stored, sha256 re-verified); the
                                 bootstrap then downloads exactly that checkpoint (runner/resume) before training
-    submit(..., chain=)         jobs/relaunch.py only: the SAME submit path for an automatic relaunch; the new job row
-                                carries retry_of / root_job_id / attempt and UNIQUE(retry_of) refuses a second
-                                successor (relaunch_exists) before anything is quoted or routed
+    submit(..., chain=)         jobs/relaunch.py and jobs/continuation.py only: the SAME submit path for an automatic
+                                relaunch, a resume, an OOM escalation or a move (chain.kind -> jobs.succession_kind);
+                                the new job row carries retry_of / root_job_id / attempt and UNIQUE(retry_of) refuses a
+                                second successor (relaunch_exists) before anything is quoted or routed
     submit(..., batch=)         jobs/batches.py only: the SAME submit path for a batch shard; the job row is attached
                                 to its budget reservation (batch_attempts) and becomes the shard's current job by
                                 compare-and-set IN the job-creating transaction, so a shard can never get a second
@@ -347,11 +348,13 @@ def _create_job(who, v, sel, chosen, *, ssh: dict, sandbox: bool, chain: dict | 
     ev = {"template": req["template"], "template_version": v.template.get("version"),
           "expected_runtime_minutes": list(T.expected_minutes(v.template, req["config"]))}
     reason = "SIMULATED sandbox job" if sandbox else "job submitted"
+    kind = (chain or {}).get("kind") or "relaunch"
     if chain:
-        actor, actor_id = "system", f"relaunch:{chain['retry_of']}"[:64]
+        actor, actor_id = chain.get("actor") or "system", (chain.get("actor_id") or f"relaunch:{chain['retry_of']}")[:64]
         reason = chain.get("reason") or f"attempt {chain['attempt']}: automatic relaunch of {chain['retry_of']}"
-        ev["relaunch"] = {k: chain.get(k) for k in ("retry_of", "root_job_id", "attempt", "max_attempts")}
-        ev["relaunch_event"] = "relaunched_from"
+        ev["relaunch"] = {k: chain.get(k) for k in ("retry_of", "root_job_id", "attempt", "max_attempts", "kind")}
+        ev["relaunch_event"] = {"relaunch": "relaunched_from", "resume": "resumed_from",
+                                "oom_escalation": "oom_escalated_from", "move": "moved_from"}.get(kind, "relaunched_from")
     try:
         with normalize.SessionLocal.begin() as s:
             job = Job(job_id=job_id, account_id=who.account_id, key_id=who.key_id, principal_kind=who.kind,
@@ -366,6 +369,7 @@ def _create_job(who, v, sel, chosen, *, ssh: dict, sandbox: bool, chain: dict | 
                       state_changed_at=now, evidence=M.blank_evidence())
             if chain:
                 job.retry_of, job.root_job_id, job.attempt = chain["retry_of"], chain["root_job_id"], int(chain["attempt"])
+                job.succession_kind = kind
             s.add(job)
             s.flush()     # UNIQUE(retry_of): a second successor of the same failed attempt stops here
             if batch:     # the shard's reservation + current-job compare-and-set, in THIS transaction
@@ -379,8 +383,8 @@ def _create_job(who, v, sel, chosen, *, ssh: dict, sandbox: bool, chain: dict | 
     except IntegrityError:
         if not chain:
             raise
-        raise JobRefused("relaunch_exists", f"job {chain['retry_of']} already has a successor (one relaunch per "
-                                            "failed attempt)", 409) from None
+        raise JobRefused("relaunch_exists", f"job {chain['retry_of']} already has a successor (one successor per "
+                                            "attempt: relaunch, resume, OOM escalation or move)", 409) from None
     return job_id
 
 
@@ -696,6 +700,15 @@ def get(job_id: str, who, *, sync_first: bool = False) -> dict:
     bl = batches.link_for_job(job_id)
     if bl is not None:      # only a batch shard's job carries `batch`; an ordinary job keeps its shape
         out["batch"] = bl
+    if not job.sandbox:     # resume / move availability + the read-only move suggestion (jobs/continuation.py)
+        from jobs import continuation as C
+        try:
+            out["actions"] = C.actions_block(job, dep, who)
+            sug = C.move_suggestion(job, dep, who)
+            if sug is not None:
+                out["move_suggestion"] = sug
+        except Exception:  # noqa: BLE001 - never breaks a read
+            log.exception("job %s: continuation block failed", job_id)
     return out
 
 

@@ -299,6 +299,38 @@ def test_jobs_cancel_needs_yes_and_idempotency_key():
     assert code == 3 and "route:execute" in err
 
 
+def test_jobs_resume_and_move_show_the_quote_then_need_yes():
+    from _support import env
+    api = MockAPI()
+    jid = "job-a37ddf8cf1c1c13f"
+    pv = {"job_id": jid, "action": "resume", "can_submit": True, "from_scratch": False,
+          "quote": {"provider": "lambda", "gpu": "NVIDIA H100 80GB SXM5", "gpu_count": 1, "price_per_gpu_hour": 2.49,
+                    "est_max_total_usd": 1.25, "max_total_cost_usd": 2},
+          "checkpoint": {"job_id": jid, "epoch": 2, "age_seconds": 600}}
+    api.overrides[f"/v1/jobs/{jid}/resume/preview"] = lambda r: httpx.Response(200, json=env(pv))
+    api.overrides[f"/v1/jobs/{jid}/move/preview"] = lambda r: httpx.Response(200, json=env({**pv, "action": "move"}))
+    api.overrides[f"/v1/jobs/{jid}/resume"] = lambda r: httpx.Response(202, json=env({"job_id": "job-b2", "status":
+                                                                                      "pending_approval"}))
+    api.overrides[f"/v1/jobs/{jid}/move"] = lambda r: httpx.Response(202, json=env({"job_id": jid, "status": "training",
+                                                                                    "move_request": {"status":
+                                                                                                     "checkpointing"}}))
+    code, out, err = run_cli(["jobs", "resume", jid, "--max-total-cost-usd", "2"], api, key=SECRET)
+    assert code == 6 and "epoch 2" in out and "--yes" in out, (code, out, err)
+    assert [r.url.path for r in api.requests] == [f"/v1/jobs/{jid}/resume/preview"], "the quote only: nothing submitted"
+    code, out, err = run_cli(["job", "resume", jid, "--max-total-cost-usd", "2", "--provider", "same", "--yes",
+                              "--json"], api, key=SECRET)
+    assert code == 0, err
+    req = api.requests[-1]
+    assert req.url.path == f"/v1/jobs/{jid}/resume" and req.headers["idempotency-key"].startswith("cli-")
+    assert json.loads(req.content) == {"max_total_cost_usd": 2.0, "provider": "same"}
+    code, out, err = run_cli(["jobs", "move", jid, "--max-total-cost-usd", "2", "--reason", "cheaper", "--yes"], api,
+                             key=SECRET)
+    assert code == 0 and "checkpointing" in out, (code, out, err)
+    assert json.loads(api.requests[-1].content) == {"max_total_cost_usd": 2.0, "provider": "best", "reason": "cheaper"}
+    code, out, err = run_cli(["jobs", "resume", jid, "--max-total-cost-usd", "0", "--yes"], api, key=SECRET)
+    assert code == 6 and "max-total-cost-usd" in err
+
+
 BATCH_ID = "bat-0123456789abcdef"
 
 

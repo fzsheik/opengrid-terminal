@@ -156,6 +156,15 @@ moved aside (`.rejected`) so it cannot wedge the queue. An undelivered `complete
   `metrics.json` adds `resumed_from` and `prior_epochs` (the checkpoint's history; `loss_decreased` spans both);
   `param_l2_change` measures this run's change from the loaded weights; the `result` adds `resumed_from_epoch`.
 
+- **Instructions** (a move, methodology/jobs.md 8f): every `POST runner/events` response carries `instructions:
+  [{id, kind, ref, issued_at, expires_at}]` (open ones; repeated until withdrawn or expired), and the reporter also
+  polls `GET /v1/jobs/{job}/runner/instructions` every 30 s with the job token. Known kind: `checkpoint_now`. The
+  reporter applies each id once: it writes `OUT/.og-checkpoint-now` (temp file + rename) holding the id and emits
+  `instruction_received {instruction_id, kind, ref}`; the trainer checks the file at every epoch boundary, saves a
+  checkpoint there even off the `checkpoint_every_epochs` schedule (never after the last epoch), adds
+  `requested: <id>` to its `checkpoint_saved` phase and removes the file; the reporter uploads it like any checkpoint.
+  Malformed or unknown instructions are ignored: an instruction is a request, never code.
+
 Verified locally (CPU, torch 2.4.1 / torchvision 0.19.1 on macOS arm64, `--allow-cpu`, 1,000-image subset,
 `tests/test_runner.py::test_cpu_checkpoint_resume_real_mnist`): a 3-epoch run saved `ckpt-e0001.pt` and
 `ckpt-e0002.pt`; a fresh process resumed from epoch 1, trained epochs 2-3 and succeeded; a wrong pinned

@@ -9,6 +9,9 @@ Wire format (JOBS_BRIEF "Runner callback API"; documented in methodology/runner.
                                               (results at the end; checkpoints ckpt-eNNNN.pt during training)
   GET  {base}/v1/jobs/{job}/runner/resume     the checkpoint this job resumes from (only if it was created with
                                               resume_from); saved only if its sha256 equals the pinned one
+  GET  {base}/v1/jobs/{job}/runner/instructions   open instructions; the same list rides on every events response
+                                              as `instructions`. checkpoint_now (a move) -> OUT/.og-checkpoint-now:
+                                              the trainer checkpoints at the end of the current epoch (once per id)
   POST {base}/v1/jobs/{job}/runner/complete   {"outcome": succeeded|failed|oom|timeout, "summary": {...}}
 
 Checkpoints: the trainer's `checkpoint_saved` phase names OUT/checkpoints/ckpt-eNNNN.pt; a background thread uploads
@@ -101,6 +104,44 @@ def parse_line(line: str):
     data = obj.get("data") if isinstance(obj.get("data"), dict) else {}
     at = obj.get("at") if isinstance(obj.get("at"), str) else now_iso()
     return obj["type"], data, at
+
+
+INSTRUCTION_KINDS = ("checkpoint_now",)
+CHECKPOINT_REQUEST = ".og-checkpoint-now"   # runner.mnist_train.CHECKPOINT_REQUEST
+
+
+def parse_instructions(body) -> list:
+    """The `instructions` list of a runner/events or runner/instructions response -> [{id, kind, ref}] (known kinds
+    only; anything malformed is ignored: an instruction is a request, never trusted beyond its kind)."""
+    try:
+        obj = json.loads(body or b"{}") if isinstance(body, (bytes, str)) else (body or {})
+    except ValueError:
+        return []
+    out = []
+    for i in (obj.get("instructions") or []) if isinstance(obj, dict) else []:
+        if isinstance(i, dict) and i.get("kind") in INSTRUCTION_KINDS and isinstance(i.get("id"), int):
+            out.append({"id": i["id"], "kind": i["kind"], "ref": str(i.get("ref") or "")[:40]})
+    return out
+
+
+def apply_instructions(instructions: list, out_dir, done: set) -> list:
+    """checkpoint_now -> OUT/.og-checkpoint-now holding the instruction id (the trainer saves a checkpoint at the end
+    of the current epoch and removes the file; the reporter's uploader sends it). Each id is applied once."""
+    applied = []
+    for i in instructions or []:
+        if i["id"] in done or out_dir is None:
+            continue
+        done.add(i["id"])
+        if i["kind"] == "checkpoint_now":
+            try:
+                p = Path(out_dir) / CHECKPOINT_REQUEST
+                tmp = p.with_name(p.name + ".tmp")
+                tmp.write_text(str(i["id"]), encoding="utf-8")
+                os.replace(tmp, p)
+                applied.append(i)
+            except OSError as e:
+                diag(f"checkpoint_now not applied: {type(e).__name__}")
+    return applied
 
 
 # ---------------------------------------------------------------------------------------------- HTTP
@@ -253,6 +294,15 @@ class Client:
         os.replace(tmp, dest)
         return {"bytes": st["n"], "sha256": got}
 
+    def get_instructions(self, *, attempts=1) -> list:
+        """GET the open runner instructions (checkpoint_now). [] on any problem: never fatal."""
+        try:
+            status, data = self.request("GET", f"/v1/jobs/{self.job_id}/runner/instructions", None, {},
+                                        attempts=attempts)
+        except (PermanentError, TransientError):
+            return []
+        return parse_instructions(data)
+
     def complete(self, outcome: str, summary: dict, *, attempts=None):
         if outcome not in OUTCOMES:
             raise ValueError(f"outcome must be one of {OUTCOMES}")
@@ -344,6 +394,7 @@ class Reporter:
     def __init__(self, client: Client, spool: Spool):
         self.client, self.spool = client, spool
         self._flush_lock = threading.Lock()
+        self.instructions: list = []     # the newest `instructions` OpenGrid returned on the runner channel
 
     def emit(self, type_: str, data: dict, at: str | None = None, *, flush=True) -> dict:
         ev = self.spool.add(type_, _bound(data), at)
@@ -367,7 +418,10 @@ class Reporter:
                     batch.append(ev)
                     size += n
                 try:
-                    self.client.post_events(batch, attempts=attempts)
+                    r = self.client.post_events(batch, attempts=attempts)
+                    got = parse_instructions(r[1] if isinstance(r, tuple) and len(r) > 1 else None)
+                    if got:
+                        self.instructions = got
                 except (AuthError, JobTerminalError) as e:
                     diag(f"events not delivered ({len(pending)} spooled kept): {e}")
                     return False
@@ -491,7 +545,7 @@ def _gpu_sample():
 
 
 def run_supervised(rep: Reporter, cmd: list, *, out_dir, max_seconds=None, flush_every=2.0,
-                   gpu_every=15.0, env=None) -> dict:
+                   gpu_every=15.0, env=None, instr_every=30.0) -> dict:
     """Run the trainer, forward its events/log lines, enforce the wall clock, upload artifacts, post complete."""
     t0 = time.monotonic()
     child_env = dict(os.environ if env is None else env)
@@ -534,8 +588,10 @@ def run_supervised(rep: Reporter, cmd: list, *, out_dir, max_seconds=None, flush
                     continue
             rep.emit("log", {"stream": name, "line": line[:MAX_LINE]}, flush=False)
 
+    done_instr: set = set()
+
     def flusher():
-        last_gpu = 0.0
+        last_gpu, last_poll = 0.0, time.monotonic()
         have_smi = shutil.which("nvidia-smi") is not None
         while not stop.wait(flush_every):
             rep.flush(attempts=1)
@@ -544,6 +600,15 @@ def run_supervised(rep: Reporter, cmd: list, *, out_dir, max_seconds=None, flush
                 s = _gpu_sample()
                 if s:
                     rep.emit("gpu", s, flush=False)
+            # instructions ride on every events response; poll them too when nothing was sent for a while
+            if instr_every and time.monotonic() - last_poll >= instr_every:
+                last_poll = time.monotonic()
+                got = rep.client.get_instructions()
+                if got:
+                    rep.instructions = got
+            for i in apply_instructions(rep.instructions, out_dir, done_instr):
+                rep.emit("phase", {"phase": "instruction_received", "instruction_id": i["id"], "kind": i["kind"],
+                                   "ref": i["ref"]}, flush=False)
 
     done = threading.Event()
 

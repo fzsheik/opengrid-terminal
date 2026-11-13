@@ -13,11 +13,19 @@
     GET  /v1/jobs/{job_id}/artifacts            artifact list (name, size, sha256)                [deployments:read]
     GET  /v1/jobs/{job_id}/artifacts/{name}     download (attachment, X-Artifact-SHA256)          [deployments:read]
     POST /v1/jobs/{job_id}/cancel       (*)     before launch: reject; after: terminate           [route:execute]
+    POST /v1/jobs/{job_id}/resume/preview       what a resume would submit (quote, checkpoint)    [route:preview]
+    POST /v1/jobs/{job_id}/resume       (*)     owner: successor from the latest verified checkpoint, once the
+                                                previous GPU is provider-confirmed gone            [route:execute]
+    POST /v1/jobs/{job_id}/move/preview         what a move would do (target quote, checkpoint)   [route:preview]
+    POST /v1/jobs/{job_id}/move         (*)     owner: checkpoint now -> verified -> terminate -> successor
+                                                (off unless JOB_MOVE_ENABLED; jobs/continuation.py) [route:execute]
   runner callbacks (ONLY the job token: Authorization: Bearer ogj_<job_id>.<token>; never an API key)
     POST /v1/jobs/{job_id}/runner/events        {"events": [{seq, type, at, data}, ...]}  duplicate seq ignored
     PUT  /v1/jobs/{job_id}/runner/artifacts/{name}   raw bytes, X-Content-SHA256 (or X-Artifact-SHA256); names
                                                 ckpt-eNNNN.pt are checkpoints (own size limit, latest-N retention)
     GET  /v1/jobs/{job_id}/runner/resume        the checkpoint this job was created to resume from (404 otherwise)
+    GET  /v1/jobs/{job_id}/runner/instructions  open instructions for the runner (checkpoint_now); the same list rides
+                                                on every runner/events response as `instructions`
     POST /v1/jobs/{job_id}/runner/complete      {outcome: succeeded|failed|oom|timeout, summary}
 Automatic relaunch (jobs/relaunch.py, background job job_relaunch; off unless JOB_AUTO_RELAUNCH_ENABLED and the job's
 retry.max_attempts > 1) submits through the same orchestrator.submit; a job in a chain carries a `chain` block.
@@ -34,6 +42,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 
+import jobs.continuation  # noqa: F401  registers the job_move background job (a no-op unless enabled)
 import jobs.relaunch  # noqa: F401  registers the job_relaunch background job (a no-op unless enabled)
 import jobs.sync  # noqa: F401  registers the job_sync background job
 from accounts.auth import Principal, require_scope
@@ -43,7 +52,7 @@ from jobs import orchestrator as O
 from jobs import tokens
 from routing import control, idempotency
 
-control.install_job_heartbeats(names=("job_sync", "job_relaunch"))
+control.install_job_heartbeats(names=("job_sync", "job_relaunch", "job_move"))
 
 router = APIRouter()
 READ = require_scope("deployments:read")
@@ -194,6 +203,78 @@ def job_cancel(job_id: str, request: Request, who: Principal = Depends(require_s
     return _idem(request, who, f"job_cancel:{job_id}", {}, run)
 
 
+def _continued(fn):
+    from jobs import continuation as C
+    try:
+        return fn()
+    except C.Refused as r:
+        raise HTTPException(r.status, r.detail()) from None
+    except O.JobRefused as r:
+        raise HTTPException(r.status, r.detail()) from None
+
+
+def _successor_check(job_id: str):
+    """reclaim_check: a crashed / stale resume that may already have created the successor is never re-run."""
+    def check(row) -> list[str]:
+        from jobs import continuation as C
+        s2 = C.successor_of(job_id)
+        return [s2.job_id] if s2 is not None else []
+    return check
+
+
+@router.post("/v1/jobs/{job_id}/resume/preview", tags=["jobs"],
+             summary="What a resume would submit: the quote, the provider and the checkpoint (no write)")
+async def job_resume_preview(job_id: str, request: Request, who: Principal = Depends(require_scope("route:preview"))):
+    _valid_id(job_id)
+    body = await _json_body(request)
+    from jobs import continuation as C
+    out = _continued(lambda: C.resume_preview(job_id, who, body))
+    return envelope(disclosure.redact(out, who), kind=ESTIMATED, methodology=METH)
+
+
+@router.post("/v1/jobs/{job_id}/resume", tags=["jobs"], summary="Resume a stopped / interrupted job on a new GPU "
+                                                                  "(Idempotency-Key required)")
+async def job_resume(job_id: str, request: Request, who: Principal = Depends(require_scope("route:execute"))):
+    _valid_id(job_id)
+    body = await _json_body(request)
+    from jobs import continuation as C
+    _continued(lambda: C._owned(job_id, who))   # 404 before claiming a key for someone else's job
+
+    def run():
+        code, out = _continued(lambda: C.resume(job_id, who, body))
+        return code, envelope(disclosure.redact(out, who), kind=TRANSACTION, methodology=METH,
+                              also=["/methodology/execution-safety"])
+
+    return _idem(request, who, f"job_resume:{job_id}", body, run,
+                 resource_of=lambda p: (p.get("data") or {}).get("job_id"), reclaim_check=_successor_check(job_id))
+
+
+@router.post("/v1/jobs/{job_id}/move/preview", tags=["jobs"],
+             summary="What a move would do: the target quote and the checkpoint steps (no write)")
+async def job_move_preview(job_id: str, request: Request, who: Principal = Depends(require_scope("route:preview"))):
+    _valid_id(job_id)
+    body = await _json_body(request)
+    from jobs import continuation as C
+    out = _continued(lambda: C.move_preview(job_id, who, body))
+    return envelope(disclosure.redact(out, who), kind=ESTIMATED, methodology=METH)
+
+
+@router.post("/v1/jobs/{job_id}/move", tags=["jobs"], summary="Move a running job to another GPU via a verified "
+                                                              "checkpoint (Idempotency-Key required)")
+async def job_move(job_id: str, request: Request, who: Principal = Depends(require_scope("route:execute"))):
+    _valid_id(job_id)
+    body = await _json_body(request)
+    from jobs import continuation as C
+    _continued(lambda: C._owned(job_id, who))
+
+    def run():
+        code, out = _continued(lambda: C.request_move(job_id, who, body))
+        return code, envelope(disclosure.redact(out, who), kind=TRANSACTION, methodology=METH,
+                              also=["/methodology/execution-safety"])
+
+    return _idem(request, who, f"job_move:{job_id}", body, run)
+
+
 def _valid_id(job_id: str) -> None:
     if not re.match(_JOB, job_id or ""):
         raise HTTPException(404, {"code": "job_not_found", "message": "job not found"})
@@ -252,7 +333,24 @@ async def runner_events(job_id: str, request: Request):
     except Exception:  # noqa: BLE001 - the events are recorded; job_sync retries
         import logging
         logging.getLogger(__name__).exception("job %s: sync after runner events failed", job_id)
-    return {"ok": True, **out}
+    return {"ok": True, **out, "instructions": _instructions(job_id)}
+
+
+def _instructions(job_id: str) -> list:
+    try:
+        return jobs.continuation.pending_instructions(job_id)
+    except Exception:  # noqa: BLE001 - an instruction read never fails a callback
+        import logging
+        logging.getLogger(__name__).exception("job %s: runner instructions unreadable", job_id)
+        return []
+
+
+@router.get("/v1/jobs/{job_id}/runner/instructions", tags=["jobs-runner"], include_in_schema=False)
+def runner_instructions(job_id: str, request: Request):
+    """Open instructions for the runner (checkpoint_now: save + upload a checkpoint at the next safe point)."""
+    auth = _runner_auth(request, job_id)
+    tokens.touch(auth.token_id, None)
+    return {"ok": True, "instructions": _instructions(job_id)}
 
 
 @router.put("/v1/jobs/{job_id}/runner/artifacts/{name}", tags=["jobs-runner"], include_in_schema=False)

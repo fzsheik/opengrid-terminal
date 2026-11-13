@@ -138,6 +138,11 @@ _RELAUNCH = {
     "relaunched": ("🔁", "Job relaunched after an interruption"),
     "relaunched_from": ("🔁", "Job relaunch attempt submitted"),
     "chain_stopped": ("⏹️", "Job not relaunched: chain stopped"),
+    "resumed": ("▶️", "Job resumed by its owner on a new GPU"),
+    "oom_escalated": ("⬆️", "Job continued on a larger-VRAM GPU after out_of_memory"),
+    "moved": ("🚚", "Job moved to another GPU"),
+    "move_aborted": ("↩️", "Job move aborted: the job kept running"),
+    "move_failed": ("⚠️", "Job move stopped after the old GPU was terminated"),
 }
 
 
@@ -282,7 +287,8 @@ _QUERIES = {
                                     'out_of_memory', 'training_timed_out', 'artifact_upload_failed', 'runner_lost',
                                     'cancel_requested', 'termination_failed', 'orphan_suspected',
                                     'provisioning_uncertain'))
-               OR e.evidence->>'relaunch_event' IN ('relaunched', 'relaunched_from', 'chain_stopped'))
+               OR e.evidence->>'relaunch_event' IN ('relaunched', 'relaunched_from', 'chain_stopped', 'resumed',
+                                                     'oom_escalated', 'moved', 'move_aborted', 'move_failed'))
         ORDER BY e.at, e.id LIMIT :n""", job_message),
     "reservations": ("""
         SELECT e.id AS key, e.at AS ts, e.request_id, e.to_status, e.actor, e.at,

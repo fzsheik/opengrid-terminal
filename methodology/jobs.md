@@ -296,6 +296,129 @@ hidden).
 **Reliability.** `routing/reliability.py` reads deployments, not jobs: the interrupted attempt's deployment is
 counted once (its own interruption) and the successor is a new deployment counted like any other launch.
 
+## 8c. Provider-initiated stops (`jobs/sync.py` `_provider_stop`)
+
+Some providers report a reclaimed or crashed machine as **stopped / exited** rather than terminated (RunPod
+`EXITED`, Vast `exited`, DigitalOcean `off`, Hyperstack `SHUTOFF`, Verda `offline`). When OpenGrid did NOT ask for the
+stop, that is an interruption and the job fails with `failure.code = gpu_interrupted` at once (it does not wait for
+the runner-silence limit), so the automatic relaunch (8b) handles it exactly like a terminated machine. Only on
+**unambiguous** evidence, all of:
+
+* the deployment went **directly** `running -> stopped` on a provider **status read** (the event carries the read's
+  state and the provider's own status word) and `routing/deployments._apply` flagged it an interruption: no
+  `requested_action: stop`, no `stop_requested_at`, no terminate request;
+* a **later** provider read still said `stopped` at least `JOB_PROVIDER_STOP_CONFIRM_SECONDS` (default 60; 0 = off)
+  after the first one (one read is never proof);
+* the runner has **not reported since** the stop (a runner still talking contradicts the provider);
+* the job is running (`initializing` / `training` / `saving_artifacts`), not completed, not cancelled.
+
+The job then moves to `runner_lost` with `failure_code gpu_interrupted` and `evidence.provider_stop` (provider
+status, the stop time, the confirming read, the last runner event), the stopped machine is terminated through the
+existing path (a stopped machine may still bill), and the relaunch waits for the provider-confirmed termination as
+always. Anything less certain (`stopping`, `degraded`, a manual transition, a single read, a runner that kept
+reporting) keeps the previous behaviour: the runner-silence rule. **A stop a user or an operator asked for never
+triggers a relaunch**: it is never flagged an interruption, and a later terminate of that machine ends the job as
+`terminated_before_completion`.
+
+## 8d. Resume (`jobs/continuation.py`)
+
+`POST /v1/jobs/{id}/resume` (owner only, scope `route:execute`, `Idempotency-Key` required)
+
+```json
+{"provider": "same" | "best" | "<provider id>", "max_total_cost_usd": 2.0, "from_scratch": false}
+```
+
+continues a job that ended without finishing (cancelled, `gpu_interrupted`, `runner_lost`,
+`terminated_before_completion`) as a NEW job: `retry_of` = this job, `succession_kind = resume`, the next attempt
+number, the same template / config / resources / strategy / price cap / runtime, `resume_from` = the chain's latest
+checkpoint that re-verifies (sha256; the same rule as 8b). `provider`: `same` = only the previous attempt's provider;
+`best` (default) = the best-ranked eligible one; an id = only that one. `max_total_cost_usd` (required) becomes the
+successor's `limits.max_total_cost_usd`; the max-price cap, the account cost guards and the approval (SUPERVISED:
+`pending_approval`) apply as for any job. It is the ordinary submit path; nothing else provisions.
+
+Refused (409 unless noted): `machine_may_exist` (the previous GPU is not provider-confirmed gone: the same core rule
+as 8b; a job that never created an instance counts as gone), `no_verified_checkpoint` (none in the chain re-verifies;
+`from_scratch: true` explicitly starts over), `already_continued` (the job already has a successor: one per attempt,
+whatever its kind, `UNIQUE(retry_of)`), `move_in_progress`, `not_resumable` (a success, a training failure, an OOM
+(see 8e), a running job), `resume_not_real` (sandbox), `job_not_found` (404: not the owner), `invalid_provider`,
+`invalid_max_total_cost_usd`, `unknown_field` (422), plus every refusal of the submit path. `POST
+/v1/jobs/{id}/resume/preview` (scope `route:preview`) returns what it would submit (provider, GPU, price, est. max
+total, the ceiling, the checkpoint with its age) and writes nothing; the job page shows it before the Resume button
+submits. The old job gets the note "resumed as job-X on P from epoch N"; `GET /v1/jobs/{id}` carries
+`actions.resume = {available, code, reason}`.
+
+## 8e. OOM escalation
+
+Opt-in per job, and only while `JOB_AUTO_RELAUNCH_ENABLED` is on (it runs in the `job_relaunch` pass):
+
+```json
+"retry": {"max_attempts": 1, "max_total_usd": 8, "on_oom": "escalate", "max_oom_escalations": 1}
+```
+
+(`on_oom` default off; `max_total_usd` required; `max_oom_escalations` 1-2, default 1.) When an attempt fails with
+`failure.code = out_of_memory` and its machine is provider-confirmed gone, OpenGrid relaunches it ONCE on the **next
+GPU tier with more VRAM** than the GPU that ran out (`hardware.py` `vram_gb`): the smallest larger tier first, within
+a tier the same family (e.g. H100 80 GB -> H100 94 GB NVL), then the same vendor; only GPUs listed in the market now;
+never MIG slices or laptop parts; a tier the workload cannot run on (`gpu_incompatible`) is skipped. Resources pin
+that GPU; everything else is the failed attempt's request, from its latest verified checkpoint. Money: spend so far
+(8b's rule) + the tier's `est_max_total` must stay within `retry.max_total_usd`; the tier is skipped otherwise, and
+if every usable tier is over, the escalation stops `retry_budget_exhausted`. The decision is a `job_relaunches` row
+(`kind = oom_escalation`, the same exactly-once claim), the submission is the ordinary submit path inside the
+idempotency store (`oom:<job id>`). Stops: `oom_escalations_exhausted` (already escalated `max_oom_escalations`
+times in this chain), `no_larger_gpu`, `retry_budget_exhausted` / `batch_budget_exhausted`, the owner codes of 8b.
+Events: "escalated as job-X on P: out_of_memory on <gpu> (80 GB): escalated to <gpu> (94 GB, the next VRAM tier,
+same family)" with `from_gpu`, `to_gpu`, both VRAM sizes and every tier tried. Never for any other failure
+(`training_failed`, a timeout, ...).
+
+## 8f. Move (`jobs/continuation.py`, the `job_move` pass)
+
+`POST /v1/jobs/{id}/move` (owner only, `route:execute`, `Idempotency-Key`; refused `move_disabled` unless
+`JOB_MOVE_ENABLED`, default off)
+
+```json
+{"provider": "best" | "<provider id>", "max_total_cost_usd": 2.0, "reason": "cheaper GPU available"}
+```
+
+moves a RUNNING job (runner reporting, deployment `running`, not in its last epoch) to another GPU without ever
+killing it unprotected:
+
+1. **Target first.** The successor's selection runs before anything is touched (`best` = the best-ranked eligible
+   provider other than the current one); nothing eligible within the ceiling -> refused, the job untouched.
+2. **checkpointing.** A runner instruction `checkpoint_now` is queued on the existing runner channel (every
+   `runner/events` response carries `instructions`; `GET /v1/jobs/{id}/runner/instructions` too). The runner saves and
+   uploads a checkpoint at the end of the current epoch (the next safe point). The pass waits for a checkpoint of this
+   job stored AFTER the request that re-verifies (sha256). None within `JOB_MOVE_CHECKPOINT_TIMEOUT_MINUTES` (default
+   30) -> **aborted** (`checkpoint_timeout`): the instruction is withdrawn and the job keeps running untouched. The
+   target is re-selected now (nothing eligible -> aborted, untouched); a batch shard reserves the successor's
+   ceiling in the batch ledger here, before anything is terminated.
+3. **terminating.** Only then: the job -> `terminating` (`outcome cancelled`, `failure.code moved`) and the GPU is
+   terminated through the existing terminate path; the pass waits for the provider-confirmed termination (an alert
+   `move_termination_stalled` after `JOB_MOVE_TERMINATION_TIMEOUT_MINUTES`; never a successor before).
+4. **submitting.** The successor through the ordinary submit path (`succession_kind = move`, `resume_from` = that
+   checkpoint), inside the idempotency store (`move:<move_id>`) and `UNIQUE(retry_of)`; **moved**. A refusal here is
+   **failed**: the old machine is gone, the checkpoint is kept, Resume works.
+
+At most one open move per job (a partial unique index; a second request is `move_in_progress`). Each step is a job
+event (`move_requested`, `move_checkpoint_verified`, `move_terminated`, `moved` | `move_aborted` | `move_failed`).
+`POST /v1/jobs/{id}/move/preview` shows the target quote, the latest checkpoint and the steps; `GET /v1/jobs/{id}`
+carries `actions.move = {available, enabled, code, reason, latest: {status, checkpoint, successor_job_id, ...}}`. A
+cancel during a move aborts it. A moved job is never auto-relaunched (`moved` is not a relaunch trigger).
+
+**Move suggestion (read-only).** `GET /v1/jobs/{id}` of a running real job carries `move_suggestion` when an eligible
+offer elsewhere has an estimated remaining cost at least `JOB_MOVE_SUGGEST_MIN_SAVINGS_PCT` (default 20) lower, or
+the current provider is degraded (deployment `degraded`, or launches on it paused) and an eligible offer exists:
+`{reason: cheaper | provider_degraded, from, to, est_remaining_cost_now_usd, est_remaining_cost_after_move_usd,
+move_overhead_usd, savings_pct, basis, auto: false}`. Remaining = the job's typical total x (epochs left / epochs);
+after a move = the alternative's typical total x the same fraction + `JOB_MOVE_OVERHEAD_MINUTES` (default 10) of its
+price (boot + resume). Estimates, labelled so; cached 60 s; **OpenGrid never moves a job on its own**. The MCP server
+shows it in the job status and cannot act on it.
+
+**Batch shards.** A shard's resume, escalation and move reserve their ceiling in the batch ledger (`batch_attempts`,
+kinds `resume` / `oom_escalation` / `move`) under the batch lock BEFORE the submission, attached to the successor in
+the job-creating transaction (which also makes it the shard's current job by compare-and-set), released if the
+submission is refused; refused when the batch is not active or its remaining budget is too small
+(`batch_budget_exhausted`); a shard being moved stays `relaunching`.
+
 ## 9. Errors
 
 HTTP 4xx/5xx with `detail = {code, message, ...}`: validation (`workloads.spec` codes, 422), `execution_disabled`,
@@ -306,7 +429,8 @@ again), `idempotency_key_required` (428), `idempotency_key_reused` (422), `idemp
 are `failure.code`: `cuda_init_failed`, `bootstrap_failed`, `bootstrap_timeout`, `training_failed`,
 `out_of_memory`, `training_timed_out`, `artifact_upload_failed`, `result_missing`, `metrics_missing`,
 `gpu_unavailable`, `price_changed`, `approval_rejected`, `terminated_before_completion`, `gpu_interrupted`,
-`runner_lost`; a relaunch submission may also be refused with `relaunch_exists` (409); an unconfirmed
+`runner_lost`, `moved` (8f); a relaunch submission may also be refused with `relaunch_exists` (409); resume / move
+refusals are listed in 8d / 8f; an unconfirmed
 termination shows as `resource.termination_unconfirmed` with `disposition = possibly_billing`.
 
 ## 10. Endpoints
@@ -319,7 +443,9 @@ termination shows as `resource.termination_unconfirmed` with `disposition = poss
 | POST | /v1/jobs (Idempotency-Key) | route:execute |
 | GET | /v1/jobs, /v1/jobs/{id}, /logs?after=&limit=, /metrics, /artifacts, /artifacts/{name} | deployments:read |
 | POST | /v1/jobs/{id}/cancel (Idempotency-Key) | route:execute |
-| POST/PUT/GET | /v1/jobs/{id}/runner/events, /runner/artifacts/{name}, /runner/complete, /runner/resume | job token only |
+| POST | /v1/jobs/{id}/resume, /v1/jobs/{id}/move (Idempotency-Key; owner only) | route:execute |
+| POST | /v1/jobs/{id}/resume/preview, /v1/jobs/{id}/move/preview (owner only; no write) | route:preview |
+| POST/PUT/GET | /v1/jobs/{id}/runner/events, /runner/artifacts/{name}, /runner/complete, /runner/resume, /runner/instructions | job token only |
 
 Keys see their own account's jobs; the operator sees all. Discord: job transitions are posted to the
 deployments channel (`alerts/channels.py`, feed `jobs`), next to the deployment's own lifecycle posts.

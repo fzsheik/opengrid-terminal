@@ -13,7 +13,8 @@ resume_from {job_id, artifact?} is shape-checked here; ownership, storage and sh
 (jobs/artifacts.resolve_resume), which pins {job_id, artifact, epoch, sha256, size} into the job's spec.
 retry {max_attempts 1..3 (default 1 = never relaunched), max_total_usd (REQUIRED when max_attempts > 1: the ceiling
 across ALL attempts, >= limits.max_total_cost_usd)} is the automatic-relaunch policy (jobs/relaunch.py); it only
-acts when settings.job_auto_relaunch_enabled is on. routing.exclude_providers [provider ids] removes providers
+acts when settings.job_auto_relaunch_enabled is on. retry.on_oom "escalate" (+ max_oom_escalations 1..2, default 1)
+opts in to ONE relaunch on a larger-VRAM GPU after out_of_memory (jobs/continuation.py; needs max_total_usd). routing.exclude_providers [provider ids] removes providers
 from the selection (a relaunch fills it with every provider that interrupted / lost an attempt of the chain);
 routing.include_providers [provider ids] restricts it to those providers (a batch shard is pinned to its placement
 this way, jobs/batches.py). These keys appear in the validated request only when given, so an ordinary request keeps exactly its old shape.
@@ -82,6 +83,10 @@ class Retry(_M):
     included (1 = never relaunched); max_total_usd caps the spend of ALL attempts together."""
     max_attempts: int = 1
     max_total_usd: float | None = None
+    # OOM escalation (jobs/continuation.py): "escalate" = after out_of_memory, relaunch ONCE (max_oom_escalations,
+    # cap MAX_OOM_ESCALATIONS) on the next GPU tier with more VRAM. Default off; needs max_total_usd.
+    on_oom: Literal["off", "escalate"] | None = None
+    max_oom_escalations: int | None = None
 
 
 class Limits(_M):
@@ -114,6 +119,7 @@ class WorkloadSpec(_M):
 
 
 MAX_ATTEMPTS = 3
+MAX_OOM_ESCALATIONS = 2
 PROVIDER_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}\Z")
 MAX_EXCLUDED_PROVIDERS = 32
 
@@ -394,6 +400,31 @@ def validate(body) -> Validated:
                 raise WorkloadError("invalid_retry", f"retry.max_total_usd must be at most {hi:g} USD",
                                     field="retry.max_total_usd")
         retry = {"max_attempts": int(n), "max_total_usd": None if cap is None else round(float(cap), 4)}
+        oom = s.retry.on_oom
+        if s.retry.max_oom_escalations is not None:
+            m = s.retry.max_oom_escalations
+            if isinstance(m, bool) or not isinstance(m, int) or not 1 <= m <= MAX_OOM_ESCALATIONS:
+                raise WorkloadError("invalid_retry", f"retry.max_oom_escalations must be an integer "
+                                                     f"1..{MAX_OOM_ESCALATIONS}", field="retry.max_oom_escalations")
+            if oom != "escalate":
+                raise WorkloadError("invalid_retry", "retry.max_oom_escalations needs retry.on_oom: escalate",
+                                    field="retry.max_oom_escalations")
+        if oom == "escalate":
+            if cap is None:
+                raise WorkloadError("retry_budget_required", "retry.max_total_usd is required with retry.on_oom "
+                                                             "escalate: it caps the spend of all attempts together",
+                                    field="retry.max_total_usd")
+            if float(cap) < float(lim.max_total_cost_usd) - 1e-9:
+                raise WorkloadError("invalid_retry", f"retry.max_total_usd {float(cap):g} is below "
+                                                     f"limits.max_total_cost_usd {float(lim.max_total_cost_usd):g}: "
+                                                     "the ceiling across all attempts must cover the first one",
+                                    field="retry.max_total_usd")
+            hi = float(lb["max_total_cost_usd"]["max"]) * (MAX_ATTEMPTS + MAX_OOM_ESCALATIONS)
+            if float(cap) > hi:
+                raise WorkloadError("invalid_retry", f"retry.max_total_usd must be at most {hi:g} USD",
+                                    field="retry.max_total_usd")
+            retry["on_oom"] = "escalate"     # only when asked: an ordinary retry block keeps its old shape
+            retry["max_oom_escalations"] = int(s.retry.max_oom_escalations or 1)
         if n > 1 and s.sandbox:
             notes.append("sandbox: a simulation is never interrupted, so the retry policy is recorded but never "
                          "used (nothing is relaunched)")

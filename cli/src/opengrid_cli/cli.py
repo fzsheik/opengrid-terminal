@@ -1,8 +1,10 @@
 """`opengrid`: OpenGrid from the terminal. Market data, local project analysis, workload-aware recommendations.
 
-No command can spend money. There is deliberately no launch / route execute / real job submit command. The only
-server-side writes are: `route preview` (records a preview ticket), `jobs cancel` / `batch cancel` (spend-reducing,
-need --yes), `demo train` and `batch sandbox` (SANDBOX: simulated, no GPU, no spend). `batch preview` writes nothing.
+No command can spend money on its own. There is deliberately no launch / route execute / real job submit command. The
+only server-side writes are: `route preview` (records a preview ticket), `jobs cancel` / `batch cancel` (spend-reducing,
+need --yes), `demo train` and `batch sandbox` (SANDBOX: simulated, no GPU, no spend), and `jobs resume` / `jobs move`
+(continue one of YOUR existing jobs on a new GPU through the server's quote / approval / cost-guard path, within the
+--max-total-cost-usd you give; without --yes they only show the quote). `batch preview` writes nothing.
 
 Exit codes:
   0  ok
@@ -780,7 +782,55 @@ def cmd_jobs(args) -> int:
                                         + f"\nidempotency key {d['idempotency_key']}"
                                         + (" (replayed)" if d["replayed"] else "")))
             return EXIT_OK
+        if args.jobs_cmd in ("resume", "move"):
+            return _continue(c, args, out)
     return EXIT_ERROR
+
+
+def _quote_lines(pv: dict) -> None:
+    q = pv.get("quote") or {}
+    ck = pv.get("checkpoint") or pv.get("latest_checkpoint")
+    if not pv.get("can_submit"):
+        r = pv.get("refusal") or {}
+        print(f"not possible now: {r.get('code')}: {r.get('message')}")
+        return
+    print(f"  provider  {q.get('provider')}  {q.get('region') or ''}".rstrip())
+    print(f"  gpu       {q.get('gpu_count') or 1}x {q.get('gpu')}  ${q.get('price_per_gpu_hour')}/GPU-h "
+          f"({q.get('price_kind') or 'observed'})")
+    print(f"  cost      est. at most ${q.get('est_max_total_usd')}  (your ceiling ${q.get('max_total_cost_usd')})")
+    if pv.get("action") == "move":
+        print("  checkpoint a NEW one is saved and verified before the current GPU is shut down"
+              + (f" (latest now: epoch {ck.get('epoch')})" if ck else ""))
+    elif pv.get("from_scratch"):
+        print("  checkpoint none: starts from scratch")
+    elif ck:
+        age = ck.get("age_seconds")
+        print(f"  checkpoint epoch {ck.get('epoch')} of {ck.get('job_id')}"
+              + (f", saved {int(age) // 60} min ago" if isinstance(age, (int, float)) else "") + " (sha256 verified)")
+
+
+def _continue(c: Client, args, out: Out) -> int:
+    """jobs resume / jobs move: the quote first; only --yes submits (Idempotency-Key, reusable)."""
+    act = args.jobs_cmd
+    extra = {"from_scratch": True if getattr(args, "from_scratch", False) else None,
+             "reason": getattr(args, "reason", None)}
+    body = actions._cont_body(provider=args.provider, max_total_cost_usd=args.max_total_cost_usd, **extra)
+    pv = actions.job_continue_preview(c, args.job_id, act, body)["preview"]
+    if not args.yes:
+        out.emit({"preview": pv, "submitted": False},
+                 lambda d: (print(f"{act} {args.job_id}: the quote (nothing submitted)"), _quote_lines(pv),
+                            print(f"add --yes to {act} (it can cost up to ${body['max_total_cost_usd']} once approved)")))
+        return EXIT_REFUSED      # the quote only: confirmation missing (or not possible now)
+    fn = actions.job_resume if act == "resume" else actions.job_move
+    d = fn(c, args.job_id, body, confirm=True, idempotency_key=args.idempotency_key)
+    if act == "resume":
+        out.emit(d, lambda d: print(f"resumed {args.job_id} as {d['job'].get('job_id')}: {d['job'].get('status')}"
+                                    f"\nidempotency key {d['idempotency_key']}" + (" (replayed)" if d["replayed"] else "")))
+    else:
+        out.emit(d, lambda d: print(f"move of {args.job_id} requested: {(d.get('move_request') or {}).get('status')} "
+                                    "(the job keeps running until a new checkpoint is verified)"
+                                    f"\nidempotency key {d['idempotency_key']}" + (" (replayed)" if d["replayed"] else "")))
+    return EXIT_OK
 
 
 FINISHED = {"reconciled", "validation_failed", "no_eligible_provider", "approval_rejected", "training_completed",
@@ -1058,7 +1108,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--mode", default="BALANCED", choices=["CHEAPEST", "FASTEST_AVAILABLE", "BALANCED", "MOST_STABLE"],
                    type=str.upper)
 
-    jobs = sub.add_parser("jobs", help="your jobs (needs deployments:read; cancel needs route:execute)", parents=[common])
+    jobs = sub.add_parser("jobs", aliases=["job"], help="your jobs (needs deployments:read; cancel / resume / move "
+                                                         "need route:execute)", parents=[common])
     jsub = jobs.add_subparsers(dest="jobs_cmd", required=True, metavar="ACTION")
     s = add("list", "list your jobs", cmd_jobs, jsub)
     s.add_argument("--status", help="open or a job state")
@@ -1075,6 +1126,22 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("job_id")
     s.add_argument("--yes", "-y", action="store_true", help="confirm the cancel")
     s.add_argument("--idempotency-key", help="reuse to retry the same cancel safely")
+    s = add("resume", "continue a stopped / interrupted job from its latest verified checkpoint (shows the quote; "
+                      "--yes submits; needs route:execute)", cmd_jobs, jsub)
+    s.add_argument("job_id")
+    s.add_argument("--provider", default="best", help="same | best | <provider id> (default best)")
+    s.add_argument("--max-total-cost-usd", type=float, required=True, help="the new attempt's total cost ceiling")
+    s.add_argument("--from-scratch", action="store_true", help="allowed only when no verified checkpoint exists")
+    s.add_argument("--yes", "-y", action="store_true", help="submit after showing the quote")
+    s.add_argument("--idempotency-key", help="reuse to retry the same resume safely")
+    s = add("move", "move a RUNNING job to another GPU: checkpoint, verify, terminate, continue (shows the quote; "
+                    "--yes requests it)", cmd_jobs, jsub)
+    s.add_argument("job_id")
+    s.add_argument("--provider", default="best", help="best | <provider id> (default best: another provider)")
+    s.add_argument("--max-total-cost-usd", type=float, required=True, help="the new attempt's total cost ceiling")
+    s.add_argument("--reason", required=True, help="why (recorded on the job)")
+    s.add_argument("--yes", "-y", action="store_true", help="request the move after showing the quote")
+    s.add_argument("--idempotency-key", help="reuse to retry the same move safely")
 
     batch = sub.add_parser("batch", help="batches of jobs: preview a plan, status, cancel, run a SANDBOX batch",
                            parents=[common])

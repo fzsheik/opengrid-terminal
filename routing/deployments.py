@@ -736,6 +736,12 @@ def observe(dep_id: str, st: InstanceState, *, checked_at: datetime | None = Non
         md = d.provider_metadata or {}
         if st.state != "not_found" and md.get("not_found_reads"):
             _meta(d, not_found_reads=[])
+        # The newest provider read that said `stopped` (jobs/sync._provider_stop: a stop is only taken for an
+        # interruption once a LATER read confirms it); any other definite state clears it.
+        if st.state == "stopped":
+            _meta(d, last_stopped_read={"at": checked_at.isoformat(), "provider_status": st.provider_status})
+        elif st.state not in ("unknown",) and md.get("last_stopped_read"):
+            _meta(d, last_stopped_read=None)
         if st.state == "unknown":
             _meta(d, last_status_error={"error_kind": st.error_kind, "message": (st.message or "")[:300],
                                         "at": checked_at.isoformat()})

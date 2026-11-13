@@ -45,6 +45,10 @@ Decision (consider(job_id); the `job_relaunch` background job every settings.job
        Both carry evidence.relaunch_event for the jobs feed (alerts/channels.py). An internal error -> `blocked`,
        retried next pass, ops alert relaunch_blocked (alerts/ops.py)
 
+OOM escalation (jobs/continuation.consider_oom; retry.on_oom "escalate") runs in the same pass with its own claim row
+(job_relaunches.kind oom_escalation). Resume and Move (user-triggered) are jobs/continuation.py; every successor of an
+attempt, whatever its kind, is the one row allowed by UNIQUE(retry_of).
+
 A batch shard (jobs/batches.py) relaunches through exactly this path; the batch adds an OUTER ceiling: no relaunch
 once the batch is cancelled / stopping (stop batch_stopped), the remaining chain budget is also capped by the batch's
 remaining budget, the successor's routing follows the batch's provider allow / deny lists (not the first attempt's
@@ -551,7 +555,7 @@ def _relaunch(job, ctx: dict) -> dict:
     from_txt = (f"resuming from epoch {resume['epoch']} of {resume['job_id']}" if resume else
                 "starting from scratch (no stored checkpoint to resume from)")
     chain_info = {"retry_of": job.job_id, "root_job_id": root_of(job), "attempt": n + 1, "max_attempts": m,
-                  "reason": f"attempt {n + 1} of {m}, relaunched after {job.failure_code} on {prev_provider or '?'} "
+                  "kind": "relaunch", "reason": f"attempt {n + 1} of {m}, relaunched after {job.failure_code} on {prev_provider or '?'} "
                             f"({cause}); {from_txt}"}
 
     def run():
@@ -623,6 +627,10 @@ def run_all() -> dict:
         out["considered"] += 1
         if r.get("decision") in ("relaunched", "stopped", "blocked"):
             out[r["decision"]] += 1
+    from jobs import continuation     # OOM escalation (opt-in per job: retry.on_oom escalate) rides the same pass
+    oom = continuation.run_oom()
+    if oom["considered"]:
+        out["oom"] = oom
     return out
 
 
@@ -638,7 +646,7 @@ def _job_relaunch():
 def _row_dict(r: JobRelaunch | None) -> dict | None:
     if r is None:
         return None
-    return {"status": r.status, "code": r.reason_code, "reason": r.reason, "next_job_id": r.successor_job_id,
+    return {"status": r.status, "kind": getattr(r, "kind", None) or "relaunch", "code": r.reason_code, "reason": r.reason, "next_job_id": r.successor_job_id,
             "excluded_providers": r.excluded_providers, "resume_from": r.resume_from,
             "spend_so_far_usd": _f(r.spend_so_far_usd), "max_total_usd": _f(r.max_total_usd),
             "est_next_usd": _f(r.est_next_usd), "decided_at": r.decided_at.isoformat() if r.decided_at else None}
@@ -646,7 +654,12 @@ def _row_dict(r: JobRelaunch | None) -> dict | None:
 
 def chain_infos(jobs) -> dict:
     """job_id -> the chain block, for the jobs that have a retry policy or belong to a chain. One query per kind."""
-    jobs = [j for j in jobs if j is not None and (policy(j) or j.retry_of or j.root_job_id)]
+    jobs = [j for j in jobs if j is not None]
+    if not jobs:
+        return {}
+    with normalize.SessionLocal() as s:     # a job that was resumed / moved has a chain block even without a policy
+        has_succ = set(s.scalars(select(Job.retry_of).where(Job.retry_of.in_([j.job_id for j in jobs]))))
+    jobs = [j for j in jobs if policy(j) or j.retry_of or j.root_job_id or j.job_id in has_succ]
     if not jobs:
         return {}
     ids = [j.job_id for j in jobs]
@@ -655,7 +668,9 @@ def chain_infos(jobs) -> dict:
     with normalize.SessionLocal() as s:
         rows = {r.failed_job_id: r for r in s.scalars(select(JobRelaunch).where(
             JobRelaunch.failed_job_id.in_(ids + prev_ids)))}
-        succ = {j.retry_of: j.job_id for j in s.scalars(select(Job).where(Job.retry_of.in_(ids)))}
+        succ_rows = list(s.scalars(select(Job).where(Job.retry_of.in_(ids))))
+        succ = {j.retry_of: j.job_id for j in succ_rows}
+        succ_kind = {j.retry_of: j.succession_kind or "relaunch" for j in succ_rows}
         prevs = {j.job_id: j for j in s.scalars(select(Job).where(Job.job_id.in_(prev_ids)))} if prev_ids else {}
         dep_ids = [j.deployment_id for j in list(jobs) + list(prevs.values()) if j.deployment_id]
         deps = {d.deployment_id: d for d in s.scalars(select(Deployment).where(
@@ -671,6 +686,8 @@ def chain_infos(jobs) -> dict:
                  "next_job_id": (mine.successor_job_id if mine is not None and mine.status == "relaunched" else None)
                  or succ.get(j.job_id),
                  "auto_relaunch_enabled": on, "simulated": bool(j.sandbox), "relaunched_after": None,
+                 "kind": j.succession_kind or ("relaunch" if j.retry_of else None),
+                 "next_kind": succ_kind.get(j.job_id),
                  "relaunch": _row_dict(mine), "stopped": None}
         if mine is not None and mine.status == "stopped":
             block["stopped"] = {"code": mine.reason_code, "reason": mine.reason}
@@ -679,6 +696,7 @@ def chain_infos(jobs) -> dict:
             pd = deps.get(pr.deployment_id) if pr is not None and pr.deployment_id else None
             rf = (prow.resume_from if prow is not None else None) or (j.spec or {}).get("resume_from") or None
             block["relaunched_after"] = {
+                "kind": j.succession_kind or "relaunch",
                 "previous_job_id": j.retry_of, "code": pr.failure_code if pr is not None else None,
                 "cause": CAUSE.get(pr.failure_code) if pr is not None else None,
                 "provider": (pd.provider if pd is not None else None) or ((pr.selection or {}).get("provider")

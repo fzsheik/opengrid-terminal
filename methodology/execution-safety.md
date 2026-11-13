@@ -245,6 +245,36 @@ chain budget, and `spend so far + its estimate <= max_total_usd` checked before 
 successor per failed attempt: a claim row (primary key), the idempotency store (key `relaunch:<job id>`) and
 `UNIQUE(jobs.retry_of)`. An internal error raises the ops alert `relaunch_blocked`.
 
+## Resume, OOM escalation and move
+
+`jobs/continuation.py`; methodology/jobs.md 8c-8f. Invariants:
+
+* **No new provisioning path.** Every successor (resume, OOM escalation, move) is an ordinary job through
+  `jobs.orchestrator.submit` -> quote -> `engine.route`: the same validation, live re-validation, cost guards,
+  approval (SUPERVISED: `pending_approval`), single provision call per deployment and no failover on an ambiguous
+  outcome.
+* **The core rule.** A successor is submitted only once the previous machine is provider-confirmed gone (job
+  `termination_confirmed` / `reconciliation_pending` / `reconciled` AND deployment `terminated` with provider
+  evidence). Resume refuses `machine_may_exist` otherwise; the move waits.
+* **One successor per attempt**, whatever its kind: `UNIQUE(jobs.retry_of)`, plus the idempotency store (resume:
+  the caller's `Idempotency-Key`; escalation `oom:<job>`; move `move:<move_id>`) and, for escalations, the
+  `job_relaunches` claim row. At most one open move per job (partial unique index on `job_moves`).
+* **Never kill without a verified checkpoint.** A move terminates the running GPU only after a checkpoint of that job,
+  stored after the request, re-verifies (sha256), and only after the target was selected within the ceiling; a
+  checkpoint timeout or no eligible target aborts the move and the job keeps running. The terminate is the existing
+  `deployments.terminate`.
+* **Money ceilings.** The caller's `max_total_cost_usd` is the successor's own `limits.max_total_cost_usd` (bound by the
+  max-price cap at approval); an escalation stays within `retry.max_total_usd` (spend so far + the next attempt's
+  maximum); a batch shard reserves in the batch ledger under the batch's advisory lock before submitting.
+* **Owner only.** Resume / move act for the job's own account (anyone else: 404), with `route:execute`; a move's
+  successor is submitted as its requester, re-verified at that moment (revoked / expired / scope lost / suspended ->
+  the move fails, nothing submitted). An escalation runs as the job's original principal (8b's rule).
+* **Provider-initiated stops** count as interruptions only on unambiguous evidence (a direct `running -> stopped`
+  provider read flagged an interruption, confirmed by a later read, runner silent since); a stop OpenGrid was asked
+  for never relaunches anything.
+* **MCP cannot provision**: it shows `move_suggestion` and the action availability, nothing more. A suggestion never
+  acts.
+
 ## Pinned credential fingerprint
 
 A deployment pins *where* its credential comes from (`platform:<provider>` or a BYO credential row) and, from

@@ -1,7 +1,9 @@
 """Recommendations, route preview and jobs: the calls shared by the CLI and the MCP server.
 
 Safety boundary (deliberate, see README "What this client can never do"):
-  - nothing here provisions compute, submits a real job, or executes code;
+  - nothing here provisions compute, submits a new real job, or executes code; `job_resume` / `job_move` continue an
+    EXISTING job of the caller through the server's normal quote / approval / cost-guard path, within an explicit
+    ceiling, only with confirm=True (CLI --yes); the MCP server never calls them;
   - the only mutations are: a route PREVIEW (writes an audit/preview ticket server-side, spends nothing),
     a job or batch CANCEL (spend-reducing, Idempotency-Key, explicit confirmation by the caller), the MNIST
     SANDBOX demo and a SANDBOX batch (simulated: no provider is called, no GPU exists, nothing is billed).
@@ -143,6 +145,16 @@ def job_summary(j: dict) -> dict:
         out["estimates"] = est
     if "cancel" in j:
         out["cancel"] = j["cancel"]
+    if j.get("move_suggestion"):        # read-only: OpenGrid never moves a job on its own
+        out["move_suggestion"] = {k: clip(v) if not isinstance(v, dict) else v
+                                  for k, v in j["move_suggestion"].items()}
+    act = j.get("actions") or {}
+    if act:
+        out["actions"] = {k: {x: clip(v.get(x)) for x in ("available", "code", "reason") if x in v}
+                          for k, v in act.items() if isinstance(v, dict)}
+    ch = j.get("chain") or {}
+    if ch.get("next_job_id") or ch.get("previous_job_id"):
+        out["chain"] = {k: clip(ch.get(k)) for k in ("attempt", "kind", "previous_job_id", "next_job_id")}
     return out
 
 
@@ -179,6 +191,57 @@ def job_cancel(c: Client, job_id: str, *, confirm: bool, idempotency_key: str | 
     r = c.post(f"/v1/jobs/{seg(job_id)}/cancel", {}, idempotency_key=key)
     return {"job": job_summary(r.data or {}), "idempotency_key": key,
             "replayed": (r.headers or {}).get("idempotent-replayed") == "true", "request_id": r.request_id}
+
+
+def _cont_body(*, provider: str | None, max_total_cost_usd: float, **extra) -> dict:
+    try:
+        m = float(max_total_cost_usd)
+    except (TypeError, ValueError):
+        m = -1
+    if not m > 0:
+        raise RefusedError("--max-total-cost-usd is required: a positive ceiling for the new attempt",
+                           code="invalid_max_total_cost_usd")
+    body = {"max_total_cost_usd": round(m, 2)}
+    if provider:
+        body["provider"] = provider
+    body.update({k: v for k, v in extra.items() if v is not None})
+    return body
+
+
+def job_continue_preview(c: Client, job_id: str, action: str, body: dict) -> dict:
+    """POST /v1/jobs/{id}/(resume|move)/preview: the quote, provider and checkpoint. Writes nothing."""
+    job_id = check_job_id(job_id)
+    if action not in ("resume", "move"):
+        raise ValueError(action)
+    r = c.post(f"/v1/jobs/{seg(job_id)}/{action}/preview", body)
+    return {"preview": r.data or {}, "request_id": r.request_id}
+
+
+def job_resume(c: Client, job_id: str, body: dict, *, confirm: bool, idempotency_key: str | None = None) -> dict:
+    """Continue a stopped / interrupted job (its GPU provider-confirmed gone) from its latest verified checkpoint
+    through the normal quote / approval / cost-guard path, within body.max_total_cost_usd. Needs confirmation."""
+    job_id = check_job_id(job_id)
+    if confirm is not True:
+        raise RefusedError(f"resuming {job_id} needs explicit confirmation (--yes): it submits a new attempt that can "
+                           f"cost up to ${body.get('max_total_cost_usd')} once approved", code="confirmation_required")
+    key = check_idempotency_key(idempotency_key)
+    r = c.post(f"/v1/jobs/{seg(job_id)}/resume", body, idempotency_key=key)
+    return {"job": job_summary(r.data or {}), "resume": (r.data or {}).get("resume"), "idempotency_key": key,
+            "replayed": (r.headers or {}).get("idempotent-replayed") == "true", "request_id": r.request_id}
+
+
+def job_move(c: Client, job_id: str, body: dict, *, confirm: bool, idempotency_key: str | None = None) -> dict:
+    """Move a running job: checkpoint now -> verified -> terminate -> successor. Needs confirmation."""
+    job_id = check_job_id(job_id)
+    if confirm is not True:
+        raise RefusedError(f"moving {job_id} needs explicit confirmation (--yes): its GPU is shut down after a new "
+                           f"verified checkpoint and a new attempt can cost up to ${body.get('max_total_cost_usd')}",
+                           code="confirmation_required")
+    key = check_idempotency_key(idempotency_key)
+    r = c.post(f"/v1/jobs/{seg(job_id)}/move", body, idempotency_key=key)
+    return {"job": job_summary(r.data or {}), "move_request": (r.data or {}).get("move_request"),
+            "idempotency_key": key, "replayed": (r.headers or {}).get("idempotent-replayed") == "true",
+            "request_id": r.request_id}
 
 
 def demo_train(c: Client, *, epochs: int = 3, idempotency_key: str | None = None) -> dict:

@@ -695,6 +695,24 @@ One real workload end to end: **"Train Your First AI Model: PyTorch MNIST"** (al
   approval / cost-guard path, as the original owner, on another provider, resuming from the latest checkpoint,
   with all attempts within `max_total_usd`; at most one successor per attempt (`UNIQUE(retry_of)`); "Attempt 2 of
   3" on the job page and My Jobs.
+- **Resume, OOM escalation, Move** (`jobs/continuation.py`, migration `0037_job_resume_move`; methodology/jobs.md
+  8c-8f). **Provider-initiated stops** (a spot reclaim surfaced as `stopped` / `exited` that OpenGrid never asked
+  for, confirmed by a later provider read, runner silent since) fail the job as `gpu_interrupted` at once so the
+  relaunch handles them; a user / operator stop never relaunches. **Resume** (`POST /v1/jobs/{id}/resume`, owner,
+  Idempotency-Key, `{provider: same|best|<id>, max_total_cost_usd, from_scratch?}`): a cancelled / interrupted job
+  whose GPU is provider-confirmed gone continues as a new attempt from the chain's latest verified checkpoint; refused
+  while the machine may exist or without a verified checkpoint (unless `from_scratch`). **OOM escalation** (opt-in
+  `retry.on_oom: escalate`, with relaunch on): after `out_of_memory`, ONE relaunch (`max_oom_escalations` ≤ 2) on the
+  next larger-VRAM GPU tier from the hardware catalog (same family first) within `retry.max_total_usd`. **Move**
+  (`POST /v1/jobs/{id}/move`, owner, off unless `JOB_MOVE_ENABLED`): target selected first, a `checkpoint_now`
+  instruction on the runner channel, a NEW verified checkpoint, only then the normal terminate, provider-confirmed
+  gone, then the successor; no checkpoint in time → aborted, job keeps running; at most one open move per job. A
+  read-only **move suggestion** on `GET /v1/jobs/{id}` (≥ 20% cheaper estimated remaining cost after the move
+  overhead, or a degraded provider); never automatic. Every successor is an ordinary job through the one submit path
+  (`UNIQUE(retry_of)`: one successor per attempt); batch shards reserve in the batch ledger first. Job page Resume… /
+  Move… with the quote (provider, price, ceiling, checkpoint age) before submitting and a suggestion banner; CLI
+  `opengrid jobs resume|move` (quote first, `--yes` submits); MCP shows the suggestion only (no write tool). Tested
+  against fake provider APIs only.
 - **Batches** (`jobs/batches.py`, `api/batches.py`, migration `0036_batches`; methodology/batches.md): many
   independent jobs (a sweep from an explicit shard list or a grid, at most `BATCH_MAX_SHARDS` = 64) as one batch with
   one budget, one approval and one status. Every shard is an ORDINARY job through `jobs.orchestrator.submit` (same
@@ -1100,7 +1118,8 @@ them). `OPENGRID_NO_JOBS` starts none; with `POLLER_ENABLED` off, the jobs marke
 | `reconcile` | 2 min | provider vs OpenGrid state, orphans, deadlines |
 | `routing_tracker` | 1 min | deployment status, uptime, usage metering |
 | `job_sync` | 30 s | training jobs: deployment state + runner callbacks → job state; terminate on completion, failure, timeout |
-| `job_relaunch` | 1 min | automatic relaunch of an interrupted job (acts only with `JOB_AUTO_RELAUNCH_ENABLED` and a per-job retry) |
+| `job_relaunch` | 1 min | automatic relaunch of an interrupted job and opt-in OOM escalation (acts only with `JOB_AUTO_RELAUNCH_ENABLED` and a per-job retry) |
+| `job_move` | 30 s | drives user-requested moves: verified checkpoint → terminate → confirmed gone → successor (acts only with `JOB_MOVE_ENABLED`) |
 | `reservation_expiry` | 5 min | expire stale price-lock offers and requests |
 | `channel_feeds` | 1 min | Discord deployments / market / news posts |
 | `silence_alerts` | 10 min | ops alert when a provider's prices, listings or capacity go silent; recovery |
@@ -1153,7 +1172,10 @@ them). `OPENGRID_NO_JOBS` starts none; with `POLLER_ENABLED` off, the jobs marke
 | `JOB_CALLBACK_BASE_URL` | where GPU runners call back (default `PUBLIC_BASE_URL`; https required) |
 | `JOB_ARTIFACT_STORE`, `JOB_ARTIFACT_MAX_MB`, `JOB_ARTIFACT_S3_*` | training artifacts: Postgres (default) or S3-compatible |
 | `JOB_SYNC_INTERVAL_SECONDS`, `JOB_BOOTSTRAP_TIMEOUT_MINUTES`, `JOB_RUNNER_SILENCE_MINUTES`, `JOB_TOKEN_GRACE_MINUTES` | training-job timing |
-| `JOB_AUTO_RELAUNCH_ENABLED` | automatic relaunch of interrupted jobs (default off) |
+| `JOB_AUTO_RELAUNCH_ENABLED` | automatic relaunch of interrupted jobs and opt-in OOM escalation (default off) |
+| `JOB_PROVIDER_STOP_CONFIRM_SECONDS` | a provider-initiated stop counts as an interruption once a later read confirms it this long after (default 60; 0 = off) |
+| `JOB_MOVE_ENABLED`, `JOB_MOVE_INTERVAL_SECONDS`, `JOB_MOVE_CHECKPOINT_TIMEOUT_MINUTES`, `JOB_MOVE_TERMINATION_TIMEOUT_MINUTES` | moving a running job (default off; 30 s pass; abort after 30 min without a new checkpoint; alert after 60 min unconfirmed) |
+| `JOB_MOVE_SUGGEST_MIN_SAVINGS_PCT`, `JOB_MOVE_OVERHEAD_MINUTES` | the read-only move suggestion (default 20%, 10 min overhead) |
 | `ASSISTANT_LLM_PROVIDER`, `ANTHROPIC_API_KEY`, `ASSISTANT_LLM_MODEL` | optional LLM for the assistant (off unless both provider and key are set) |
 
 `deploy/make_env.py` builds the Railway variables file and generates the secrets.

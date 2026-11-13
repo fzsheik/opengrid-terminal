@@ -317,5 +317,36 @@ ok(J.collapseChains([att1]).length === 1, "the previous attempt stays when its s
   ok(/chainNote\(\)/.test(jsrc) && /J\.chainLine\(job\)/.test(jsrc), "the job page shows the chain note");
 }
 
+// ---------- resume / move / move suggestion (jobs/continuation.py) ----------
+{
+  const ca = J.continueActions({ actions: { resume: { available: false, code: "machine_may_exist" }, move: { available: true } } });
+  ok(ca.resume && !ca.resume.available && /provider confirms/.test(ca.resume.reason) && ca.move.available, "resume waits for the confirmed termination; move offered on a running job");
+  eq(J.continueActions({ sandbox: true, actions: { resume: { available: true } } }), { resume: null, move: null }, "never for a simulation");
+  eq(J.continueActions({ actions: { resume: { available: false, code: "not_resumable" }, move: { available: false } } }), { resume: null, move: null }, "no control when it cannot apply");
+  const rows = J.quoteRows({ action: "resume", quote: { provider: "lambda", gpu: "NVIDIA H100 80GB SXM5", gpu_count: 1, price_per_gpu_hour: 2.49, est_max_total_usd: 1.25, max_total_cost_usd: 2 }, checkpoint: { epoch: 2, age_seconds: 600 } });
+  eq(rows.map(r => r[0]), ["Provider", "GPU", "Price", "Est. cost (at most)", "Your ceiling", "Checkpoint"], "the resume confirmation shows the quote, provider and checkpoint age");
+  ok(/epoch 2, saved 10 min ago \(verified\)/.test(rows[5][1]), "checkpoint age in words");
+  ok(/NEW one is saved first/.test(J.quoteRows({ action: "move", quote: {}, latest_checkpoint: { epoch: 1, age_seconds: 4000 } }).pop()[1]), "a move always saves a new checkpoint first");
+  ok(/scratch/.test(J.quoteRows({ action: "resume", from_scratch: true, quote: {} }).pop()[1]), "from scratch said so");
+  const sg = J.suggestionLine({ move_suggestion: { suggested: true, reason: "cheaper", savings_pct: 41.2, to: { provider: "lambdb", gpu: "H100" }, est_remaining_cost_now_usd: 0.55, est_remaining_cost_after_move_usd: 0.2, move_overhead_usd: 0.08 } });
+  ok(sg && /save about 41%/.test(sg.title) && /never moves a job on its own/.test(sg.text), "the suggestion banner: savings, and it never acts");
+  ok(J.suggestionLine({ move_suggestion: { suggested: true, reason: "provider_degraded", degraded: "the GPU's deployment is degraded", to: { provider: "lambdb" }, est_remaining_cost_after_move_usd: 1 } }).tone === "warn", "a degraded provider: a warning");
+  ok(J.suggestionLine({}) === null, "no suggestion, no banner");
+  ok(/no new checkpoint arrived in time/.test(J.moveLine({ actions: { move: { latest: { status: "aborted", outcome_code: "checkpoint_timeout" } } } }).text), "an aborted move says the job kept running");
+  ok(J.moveLine({ actions: { move: { latest: { status: "moved", successor_job_id: "job-n" } } } }).next === "job-n", "a finished move links the new attempt");
+  const cl = J.chainLine({ chain: { attempt: 2, max_attempts: 1, previous_job_id: "job-a", relaunched_after: { kind: "oom_escalation", code: "out_of_memory", provider: "lambda", resume_from_epoch: 1 } } });
+  ok(/moved to a GPU with more memory after it ran out of GPU memory/.test(cl.text), "an OOM escalation in plain words: " + cl.text);
+  ok(/You resumed this job as attempt 2/.test(J.chainStatus({ chain: { attempt: 1, next_job_id: "job-n", next_kind: "resume", relaunch: { status: "relaunched" } } }).text), "the next attempt's kind wins (a resume that raced a relaunch)");
+  ok(/more memory/.test(J.chainStatus({ chain: { attempt: 1, next_job_id: "job-n", next_kind: "oom_escalation" } }).text), "an OOM escalation's next attempt");
+  ok(/moved by you from/.test(J.chainLine({ chain: { attempt: 2, previous_job_id: "job-a", relaunched_after: { kind: "move", code: "moved", provider: "lambda", resume_from_epoch: 3 } } }).text), "a move");
+  const tl = J.timeline({ events: [{ at: "a", from: "training", to: "training", evidence: { relaunch_event: "move_requested" } }, { at: "b", from: "reconciled", to: "reconciled", evidence: { relaunch_event: "moved", successor_job_id: "job-n" } }] });
+  eq(tl.map(t => t.text), ["Move requested: waiting for a new checkpoint", "Moved to another GPU"], "move steps on the timeline");
+  ok(/Moved to another GPU/.test(J.PLAIN_FAILURE.moved), "the moved attempt's failure title");
+  const fs = require("fs"), path = require("path");
+  const jsrc = fs.readFileSync(path.join(__dirname, "..", "web", "pages", "job.js"), "utf8");
+  ok(/resume\/preview/.test(jsrc) && /move\/preview/.test(jsrc) && /OG\.api\.intent\(I\[slot\]/.test(jsrc), "the job page previews the quote, then submits with an intent key");
+  ok(/suggestionBanner\(\)/.test(jsrc) && /moveNote\(\)/.test(jsrc), "the job page shows the move suggestion and the move state");
+}
+
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);

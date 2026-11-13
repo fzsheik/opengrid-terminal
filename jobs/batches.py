@@ -46,7 +46,10 @@ platform_admin). LIVE providers launch without approval, exactly as a plain job.
 job (no provider, no spend, no approval).
 Failure policy: continue | stop_on_first_failure (queued shards skipped, submitted ones cancelled). Interrupted / lost
 shards relaunch through jobs/relaunch.py (the shard's retry policy) with the batch budget as the outer ceiling
-(relaunch_terms / reserve_relaunch); training failures are reported, never retried.
+(relaunch_terms / reserve_relaunch); training failures are reported, never retried (an out_of_memory shard opted in to
+retry.on_oom escalate is escalated once, jobs/continuation.py). A shard's resume, OOM escalation and move reserve
+their ceiling in this ledger exactly like a relaunch (kinds resume | oom_escalation | move), before the submission;
+a shard being moved stays `relaunching` until its successor is attached.
 """
 
 from __future__ import annotations
@@ -960,6 +963,9 @@ def _derive(b: Batch, sh: BatchShard, job, chain: dict | None) -> tuple[str, str
     stopping = b.cancel_requested_at is not None or b.status in ("stopping", "cancelling")
     if job is None:
         return sh.status, sh.reason_code, sh.reason
+    if (chain or {}).get("continuation_pending") and not stopping:
+        # a move is under way (jobs/continuation.py): the successor is coming, the shard is not over
+        return "relaunching", "moving", "the shard is moving to another GPU"
     if S.is_finished(job) and job.deployment_id is None and sh.status in ("queued", "refused", "cancelled", "skipped"):
         return sh.status, sh.reason_code, sh.reason       # a refused submission: the shard's own state decides
     if job.outcome == "cancelled":
@@ -997,6 +1003,9 @@ def sync_batch(batch_id: str) -> Batch | None:
         shards = _shards(s, batch_id)
         jobs, _ = _jobs_deps(s, shards)
     chains = relaunch.chain_infos(list(jobs.values()))
+    from jobs import continuation
+    for jid in continuation.pending_succession(list(jobs)):
+        chains[jid] = {**(chains.get(jid) or {}), "continuation_pending": True}
     with normalize.SessionLocal.begin() as s:
         b = s.get(Batch, batch_id, with_for_update=True)
         for sh0 in shards:

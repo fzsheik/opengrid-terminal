@@ -721,6 +721,7 @@
     runner_lost: "Lost contact with the GPU: it stopped reporting",
     gpu_interrupted: "The provider stopped the GPU before training finished",
     terminated_before_completion: "The GPU stopped before training finished",
+    moved: "Moved to another GPU (this attempt was shut down after its checkpoint)",
   };
   const SANDBOX_PLAIN = { initializing: "Setting up (simulated)", training: "Training (simulated)", saving_artifacts: "Saving the report (simulated)", training_completed: "Simulation finished" };
   const plainState = (s, sandbox) => (sandbox && SANDBOX_PLAIN[s]) || PLAIN_STATE[s] || String(s || "unknown").replace(/_/g, " ");
@@ -735,6 +736,14 @@
       if (re === "relaunched") return { at: e.at || null, state: s, text: `Relaunched automatically as attempt ${x.attempt || "?"}` + (x.provider ? " on " + provName(x.provider) : ""), reason: e.reason || null, tone: "good", next: x.successor_job_id || null };
       if (re === "chain_stopped") return { at: e.at || null, state: s, text: "Not relaunched: " + (STOP_PLAIN[x.code] || "the retry policy ended here"), reason: e.reason || null, tone: "warn" };
       if (re === "relaunched_from") return { at: e.at || null, state: s, text: `Created automatically as attempt ${(x.relaunch || {}).attempt || "?"}`, reason: e.reason || null, tone: "busy", prev: (x.relaunch || {}).retry_of || null };
+      const CONT = { resumed_from: ["Created by your resume as attempt", "busy"], moved_from: ["Created by your move as attempt", "busy"],
+        oom_escalated_from: ["Created on a GPU with more memory as attempt", "busy"] };
+      if (CONT[re]) return { at: e.at || null, state: s, text: `${CONT[re][0]} ${(x.relaunch || {}).attempt || "?"}`, reason: e.reason || null, tone: CONT[re][1], prev: (x.relaunch || {}).retry_of || null };
+      const NOTE = { resumed: ["Resumed on a new GPU", "good"], oom_escalated: ["Continued on a GPU with more memory", "good"], oom_not_escalated: ["Not moved to a larger GPU", "warn"],
+        move_requested: ["Move requested: waiting for a new checkpoint", "busy"], move_checkpoint_verified: ["Move: new checkpoint verified, shutting down the old GPU", "busy"],
+        move_terminated: ["Move: the old GPU is gone", "busy"], moved: ["Moved to another GPU", "good"], move_aborted: ["Move cancelled: the job kept running", "warn"],
+        move_failed: ["Move stopped after the old GPU was shut down", "warn"] };
+      if (NOTE[re]) return { at: e.at || null, state: s, text: NOTE[re][0], reason: e.reason || null, tone: NOTE[re][1], next: x.successor_job_id || null };
       return { at: e.at || null, state: s, text: plainState(s, sb), reason: e.reason || null, tone: tone(s) || (s === "created" ? "busy" : "") };
     });
   }
@@ -831,7 +840,12 @@
   const CAUSE_PLAIN = {
     gpu_interrupted: p => `the GPU on ${provName(p)} was interrupted`,
     runner_lost: p => `the GPU on ${provName(p)} stopped reporting`,
+    terminated_before_completion: p => `the GPU on ${provName(p)} stopped before training finished`,
+    out_of_memory: p => `it ran out of GPU memory on ${provName(p)}`,
+    moved: p => `you moved it off ${provName(p)}`,
   };
+  // How an attempt continues the previous one (job.chain.kind; jobs/continuation.py)
+  const KIND_PLAIN = { relaunch: "relaunched", resume: "continued by you", oom_escalation: "moved to a GPU with more memory", move: "moved by you" };
   const STOP_PLAIN = {
     max_attempts_reached: "it already used every attempt its retry setting allows",
     retry_budget_exhausted: "another attempt could cost more than the job's total budget for all attempts",
@@ -841,6 +855,10 @@
     owner_scope_missing: "the API key that started it can no longer launch GPUs",
     account_suspended: "the account is suspended",
     owner_unavailable: "OpenGrid could not confirm who owns it",
+    oom_escalations_exhausted: "it already moved to a larger GPU as many times as its setting allows",
+    no_larger_gpu: "no GPU with more memory is available to run it",
+    batch_budget_exhausted: "its batch has no budget left for another attempt",
+    batch_stopped: "its batch was stopped",
   };
   const chainOf = job => (job && job.chain && typeof job.chain === "object" ? job.chain : null);
   const inChain = c => !!c && (c.attempt > 1 || !!c.next_job_id || !!c.previous_job_id || !!c.stopped || !!(c.relaunch && c.relaunch.status));
@@ -852,7 +870,8 @@
     const ra = c.relaunched_after;
     if (ra) {
       const why = CAUSE_PLAIN[ra.code];
-      parts.push("relaunched after " + (why ? why(ra.provider) : "the previous attempt stopped"));
+      const verb = KIND_PLAIN[ra.kind || c.kind] || "relaunched";
+      parts.push(ra.kind === "move" ? verb + " from " + provName(ra.provider) : ra.code === "cancelled" || !ra.code ? verb : verb + " after " + (why ? why(ra.provider) : "the previous attempt stopped"));
       parts.push(ra.from_scratch ? "started from scratch (no checkpoint)" : `resumed from epoch ${ra.resume_from_epoch ?? "?"}`);
     }
     return { text: parts.join(" · "), prev: c.previous_job_id || null, next: c.next_job_id || null, simulated: !!c.simulated };
@@ -867,7 +886,14 @@
       return { text: "Not relaunched: " + (STOP_PLAIN[code] || (c.stopped || r).reason || "the retry policy ended here") + ".", tone: "warn",
         href: c.next_job_id ? "/jobs/" + encodeURIComponent(c.next_job_id) : null, label: c.next_job_id ? "Open the refused attempt" : null };
     }
-    if (c.next_job_id) return { text: `OpenGrid relaunched this job automatically as attempt ${(c.attempt || 1) + 1}.`, tone: "good", href: "/jobs/" + encodeURIComponent(c.next_job_id), label: "Open the next attempt" };
+    if (c.next_job_id) {
+      const k = c.next_kind || (r.kind === "oom_escalation" ? "oom_escalation" : (job && job.actions && job.actions.move && job.actions.move.latest && job.actions.move.latest.successor_job_id === c.next_job_id) ? "move" : (r.status === "relaunched" ? "relaunch" : "resume"));
+      const txt = { relaunch: `OpenGrid relaunched this job automatically as attempt ${(c.attempt || 1) + 1}.`,
+        oom_escalation: `It ran out of GPU memory, so OpenGrid continued it on a GPU with more memory as attempt ${(c.attempt || 1) + 1}.`,
+        move: `You moved this job: it continues as attempt ${(c.attempt || 1) + 1}.`,
+        resume: `You resumed this job as attempt ${(c.attempt || 1) + 1}.` }[k];
+      return { text: txt, tone: "good", href: "/jobs/" + encodeURIComponent(c.next_job_id), label: "Open the next attempt" };
+    }
     if (r.status === "blocked") return { text: "The automatic relaunch is delayed by an OpenGrid problem. The previous GPU is confirmed gone, so nothing is billing; OpenGrid's operator is alerted.", tone: "warn", href: null, label: null };
     if (r.status === "claimed") return { text: "Relaunching now.", tone: "busy", href: null, label: null };
     if (r.status === "pending") return { text: String(r.reason || "A relaunch is due.").replace(/^\w/, ch => ch.toUpperCase()) + ".", tone: "busy", href: null, label: null };
@@ -890,7 +916,69 @@
       return !(c && c.next_job_id && ids.has(c.next_job_id) && isTerminal(r) && !needsAttention(r));
     });
   }
-  Object.assign(OG.jobs, { chainLine, chainStatus, chainSpend, collapseChains, STOP_PLAIN });
+  /* =============================== resume / move / move suggestion (pure; jobs/continuation.py) ============ */
+  // "12 min ago" from seconds (null -> "")
+  function ageText(sec) {
+    if (sec == null || !isFinite(sec)) return "";
+    if (sec < 90) return "just now";
+    if (sec < 5400) return Math.round(sec / 60) + " min ago";
+    if (sec < 172800) return Math.round(sec / 3600) + " h ago";
+    return Math.round(sec / 86400) + " days ago";
+  }
+  // What the Resume / Move controls show for this job -> {resume, move}, each null (no control) or
+  // {available, reason, button}. Never offered for a simulation.
+  function continueActions(job) {
+    const a = job && job.actions;
+    if (!a || isSandbox(job)) return { resume: null, move: null };
+    const r = a.resume || {}, m = a.move || {};
+    const resume = r.available ? { available: true, reason: null, button: "Resume…" }
+      : (r.code === "machine_may_exist" ? { available: false, reason: "Resume is possible once the provider confirms the old GPU is gone.", button: "Resume…" } : null);
+    const move = m.available ? { available: true, reason: null, button: "Move…" } : null;
+    return { resume, move };
+  }
+  // The move in progress / last move -> {text, tone} | null
+  function moveLine(job) {
+    const mv = job && job.actions && job.actions.move && job.actions.move.latest;
+    if (!mv) return null;
+    const T = { checkpointing: ["Moving: waiting for the GPU to save a new checkpoint (the job keeps running meanwhile).", "busy"],
+      requested: ["Moving: waiting for the GPU to save a new checkpoint.", "busy"],
+      terminating: ["Moving: the new checkpoint is verified; shutting down the old GPU before starting the new one.", "busy"],
+      submitting: ["Moving: the old GPU is gone; starting the job again on the new GPU from the checkpoint.", "busy"],
+      moved: ["Moved to another GPU.", "good"],
+      aborted: ["Move cancelled: " + (mv.outcome_code === "checkpoint_timeout" ? "no new checkpoint arrived in time, so the job kept running where it was." : (mv.outcome_reason || "the job kept running where it was.")), "warn"],
+      failed: ["Move stopped after the old GPU was shut down: " + (mv.outcome_reason || "the new GPU was refused") + " Resume the job to try again.", "warn"] };
+    const t = T[mv.status];
+    return t ? { text: t[0], tone: t[1], next: mv.successor_job_id || null } : null;
+  }
+  // The read-only move suggestion (job.move_suggestion) -> {title, text, tone} | null
+  function suggestionLine(job) {
+    const s = job && job.move_suggestion;
+    if (!s || !s.suggested) return null;
+    const to = s.to || {};
+    const where = `${OG.shortGpu ? OG.shortGpu(to.gpu || "") : to.gpu || "a GPU"} on ${provName(to.provider)}`;
+    if (s.reason === "provider_degraded")
+      return { title: "The current GPU's provider is having problems", tone: "warn",
+        text: `${s.degraded || "The provider reports a problem."} You can move the job to ${where} (est. ${usd(s.est_remaining_cost_after_move_usd)} for the rest).` };
+    return { title: `A cheaper GPU is available: save about ${Math.round(s.savings_pct)}%`, tone: "good",
+      text: `Est. ${usd(s.est_remaining_cost_after_move_usd)} to finish on ${where} instead of ${usd(s.est_remaining_cost_now_usd)} where it runs now (includes about ${usd(s.move_overhead_usd)} to restart). OpenGrid never moves a job on its own.` };
+  }
+  // A resume / move preview (POST …/resume/preview, …/move/preview) -> [[label, value]] for the confirmation
+  function quoteRows(pv) {
+    if (!pv) return [];
+    const q = pv.quote || {};
+    const ck = pv.checkpoint || pv.latest_checkpoint;
+    const rows = [];
+    if (q.provider) rows.push(["Provider", provName(q.provider) + (q.region ? " · " + q.region : "")]);
+    if (q.gpu) rows.push(["GPU", `${q.gpu_count || 1}× ${q.gpu}`]);
+    if (q.price_per_gpu_hour != null) rows.push(["Price", perGpuH(q.price_per_gpu_hour)]);
+    if (q.est_max_total_usd != null) rows.push(["Est. cost (at most)", usd(q.est_max_total_usd)]);
+    if (q.max_total_cost_usd != null) rows.push(["Your ceiling", usd(q.max_total_cost_usd)]);
+    if (pv.action === "move") rows.push(["Checkpoint", ck ? `a NEW one is saved first (latest now: epoch ${ck.epoch}, ${ageText(ck.age_seconds)})` : "a NEW one is saved first"]);
+    else rows.push(["Checkpoint", pv.from_scratch ? "none: starts from scratch" : ck ? `epoch ${ck.epoch}, saved ${ageText(ck.age_seconds)} (verified)` : "-"]);
+    return rows;
+  }
+  Object.assign(OG.jobs, { chainLine, chainStatus, chainSpend, collapseChains, STOP_PLAIN, KIND_PLAIN, ageText, continueActions,
+    moveLine, suggestionLine, quoteRows });
 
   if (typeof OG.page !== "function" || typeof document === "undefined") return;   // node tests: pure part only
 

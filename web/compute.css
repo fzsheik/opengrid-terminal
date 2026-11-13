@@ -175,4 +175,7 @@
 /* one job: the status line, its tag and the Refresh button wrap on small screens */
 .pg-job .jb-bigline { flex-wrap: wrap; }
 .pg-job .jb-bigline .btn { margin-left: auto; }
+.pg-job .jb-acts { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.pg-job .jb-suggest { display: grid; gap: 4px; justify-items: start; }
+.pg-job .jb-suggest p { margin: 0; }
 .fd-sum { font-size: var(--fs-sm); margin: 2px 0 4px; }

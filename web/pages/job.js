@@ -8,7 +8,10 @@
    decision, Cancel (one Idempotency-Key per intent, confirmed) and errors with their actionable message.
    A SIMULATED job carries a persistent banner and never shows a real check mark. An automatically relaunched job
    (job.chain, jobs/relaunch.py) shows "Attempt 2 of 3 · relaunched after … · resumed from epoch N" with links to
-   the previous / next attempt, the relaunch decision and the spend so far vs the ceiling. */
+   the previous / next attempt, the relaunch decision and the spend so far vs the ceiling. Resume… (a stopped /
+   interrupted job whose GPU is provider-confirmed gone) and Move… (a running job; jobs/continuation.py) ask for the
+   settings, show the quote (provider, GPU, price, ceiling, checkpoint age) and only then submit, one Idempotency-Key
+   per intent; a move suggestion (job.move_suggestion, read-only) shows as a banner. */
 (() => {
   if (typeof document === "undefined" || typeof OG.page !== "function") return;
   const { h, fmt } = OG;
@@ -33,7 +36,7 @@
       const me = await OG.me();
       if (!ctx.alive()) return;
       const admin = OG.isAdmin(me);
-      const I = { cancel: null };
+      const I = { cancel: null, resume: null, move: null };
       let job = null, dep = null, metrics = [], arts = null, artErr = null, metErr = null, timer = null, stopped = false;
 
       // fixed regions: the log panel keeps its lines (and its scroll position) across polls
@@ -103,17 +106,23 @@
         // The control matches the real operation: none for a simulation (the server never cancels one; it finishes
         // on its own), "Cancel job" before launch, "Terminate GPU" once a GPU may exist.
         const ca = J.cancelAction(job);
+        const ct = J.continueActions(job);
         const where = sandbox() ? "Free simulation: no GPU, no provider, no charge"
           : [sm.gpu ? `${sm.gpu_count}× ${OG.shortGpu(sm.gpu)}` : null, sm.provider ? "on " + OG.providerName(sm.provider) : null, sm.region || sm.region_group || null].filter(Boolean).join(" ") || "GPU not chosen yet";
         return [
           h("a", { class: "lnk jb-back", href: "/jobs" }, "← My Jobs"),
           OG.head(h("span", { class: "dep-title" }, job.name || "Job"), h("span", {}, where),
-            ca ? h("button", { class: "btn w4-danger", type: "button", onclick: () => cancel(ca) }, ca.button) : null),
+            h("span", { class: "jb-acts" },
+              ct.resume ? h("button", { class: "btn pri", type: "button", disabled: ct.resume.available ? null : true, title: ct.resume.reason || "Continue from the latest verified checkpoint on a new GPU (shows the price first)", onclick: () => resumeFlow() }, ct.resume.button) : null,
+              ct.move ? h("button", { class: "btn", type: "button", title: "Checkpoint now, then continue on another GPU (shows the price first)", onclick: () => moveFlow() }, ct.move.button) : null,
+              ca ? h("button", { class: "btn w4-danger", type: "button", onclick: () => cancel(ca) }, ca.button) : null)),
           h("div", { class: "jb-bigline" }, J.lineEl(job), J.modeTag(sandbox()),
             J.isTerminal(job) ? null : h("span", { class: "dim" }, "updates every few seconds"),
             h("button", { class: "btn sm", type: "button", onclick: () => load(), title: "Reload the job now" }, "Refresh")),
           resumeNote(),
           chainNote(),
+          moveNote(),
+          suggestionBanner(),
           job.batch ? h("p", { class: "note", role: "note" }, `Shard ${job.batch.shard_index} of ${job.batch.shards_total || "?"} in batch `,
             h("a", { class: "lnk", href: "/batch/" + encodeURIComponent(job.batch.batch_id) }, job.batch.name || job.batch.batch_id)) : null,
           sandbox() ? h("div", { class: "jb-simban", role: "note" }, h("b", {}, "SIMULATED"), h("span", {}, "No GPU was used and nothing was charged. Every number on this page is synthetic.")) : null,
@@ -142,6 +151,21 @@
           cl && (cl.prev || cl.next) ? h("p", {}, link(cl.prev, "← previous attempt"), cl.prev && cl.next ? " · " : null, link(cl.next, "next attempt →")) : null,
           cs && !(cl && cl.next && cs.href) ? h("p", { class: cs.tone ? "t-" + cs.tone : null }, cs.text) : null,
           sp ? h("p", { class: "dim" }, sp) : null);
+      }
+      // A move in progress / the last move (job.actions.move.latest; jobs/continuation.py)
+      function moveNote() {
+        const ml = J.moveLine(job);
+        if (!ml) return null;
+        return h("p", { class: "note" + (ml.tone ? " t-" + ml.tone : ""), role: "status" }, ml.text, ml.next ? [" ", h("a", { class: "lnk", href: "/jobs/" + encodeURIComponent(ml.next) }, "Open the new attempt →")] : null);
+      }
+      // The read-only move suggestion (job.move_suggestion): a banner, never an automatic action
+      function suggestionBanner() {
+        const sg = J.suggestionLine(job);
+        if (!sg) return null;
+        const ct = J.continueActions(job);
+        return h("div", { class: "note jb-suggest t-" + sg.tone, role: "note" }, h("b", {}, sg.title), h("p", {}, sg.text),
+          ct.move ? h("button", { class: "btn sm", type: "button", onclick: () => moveFlow({ provider: (job.move_suggestion.to || {}).provider }) }, "Move…")
+            : h("p", { class: "dim" }, job.move_suggestion.move_enabled ? "Moving is possible once the job is training." : "Moving running jobs is not switched on for OpenGrid yet."));
       }
       // At a glance: simulation or real, status, result, GPU, cost, outputs; then the one next step.
       function glanceBlock() {
@@ -424,6 +448,66 @@
         } catch (e) {
           flash.replaceChildren(J.apiErr(e, "POST /v1/jobs/{id}/cancel", { admin }), I.cancel.state === "unknown" ? h("p", { class: "warn-t" }, "Outcome unknown. Press the button again: it reuses the same request key (" + I.cancel.key.slice(0, 12) + "…), so it can't act twice.") : null);
         }
+      }
+
+      /* ---------------- resume / move: settings -> the quote -> confirm (one Idempotency-Key per intent) -------- */
+      const quoteBody = pv => h("div", {}, kv(J.quoteRows(pv)), pv.quote && pv.quote.note ? h("p", { class: "dim" }, pv.quote.note) : null,
+        (pv.steps || []).length ? h("ol", { class: "dim" }, pv.steps.map(t => h("li", {}, t))) : null);
+      async function preview(path, body) {
+        flash.replaceChildren(OG.loading("Getting the price…"));
+        try { const pv = await OG.api(path, { method: "POST", body, nocache: true }); flash.replaceChildren(); return pv; }
+        catch (e) { flash.replaceChildren(J.apiErr(e, "POST " + path.replace(id, "{id}"), { admin })); return null; }
+      }
+      function refusedPv(pv) {
+        const r = pv.refusal || {};
+        flash.replaceChildren(h("div", { class: "og-alarm t-warn" }, h("b", {}, "Not possible right now"), h("span", {}, r.message || "no GPU fits these settings now")));
+      }
+      async function submitIntent(slot, action, path, body, done) {
+        I[slot] = OG.intentFor(I[slot], action + ":" + id, body);
+        flash.replaceChildren(OG.loading("Submitting…"));
+        try {
+          const r = await OG.api.intent(I[slot], path, { method: "POST", body });
+          done(r);
+          stopped = false; await load(); schedule();
+        } catch (e) {
+          flash.replaceChildren(J.apiErr(e, "POST " + path.replace(id, "{id}"), { admin }), I[slot].state === "unknown" ? h("p", { class: "warn-t" }, "Outcome unknown. Press the button again: it reuses the same request key (" + I[slot].key.slice(0, 12) + "…), so it can't act twice.") : null);
+        }
+      }
+      const limitOf = () => ((job.request || {}).limits || {}).max_total_cost_usd || 2;
+      async function resumeFlow() {
+        const v = await OG.ask({ title: "Resume this job on a new GPU", confirm: "See the price", fields: [
+          { key: "provider", label: "Where", type: "select", options: [["best", "The best GPU available now"], ["same", "The same provider as before"]] },
+          { key: "max_total_cost_usd", label: "Spend at most (USD)", required: true, value: String(limitOf()), hint: "the new attempt's total cost ceiling" },
+          { key: "from_scratch", label: "No checkpoint? Start from scratch", type: "checkbox" }] });
+        if (!v) return;
+        const body = { provider: v.provider, max_total_cost_usd: Number(v.max_total_cost_usd) };
+        if (v.from_scratch) body.from_scratch = true;
+        if (!(body.max_total_cost_usd > 0)) { flash.replaceChildren(h("div", { class: "og-alarm t-warn" }, "Enter a positive amount.")); return; }
+        const pv = await preview(`/v1/jobs/${enc}/resume/preview`, body);
+        if (!pv) return;
+        if (!pv.can_submit) return refusedPv(pv);
+        const ok = await OG.dialog({ title: "Resume this job?", confirm: "Resume job", cancel: "Not now", body: quoteBody(pv),
+          ack: `I understand the new attempt can cost up to ${J.usd(body.max_total_cost_usd)} once OpenGrid approves the price` });
+        if (!ok) return;
+        await submitIntent("resume", "resume", `/v1/jobs/${enc}/resume`, body, r => flash.replaceChildren(h("div", { class: "og-ok" }, h("b", {}, "Resumed"), " ",
+          r && r.job_id ? h("a", { class: "lnk", href: "/jobs/" + encodeURIComponent(r.job_id) }, "Open the new attempt →") : null)));
+      }
+      async function moveFlow(pre) {
+        const v = await OG.ask({ title: "Move this job to another GPU", confirm: "See the price", fields: [
+          { key: "provider", label: "Where (provider id, or best)", required: true, value: (pre && pre.provider) || "best" },
+          { key: "max_total_cost_usd", label: "Spend at most (USD)", required: true, value: String(limitOf()), hint: "the new attempt's total cost ceiling" },
+          { key: "reason", label: "Why", type: "textarea", required: true, minLength: 3, placeholder: "e.g. cheaper GPU available" }] });
+        if (!v) return;
+        const body = { provider: v.provider || "best", max_total_cost_usd: Number(v.max_total_cost_usd), reason: v.reason };
+        if (!(body.max_total_cost_usd > 0)) { flash.replaceChildren(h("div", { class: "og-alarm t-warn" }, "Enter a positive amount.")); return; }
+        const pv = await preview(`/v1/jobs/${enc}/move/preview`, body);
+        if (!pv) return;
+        if (!pv.can_submit) return refusedPv(pv);
+        const ok = await OG.dialog({ title: "Move this job?", confirm: "Move job", cancel: "Keep it here", danger: true, body: quoteBody(pv),
+          ack: `I understand the current GPU is shut down only after a new checkpoint is verified, and the new attempt can cost up to ${J.usd(body.max_total_cost_usd)}` });
+        if (!ok) return;
+        await submitIntent("move", "move", `/v1/jobs/${enc}/move`, body, () => flash.replaceChildren(h("div", { class: "og-ok" }, h("b", {}, "Move requested"),
+          h("span", { class: "dim" }, " The job keeps running until its new checkpoint is saved and verified."))));
       }
 
       /* ---------------- logs: cursor-paged, filter, auto-scroll ---------------- */
