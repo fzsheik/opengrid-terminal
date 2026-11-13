@@ -42,6 +42,23 @@ def _safe_url(escaped_url: str) -> str | None:
     return esc(raw)
 
 
+OWN_DOMAIN = "tryopengrid.com"
+
+
+def is_external(url: str) -> bool:
+    """Another website (absolute http(s), not tryopengrid.com or a subdomain): such links open in a new tab, as in
+    web/core.js isExternal. Relative paths, #anchors and mailto: stay in the same tab."""
+    from urllib.parse import urlsplit
+
+    if not re.match(r"(?i)^https?://", url or ""):
+        return False
+    try:
+        host = (urlsplit(url).hostname or "").lower()
+    except ValueError:
+        return False
+    return bool(host) and host != OWN_DOMAIN and not host.endswith("." + OWN_DOMAIN)
+
+
 def inline(text: str) -> str:
     """Escape, then add code spans, links, bold and italic."""
     out = []
@@ -56,7 +73,7 @@ def inline(text: str) -> str:
             label = m.group(1)
             if url is None:
                 return label
-            ext = ' rel="noopener" target="_blank"' if url.startswith("http") else ""
+            ext = ' target="_blank" rel="noopener noreferrer"' if is_external(html.unescape(url)) else ""
             return f'<a href="{url}"{ext}>{label}</a>'
 
         s = _LINK.sub(link, s)

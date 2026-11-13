@@ -105,6 +105,24 @@ eq(OG.unwrap({ gpus: [], data: 1, meta: {} }), { data: { gpus: [], data: 1, meta
 eq(OG.unwrap([1, 2]), { data: [1, 2], meta: null }, "plain arrays pass through");
 ok(OG.reasonOf({ value: null, reason: "coverage below 3 providers" }) === "coverage below 3 providers" && OG.reasonOf({ unavailable_reason: "x" }) === "x" && OG.reasonOf(null) === null, "reasonOf");
 
+// ---------- links to other websites open in a new tab ----------
+{
+  const O = "https://terminal.tryopengrid.com";
+  ok(OG.isExternal("https://lambda.ai/pricing", O) && OG.isExternal("HTTP://News.Example.org/a", O), "another website is external");
+  ok(!OG.isExternal("https://tryopengrid.com/", O) && !OG.isExternal("https://docs.tryopengrid.com/x", O) && !OG.isExternal("https://data.tryopengrid.com", O), "OpenGrid's own sites are not");
+  ok(OG.isExternal("https://tryopengrid.com.evil.example/", O) && OG.isExternal("https://eviltryopengrid.com/", O), "look-alike hosts are external");
+  ok(!OG.isExternal("/gpus", O) && !OG.isExternal("#top", O) && !OG.isExternal("?q=1", O) && !OG.isExternal("mailto:a@b.co", O) && !OG.isExternal("tel:123", O) && !OG.isExternal("", O) && !OG.isExternal(null, O), "relative, anchor, mailto, tel and empty are not");
+  ok(!OG.isExternal("http://localhost:8000/gpus", "http://localhost:8000") && OG.isExternal("http://localhost:9000/", "http://localhost:8000"), "this page's own origin is not (local dev)");
+  eq(OG.linkAttrs({ href: "https://lambda.ai", class: "lnk" }, O), { href: "https://lambda.ai", class: "lnk", target: "_blank", rel: "noopener noreferrer" }, "external link gets a new tab");
+  eq(OG.linkAttrs({ href: "https://x.org", rel: "external nofollow" }, O).rel, "external nofollow noopener noreferrer", "existing rel words are kept");
+  eq(OG.linkAttrs({ href: "/gpus" }, O), { href: "/gpus" }, "internal link untouched");
+  eq(OG.linkAttrs({ href: "https://docs.tryopengrid.com" }, O), { href: "https://docs.tryopengrid.com" }, "own subdomain untouched");
+  eq(OG.linkAttrs({ href: "mailto:a@b.co" }, O), { href: "mailto:a@b.co" }, "mailto untouched");
+  eq(OG.linkAttrs({ href: "https://x.org/f.csv", download: "f.csv" }, O).target, undefined, "downloads keep their tab");
+  eq(OG.linkAttrs({ href: "https://x.org", target: "_self" }, O), { href: "https://x.org", target: "_self" }, "an explicit target is kept");
+  eq(OG.linkAttrs({ href: "/v1/route/1", target: "_blank", rel: "external noopener" }, O).rel, "external noopener noreferrer", "every new-tab link carries noopener noreferrer");
+}
+
 // ---------- API client: dedupe + out-of-order ----------
 (async () => {
   let calls = 0;

@@ -658,6 +658,35 @@ Full docs: web/README.md.
   }
   OG.safeUrl = safeUrl;
 
+  // Links to other websites open in a new tab; OpenGrid's own sites (tryopengrid.com and its subdomains, or this
+  // page's own origin) stay in the same tab. Only absolute http(s) URLs can be external: relative paths, #anchors,
+  // mailto: and tel: never are.
+  const OWN_DOMAIN = "tryopengrid.com";
+  function isExternal(href, origin) {
+    const raw = String(href == null ? "" : href).trim();
+    if (!/^https?:\/\//i.test(raw)) return false;
+    let u;
+    try { u = new URL(raw); } catch (e) { return false; }
+    const host = u.hostname.toLowerCase();
+    if (host === OWN_DOMAIN || host.endsWith("." + OWN_DOMAIN)) return false;
+    return !(origin && u.origin === origin);
+  }
+  // The attributes an <a> gets: an external href without its own target opens in a new tab, and every new-tab link
+  // carries rel="noopener noreferrer" (other rel words such as external / nofollow are kept). A link that sets its
+  // own target, or a download, keeps it.
+  function linkAttrs(props, origin) {
+    const p = Object.assign({}, props || {});
+    if (p.target == null && p.download == null && isExternal(p.href, origin)) p.target = "_blank";
+    if (p.target === "_blank") {
+      const rel = String(p.rel || "").split(/\s+/).filter(Boolean);
+      for (const w of ["noopener", "noreferrer"]) if (!rel.includes(w)) rel.push(w);
+      p.rel = rel.join(" ");
+    }
+    return p;
+  }
+  OG.isExternal = isExternal;
+  OG.linkAttrs = linkAttrs;
+
   if (!HAS_DOM) return OG;
 
   /* ================= DOM helpers ================= */
@@ -684,6 +713,7 @@ Full docs: web/README.md.
   OG.fill = (el, ...kids) => { el.replaceChildren(...cleanKids(kids)); return el; };
   function h(tag, props, ...kids) {
     const el = document.createElement(tag);
+    if (tag === "a") props = linkAttrs(props, location.origin);
     for (const [k, v] of Object.entries(props || {})) {
       if (v == null || v === false) continue;
       if (URL_ATTRS.has(k.toLowerCase())) { el.setAttribute(k, k.toLowerCase() === "srcdoc" ? "" : safeUrl(v)); continue; }
@@ -1311,6 +1341,7 @@ Full docs: web/README.md.
   OG.go = (url, opts) => {
     const u = new URL(url, location.href);
     if (!/^https?:$/.test(u.protocol)) return;  // never navigate to javascript: / data: (see safeUrl)
+    if (isExternal(u.href, location.origin)) { window.open(u.href, "_blank", "noopener,noreferrer"); return; }  // another website: new tab
     if (u.origin !== location.origin || !OG.match(u.pathname)) { location.href = u.href; return; }
     history[opts && opts.replace ? "replaceState" : "pushState"](null, "", u.pathname + u.search + u.hash);
     render();

@@ -126,6 +126,7 @@ Dark by default, or the OS preference on first visit; the choice is saved in the
 - Colours (dark): background #090b0e, surface #0e1217, raised #131920, text #e7ebef with three lighter greys; up green #2fbf71, down red #ef5350, warning amber #f5a524, accent blue #4d94ff; plus families of blue, green, amber, red and purple tints for badges and banners, and chart colours. Light theme swaps every token (background #f5f6f8, surface white, accent #1a64cc, darker green and red).
 - Breakpoints: 1600px hides the provider count; 1440 and 1280 shrink the search box; 1080 hides the ticker and stacks two-column grids; 820 turns the menu into a hamburger panel; 560 hides the status line, the "/" hint and the brand word.
 - web/devx.css (developer pages and the assistant panel) uses only these tokens and dx- prefixed classes.
+- Links: a link to another website (provider sites, news and source articles, status pages, API docs) opens in a new tab with rel="noopener noreferrer"; OpenGrid's own sites (tryopengrid.com and its subdomains), relative links, #anchors and mailto: stay in the same tab. This is applied centrally: `h("a", …)` via `OG.linkAttrs`, `OG.go` for row and command navigation, and server-rendered methodology markdown (`api/markdown.py`).
 
 #### Observations (shell)
 

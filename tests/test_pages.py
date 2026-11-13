@@ -196,7 +196,12 @@ def test_markdown_renderer():
     assert r("> quoted") == "<blockquote><p>quoted</p></blockquote>"
     assert r("---") == "<hr>"
     assert r("[doc](other-doc.md#sec)") == '<p><a href="/methodology/other-doc#sec">doc</a></p>', "relative doc links point at the page"
-    assert r("[site](https://x.org/a?b=1&c=2)") == '<p><a href="https://x.org/a?b=1&amp;c=2" rel="noopener" target="_blank">site</a></p>'
+    assert r("[site](https://x.org/a?b=1&c=2)") == '<p><a href="https://x.org/a?b=1&amp;c=2" target="_blank" rel="noopener noreferrer">site</a></p>'
+    # OpenGrid's own sites stay in the same tab; so do relative links and mail links
+    assert r("[docs](https://docs.tryopengrid.com/x)") == '<p><a href="https://docs.tryopengrid.com/x">docs</a></p>'
+    assert r("[home](https://tryopengrid.com)") == '<p><a href="https://tryopengrid.com">home</a></p>'
+    assert 'target' not in r("[m](/methodology/families) [e](mailto:a@b.co)")
+    assert markdown.is_external("https://tryopengrid.com.evil.example/") and markdown.is_external("HTTP://Lambda.ai")
     assert markdown.title("intro\n## The *Name*\n") == "The Name"
 
 
