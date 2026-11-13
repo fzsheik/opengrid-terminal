@@ -2,7 +2,7 @@
    Economic value (GET /v1/economics): per deployment market median vs selected vs savings, or "no valid
    comparison: <reason>"; totals and by GPU / provider / strategy. Routing quality (/v1/admin/quality),
    reliability with sample sizes (/v1/admin/reliability: n and "insufficient sample" as the API says),
-   the activation funnel (/v1/admin/funnel) and product usage (/v1/admin/product). */
+   the activation funnel (/v1/admin/funnel), product usage (/v1/admin/product) and PostHog (/v1/admin/posthog). */
 (() => {
   const { h, fmt } = OG;
   const pct = v => (v == null ? null : fmt.num(v, 2) + "%");
@@ -25,13 +25,14 @@
       if (!ctx.alive()) return;
       if (!OG.isAdmin(me)) { root.append(OG.operatorGate("Value", me)); return; }
       const days = ["7", "30", "90", "3650"].includes(query.days) ? query.days : "30";
-      const B = { econ: h("div", {}, OG.loading()), qual: h("div", {}, OG.loading()), rel: h("div", {}, OG.loading()), fun: h("div", {}, OG.loading()), prod: h("div", {}, OG.loading()) };
+      const B = { econ: h("div", {}, OG.loading()), qual: h("div", {}, OG.loading()), rel: h("div", {}, OG.loading()), fun: h("div", {}, OG.loading()), prod: h("div", {}, OG.loading()), ph: h("div", {}, OG.loading()) };
       root.append(OG.head("Value", "Is OpenGrid saving customers money? From real transactions only.",
         OG.kindBadge("transaction"), OG.seg([["7", "7D"], ["30", "30D"], ["90", "90D"], ["3650", "ALL"]], days, v => { OG.qs.set({ days: v }); OG.render(); })),
         OG.section("Economic value vs the market median", B.econ),
         OG.section("Routing quality", B.qual),
         OG.section("Provider reliability (OpenGrid's own launches)", B.rel),
-        h("div", { class: "cols-2" }, OG.section("Activation funnel", B.fun), OG.section("Product usage", B.prod)));
+        h("div", { class: "cols-2" }, OG.section("Activation funnel", B.fun), OG.section("Product usage", B.prod)),
+        OG.section("PostHog", B.ph));
       const fold = (summary, ...kids) => h("details", { class: "sec val-fold" }, h("summary", { class: "sec-h" }, summary), kids);
       const groupTable = (obj, label) => OG.table({
         columns: [{ key: "k", label }, { key: "n", label: "n", num: true }, { key: "total_savings_usd", label: "Savings $", num: true, fmt: v => OG.money(v) },
@@ -128,9 +129,29 @@
         ]), h("div", { class: "cols-2" },
           small(p.top_pages, [{ key: "page", label: "Page", cls: "mono" }, { key: "views", label: "Views", num: true }, { key: "visitors", label: "Visitors", num: true }]),
           h("div", {}, small(p.top_searches, [{ key: "q", label: "Search", cls: "mono" }, { key: "count", label: "n", num: true }]), small(p.top_gpus, [{ key: "gpu", label: "GPU viewed", cls: "mono" }, { key: "views", label: "n", num: true }]))),
-          h("p", { class: "note" }, p.note || "", " · anonymous ids only (sessionStorage), Do Not Track respected."));
+          h("p", { class: "note" }, p.note || "", " · anonymous ids only (sessionStorage), Do Not Track respected; also sent to PostHog when POSTHOG_KEY is set (same rules)."));
       }, err => B.prod.replaceChildren(OG.error(err, loadProd)));
       loadProd();
+
+      // PostHog: fixed windows (7 and 30 days) whatever the range above; read server-side, cached 10 minutes.
+      const loadPh = refresh => ctx.api("/v1/admin/posthog", { params: { refresh: refresh ? "true" : null }, nocache: true }).then(p => {
+        const open = p.project_url ? h("a", { class: "btn sm", href: p.project_url, target: "_blank", rel: "noopener noreferrer" }, "Open in PostHog →") : null;
+        if (!p.configured) {
+          B.ph.replaceChildren(h("p", { class: "note" }, p.tracking ? "PostHog is receiving events, but the numbers here need " : "PostHog is not configured. Set ",
+            (p.missing || []).map((k, i) => [i ? ", " : "", h("code", {}, k)]), p.tracking ? "." : " on the server (Railway variables)."), open);
+          return;
+        }
+        if (p.error) { B.ph.replaceChildren(h("p", { class: "warn-t" }, p.error), h("div", { class: "st-acts" }, open, h("button", { class: "btn sm", type: "button", onclick: () => loadPh(true) }, "Try again"))); return; }
+        const w7 = p.last_7_days || {}, w30 = p.last_30_days || {};
+        B.ph.replaceChildren(OG.stats([
+          { label: "Pageviews · 7D", value: fmt.num(w7.pageviews) }, { label: "Visits · 7D", value: fmt.num(w7.visitors), sub: "browser-tab sessions" },
+          { label: "Pageviews · 30D", value: fmt.num(w30.pageviews) }, { label: "Visits · 30D", value: fmt.num(w30.visitors) },
+        ]), OG.table({ columns: [{ key: "path", label: "Top pages · 7D", cls: "mono" }, { key: "views", label: "Views", num: true }, { key: "visitors", label: "Visits", num: true }],
+          rows: p.top_pages_7_days || [], compact: true, csv: false, empty: "No pageviews in PostHog yet." }),
+        h("div", { class: "st-acts" }, open, h("button", { class: "btn sm", type: "button", onclick: () => loadPh(true) }, "Refresh")),
+        h("p", { class: "note" }, `As of ${p.as_of ? fmt.dateTime(p.as_of) : "now"}${p.cached ? " (cached, refreshes every 10 minutes)" : ""}. Operator sessions are not sent; no cookies, no session recording, URLs without query strings.`));
+      }, err => B.ph.replaceChildren(OG.error(err, () => loadPh(true))));
+      loadPh(false);
     },
   });
 })();

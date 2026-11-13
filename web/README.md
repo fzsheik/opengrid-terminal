@@ -127,6 +127,11 @@ OG.page("/gpu/:slug", {
   watchlist_create (page views, command-bar searches and GPU / provider / compare views are tracked by core.js).
   Anonymous id in sessionStorage, no cookies, no PII; batches of ≤ 50 to `POST /v1/events/track` every 10 s and on
   pagehide; failures dropped; nothing is tracked when `navigator.doNotTrack === "1"`. Pure part: `OG.makeTracker`.
+- **PostHog** (only when the server sends `boot.posthog`, i.e. `POSTHOG_KEY` is set): `OG.track` also forwards each
+  event to PostHog (`page_view` as `$pageview`). `vendor/posthog.js` (posthog-js, vendored, see its header) is
+  loaded on demand, never for the operator and never under Do Not Track / Global Privacy Control. Options in
+  `OG.phOptions`: sessionStorage, no autocapture / recording / surveys / flags / person profiles; `OG.phClean`
+  strips query strings and fragments from every URL property before an event leaves the browser.
 - Pages: `/route` (ticket: `?rr=<route_request_id>`), `/deployments`, `/deployments/:id`, `/onboarding`
   (`?account=<id>` operator preview), `/admin/execution`, `/admin/checklist`, `/admin/partners`, `/admin/value`.
   Tests: `node tests/test_web_exec.js`.

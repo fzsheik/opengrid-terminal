@@ -297,6 +297,9 @@ def csp(path: str, html: str) -> str:
         style += f" {_DOCS_CDN}"
         img += " https://fastapi.tiangolo.com"
         extra = "; worker-src 'self' blob:"
+    # PostHog (POSTHOG_KEY set): its script is served from /static (script-src stays 'self'); the browser only SENDS
+    # events to the one configured ingest origin (fetch / sendBeacon), so that origin alone joins connect-src.
+    connect = "'self'" + (f" {settings.posthog_host}" if settings.posthog_key else "")
     return (f"default-src 'self'; script-src {script}; style-src {style}; img-src {img}; font-src 'self' data:; "
-            f"connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; "
+            f"connect-src {connect}; object-src 'none'; base-uri 'self'; form-action 'self'; "
             f"frame-ancestors 'none'{extra}")

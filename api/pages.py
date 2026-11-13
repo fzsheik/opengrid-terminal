@@ -182,6 +182,9 @@ def _boot() -> dict:
         "providers": [provider_meta.as_dict(n) for n in names],
         "methodology": methodology_names(),
         "asset_v": asset_version(),
+        # PostHog (web/core.js): only the public project key and ingest host, only when configured. Never the
+        # personal API key (settings.posthog_personal_api_key stays on the server, analytics/posthog.py).
+        **({"posthog": {"key": settings.posthog_key, "host": settings.posthog_host}} if settings.posthog_key else {}),
     }
 
 

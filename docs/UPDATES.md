@@ -5,6 +5,48 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-13 — Read-only viewer login (no admin pages) and PostHog analytics (admin numbers on /admin/value)
+
+### What shipped
+- **Viewer site login** (`accounts/sitelogin.py`, `accounts/auth.py` `VIEWER`): `VIEWER_USER` / `VIEWER_PASSWORD`
+  open a second, read-only login beside the operator's. It holds `data:read` only (no account: deployment, job and
+  reservation reads treat "no account" as the operator's rows, so no further scope is safe). It sees the market
+  pages and the Data API; it gets 403 on every `/v1/admin`, `/v1/ops`, key, account and money endpoint and on the
+  operator tools (`/raw`, `/fetch`, `/normalize`, `/unmapped`, `/internal/live`, `/internal/mapping`); the admin nav
+  stays hidden (`OG.isAdmin` is false) and admin pages show the operator gate. Its cookie is `v.<exp>.<HMAC>` keyed
+  from the viewer's own credentials, so it cannot be turned into an operator cookie; the operator cookie format is
+  unchanged (existing operator sessions stay signed in until APP_PASSWORD changes). Failed viewer logins count
+  toward the same per-IP lockout. Startup refuses a viewer login equal to the operator's. Unset: no viewer.
+- **PostHog** (`analytics/posthog.py`, `web/core.js` `OG.phOptions` / `OG.phClean`, `web/vendor/posthog.js`):
+  inert until `POSTHOG_KEY` is set. Then the browser also sends the anonymous tracker events to PostHog
+  (`page_view` as `$pageview`) under the tracker's rules: sessionStorage only, no autocapture, session recording,
+  surveys, flags or person profiles, URLs stripped of query strings and fragments, nothing under Do Not Track /
+  Global Privacy Control, never from the operator's own sessions (viewer sessions count as ordinary visitors).
+  posthog-js 1.448.0 (`array.no-external.js`) is vendored under `/static/vendor/`, loaded on demand, so the CSP
+  `script-src` stays `'self'`; `connect-src` gains exactly `POSTHOG_HOST`, and only while the key is set.
+- **Admin "PostHog" section** on `/admin/value` (`GET /v1/admin/posthog`, admin only): page views and visits for 7
+  and 30 days and the top 10 pages (7 days), read server-side with HogQL using `POSTHOG_PERSONAL_API_KEY` (never
+  sent to a browser), cached 10 minutes (`?refresh=true` forces a read), short errors that never echo the key, and
+  an "Open in PostHog" link. Missing settings are named on the page.
+- Tests: `tests/test_posthog.py` (new), viewer tests in `tests/test_pages.py`, PostHog option / cleaner tests in
+  `tests/test_web_core.js`.
+
+### Deploy notes
+- No migration. Push `main` before setting any variable (a variable change rebuilds from GitHub `main`).
+- Railway variables, all at once (one rebuild):
+  - `VIEWER_USER` / `VIEWER_PASSWORD` = the login the venture account uses today (the current `APP_USER` /
+    `APP_PASSWORD`), so they sign in exactly as before, now read-only.
+  - `APP_PASSWORD` = a NEW operator password (keep `APP_USER`, or change it too). Without this the shared login
+    stays the operator and the viewer login is refused at startup.
+  - `POSTHOG_KEY` (phc_…), `POSTHOG_HOST` (`https://us.i.posthog.com` or `https://eu.i.posthog.com`),
+    `POSTHOG_PROJECT_ID`, `POSTHOG_PERSONAL_API_KEY` (phx_…, scope Query: Read on this project only).
+- In PostHog, project settings: turn on **Discard client IP data**, and leave session replay, surveys and
+  autocapture off (the client disables them too).
+- Rollback: unset `POSTHOG_KEY` (PostHog off, CSP back to `'self'`); unset `VIEWER_*` (viewer off). Previous
+  release: `cc9c217`.
+
+---
+
 ## 2026-11-13 — Four broken price pages read again: Hot Aisle, Baseten, Fireworks, Together
 
 ### What shipped

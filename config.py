@@ -222,6 +222,14 @@ class Settings(BaseSettings):
     reliability_min_samples: int = 10
     # Product analytics (analytics/product.py): POST /v1/events/track budget per client per minute.
     product_events_per_minute: int = 60
+    # PostHog, an optional processor for the same anonymous events (web/core.js, analytics/posthog.py). Unset key: off,
+    # nothing loads and the CSP is unchanged. The key (phc_...) is public by design (it only sends events). Ingest host:
+    # https://us.i.posthog.com or https://eu.i.posthog.com. The personal API key (phx_..., scope Query: Read) and the
+    # project id feed the admin numbers on /admin/value; server-only, never sent to a browser.
+    posthog_key: str | None = None
+    posthog_host: str = "https://us.i.posthog.com"
+    posthog_project_id: str | None = None
+    posthog_personal_api_key: SecretStr | None = None
     # How often the route_outcomes / product server-events jobs recompute (seconds).
     metrics_recompute_seconds: int = 300
     # --- OpenGrid Jobs (jobs/, api/jobs.py; methodology/jobs.md) ---
@@ -273,6 +281,20 @@ class Settings(BaseSettings):
         if v != "anthropic":
             raise ValueError("ASSISTANT_LLM_PROVIDER must be unset or 'anthropic'")
         return v
+
+    @field_validator("posthog_host")
+    @classmethod
+    def _posthog_host(cls, v: str) -> str:
+        v = (v or "").strip().rstrip("/")
+        if not v.startswith("https://") or any(c in v[8:] for c in "/?#@ ") or not v[8:]:
+            raise ValueError("POSTHOG_HOST must be an https origin, e.g. https://us.i.posthog.com")
+        return v
+
+    @property
+    def posthog_app_host(self) -> str:
+        """The PostHog app / query API origin for the ingest host: us.i.posthog.com -> us.posthog.com."""
+        host = self.posthog_host[len("https://"):]
+        return "https://" + (host.replace(".i.posthog.com", ".posthog.com") if host.endswith(".i.posthog.com") else host)
 
     @model_validator(mode="after")
     def _raw_retention_order(self):

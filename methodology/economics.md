@@ -64,3 +64,11 @@ and account are excluded. No IP address or personal data is stored: event proper
 (short keys, scalar values, PII-looking keys dropped, e-mail addresses and secrets redacted, query strings
 stripped, 2 KB cap). Server-side events (API calls per key per day, route previews, approvals and completed
 routes) are derived from the database idempotently, so a client cannot forge them.
+
+When `POSTHOG_KEY` is set, the browser also sends the same client events to PostHog (a processor; page views
+as PostHog's `$pageview`), under the same rules: sessionStorage only (no cookie), no autocapture, no session
+recording, no person profiles (nobody is identified), URLs without query strings or fragments, nothing under Do
+Not Track or Global Privacy Control, and nothing from the operator's own sessions. PostHog's "Discard client IP
+data" project setting must be on, so PostHog does not keep IP addresses either. Its numbers appear on
+`/admin/value` ("PostHog": page views and visits for 7 and 30 days, top pages), where a "visit" is one browser-tab
+session, not a person.

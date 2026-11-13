@@ -19,8 +19,11 @@ OUT = ROOT / "deploy" / "railway.env"
 # Only what the deployed app uses. PAPERSPACE_API_KEY and DATABASE_URL are deliberately left behind.
 KEYS = ["SALAD_API_KEY", "SALAD_ORG", "HYPERSTACK_API_KEY", "LAMBDA_API_KEY", "RUNPOD_API_KEY", "DIGITALOCEAN_API_KEY",
         # Optional routing credentials: copied when present, never required.
-        "SHADEFORM_API_KEY", "VAST_API_KEY", "VERDA_CLIENT_ID", "VERDA_CLIENT_SECRET"]
-OPTIONAL = {"SHADEFORM_API_KEY", "VAST_API_KEY", "VERDA_CLIENT_ID", "VERDA_CLIENT_SECRET"}
+        "SHADEFORM_API_KEY", "VAST_API_KEY", "VERDA_CLIENT_ID", "VERDA_CLIENT_SECRET",
+        # Optional: the read-only viewer site login (accounts/sitelogin.py) and PostHog (analytics/posthog.py).
+        "VIEWER_USER", "VIEWER_PASSWORD", "POSTHOG_KEY", "POSTHOG_HOST", "POSTHOG_PROJECT_ID", "POSTHOG_PERSONAL_API_KEY"]
+OPTIONAL = {"SHADEFORM_API_KEY", "VAST_API_KEY", "VERDA_CLIENT_ID", "VERDA_CLIENT_SECRET",
+            "VIEWER_USER", "VIEWER_PASSWORD", "POSTHOG_KEY", "POSTHOG_HOST", "POSTHOG_PROJECT_ID", "POSTHOG_PERSONAL_API_KEY"}
 
 local = {k.strip(): v for k, v in dotenv_values(ROOT / ".env").items() if v}
 existing = {k: v for k, v in dotenv_values(OUT).items()} if OUT.exists() else {}

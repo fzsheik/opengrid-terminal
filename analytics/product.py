@@ -13,7 +13,11 @@ Privacy
     props are sanitized: short [a-z0-9_] keys, scalar values, PII-looking keys dropped (email,
     name, phone, ip, address, token, key, password, ...), e-mail addresses and secrets
     redacted from values, query strings stripped from paths, total size capped at 2 KB.
-    Operator (site login) events are tagged internal and left out of the funnel.
+    Operator (site login) events are tagged internal and left out of the funnel. The read-only viewer login
+    (VIEWER_USER) counts as an ordinary visitor.
+    PostHog (optional, POSTHOG_KEY): the browser sends the same events there too, under the same rules
+    (sessionStorage, no person profiles, no recording, query strings stripped, DNT / GPC respected, no operator
+    sessions); analytics/posthog.py reads its numbers for /admin/value.
 
 Funnel (by ISO week; methodology in methodology/economics.md, "Funnel")
     visitor -> market user (>= 2 market page views in the week) -> account -> API key ->

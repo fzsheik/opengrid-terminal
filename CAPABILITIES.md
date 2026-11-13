@@ -889,7 +889,7 @@ data. Delivery: in-app feed and signed webhooks (email not implemented).
   returned by any API, never usable by another tenant.
 - **Security controls** (independently re-audited by attack):
   CSRF protection on every state-changing request · safe URL schemes everywhere links are rendered
-  · CSP limited to OpenGrid's own scripts · X-Frame-Options / nosniff / Referrer-Policy · login
+  · CSP limited to OpenGrid's own scripts (connect-src adds only the PostHog ingest origin when POSTHOG_KEY is set) · X-Frame-Options / nosniff / Referrer-Policy · login
   throttling · DNS-rebinding protection · SSRF-safe webhooks · production detection that can't be
   spoofed · secrets redacted from all logs · admin API requires platform-admin authority · tenant
   isolation on every resource.

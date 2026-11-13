@@ -214,6 +214,26 @@ ok(OG.reasonOf({ value: null, reason: "coverage below 3 providers" }) === "cover
     ok(grouped.length === new Set(grouped).size, "each document is in exactly one group");
   }
 
+  // ---------- PostHog: the same privacy rules as the first-party tracker ----------
+  {
+    const o = OG.phOptions({ key: "phc_x", host: "https://eu.i.posthog.com" });
+    ok(o.api_host === "https://eu.i.posthog.com", "PostHog sends to the configured ingest host");
+    ok(o.persistence === "sessionStorage", "PostHog: sessionStorage only (no cookie, no localStorage)");
+    ok(o.autocapture === false && o.capture_pageview === false && o.capture_pageleave === false, "PostHog: no autocapture; page views come from the router");
+    ok(o.disable_session_recording === true && o.disable_surveys === true && o.capture_heatmaps === false, "PostHog: no recording, surveys or heatmaps");
+    ok(o.respect_dnt === true && o.person_profiles === "identified_only" && o.advanced_disable_flags === true, "PostHog: DNT, no person profiles, no flags call");
+    ok(o.disable_external_dependency_loading === true, "PostHog: never loads more script from PostHog's CDN (CSP script-src 'self')");
+    const ev = OG.phClean({ event: "$pageview", properties: { $current_url: "https://t.example/gpus?q=secret#frag", $referrer: "https://google.com/search?q=me", $pathname: "/gpus", $search_engine: "google" },
+      $set_once: { $initial_referrer: "https://x.example/a?b=c" } });
+    eq(ev.properties.$current_url, "https://t.example/gpus", "PostHog: query string and fragment stripped from the URL");
+    eq(ev.properties.$referrer, "https://google.com/search", "PostHog: referrer without its query");
+    ok(!("$search_engine" in ev.properties), "PostHog: search-engine guess dropped");
+    eq(ev.$set_once.$initial_referrer, "https://x.example/a", "PostHog: initial referrer stripped too");
+    ok(OG.phClean(null) === null && OG.phCleanUrl(undefined) === undefined, "PostHog cleaner tolerates odd input");
+    eq(OG.phEvent("page_view", { page: "/gpus?x=1" }), ["$pageview", {}], "page_view becomes PostHog's $pageview (URL from the cleaned $current_url)");
+    eq(OG.phEvent("gpu_view", { gpu: "h100-80gb-sxm5" }), ["gpu_view", { gpu: "h100-80gb-sxm5" }], "other events keep name and props");
+  }
+
   console.log(failures ? `\n${failures} FAILED` : "\nall passed");
   process.exit(failures ? 1 : 0);
 })();

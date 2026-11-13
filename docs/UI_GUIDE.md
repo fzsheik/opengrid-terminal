@@ -100,7 +100,7 @@ Locks: every link marked as needing an account shows a small lock at its right e
 - **Typing** shows up to 12 suggestions: an exact command match first ("↵ <text>"), up to 3 menu pages (fuzzy on labels and hidden aliases, locked ones say "page · needs an account"), up to 2 GPU families ("GPU family · N variants"), up to 6 GPUs ("GPU · N providers" or "GPU · none priced now"), up to 4 providers, commands whose syntax starts with the text, and, for any multi-word text that is not a command, "Ask the assistant: "<text>"" (opens /assistant?q=...).
 - **Commands**: "g <gpu>" open a GPU market (family or variant aware: "g h100" opens the family page, "g h100 sxm" the SXM5 variant; unknown text goes to /gpus?q=); "p <provider>"; "c <gpu> <gpu>" compare; "r <gpu> [n] [region]" route preview; single letters "e" events, "n" news, "o" opportunities, "x" explorer, "i" indices, "h" heatmaps, "m" methodology, "d" deployments; words "home", "gpus", "find", "markets", "developers"; "ask <question>"; "theme [light|dark]"; "?" or "help".
 - **Shortcuts dialog** ("?" key or "help"): title "Search and shortcuts", "Esc to close"; sections "Keys" (/, ?, arrows plus Enter, Esc), "Find something (type in the search box)" (commands with arguments), "Jump to a page" (the rest, alphabetical); "Close" button. Click on the backdrop closes it.
-- Searches are counted by the anonymous analytics tracker (no cookies, off when Do Not Track is set).
+- Searches are counted by the anonymous analytics tracker (no cookies, off when Do Not Track is set), and sent to PostHog under the same rules when POSTHOG_KEY is set.
 
 #### Shared states (used by every page)
 

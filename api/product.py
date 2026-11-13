@@ -4,6 +4,7 @@
     GET  /v1/admin/funnel     visitor -> market user -> account -> key -> preview -> deployment -> 2nd, by week [admin]
     GET  /v1/admin/product    top pages, searches, GPUs, repeat visitors                  [admin]
     POST /v1/admin/product/sync   derive server events (api calls, previews, approvals, completions) now [admin]
+    GET  /v1/admin/posthog    PostHog page views, visitors and top pages (analytics/posthog.py)         [admin]
 
 /v1/events/track must be reachable without the site password for anonymous public pages: the lead
 adds it to api/pages.py (is_public: POST of exactly this path). Until then, only signed-in
@@ -15,7 +16,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
 from accounts.auth import Principal, principal, require_scope
-from analytics import product
+from analytics import posthog, product
 from api.common import envelope
 
 router = APIRouter()
@@ -63,3 +64,9 @@ def admin_product(days: int = Query(30, ge=1, le=365), limit: int = Query(20, ge
 @router.post("/v1/admin/product/sync", tags=["admin"], summary="Derive server-side product events now")
 def admin_product_sync(full: bool = False, who: Principal = Depends(admin)):
     return envelope(product.sync_server_events(None if full else 3))
+
+
+@router.get("/v1/admin/posthog", tags=["admin"], summary="PostHog page views, visitors and top pages")
+def admin_posthog(refresh: bool = False, who: Principal = Depends(admin)):
+    return envelope(posthog.summary(refresh=refresh),
+                    note="PostHog visitors are browser-tab sessions (sessionStorage), not people; cached 10 minutes")

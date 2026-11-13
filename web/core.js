@@ -552,9 +552,40 @@ Full docs: web/README.md.
     };
   }
 
+  /* ================= pure: PostHog options (same rules as the tracker above) ================= */
+  // PostHog is a processor for the same anonymous events, never more: sessionStorage only (no cookie, no
+  // localStorage), no autocapture, no session recording, no surveys, no feature-flag call, no person profiles (we never
+  // identify), Do Not Track respected, and every URL loses its query string and fragment before it leaves the browser.
+  const PH_URL_PROPS = ["$current_url", "$referrer", "$initial_referrer", "$initial_current_url", "$prev_pageview_pathname"];
+  function phCleanUrl(u) {
+    if (typeof u !== "string") return u;
+    return u.split(/[?#]/, 1)[0];
+  }
+  function phClean(ev) {
+    if (!ev || typeof ev !== "object") return ev;
+    for (const bag of [ev.properties, ev.$set, ev.$set_once]) {
+      if (!bag || typeof bag !== "object") continue;
+      for (const k of PH_URL_PROPS) if (k in bag) bag[k] = phCleanUrl(bag[k]);
+      delete bag.$search_engine; delete bag.$referring_domain_query;
+    }
+    return ev;
+  }
+  function phOptions(cfg) {
+    return {
+      api_host: cfg.host, persistence: "sessionStorage", autocapture: false, capture_pageview: false,
+      capture_pageleave: false, capture_heatmaps: false, capture_dead_clicks: false, capture_exceptions: false,
+      disable_session_recording: true, disable_surveys: true, advanced_disable_flags: true,
+      disable_external_dependency_loading: true, respect_dnt: true, person_profiles: "identified_only",
+      save_referrer: false, before_send: phClean,
+    };
+  }
+  // Tracker event -> PostHog event: a page view is PostHog's own $pageview (its web analytics and the admin numbers
+  // count those); the rest keep their names and props (paths, GPU slugs, provider names: no PII).
+  const phEvent = (event, props) => event === "page_view" ? ["$pageview", {}] : [event, props || {}];
+
   Object.assign(OG, { compile, matchRoute, legacyHash, navKeyFor, slug, fmt, freshness, freshLimits, cleanKids, familyTarget, shortReason, sortRows, csvCell, csvString,
     fuzzy, fuzzyScore, parseCommand, command, findCommand, COMMANDS, commandParts, ACCESS, explainError, freshnessText, lastReadOf, tapeFit, unwrap, withParams, reasonOf,
-    randomId, stableJson, outcomeUnknown, intentFor, settleIntent, makeTracker, TRACK_EVENTS,
+    randomId, stableJson, outcomeUnknown, intentFor, settleIntent, makeTracker, TRACK_EVENTS, phOptions, phClean, phCleanUrl, phEvent,
     dep: { FLOW: DEP_FLOW, UNCERTAIN: DEP_UNCERTAIN, FAILED: DEP_FAILED, LIVE: DEP_LIVE, tone: depTone, strip: depStrip },
     qs: { parse: qsParse, stringify: qsStringify } });
 
@@ -1377,12 +1408,38 @@ Full docs: web/README.md.
     send: (batch, o) => api("/v1/events/track", { method: "POST", body: { events: batch }, keepalive: !!o.keepalive }),
   });
   OG.tracker = tracker;
-  OG.track = (event, props) => tracker.track(event, props);
+  // PostHog (optional): only when the server sends boot.posthog (POSTHOG_KEY set), loaded on demand from /static
+  // (CSP script-src stays 'self'), never for the operator, never under Do Not Track / Global Privacy Control.
+  const ph = { lib: null, wait: null, q: [] };
+  const gpc = !!(root.navigator && root.navigator.globalPrivacyControl);
+  function phLoad() {
+    const cfg = BOOT.posthog;
+    if (ph.wait || !cfg || !cfg.key || !tracker.enabled || gpc) return;
+    ph.wait = OG.me().then(me => me && me.principal === "operator" ? null : new Promise(res => {
+      const sc = document.createElement("script");
+      sc.src = "/static/vendor/posthog.js?v=" + encodeURIComponent(BOOT.asset_v || "");
+      sc.async = true;
+      sc.onload = () => res(root.posthog || null);
+      sc.onerror = () => res(null);
+      document.head.appendChild(sc);
+    })).then(lib => {
+      if (lib) { lib.init(cfg.key, phOptions(cfg)); ph.lib = lib; ph.q.splice(0).forEach(([e, p]) => lib.capture(e, p)); }
+      else ph.q.length = 0;
+    }).catch(() => { ph.q.length = 0; });
+  }
+  function phTrack(event, props) {
+    if (!BOOT.posthog || !tracker.enabled || gpc) return;
+    const [e, p] = phEvent(event, props);
+    if (ph.lib) { try { ph.lib.capture(e, p); } catch (err) { /* dropped */ } return; }
+    phLoad();
+    if (ph.wait && ph.q.length < 100) ph.q.push([e, p]);
+  }
+  OG.track = (event, props) => { const ok = tracker.track(event, props); if (ok) phTrack(event, props); return ok; };
   function trackView(path, pattern, params) {
-    tracker.track("page_view", { page: path });
-    if (pattern === "/gpu/:slug") tracker.track("gpu_view", { gpu: params.slug });
-    else if (pattern === "/provider/:name") tracker.track("provider_view", { provider: params.name });
-    else if (pattern === "/compare/:a-vs-:b") tracker.track("compare", { a: params.a, b: params.b });
+    OG.track("page_view", { page: path });
+    if (pattern === "/gpu/:slug") OG.track("gpu_view", { gpu: params.slug });
+    else if (pattern === "/provider/:name") OG.track("provider_view", { provider: params.name });
+    else if (pattern === "/compare/:a-vs-:b") OG.track("compare", { a: params.a, b: params.b });
   }
 
   /* ================= who is this (GET /v1/me, cached) ================= */

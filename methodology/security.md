@@ -44,7 +44,8 @@ News feed links are third-party input that is rendered as `<a href>`.
   http(s) and mailto URLs, relative paths, `#fragments` and `?queries`, and turns anything else into
   `#`. `OG.go` and row clicks refuse non-http(s) targets. String event handlers (`onclick: "…"`)
   are never set.
-- The Content-Security-Policy (below) allows no inline script except each page's own boot script.
+- The Content-Security-Policy (below) allows no inline script except each page's own boot script, and no script
+  from another origin (PostHog's library, when enabled, is a vendored copy served from `/static/vendor/`).
 
 ## Response headers (SEC-P2-6)
 
@@ -60,6 +61,10 @@ An injected script has a different hash and does not run. JSON data blocks (`app
 `ld+json`) are not scripts and need no hash. Inline *styles* are allowed because the UI sets style
 attributes, and styles cannot run script. FastAPI's `/docs` and `/redoc` (operator only) also allow
 `https://cdn.jsdelivr.net`, where Swagger UI and ReDoc are loaded from.
+
+With `POSTHOG_KEY` set, `connect-src` also allows exactly the configured PostHog ingest origin (`POSTHOG_HOST`,
+e.g. `https://us.i.posthog.com`): the browser only sends anonymous events there. Nothing else changes, and
+without the key the policy is exactly the one above.
 
 ## API keys and rate limits (SEC-P1-3)
 
