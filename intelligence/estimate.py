@@ -84,7 +84,9 @@ def questions(req: WorkloadRequirements, prof: dict, need: bool | None) -> list[
         out.append(_q("precision", "Which precision or quantization (bf16, fp8, int8, 4-bit)?",
                       "weights take 2 bytes per parameter in bf16, 1 in 8-bit, about 0.5 in 4-bit"))
     tr = req.training
-    if wc == "training" and m.get("parameters_b") and not (tr is not None and (tr.dataset_tokens or (tr.dataset_samples and tr.seq_len))):
+    if wc == "training" and m.get("parameters_b") and not (tr is not None and (
+            tr.dataset_tokens or (tr.dataset_samples and tr.seq_len)
+            or (tr.max_steps and tr.global_batch_size and tr.seq_len))):
         out.append(_q("training.dataset_tokens", "How many tokens will you train on (and for how many epochs)?",
                       "lets OpenGrid estimate the runtime and the whole-job cost of each GPU option, including "
                       "whether more GPUs finish it for less"))

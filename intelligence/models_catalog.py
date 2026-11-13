@@ -124,6 +124,16 @@ _m("microsoft/resnet-50", "resnet", None, "50", "cnn", 0.025557, paper="https://
    aliases=["resnet50", "resnet-50", "torchvision/resnet50", "timm/resnet50.a1_in1k"],
    input_resolution=224, activation_elements_per_sample=27_948_032, activation_elements_per_sample_high=37_556_736,
    note="25,557,032 parameters (torchvision); activation elements computed from the architecture at 224x224")
+# OpenGrid's allowlisted job template (workloads/templates.py, runner/mnist_train.py build_model): the classic PyTorch
+# MNIST example network. Parameters: conv1 320 + conv2 18,496 + fc1 1,179,776 + fc2 1,290 = 1,199,882. Activation
+# elements per 28x28 sample, computed from the layer shapes: conv1 + ReLU 2 x 21,632, conv2 + ReLU 2 x 36,864,
+# max-pool 9,216, dropout 9,216, fc1 + ReLU + dropout 3 x 128, fc2 10 = 135,818; the _high figure adds the input
+# (784), the max-pool indices (9,216) and the dropout masks (9,344). Architectural counts, not measurements.
+_m("opengrid/pytorch-mnist-cnn", "mnist-cnn", None, "small", "cnn", 0.001199882,
+   source="https://github.com/pytorch/examples/blob/main/mnist/main.py",
+   aliases=["pytorch-mnist", "mnist-cnn", "pytorch mnist"],
+   input_resolution=28, activation_elements_per_sample=135_818, activation_elements_per_sample_high=155_162,
+   note="the network OpenGrid's pytorch-mnist template trains (2 conv + 2 fully-connected layers)")
 _m("google/vit-base-patch16-224", "vit", None, "base", "vit", 0.0866, layers=12, hidden=768, heads=12, kv=12,
    head_dim=64, ctx=197, paper="https://arxiv.org/abs/2010.11929", aliases=["vit-base", "vit-b/16", "vit_b_16"],
    input_resolution=224, note="sequence = 196 patches of 16x16 at 224x224 + 1 class token = 197")

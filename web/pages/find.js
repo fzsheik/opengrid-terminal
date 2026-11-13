@@ -38,10 +38,11 @@
     precision: E("fp32", "bf16", "fp16", "fp8", "int8", "int4"),
     quantization: E("none", "int8", "int4", "nf4", "gptq", "awq", "fp8"),
     training: O({ method: E("full", "lora", "qlora"), optimizer: E("adamw", "adamw_8bit", "adafactor", "sgd"), micro_batch_size: I(1e6), global_batch_size: I(1e9),
-      seq_len: I(1e8), gradient_checkpointing: B, lora_rank: I(100000), zero_stage: E(0, 1, 2, 3), cpu_offload: B, epochs: N(1e6), dataset_tokens: N(), dataset_samples: N() }),
+      seq_len: I(1e8), gradient_checkpointing: B, lora_rank: I(100000), zero_stage: E(0, 1, 2, 3), cpu_offload: B, epochs: N(1e6), dataset_tokens: N(), dataset_samples: N(),
+      max_steps: I(1e8) }),
     inference: O({ concurrency: I(1e6), context_len: I(1e8), output_tokens: I(1e8), target_latency_ms: N(1e9), target_tokens_per_s: N(1e9),
       engine: E("vllm", "tgi", "transformers", "llama.cpp") }),
-    constraints: O({ budget_usd: N(1e9), max_price_per_gpu_hour: N(1e6), runtime_hours: N(1e6), region: S(32), max_gpus: I(100000), allow_spot: B,
+    constraints: O({ budget_usd: N(1e9), max_price_per_gpu_hour: N(1e6), runtime_hours: N(1e6), deadline_hours: N(1e6), region: S(32), max_gpus: I(100000), allow_spot: B,
       vendor: E("NVIDIA", "AMD"), include_providers: A(S(60), 100), exclude_providers: A(S(60), 100) }),
     hardware_hints: O({ gpus_mentioned: A(S(80), 50), gpu_count: I(100000), cuda_min: S(16) }),
     evidence: A(O({ field: S(80), value: SCALAR, source: S(300), confidence: E("high", "medium", "low") }), 200),
@@ -328,7 +329,7 @@
   ];
   // The fourth answer, only when the server could estimate runtimes (training with a known dataset size): what the
   // whole job costs, which can favour more GPUs that cost more per hour. Theoretical, and labelled so.
-  const JOB_PICK = ["lowest_estimated_job_cost", "Lowest cost for the whole job", "Estimated: theoretical runtime x observed price. More GPUs can cost more per hour and less for the job."];
+  const JOB_PICK = ["lowest_estimated_job_cost", "Lowest cost for the whole job", "Estimated: runtime (measured on real OpenGrid runs where labelled, else theoretical) x observed price. More GPUs can cost more per hour and less for the job."];
   // No tier is called "faster": throughput is a spec-sheet estimate, never a benchmark.
   const TIERS = [["lower_cost", "Lower cost", "Cheapest options that still fit"], ["balanced", "Balanced", "Headroom and price in balance"], ["higher_performance", "More throughput", "More total throughput across the GPUs, estimated from spec sheets (not benchmarked), for more money"]];
   const DEMO_HREF = "/jobs/new?preset=mnist&sandbox=1";
@@ -471,7 +472,11 @@
   // option.performance -> plain parts for the cards. Everything here is the server's estimate; null when absent.
   function perfInfo(o) {
     const p = (o && o.performance) || {};
-    const tot = p.total || {}, ic = p.interconnect || {}, sc = p.scaling || {}, rel = p.relative_to_balanced || null, rt = p.runtime || {}, jc = p.job_cost || null;
+    const tot = p.total || {}, ic = p.interconnect || {}, sc = p.scaling || {}, rel = p.relative_to_balanced || null, rt = p.runtime || {};
+    // a MEASURED runtime (completed real OpenGrid runs of this workload on this GPU) wins over the theoretical one
+    const m = p.measured || null, mrt = m && m.runtime && m.runtime.known === true && finite(m.runtime.hours) ? m.runtime : null;
+    const jm = p.job_cost_measured && finite(p.job_cost_measured.usd) ? p.job_cost_measured : null, jc = jm || p.job_cost || null;
+    const conf = o && o.decision && o.decision.confidence ? o.decision.confidence : null;
     const n = tot.gpu_count || (o && o.gpu_count) || 1;
     const rng = (a, f) => (Array.isArray(a) && finite(a[0]) && finite(a[1]) ? `${f(a[0])} to ${f(a[1])}` : null);
     return {
@@ -481,8 +486,10 @@
       speedup: n > 1 && finite(sc.speedup) ? { text: `≈ ${sc.speedup}× one GPU`, range: rng(sc.speedup_range, v => v + "×"), basis: sc.basis || null } : null,
       basis: p.basis && p.basis.label ? String(p.basis.label) : null,
       relative: rel && finite(rel.value) ? { value: rel.value, text: `${rel.value}× the balanced pick`, range: rng(rel.range, v => v + "×") } : null,
-      runtime: rt.known === true && finite(rt.hours) ? { text: "≈ " + hoursText(rt.hours), range: rng(rt.range_hours, hoursText), basis: rt.basis || null } : null,
-      jobCost: jc && finite(jc.usd) ? { text: usd(jc.usd), range: rng(jc.range_usd, usd), usd: jc.usd } : null,
+      runtime: mrt ? { text: "≈ " + hoursText(mrt.hours), range: rng(mrt.range_hours, hoursText), basis: mrt.basis || null, measured: true, n: m.n }
+        : rt.known === true && finite(rt.hours) ? { text: "≈ " + hoursText(rt.hours), range: rng(rt.range_hours, hoursText), basis: rt.basis || null } : null,
+      jobCost: jc && finite(jc.usd) ? { text: usd(jc.usd), range: rng(jc.range_usd, usd), usd: jc.usd, measured: !!jm } : null,
+      confidence: conf && conf.level ? { level: String(conf.level), reason: arr(conf.reasons)[0] ? String(arr(conf.reasons)[0]) : null } : null,
     };
   }
 
@@ -542,6 +549,7 @@
   // Inference has no runtime estimate, so it gets no runtime line and no data-size hint.
   function runtimeFact(o, e) {
     const pi = perfInfo(o), c = costLines(o);
+    if (pi.runtime && pi.runtime.measured) return { label: "Measured runtime", value: pi.runtime.text, sub: (pi.runtime.range ? pi.runtime.range + " · " : "") + `measured on ${pi.runtime.n} real OpenGrid run${pi.runtime.n === 1 ? "" : "s"} of this workload`, estimated: false, kind: "measured" };
     if (pi.runtime) return { label: "Est. runtime", value: pi.runtime.text, sub: (pi.runtime.range ? pi.runtime.range + " · " : "") + "theoretical, not a benchmark", estimated: true };
     if (c.budget_hours != null) return { label: "Your budget", value: "≈ " + (Math.round(c.budget_hours * 10) / 10) + " h", sub: "of runtime at this price", estimated: true };
     if (isTraining(e && e.workload_type)) return { label: "Runtime", value: "Not estimated", sub: "add your training data size to estimate the runtime and the whole-job cost", estimated: false };
@@ -753,8 +761,9 @@
         fact("Memory needed", o.gpu_count > 1 && f.known ? fmtGb(f.needed) + " per GPU" : finite(m.recommended_gb) ? fmtGb(m.recommended_gb) : OG.na("not enough information yet"),
           f.known ? (f.over ? h("span", { class: "down" }, `does not fit ${fmtGb(f.vram)}`) : `fits ${fmtGb(f.vram)} per GPU · ${Math.round(f.headroom_pct)}% headroom`) : m.confidence ? "confidence " + m.confidence : null, OG.kindBadge("estimated")),
         fact("Availability", av.label, seen ? h("span", {}, "price seen ", seen) : "freshness not reported"),
-        rf ? fact(rf.label, rf.value, rf.sub, rf.estimated ? OG.kindBadge("estimated") : null) : null,
-        pi.jobCost ? fact("Est. whole job", pi.jobCost.text, pi.jobCost.range ? pi.jobCost.range + " · runtime x price" : "runtime x price", OG.kindBadge("estimated")) : null),
+        rf ? fact(rf.label, rf.value, rf.sub, rf.kind ? OG.kindBadge(rf.kind) : rf.estimated ? OG.kindBadge("estimated") : null) : null,
+        pi.jobCost ? fact("Est. whole job", pi.jobCost.text, (pi.jobCost.range ? pi.jobCost.range + " · " : "") + (pi.jobCost.measured ? "measured runtime x price" : "runtime x price"), OG.kindBadge("estimated")) : null,
+        pi.confidence ? fact("Confidence", pi.confidence.level, pi.confidence.reason) : null),
       pi.multi ? h("div", { class: "cx-perf-r" }, h("b", {}, `${pi.n} GPUs`), pi.memory ? h("span", {}, pi.memory) : null,
         pi.link ? h("span", { class: "dim", title: pi.linkDetail || "" }, pi.link) : null,
         pi.speedup ? h("span", { title: pi.speedup.basis || "" }, pi.speedup.text + " (estimated)") : null) : null,
