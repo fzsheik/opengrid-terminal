@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     # HTTP basic auth for the whole site. Unset means open, which is only right on your own machine.
     app_user: str = "opengrid"
     app_password: str | None = None
+    # A second, read-only site login (e.g. for an investor demo): market data pages and Data API reads (data:read),
+    # no admin pages, no keys, no money. Both unset: there is only the operator login above. Must differ from it.
+    viewer_user: str | None = None
+    viewer_password: str | None = None
     # Open the read-only public surface (pages, /v1 data reads) without the site password.
     public_pages: bool = False
     # Real provisioning spends money. Off unless explicitly enabled per environment.

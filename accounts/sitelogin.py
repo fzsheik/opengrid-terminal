@@ -1,34 +1,79 @@
 """Site login: a signed session cookie behind a styled /login form, instead of the browser's basic-auth popup.
 
-The cookie is "<expiry>.<HMAC>" keyed from APP_USER + APP_PASSWORD, so changing the password signs everyone out.
-Basic auth still works for scripts. One shared operator login: no per-user accounts (use API keys for those).
+Two logins, each a role:
+    operator  APP_USER + APP_PASSWORD        every scope, the admin pages
+    viewer    VIEWER_USER + VIEWER_PASSWORD  read-only (accounts.auth.VIEWER): data pages and data:read, no admin
+The operator cookie is "<expiry>.<HMAC>", the viewer cookie "v.<expiry>.<HMAC>". Each HMAC is keyed from that role's
+own user + password (domain-separated), so changing a password signs that role out, and a viewer, who knows only the
+viewer password, cannot mint an operator cookie. Basic auth still works for scripts, with either login.
+No per-user accounts beyond these two (use API keys for those).
 """
 import hashlib
 import hmac
 import html
+import secrets
 import time
 
 from config import settings
 
 COOKIE = "og_session"
 MAX_AGE = 7 * 86400
+OPERATOR, VIEWER = "operator", "viewer"
 
 
-def _sign(exp: str) -> str:
-    key = hashlib.sha256(f"opengrid-site-session|{settings.app_user}|{settings.app_password}".encode()).digest()
-    return hmac.new(key, exp.encode(), "sha256").hexdigest()
+def viewer_enabled() -> bool:
+    """The viewer login exists only beside an operator password, and only with both of its own settings."""
+    return bool(settings.app_password and settings.viewer_user and settings.viewer_password)
 
 
-def make_token() -> str:
+def _key(role: str) -> bytes:
+    if role == VIEWER:
+        return hashlib.sha256(
+            f"opengrid-site-session-viewer|{settings.viewer_user}|{settings.viewer_password}".encode()).digest()
+    return hashlib.sha256(f"opengrid-site-session|{settings.app_user}|{settings.app_password}".encode()).digest()
+
+
+def _sign(exp: str, role: str = OPERATOR) -> str:
+    return hmac.new(_key(role), exp.encode(), "sha256").hexdigest()
+
+
+def make_token(role: str = OPERATOR) -> str:
     exp = str(int(time.time()) + MAX_AGE)
-    return f"{exp}.{_sign(exp)}"
+    return f"{exp}.{_sign(exp)}" if role == OPERATOR else f"v.{exp}.{_sign(exp, VIEWER)}"
+
+
+def creds_role(user: str, password: str) -> str | None:
+    """Which login a username + password is: "operator", "viewer" or None. Both pairs are compared every time
+    (& not `and`), in constant time, so timing reveals neither which login exists nor which matched."""
+    op = secrets.compare_digest(user.encode(), settings.app_user.encode()) & secrets.compare_digest(
+        password.encode(), (settings.app_password or "").encode())
+    vw = secrets.compare_digest(user.encode(), (settings.viewer_user or "").encode()) & secrets.compare_digest(
+        password.encode(), (settings.viewer_password or "").encode())
+    if op and settings.app_password:
+        return OPERATOR
+    if vw and viewer_enabled():
+        return VIEWER
+    return None
+
+
+def role(request) -> str | None:
+    """The role of a valid session cookie, or None."""
+    if not settings.app_password:
+        return None
+    raw = request.cookies.get(COOKIE, "")
+    who = OPERATOR
+    if raw.startswith("v."):
+        if not viewer_enabled():
+            return None
+        who, raw = VIEWER, raw[2:]
+    exp, _, sig = raw.partition(".")
+    ok = exp.isdigit() and int(exp) > time.time() and hmac.compare_digest(sig, _sign(exp, who))
+    return who if ok else None
 
 
 def valid(request) -> bool:
-    if not settings.app_password:
-        return False
-    exp, _, sig = request.cookies.get(COOKIE, "").partition(".")
-    return exp.isdigit() and int(exp) > time.time() and hmac.compare_digest(sig, _sign(exp))
+    """Any valid session cookie (operator or viewer)."""
+    return role(request) is not None
 
 
 _PAGE = """<!doctype html>

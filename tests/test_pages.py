@@ -308,6 +308,114 @@ def test_public_pages_through_the_middleware():
         settings.app_password, settings.public_pages = None, False
 
 
+def _viewer_routes(prefixes):
+    """Every (method, path) the app serves under `prefixes`, path params filled with a dummy."""
+    def walk(rs):  # including the routes inside included routers (as tests/test_security_reaudit.all_routes)
+        for r in rs:
+            if hasattr(r, "original_router"):
+                yield from walk(r.original_router.routes)
+            elif hasattr(r, "routes") and not hasattr(r, "methods") and not hasattr(r, "app"):
+                yield from walk(r.routes)
+            else:
+                yield r
+    out = []
+    for r in walk(main.app.routes):
+        path = getattr(r, "path", "")
+        if path.startswith(prefixes):
+            for m in sorted(getattr(r, "methods", None) or ()):
+                if m != "HEAD":
+                    out.append((m, re.sub(r"\{[^}]+\}", "1", path)))
+    return out
+
+
+def test_viewer_login_reads_data_but_never_admin():
+    """VIEWER_USER / VIEWER_PASSWORD: a second, read-only site login (accounts.sitelogin). It opens the market pages
+    and data:read, and gets 403 on every admin / ops / key / money endpoint and operator tool; the operator login is
+    unchanged; a viewer cannot turn its cookie into an operator one; unset = no viewer at all."""
+    form = {"Content-Type": "application/x-www-form-urlencoded"}
+    settings.app_password, settings.public_pages = "s3cret", False
+    try:
+        # off by default: the viewer's credentials are just wrong
+        assert client.post("/login", content=b"username=vc&password=look-only", headers=form,
+                           follow_redirects=False).status_code == 401, "no viewer configured: refused"
+        assert client.get("/v1/me", auth=("vc", "look-only")).status_code == 401
+        settings.viewer_user, settings.viewer_password = "vc", "look-only"
+        good = client.post("/login", content=b"username=vc&password=look-only&next=/gpus", headers=form,
+                           follow_redirects=False)
+        assert good.status_code == 303 and good.headers["location"] == "/gpus", good.status_code
+        tok = good.headers["set-cookie"].split("og_session=")[1].split(";")[0]
+        assert tok.startswith("v."), tok
+        jar = {"og_session": tok}
+        me = client.get("/v1/me", cookies=jar)
+        assert me.status_code == 200, me.text
+        d = me.json()["data"]
+        assert d["principal"] == "viewer" and d["scopes"] == ["data:read"] and d["account"] is None, d
+        assert client.get("/v1/me", auth=("vc", "look-only")).json()["data"]["principal"] == "viewer", "basic auth too"
+        # reads: pages, assets, Data API
+        for p in ("/gpus", "/static/core.js", "/v1/gpus", "/v1/listings", "/internal/overview", "/admin/value", "/ops"):
+            r = client.get(p, cookies=jar)
+            assert r.status_code == 200, (p, r.status_code)  # admin page SHELLS hold no data; the JS shows the gate
+        # never: operator tools outside /v1
+        for m, p in (("GET", "/raw"), ("GET", "/raw/summary"), ("POST", "/fetch"), ("POST", "/normalize"),
+                     ("GET", "/unmapped"), ("GET", "/internal/mapping"), ("GET", "/internal/live/status")):
+            r = client.request(m, p, cookies=jar)
+            assert r.status_code == 403, (m, p, r.status_code)
+        # never: every admin / ops / key / account / money endpoint the app has
+        routes = _viewer_routes(("/v1/admin", "/v1/ops", "/v1/keys", "/v1/credentials", "/v1/route", "/v1/deployments",
+                                 "/v1/jobs", "/v1/reservations", "/v1/billing", "/v1/usage", "/v1/watchlists", "/v1/alerts",
+                                 "/v1/quotes", "/v1/onboarding", "/v1/partners"))
+        assert len([1 for m, p in routes if p.startswith("/v1/admin")]) >= 15, routes
+        leaked = []
+        catalogue = {("GET", "/v1/jobs/templates")}  # the allowlisted job templates: a data:read catalogue, no account data
+        for m, p in [x for x in routes if x not in catalogue]:
+            r = client.request(m, p, cookies=jar, json={})
+            if r.status_code not in (401, 403):
+                leaked.append((m, p, r.status_code))
+        assert not leaked, f"viewer reached: {leaked}"
+        # a viewer cannot forge an operator cookie: its own token without the "v." prefix is not operator-signed
+        assert client.get("/v1/me", cookies={"og_session": tok[2:]}).status_code == 401, "viewer HMAC is not operator's"
+        assert client.get("/v1/me", cookies={"og_session": tok[:-1] + ("1" if tok[-1] == "0" else "0")}).status_code == 401
+        # the operator is unchanged, and still gets the admin endpoints
+        op = client.post("/login", content=b"username=opengrid&password=s3cret", headers=form, follow_redirects=False)
+        otok = op.headers["set-cookie"].split("og_session=")[1].split(";")[0]
+        assert not otok.startswith("v.")
+        assert client.get("/v1/me", cookies={"og_session": otok}).json()["data"]["principal"] == "operator"
+        assert client.get("/v1/admin/funnel", cookies={"og_session": otok}).status_code == 200
+        assert client.get("/internal/mapping", cookies={"og_session": otok}).status_code == 200, "operator tools open"
+        # changing the viewer password signs the viewer out (and only the viewer)
+        settings.viewer_password = "rotated"
+        assert client.get("/v1/me", cookies=jar).status_code == 401, "rotated viewer password: old cookie dead"
+        assert client.get("/v1/me", cookies={"og_session": otok}).status_code == 200, "operator unaffected"
+        # unset again: a leftover viewer cookie is worthless
+        settings.viewer_password = "look-only"
+        assert client.get("/v1/me", cookies=jar).status_code == 200
+        settings.viewer_user = None
+        assert client.get("/v1/me", cookies=jar).status_code == 401, "viewer off: its cookie no longer opens anything"
+        # failed viewer logins count toward the same per-IP lockout as the operator's (accounts.security)
+        from accounts import security
+        settings.viewer_user = "vc"
+        security.reset()
+        for _ in range(settings.login_max_failures):
+            assert client.post("/login", content=b"username=vc&password=nope", headers=form,
+                               follow_redirects=False).status_code == 401
+        locked = client.post("/login", content=b"username=vc&password=look-only", headers=form, follow_redirects=False)
+        assert locked.status_code == 429, "locked out, even with the right viewer password"
+        security.reset()
+    finally:
+        settings.app_password, settings.public_pages = None, False
+        settings.viewer_user = settings.viewer_password = None
+        client.cookies.clear()  # the /login responses above set og_session on the shared client
+
+
+def test_viewer_sees_no_admin_ui():
+    """The browser side: OG.isAdmin is false for the viewer, so the admin nav stays hidden and admin pages gate."""
+    core = (Path(__file__).resolve().parent.parent / "web" / "core.js").read_text(encoding="utf-8")
+    m = re.search(r"OG\.isAdmin = me => (.+);", core)
+    assert m, "OG.isAdmin"
+    rule = m.group(1)
+    assert 'me.principal === "operator"' in rule and '"viewer"' not in rule, rule
+
+
 def test_unknown_url_shows_the_apps_not_found_page():
     """Public site: a browser opening an unknown page path gets the shell with 404 (the app's "Page not found"),
     never a plain-text 401; API, asset, login and private legacy paths keep their answers."""

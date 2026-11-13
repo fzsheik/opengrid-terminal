@@ -70,7 +70,7 @@ def _400(e: Exception):
 
 @router.get("/v1/me", tags=["accounts"], summary="The calling account, key, scopes and rate-limit budget")
 def me(who: Principal = Depends(principal)):
-    acct = get_account(account_for(who))
+    acct = None if who.kind == "viewer" else get_account(account_for(who))  # the viewer login has no account
     key = keys.get_key(who.key_id) if who.key_id else None
     return envelope({
         "principal": who.kind, "account": acct, "key": key,

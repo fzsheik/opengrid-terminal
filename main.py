@@ -2,7 +2,6 @@ import base64
 import logging
 import os
 import re
-import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import parse_qs, quote
@@ -45,6 +44,10 @@ async def lifespan(app: FastAPI):
     # Deployed with no password would publish prices, raw provider responses and the fetch button.
     if security.deployed() and not settings.app_password:
         raise RuntimeError(f"APP_PASSWORD must be set when deployed ({'; '.join(security.deployment_signals())})")
+    if (settings.viewer_user or settings.viewer_password) and not sitelogin.viewer_enabled():
+        logging.getLogger(__name__).warning("viewer login is off: VIEWER_USER, VIEWER_PASSWORD and APP_PASSWORD must all be set")
+    if sitelogin.viewer_enabled() and (settings.viewer_user, settings.viewer_password) == (settings.app_user, settings.app_password):
+        raise RuntimeError("VIEWER_USER/VIEWER_PASSWORD equal the operator login: the viewer would be the operator")
     init_db()
     ingest = Ingest()
     if settings.poller_enabled:
@@ -63,8 +66,8 @@ async def lifespan(app: FastAPI):
 # form are refused (422) instead of parsed, so a cross-site <form> cannot forge a JSON request.
 app = FastAPI(title="opengrid-terminal", lifespan=lifespan, strict_content_type=True)
 
-def password_ok(header: str) -> bool:
-    """True when an Authorization header carries the site's user and password."""
+def password_ok(header: str) -> str | None:
+    """The site login an Authorization header carries: "operator", "viewer" or None (see accounts.sitelogin)."""
     if not header.lower().startswith("basic "):
         return False
     try:
@@ -74,11 +77,9 @@ def password_ok(header: str) -> bool:
     return creds_ok(user, password)
 
 
-def creds_ok(user: str, password: str) -> bool:
-    # Both are compared every time (& not `and`), in constant time, so timing reveals nothing.
-    return secrets.compare_digest(user.encode(), settings.app_user.encode()) & secrets.compare_digest(
-        password.encode(), (settings.app_password or "").encode()
-    )
+def creds_ok(user: str, password: str) -> str | None:
+    # Constant time, every pair compared every time (accounts.sitelogin.creds_role).
+    return sitelogin.creds_role(user, password)
 
 
 def _deny(status: int, detail: str, headers: dict | None = None) -> Response:
@@ -105,6 +106,21 @@ def _unknown_page(request) -> bool:
     # anything a non-page route answers (a JSON endpoint added later, say) is not ours to replace
     return not any(r.matches(request.scope)[0] == Match.FULL for r in app.routes if getattr(r, "endpoint", None)
                    and not getattr(r.endpoint, "__name__", "").startswith("page_"))
+
+
+# What the read-only viewer login (accounts.sitelogin) may reach beyond the /v1 Data API, where accounts.auth.VIEWER's
+# scopes (data:read only) decide: the page shells, assets, the API reference and the website's public /internal reads.
+# Never /raw, /fetch, /normalize, /unmapped, /internal/live or /internal/mapping (operator tools).
+_VIEWER_PATHS = ("/docs", "/redoc", "/openapi.json", "/robots.txt", "/sitemap.xml")
+
+
+def viewer_may(request) -> bool:
+    path = request.url.path
+    if path.startswith(("/static/", "/v1/")) or path in _VIEWER_PATHS or pages_api.is_page_path(path):
+        return True
+    if path.startswith("/internal/"):
+        return request.method in ("GET", "HEAD") and path[len("/internal/"):].split("/", 1)[0] in pages_api.PUBLIC_INTERNAL
+    return _unknown_page(request)
 
 
 @app.middleware("http")
@@ -135,18 +151,20 @@ async def require_password(request, call_next):
         return await call_next(request)
     ip = security.client_ip(request)
     public = False
+    role = None  # the site login's role once known: "operator", "viewer" (None: open dev, which is the operator)
     if not settings.app_password:
         if security.deployed():
             return _deny(503, "APP_PASSWORD is not configured on a deployed server")
         if not security.open_dev_host_ok(request):  # DNS rebinding against an open dev server
             return _deny(403, "this development server (no APP_PASSWORD) only answers to localhost or an IP address")
-    elif sitelogin.valid(request):
-        pass  # signed session cookie from /login: an operator, same CSRF rules as basic auth below
+    elif (role := sitelogin.role(request)) is not None:
+        pass  # signed session cookie from /login (operator or viewer), same CSRF rules as basic auth below
     elif security.is_basic(auth):
         wait = security.login_locked(ip)
         if wait:
             return _deny(429, "too many failed logins from this address; try again later", {"Retry-After": str(wait)})
-        if not password_ok(auth):
+        role = password_ok(auth)
+        if not role:
             security.login_failed(ip)
             if not (settings.public_pages and pages_api.is_public(request)):
                 return Response("Authentication required", status_code=401,
@@ -174,7 +192,9 @@ async def require_password(request, call_next):
             if not d.allowed:
                 return _deny(429, "rate limit exceeded for anonymous access; sign in or use an API key", d.headers())
         return await call_next(request)
-    bad = security.csrf_violation(request)  # operator (site login or open dev) from here on
+    if role == sitelogin.VIEWER and not viewer_may(request):
+        return _deny(403, "the viewer login reads market data only; this needs the operator login")
+    bad = security.csrf_violation(request)  # site login (operator or viewer) or open dev from here on
     if bad:
         return _deny(403, bad)
     return await call_next(request)
@@ -237,12 +257,13 @@ async def login_submit(request: Request):
     if wait:
         return HTMLResponse(sitelogin.page(safe, "Too many failed attempts. Try again later."), status_code=429,
                             headers={"Retry-After": str(wait), "Cache-Control": "no-store"})
-    if not (settings.app_password and creds_ok(form.get("username", ""), form.get("password", ""))):
+    role = creds_ok(form.get("username", ""), form.get("password", "")) if settings.app_password else None
+    if not role:
         security.login_failed(ip)
         return HTMLResponse(sitelogin.page(safe, "Incorrect username or password."), status_code=401,
                             headers={"Cache-Control": "no-store"})
     resp = RedirectResponse(safe, status_code=303)
-    resp.set_cookie(sitelogin.COOKIE, sitelogin.make_token(), max_age=sitelogin.MAX_AGE, httponly=True,
+    resp.set_cookie(sitelogin.COOKIE, sitelogin.make_token(role), max_age=sitelogin.MAX_AGE, httponly=True,
                     secure=security.deployed(), samesite="lax", path="/")
     return resp
 

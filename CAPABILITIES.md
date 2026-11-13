@@ -1091,7 +1091,8 @@ them). `OPENGRID_NO_JOBS` starts none; with `POLLER_ENABLED` off, the jobs marke
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL`, `APP_USER`, `APP_PASSWORD` | database and site login |
+| `DATABASE_URL`, `APP_USER`, `APP_PASSWORD` | database and site login (operator) |
+| `VIEWER_USER`, `VIEWER_PASSWORD` | optional read-only site login: market data only, no admin pages (`accounts/sitelogin.py`) |
 | `API_KEY_PEPPER`, `CREDENTIALS_ENCRYPTION_KEY` | key hashing and credential encryption; never change once set |
 | `ENVIRONMENT=production`, `TRUST_PROXY_HEADERS=true` | production behaviour behind Railway's proxy |
 | `PUBLIC_BASE_URL`, `DATA_API_HOST`, `DOCS_BASE_URL` | canonical links; the Data API host name (Data API routes only, key required; unset: no such host); the customer docs origin (error `docs_url`, the only CORS origin) |

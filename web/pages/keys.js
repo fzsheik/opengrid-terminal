@@ -1,6 +1,6 @@
 /* /keys: create and manage API keys.
    Signed out (no site login): one access state (how keys are issued today, what works without one); no private
-   API call is made, so there is no stack of 401 boxes. Signed in (the operator, the only browser principal):
+   API call is made, so there is no stack of 401 boxes. Signed in (the operator; the read-only viewer login holds no keys):
      1. create a key (presets first; the full scope grid is one click away; operator-level scopes are set apart)
         -> the secret is shown once, with how to use it;
      2. the keys table (revoke);
@@ -89,7 +89,7 @@ curl -s "${base}/v1/keys" -H "Authorization: Bearer $${KEY_VAR}"`, "curl", "your
 
       function drawMe() {
         const a = (st.me && st.me.account) || {};
-        meLine.replaceChildren(st.me.principal === "operator" ? "Operator account · " : "Signed in with a key · ",
+        meLine.replaceChildren(st.me.principal === "operator" ? "Operator account · " : st.me.principal === "viewer" ? "Read-only site login (no keys) · " : "Signed in with a key · ",
           `#${a.id != null ? a.id : "-"} ${a.name ? "· " + a.name : ""} · ${st.keys.filter(k => k.state === "active").length} active key(s)`);
       }
 

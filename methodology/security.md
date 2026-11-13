@@ -8,7 +8,8 @@ closes (the ids refer to the security audit). Tests: `tests/test_security.py`.
 | Principal | How | Ambient? | Notes |
 |---|---|---|---|
 | API key | `Authorization: Bearer opg_live_…` | no | verified by `accounts/keys.py`; scopes from the key |
-| Operator | the site's HTTP basic auth (APP_PASSWORD), or nothing on a developer machine | **yes** | holds every scope |
+| Operator | the site login (`/login` cookie or HTTP basic auth, APP_USER/APP_PASSWORD), or nothing on a developer machine | **yes** | holds every scope |
+| Viewer | the read-only site login (VIEWER_USER/VIEWER_PASSWORD), when set | **yes** | `data:read` only: market pages and Data API reads; 403 on admin, ops, keys, money and the operator tools (`/raw`, `/fetch`, `/normalize`, `/unmapped`, `/internal/live`, `/internal/mapping`); no account |
 | Public | nobody, when `PUBLIC_PAGES` is on | n/a | GET/HEAD of the public pages and market-data reads only |
 
 "Ambient" means the browser attaches the credential on its own, including to requests a different

@@ -111,6 +111,7 @@ opengrid providers --limit 10`,
   function accessState(me) {
     if (!me) return "anonymous";
     if (me.principal === "operator" || (me.scopes || []).includes("*")) return "operator";
+    if (me.principal === "viewer") return "anonymous";  // the read-only site login holds no key: same guidance
     return "key";
   }
 

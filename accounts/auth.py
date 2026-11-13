@@ -8,9 +8,10 @@
 
 Two ways in:
     Authorization: Bearer opg_...   an OpenGrid API key (accounts.keys verifies it)
-    the site's own basic auth       the operator using the web UI; or nothing at
-                                    all when APP_PASSWORD is unset (local dev).
-                                    The operator holds every scope.
+    the site's own login            /login cookie or basic auth (accounts.sitelogin): the operator
+                                    (APP_USER/APP_PASSWORD, every scope), or the read-only viewer
+                                    (VIEWER_USER/VIEWER_PASSWORD, VIEWER below); or nothing at all when
+                                    APP_PASSWORD is unset (local dev: operator).
 
 The middleware in main.py lets Bearer requests to /v1 past the site password;
 this module is then the only gate, so every /v1 handler must depend on it.
@@ -42,7 +43,7 @@ SCOPES = {
 
 @dataclass(frozen=True)
 class Principal:
-    kind: str                      # "operator" | "api_key"
+    kind: str                      # "operator" | "viewer" | "api_key" | "public"
     account_id: int | None = None  # None for the operator
     key_id: int | None = None
     scopes: frozenset = field(default_factory=frozenset)
@@ -56,17 +57,22 @@ class Principal:
 OPERATOR = Principal(kind="operator", scopes=frozenset({ALL}))
 # An anonymous visitor when PUBLIC_PAGES is on: market data reads only, no account.
 PUBLIC = Principal(kind="public", scopes=frozenset({"data:read"}))
+# The read-only site login (VIEWER_USER): market data and Data API reads only. Deliberately data:read and nothing else:
+# it has no account (account_id None), and the deployment / job / reservation reads treat "no account" as the
+# operator's own rows, so any further read scope would show the operator's private data.
+VIEWER = Principal(kind="viewer", scopes=frozenset({"data:read"}))
 
 
-def _site_auth_ok(request: Request, header: str) -> bool:
+def _site_role(request: Request, header: str) -> str | None:
+    """"operator" / "viewer" for the site login (basic auth or the /login cookie), else None."""
     import main
     from accounts import sitelogin  # the site password check lives with the middleware
 
     if not settings.app_password:
         from accounts.security import deployed
 
-        return not deployed()  # open only on a developer's machine; deployed without a password: closed
-    return main.password_ok(header) or sitelogin.valid(request)  # basic auth, or the /login session cookie
+        return None if deployed() else sitelogin.OPERATOR  # open only on a developer's machine
+    return main.password_ok(header) or sitelogin.role(request)  # basic auth, or the /login session cookie
 
 
 def _public_path(request: Request) -> bool:
@@ -93,8 +99,8 @@ def principal(request: Request) -> Principal:
         from accounts import keys
 
         who = keys.verify(header[7:].strip(), request)  # raises 401/429 itself
-    elif _site_auth_ok(request, header):
-        who = OPERATOR
+    elif (role := _site_role(request, header)) is not None:
+        who = OPERATOR if role == "operator" else VIEWER
     elif settings.public_pages and _public_read(request) and _public_path(request):
         who = PUBLIC
     else:

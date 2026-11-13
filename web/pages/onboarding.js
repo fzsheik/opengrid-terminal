@@ -1,5 +1,5 @@
 /* /onboarding: the design-partner path to a first real route.
-   In a browser the only signed-in principal is the operator (site login); partners act with their API key. So:
+   In a browser the signed-in principal is the operator (site login) or the read-only viewer (no onboarding); partners act with their API key. So:
      signed out  a static explanation of how onboarding works today (keys are issued by the OpenGrid team; no
                  self-service sign-up) with the access request link. No private call, no 401 stack.
      operator    the operator account's own checklist, or ?account=<id> to preview a partner's progress (read from
