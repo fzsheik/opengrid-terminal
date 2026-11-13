@@ -73,7 +73,8 @@ VM_ENDPOINT = "/teams/{team}/virtual_machines/available/"
 BAREMETAL_ENDPOINT = "/teams/{team}/bare_metal/available/"
 
 _CARD = re.compile(
-    r'<p class="mb-2 font-bold[^"]*uppercase[^"]*">(?P<kind>[^<]+)</p>\s*<h2[^>]*>(?P<plan>[^<]+)</h2>\s*'
+    # The kind label: any <p> whose classes include "uppercase" (class order changed 2026-11; not relied on).
+    r'<p class="[^"]*\buppercase\b[^"]*">(?P<kind>[^<]+)</p>\s*<h2[^>]*>(?P<plan>[^<]+)</h2>\s*'
     r'<div[^>]*><span>(?P<counts>[^<]+)</span><span[^>]*>(?P<gpu>[^<]+)</span></div>\s*'
     r'<p[^>]*>(?P<price>[^<]+)</p>'
 )

@@ -60,6 +60,8 @@ _TD_SPAN = re.compile(r"<td(?P<a>[^>]*)>(?P<c>.*?)</td>", re.S)
 _COLSPAN = re.compile(r'colspan="?(\d+)')
 _TERM = re.compile(r"^(?P<lo>\d+)(?:-(?P<hi>\d+)|(?P<plus>\+)) days$")
 EXPECTED_HEADER = ["Hardware", "Preemptible Compute", "ON-Demand", "Reserved"]
+# The page has printed both "Preemptible Compute" and (since 2026-11-12) "Preemptible" for the same column.
+_HEADERS = (EXPECTED_HEADER, ["Hardware", "Preemptible", "ON-Demand", "Reserved"])
 
 
 def _text(fragment: str) -> str:
@@ -92,7 +94,7 @@ def extract_reserved(html: str) -> dict:
     """
     trs = _price_table(html)
     header = [_text(c) for c in _TH.findall(trs[0])] if trs else []
-    if header[:4] != EXPECTED_HEADER:
+    if header[:4] not in _HEADERS:
         raise ValueError(f"together: GPU table header changed: {header!r}")
     sub = [_text(c) for c in _TH.findall(trs[1])] if len(trs) > 1 else []
     terms = sub[2:]
@@ -106,6 +108,10 @@ def extract_reserved(html: str) -> dict:
             cells += [_text(m["c"])] * (int(span.group(1)) if span else 1)
         if not cells:
             continue
+        # One trailing text cell standing for every reserved term without a colspan ("Request Capacity" on the
+        # NVL72 rows since 2026-11-12) covers them all, as a colspan would.
+        if len(cells) == 4 and len(terms) > 1 and not re.search(r"\d", cells[-1]):
+            cells += [cells[-1]] * (3 + len(terms) - len(cells))
         if len(cells) != 3 + len(terms):
             raise ValueError(f"together: row {cells[:1]!r} has {len(cells)} columns, expected {3 + len(terms)}")
         rows.append({"hardware": cells[0], "reserved": dict(zip(terms, cells[3:]))})
@@ -122,7 +128,7 @@ def extract(html: str) -> dict:
     """
     trs = _price_table(html)
     header = [_text(c) for c in _TH.findall(trs[0])] if trs else []
-    if header[:4] != EXPECTED_HEADER:
+    if header[:4] not in _HEADERS:
         raise ValueError(f"together: GPU table header changed: {header!r}")
     rows = []
     for tr in trs:

@@ -12,6 +12,10 @@ pay per GPU second, with no extra charges for start-up times") lists one row per
 minute and a price per hour, in USD, per GPU. Read: every row, at the hourly price; the per-minute figure x 60 must
 agree within 1% (Fireworks rounds the per-minute figure: H100 $0.134 x 60 = $8.04 vs $8.00) or the row is skipped.
 
+Since 2026-11 the page prints one shared rate card instead: "GPU rates (USD)", header "GPU Per minute Per hour",
+rows "H100 80 GB $0.134 $8.00" ("On Demand bills per GPU-second ... from the same rates"). extract() reads it into the
+same rows, the name with " GPU" appended as before ("H100 80 GB GPU"), so listing ids are unchanged.
+
 A dedicated inference deployment billed per GPU, host included: one listing per GPU model, gpu_count 1, tier
 "serverless". Region-restricted deployments cost 1.5x (not modelled: the list price is the unrestricted one).
 Fireworks runs on other clouds' capacity and publishes no region or stock: region, available and capacity stay None.
@@ -55,7 +59,7 @@ def extract(page: str) -> dict:
     """The on-demand GPU table's rows, as printed. Raises when the table or its header is missing or has no row."""
     m = _SECTION.search(page)
     if m is None:
-        raise ValueError("fireworks: 'On demand deployments' section not found - page reshaped")
+        return _rate_card(_text(page))
     text = _text(m["body"])
     if _HEADER not in text:
         raise ValueError("fireworks: on-demand table header not found - page reshaped")
@@ -63,6 +67,24 @@ def extract(page: str) -> dict:
     rows = [{"gpu": r["name"], "per_minute": r["minute"], "per_hour": r["hour"]} for r in _ROW.finditer(table)]
     if not rows:
         raise ValueError("fireworks: no GPU row in the on-demand table - page reshaped")
+    return {"rows": rows}
+
+
+_CARD_HEADER = "GPU rates (USD) GPU Per minute Per hour"
+_CARD_ROW = re.compile(r"\s*(?P<name>[A-Z][A-Za-z0-9]* \d+ GB) \$(?P<minute>\d+\.\d+) \$(?P<hour>\d+(?:,\d{3})*\.\d+)")
+
+
+def _rate_card(text: str) -> dict:
+    """The "GPU rates (USD)" card (the page's layout since 2026-11): consecutive rows right after its header."""
+    if _CARD_HEADER not in text:
+        raise ValueError("fireworks: neither the 'On demand deployments' table nor the 'GPU rates' card found - "
+                         "page reshaped")
+    rest, rows = text[text.index(_CARD_HEADER) + len(_CARD_HEADER):], []
+    while (r := _CARD_ROW.match(rest)) is not None:
+        rows.append({"gpu": f"{r['name']} GPU", "per_minute": r["minute"], "per_hour": r["hour"]})
+        rest = rest[r.end():]
+    if not rows:
+        raise ValueError("fireworks: no GPU row in the 'GPU rates' card - page reshaped")
     return {"rows": rows}
 
 

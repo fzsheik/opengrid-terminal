@@ -6,6 +6,11 @@ table is an InstancePriceTableRecord whose instanceList gives, per instance:
 name ("H100"), instanceType ("gpu" | "cpu"), specs ("80 GiB VRAM"),
 pricePerMinute and pricePerHour, all in USD.
 
+Since 2026-11 the page prints the same data as a plain table instead: heading "Compute pricing", columns
+["GPU", "Memory", "Per Minute", "Approx / hour"], cells like "$$0.10833" (the stream escapes "$" as "$$"). extract()
+reads that table into the same instance shape (instanceType "gpu" when Memory names VRAM / VM, else "cpu"), so the
+stored body and normalize() did not change; the old instanceList is still read if it returns.
+
 Read: the GPU instances of that table, at Baseten's own pricePerHour (billing is
 per minute; the hourly figure is checked against pricePerMinute x 60 to within a
 cent, and a row that disagrees is skipped). The "Training" table repeats the
@@ -59,7 +64,7 @@ def extract(html: str) -> dict:
         raise ValueError("baseten: no Next.js data stream in the page - page reshaped")
     at = stream.find(_HEADING)
     if at == -1:
-        raise ValueError("baseten: 'Dedicated Deployments' price table not found - page reshaped")
+        return _compute_table(stream)
     start = stream.find('"instanceList":', at)
     if start == -1:
         raise ValueError("baseten: price table has no instanceList")
@@ -73,6 +78,37 @@ def extract(html: str) -> dict:
         if not isinstance(i, dict) or any(k not in i for k in _FIELDS):
             raise ValueError(f"baseten: instance lost one of {_FIELDS}: {i!r}"[:300])
         rows.append({k: i[k] for k in _FIELDS})
+    return {"instances": rows}
+
+
+_TABLE_HEADING = '"heading":"Compute pricing"'
+_TABLE_COLUMNS = ["GPU", "Memory", "Per Minute", "Approx / hour"]
+_MONEY = re.compile(r"^\$+(\d+(?:\.\d+)?)$")
+
+
+def _compute_table(stream: str) -> dict:
+    """The "Compute pricing" table (the page's layout since 2026-11) as the instance rows extract() returns."""
+    at = stream.find(_TABLE_HEADING)
+    if at == -1:
+        raise ValueError("baseten: neither the 'Dedicated Deployments' nor the 'Compute pricing' table found - "
+                         "page reshaped")
+    start = stream.find('"tables":', at)
+    if start == -1:
+        raise ValueError("baseten: 'Compute pricing' has no tables")
+    tables, _ = json.JSONDecoder().raw_decode(stream, start + len('"tables":'))
+    table = tables[0] if isinstance(tables, list) and tables and isinstance(tables[0], dict) else {}
+    if table.get("columns") != _TABLE_COLUMNS or not isinstance(table.get("rows"), list) or not table["rows"]:
+        raise ValueError(f"baseten: 'Compute pricing' columns changed: {table.get('columns')!r}"[:300])
+    rows = []
+    for r in table["rows"]:
+        if not isinstance(r, list) or len(r) != 4:
+            raise ValueError(f"baseten: 'Compute pricing' row reshaped: {r!r}"[:300])
+        name, specs, minute, hour = (str(x).strip() for x in r)
+        pm, ph = _MONEY.match(minute), _MONEY.match(hour)
+        if pm is None or ph is None:
+            raise ValueError(f"baseten: price cell is not '$x.xx': {r!r}"[:300])
+        rows.append({"name": name, "instanceType": "gpu" if _VRAM.match(specs) else "cpu", "specs": specs,
+                     "pricePerMinute": pm.group(1), "pricePerHour": ph.group(1)})
     return {"instances": rows}
 
 

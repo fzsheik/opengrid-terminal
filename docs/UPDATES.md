@@ -5,6 +5,22 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-13 — Four broken price pages read again: Hot Aisle, Baseten, Fireworks, Together
+
+### What shipped
+- **Hot Aisle**: the plan cards' label classes were reordered; the card pattern no longer depends on class order.
+  It had failed on every poll.
+- **Baseten**: the "Dedicated Deployments" instance list became a "Compute pricing" table (GPU, Memory, Per
+  Minute, Approx / hour). It is read into the same stored shape; listing ids unchanged. It had failed on every poll.
+- **Fireworks** (internal only): the on-demand table became one "GPU rates (USD)" card shared by serving and
+  training; same ids ("H100 80 GB GPU"). It had failed on every poll.
+- **Together**: the header now reads "Preemptible" (was "Preemptible Compute"), reserved terms are 3-30 / 31-90 /
+  91+ days, and the NVL72 rows print one "Request Capacity" cell with no colspan. Preemptible (spot), on-demand and
+  reserved all read again. It had failed on about 40% of polls.
+- The pages as fetched on 2026-11-13 are fixtures (tests/test_page_layouts_2026_11.py); the older layouts stay tested.
+
+---
+
 ## 2026-11-13 — GCP Spot, RunPod serverless, AWS in 15 regions + Savings Plans, Lium rented machines, Alibaba (dormant)
 
 Against a competitor's 7-day enterprise feed (AWS spot / Capacity Blocks / Savings Plans, GCP spot, RunPod
@@ -41,8 +57,7 @@ serverless, Lium trades, Alibaba spot), every feed it had that we lacked is now 
 - **GCP a3-edgegpu-8g and the *-nolssd shapes**: no proven price.
 
 ### Next
-- Broken page parsers found while checking intervals: Hot Aisle, Baseten, Fireworks (100% failing), Together
-  (header now `Hardware | Preemptible | ON-Demand | Reserved`: a new preemptible column).
+- Broken page parsers found while checking intervals: fixed the same day (next entry up).
 
 ---
 
