@@ -12,7 +12,7 @@
     ["Prices & data", ["data-kinds", "data-visibility", "fx", "data-trust", "freshness", "data-quality", "historical-context", "archived-history", "reserved-prices", "full-cost", "rl-cost", "market-context", "power-markets", "live-feeds", "gcp-regions", "dispersion", "families", "hardware"]],
     ["Indices & settlement", ["indices", "settlement"]],
     ["Market signals", ["events", "shifts", "opportunities", "news", "news-history", "provider-value", "capacity", "reliability", "uptime", "probes"]],
-    ["Recommendations", ["recommendations", "workloads", "best-execution"]],
+    ["Recommendations", ["recommendations", "workloads", "workload-intelligence-review", "best-execution"]],
     ["Running jobs", ["jobs", "batches", "execution-safety", "runner", "routing", "routing-quality", "provider-capabilities", "adapter-contract-audit", "reservations", "first-live-route"]],
     ["Accounts, billing & security", ["security", "billing", "reconciliation", "economics", "alerts"]],
   ];
