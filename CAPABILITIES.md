@@ -59,7 +59,7 @@ important) what it deliberately does not claim.
 | Discord channels | **4** (ops, deployments, market, news) with OpenGrid-branded embeds |
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
-| Workload intelligence | GPU memory estimator, project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (13 tools, 3 prompts; hosted at `/mcp` with an API key, or local via uvx), grounded assistant |
+| Workload intelligence | GPU memory estimator, project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (14 tools, 3 prompts; hosted at `/mcp` with an API key, or local via uvx), grounded assistant |
 | Automated tests | **124** Python test files + **12** JavaScript test files, all 136 run in parallel by `tests/run_all.py` (and by CI on every push), + **4** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
 
 ---
@@ -454,6 +454,23 @@ and verification date (only values checked on the provider's own page are used).
 makes the total a lower bound ("≥ $X"), never $0, and a lower bound never outranks a complete total. Public tier only;
 nothing statistical reads cost data.
 
+### 4.9 RL post-training cost (`cost/rl.py`, methodology/rl-cost.md)
+`POST /v1/costs/rl-estimate` (public, read-only) prices an RL job as trainer + rollout GPUs + CPU sandboxes + weight
+syncs, three ways: **same cluster** (the cheapest provider that hosts the trainer and every rollout GPU), **split**
+(cheapest trainer + cheapest eligible rollout GPUs anywhere, the weights shipped across clouds), and the **best plan
+found** over every trainer provider x rollout mixes. Inputs: trainer GPU / GPUs per node / nodes, rollout GPU (or
+auto) / count / minimum VRAM / spot allowed / interruption overhead (default 1.15, an assumption), sandboxes, GB per
+sync, syncs per hour, fanout, hours, checkpoint storage; presets RL1-RL3 (`GET /v1/costs/rl-presets`). Builds on
+the full-cost estimator (billing increments, storage, egress tiers) and adds per-provider **ingress**
+(`ingress_internet` components: free where the provider's page says so, per offer on Vast, unverified for AWS, GCP and
+Oracle, unknown elsewhere). Returns line items with data kind and source, totals that are lower bounds when anything
+is unknown (never $0), the saving with its bound (exact / at most / at least), a **break-even** transfer $/GB and
+sync rate, a sensitivity table (overhead x syncs/hour), a rollout GPU ranking by memory bandwidth per dollar
+(labelled a theoretical heuristic) and the applicable gaps in plain words. Page `/rl-cost`; MCP tool
+`opengrid_rl_estimate`. **Does not:** measure tokens/s, spot reclaim rates or CPU sandbox prices (no dataset yet);
+price inter-region transfer inside one provider (assumed $0 in one cluster), rollout-side storage, engineering
+overhead, enterprise discounts, or compression / partial weight updates; convert a tokens-per-hour target into GPUs.
+
 ---
 
 ## 5. News & external signals
@@ -750,11 +767,11 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
   - **hosted** at `<server>/mcp` (`api/mcp_remote.py`): streamable HTTP, stateless, JSON responses; connect with
     only the URL and `Authorization: Bearer opg_...` (never the site login, never anonymous, cross-site Origin
     refused). Tools call `/v1` in-process with the caller's key, so scopes, ownership, rate limits and usage
-    logging are the API's own. 12 tools (no local-file access) and 2 prompts. `/mcp` answers 503 (the site
+    logging are the API's own. 13 tools (no local-file access) and 2 prompts. `/mcp` answers 503 (the site
     still starts) if the MCP SDK cannot be imported;
   - **local** (`opengrid mcp`, stdio; optional loopback HTTP; zero-install via
-    `uvx --from 'git+https://github.com/fzsheik/opengrid-terminal#subdirectory=cli' opengrid mcp`): 13 tools
-    (adds the local project analyzer) and 3 prompts.
+    `uvx --from 'git+https://github.com/fzsheik/opengrid-terminal#subdirectory=cli' opengrid mcp`): 14 tools
+    (adds the local project analyzer) and 3 prompts. `opengrid_rl_estimate` prices an RL job (section 4.9).
   Tools are read-only except a non-provisioning route preview, the free MNIST sandbox demo
   (`opengrid_start_demo`: simulated, no provider, no GPU, no spend) and a confirm-gated job cancel; no tool can
   provision paid compute or submit a real job, and results link to `/jobs/new?preset=mnist` where a person
@@ -943,7 +960,7 @@ description is in docs/UI_GUIDE.md.
 | Area | Pages |
 |---|---|
 | Home | "Compare GPU prices. Find the right compute. Run supported workloads.", a "What works today" list (including what does not work yet), three actions tagged free / simulation / needs an account, the live price board, indices, how it works |
-| Market | Overview · Indices · Index detail · GPUs · GPU detail · GPU family · Providers · Provider detail · Compare · Explorer · Heatmaps · Capacity · Reserved prices · True cost (full-cost estimator) · Provider uptime · Provider probes |
+| Market | Overview · Indices · Index detail · GPUs · GPU detail · GPU family · Providers · Provider detail · Compare · Explorer · Heatmaps · Capacity · Reserved prices · True cost (full-cost estimator) · RL cost (RL post-training estimator) · Provider uptime · Provider probes |
 | Signals | Opportunities · Events · News (feed + timeline) |
 | Find Compute | four guided steps (what you are doing, model or project, what matters incl. **training data** and epochs, recommendation); one recommended option with price, memory per GPU, availability, estimated runtime and whole-job cost, and whether OpenGrid can run it; up to three alternatives; the three or four answers kept apart (lowest advertised price, best fit, execution-ready, lowest cost for the whole job); per-option performance across its GPUs; everything else under Advanced details |
 | Workspace | My Jobs (Needs attention / Active / Completed, simulation vs real tags, a plain-English box) · New job (example job as a free simulation, a real-GPU card with readiness, run your own model) · Job page (at a glance, next step, timeline) · Route (a simple ticket; technical panel folded) · Deployments · Deployment detail · Reserve (price-lock requests) · Request detail · Watchlists |
@@ -1010,7 +1027,7 @@ the app:
 | Reference | `/v1/gpus`, `/v1/gpus/{gpu}`, `/v1/families`, `/v1/families/{family}`, `/v1/providers`, `/v1/providers/{provider}`, `/v1/regions`, `/v1/methodology`, `/v1/methodology/{name}` |
 | Markets & listings | `/v1/markets` (`?trend=true`), `/v1/markets/{gpu}`, `…/regions`, `…/history`, `…/history/daily`, `…/history/archived`, `…/history/dispersion`, `…/history/providers`, `/v1/listings` (`?as_of=`, `?previous=true`), `/v1/listings/history`, `/v1/providers/{provider}/listings/context`, `/v1/providers/{provider}/gpus/{gpu}/context` |
 | Indices & fixings | `/v1/indices`, `/v1/indices/{id}`, `…/history`, `…/fixings`; `/v1/fixings`, `/v1/fixings/{id}`, `…/verify`, `/v1/fixings/chain/verify`, `/v1/fixings/restatements`, `/v1/fixings/methodology` |
-| Capacity, reserved, costs, FX | `/v1/capacity`, `/v1/capacity/history`, `/v1/reserved`, `/v1/reserved/summary`, `/v1/costs/components`, `/v1/costs/billing`, `/v1/costs/sources`, `/v1/costs/presets`, `POST /v1/costs/estimate`, `/v1/fx/rates`, `/v1/fx/rates/history` |
+| Capacity, reserved, costs, FX | `/v1/capacity`, `/v1/capacity/history`, `/v1/reserved`, `/v1/reserved/summary`, `/v1/costs/components`, `/v1/costs/billing`, `/v1/costs/sources`, `/v1/costs/presets`, `POST /v1/costs/estimate`, `/v1/costs/rl-presets`, `POST /v1/costs/rl-estimate`, `/v1/fx/rates`, `/v1/fx/rates/history` |
 | Reliability | `/v1/reliability/providers`, `/v1/reliability/providers/{provider}`, `…/dips`, `/v1/reliability/targets`, `/v1/reliability/agents`, `/v1/reliability/probes`, `/v1/reliability/incidents`; probe agents: `/v1/probes/targets`, `POST /v1/probes/ingest` |
 | Signals | `/v1/events`, `/v1/events/types`, `/v1/events/shifts`, `/v1/events/shifts/{id}`, `/v1/events/shifts/definition`, `/v1/news`, `/v1/news/{id}`, `/v1/news/sources`, `/v1/news/topics`, `/v1/news/families`, `/v1/timeline`, `/v1/timeline/around` |
 | Market context | `/v1/macro/series`, `/v1/macro/series/{series}`, `…/history`, `/v1/macro/power` (power markets and equities: admin only, section 5a) |
@@ -1239,7 +1256,7 @@ Every number OpenGrid publishes traces to a document in `methodology/` (also ser
 - **Market data:** `data-kinds` · `data-quality` · `data-trust` · `data-visibility` · `freshness` · `capacity` ·
   `live-feeds` · `families` · `hardware` · `fx` · `gcp-regions`
 - **Market intelligence:** `indices` · `settlement` · `historical-context` · `archived-history` · `dispersion` ·
-  `provider-value` · `events` · `shifts` · `opportunities` · `reserved-prices` · `full-cost`
+  `provider-value` · `events` · `shifts` · `opportunities` · `reserved-prices` · `full-cost` · `rl-cost`
 - **News and context:** `news` · `news-history` · `market-context` · `power-markets`
 - **Reliability:** `uptime` · `probes` · `reliability`
 - **Execution:** `routing` · `best-execution` · `execution-safety` · `reconciliation` · `provider-capabilities` · `adapter-contract-audit` ·

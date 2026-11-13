@@ -35,7 +35,7 @@ OUTSIDE = Path(tempfile.mkdtemp(prefix="og-mcp-outside-")).resolve()
 EXPECTED = {"opengrid_search_gpus", "opengrid_compare_gpus", "opengrid_get_gpu_specs", "opengrid_get_market_context",
             "opengrid_analyze_project", "opengrid_estimate_requirements", "opengrid_recommend_compute",
             "opengrid_preview_route", "opengrid_list_jobs", "opengrid_get_job_status", "opengrid_cancel_job",
-            "opengrid_get_job_logs", "opengrid_start_demo"}
+            "opengrid_get_job_logs", "opengrid_start_demo", "opengrid_rl_estimate"}
 WRITES = {"opengrid_preview_route", "opengrid_cancel_job", "opengrid_start_demo"}
 
 
@@ -364,6 +364,25 @@ def test_start_demo_is_sandbox_only():
     srv3, _ = server(MockAPI(), key=LIMITED_KEY)
     r = call(srv3, "opengrid_start_demo", {})
     assert r.is_error and "route:execute" in text(r)
+
+
+def test_rl_estimate():
+    srv, api = server()
+    r = call(srv, "opengrid_rl_estimate", {"preset": "RL1", "rollout_gpus": 64, "interruptible": True, "hours": 24})
+    sc = r.structured_content
+    assert not r.is_error, text(r)
+    assert sc["split"]["total"] == 630.0 and sc["comparison"]["split_vs_same_cluster"]["bound"] == "exact"
+    assert sc["caveats"] and sc["kind"] == "estimated" and sc["job"] == {"preset": "RL1"}
+    assert api.bodies("/v1/costs/rl-estimate")[-1] == {"preset": "RL1", "hours": 24,
+                                                       "rollouts": {"count": 64, "interruptible": True}}
+    assert call(srv, "opengrid_rl_estimate", {}).is_error  # neither a preset nor a trainer
+    assert call(srv, "opengrid_rl_estimate", {"preset": "RL9"}).is_error
+    r = call(srv, "opengrid_rl_estimate", {"trainer_gpu": "h100-80gb-sxm5", "trainer_gpus_per_node": 8, "rollout_gpus": 16,
+                                          "weights_gb": 100, "syncs_per_hour": 2, "hours": 10, "sandbox_count": 4,
+                                          "sandbox_vcpu": 2})
+    assert not r.is_error and api.bodies("/v1/costs/rl-estimate")[-1] == {
+        "weights_gb": 100.0, "syncs_per_hour": 2.0, "hours": 10.0, "trainer": {"gpu": "h100-80gb-sxm5", "count": 8},
+        "rollouts": {"count": 16}, "sandboxes": {"count": 4, "vcpu": 2.0}}
 
 
 def test_prompts():

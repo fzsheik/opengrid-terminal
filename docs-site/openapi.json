@@ -9515,6 +9515,421 @@
     }
    }
   },
+  "/v1/costs/rl-estimate": {
+   "post": {
+    "tags": [
+     "Costs"
+    ],
+    "summary": "Estimate an RL job's cost",
+    "description": "RL post-training cost: trainer + rollouts + sandboxes + weight syncs, same cluster vs split.",
+    "operationId": "estimate-an-rl-job-s-cost",
+    "parameters": [
+     {
+      "name": "OpenGrid-Version",
+      "in": "header",
+      "required": false,
+      "description": "The API version to shape the response for. Default: the version pinned to your key.",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "2026-11-03"
+       ],
+       "example": "2026-11-03"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "An RL post-training job. Start from a `preset` and override fields (nested ones too), or give `trainer`, `rollouts`, `weights_gb`, `syncs_per_hour` and `hours`. GB are decimal. Body at most 16384 bytes. Methodology: /methodology/rl-cost.",
+        "properties": {
+         "preset": {
+          "type": "string",
+          "enum": [
+           "RL1",
+           "RL2",
+           "RL3"
+          ],
+          "description": "`GET /v1/costs/rl-presets`."
+         },
+         "trainer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+           "gpu": {
+            "type": "string",
+            "example": "nvidia-h100-80gb-sxm5"
+           },
+           "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 64,
+            "description": "GPUs per trainer node."
+           },
+           "nodes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 128,
+            "default": 1
+           }
+          }
+         },
+         "rollouts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+           "gpu": {
+            "type": "string",
+            "default": "auto",
+            "description": "\"auto\" or a GPU id."
+           },
+           "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4096,
+            "description": "Rollout GPUs in total."
+           },
+           "min_vram_gb": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1024,
+            "default": 0
+           },
+           "interruptible": {
+            "type": "boolean",
+            "default": false
+           },
+           "interruption_overhead": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5,
+            "default": 1.15
+           },
+           "rank_by": {
+            "type": "string",
+            "enum": [
+             "price",
+             "bandwidth_per_dollar"
+            ],
+            "default": "price"
+           }
+          }
+         },
+         "sandboxes": {
+          "type": [
+           "object",
+           "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+           "vcpu": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1024
+           },
+           "ram_gb": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 8192
+           },
+           "count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+           },
+           "price_per_hour": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Your price for every sandbox together, per hour."
+           }
+          }
+         },
+         "weights_gb": {
+          "type": "number",
+          "minimum": 0.001,
+          "maximum": 100000,
+          "description": "GB sent per weight sync."
+         },
+         "syncs_per_hour": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3600
+         },
+         "hours": {
+          "type": "number",
+          "minimum": 0.016667,
+          "maximum": 8760
+         },
+         "sync_fanout": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024,
+          "description": "Copies per sync leaving the trainer's provider. Default: one per rollout provider."
+         },
+         "storage_gb": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000000
+         },
+         "storage_tb": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000,
+          "description": "Give `storage_tb` or `storage_gb`."
+         },
+         "storage_class": {
+          "type": "string",
+          "enum": [
+           "auto",
+           "shared_fs",
+           "block_storage",
+           "object_storage"
+          ],
+          "default": "auto"
+         },
+         "same_cluster_only": {
+          "type": "boolean",
+          "default": false
+         }
+        }
+       },
+       "example": {
+        "preset": "RL1",
+        "rollouts": {
+         "interruptible": true
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "data": {
+           "description": "Field-level schema not published for this route yet; send a request to see one."
+          },
+          "meta": {
+           "$ref": "#/components/schemas/Meta"
+          }
+         },
+         "required": [
+          "data",
+          "meta"
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad request: an unknown `OpenGrid-Version`, a cursor this API did not issue, or a malformed body.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "No API key, or the key is invalid, revoked or expired.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "The key lacks the `data:read` scope, or the account is suspended.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "No such resource (an unknown GPU, provider, index ...).",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "A parameter failed validation; `error.param` names it.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "description": "Over the per-key or per-account rate limit; wait `Retry-After` seconds.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/costs/rl-presets": {
+   "get": {
+    "tags": [
+     "Costs"
+    ],
+    "summary": "RL reference jobs",
+    "description": "The RL reference jobs.",
+    "operationId": "rl-reference-jobs",
+    "parameters": [
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 1000,
+       "minimum": 1,
+       "default": 100,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "cursor",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Cursor"
+      }
+     },
+     {
+      "name": "OpenGrid-Version",
+      "in": "header",
+      "required": false,
+      "description": "The API version to shape the response for. Default: the version pinned to your key.",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "2026-11-03"
+       ],
+       "example": "2026-11-03"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "data": {
+           "description": "Field-level schema not published for this route yet; send a request to see one."
+          },
+          "meta": {
+           "$ref": "#/components/schemas/Meta"
+          }
+         },
+         "required": [
+          "data",
+          "meta"
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Bad request: an unknown `OpenGrid-Version`, a cursor this API did not issue, or a malformed body.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "No API key, or the key is invalid, revoked or expired.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "The key lacks the `data:read` scope, or the account is suspended.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "No such resource (an unknown GPU, provider, index ...).",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "A parameter failed validation; `error.param` names it.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "429": {
+      "description": "Over the per-key or per-account rate limit; wait `Retry-After` seconds.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/v1/costs/sources": {
    "get": {
     "tags": [
