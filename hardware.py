@@ -9,7 +9,10 @@ Hand-maintained from vendor datasheets, like canonical.py. Rules:
       halved and the entry says so in `notes` where it matters.
     - fp16/bf16 are tensor/matrix-core peaks. For GeForce cards they are the
       FP32-accumulate rate (what mixed-precision training uses); GeForce runs
-      FP16-accumulate at twice that. Consumer AMD cards carry fp32 only.
+      FP16-accumulate at twice that. GeForce fp8 is likewise the FP32-accumulate FP8 rate (2x fp16, as on the
+      datacenter rows). GeForce rows carry `tensor_basis`: "whitepaper" (printed in an NVIDIA architecture
+      whitepaper table) or "nvidia_ai_tops" (derived from the AI TOPS on NVIDIA's product page with the exact ratio
+      those whitepaper tables show). Consumer AMD cards carry fp32 only.
     - A field we could not confirm from a vendor document is None, never guessed.
       fp8 is None both where the chip lacks FP8 (`fp8_supported` False) and where
       the dense rate is not published (`fp8_supported` True).
@@ -64,6 +67,10 @@ NV_QRTX8000_DS = ("https://www.nvidia.com/content/dam/en-zz/Solutions/design-vis
                   "quadro-rtx-8000-us-nvidia-946977-r1-web.pdf")
 NV_WS = "https://www.nvidia.com/en-us/design-visualization/desktop-graphics/"
 NV_GEFORCE = "https://www.nvidia.com/en-us/geforce/graphics-cards/compare/"
+NV_GEFORCE_5060 = "https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5060-family/"
+NV_GEFORCE_4080 = "https://www.nvidia.com/en-us/geforce/graphics-cards/40-series/rtx-4080-family/"
+NV_GEFORCE_4070 = "https://www.nvidia.com/en-us/geforce/graphics-cards/40-series/rtx-4070-family/"
+NV_GEFORCE_4060 = "https://www.nvidia.com/en-us/geforce/graphics-cards/40-series/rtx-4060-4060ti/"
 AMD_MI300X = "https://www.amd.com/en/products/accelerators/instinct/mi300/mi300x.html"
 AMD_MI325X = "https://www.amd.com/en/products/accelerators/instinct/mi300/mi325x.html"
 AMD_MI355X = "https://www.amd.com/en/products/accelerators/instinct/mi350/mi355x.html"
@@ -270,54 +277,97 @@ _s("NVIDIA Quadro RTX 8000 48GB", "NVIDIA", "Turing", "Turing", 2018, WS, 48, "G
    "Datasheet (Mar 2019): 48 GB GDDR6, 672 GB/s, 16.3 TFLOPS FP32, 130.5 TFLOPS tensor, 295 W board power.")
 
 # ---------------------------------------------------------------- NVIDIA GeForce (consumer)
-_gf = "GeForce: fp16/bf16 is the FP32-accumulate tensor rate from NVIDIA's architecture whitepaper (FP16-accumulate is 2x)."
-_gf_none = "Tensor rate not recorded (no per-SKU dense figure confirmed); FP32 is the boost-clock shader peak."
+# Tensor figures (methodology/hardware.md, "GeForce tensor rates"):
+#   fp16/bf16 = dense FP16/BF16 tensor TFLOPS with FP32 ACCUMULATE: what mixed-precision training and standard
+#       inference GEMMs (cuBLAS / PyTorch half and bf16 matmuls accumulate in FP32) use, and the same semantics as the
+#       datacenter rows, whose FP32-accumulate rate is not halved. GeForce runs FP16-accumulate at 2x this.
+#   fp8 = dense FP8 tensor TFLOPS with FP32 accumulate (GeForce FP8 with FP16 accumulate is 2x), i.e. 2x the fp16
+#       figure, matching the datacenter rows where fp8 = 2x bf16.
+#   tensor_basis "whitepaper": the dense FP32-accumulate figures printed in NVIDIA's architecture whitepaper appendix
+#       tables. "nvidia_ai_tops": the SKU is not in a whitepaper table; NVIDIA's product page prints only "AI TOPS"
+#       (sparse, lowest precision), and dense FP16/FP32-acc = AI TOPS / 16 on Blackwell (FP4 sparse) and / 8 on Ada
+#       (FP8 sparse, FP16 acc). That ratio is exact for every SKU NVIDIA's whitepapers print both for (RTX 5090 3352 /
+#       16 = 209.5, 5080 1801 / 16 = 112.6, 5070 Ti 1406 / 16 = 87.9, 5070 988 / 16 = 61.7; RTX 4090 1321 / 8 = 165.2,
+#       4080 780 / 8 = 97.5, 4070 Ti 641 / 8 = 80.2, 4070 466 / 8 = 58.3), and it equals SMs x 512 FLOPs/clock x the
+#       boost clock NVIDIA lists.
+_gf = ("GeForce: fp16/bf16 is the dense FP32-accumulate tensor rate and fp8 the dense FP8 FP32-accumulate rate from "
+       "NVIDIA's architecture whitepaper appendix (FP16-accumulate runs at 2x; sparse figures are 2x again).")
+_gf_tops = ("GeForce: tensor figures derived from the 'AI TOPS' on NVIDIA's product page ({tops} AI TOPS, {what}, "
+            "sparse) with the ratio NVIDIA's {arch} whitepaper tables show for every SKU they list: dense FP16/BF16 with "
+            "FP32 accumulate = AI TOPS / {div}, dense FP8 with FP32 accumulate = 2x that.")
+_gf_none = ("Tensor rate not recorded: NVIDIA publishes no per-SKU tensor figure for this card (no whitepaper table, no "
+            "AI TOPS on its product page); FP32 is the boost-clock shader peak.")
+_WP, _TOPS = {"tensor_basis": "whitepaper"}, {"tensor_basis": "nvidia_ai_tops"}
+
+
+def _bw_tops(tops):
+    return _gf_tops.format(tops=tops, what="FP4", arch="RTX Blackwell", div=16)
+
+
+def _ada_tops(tops):
+    return _gf_tops.format(tops=tops, what="FP8 with FP16 accumulate", arch="Ada", div=8)
+
+
 _s("NVIDIA RTX 5090 32GB", "NVIDIA", "Blackwell", "Blackwell", 2025, CON, 32, "GDDR7", 1.792,
-   104.8, 209.5, 209.5, None, True, "PCIe Gen5", None, "PCIe", 575, GI, [NV_GEFORCE, NV_BLACKWELL_WP], _gf)
+   104.8, 209.5, 209.5, 419, True, "PCIe Gen5", None, "PCIe", 575, GI, [NV_GEFORCE, NV_BLACKWELL_WP], _gf, **_WP)
 _s("NVIDIA RTX 5090 Laptop 24GB", "NVIDIA", "Blackwell", "Blackwell", 2025, LAP, 24, "GDDR7", 0.896,
    None, None, None, None, True, "PCIe Gen5", None, "Laptop", None, GI, [NV_GEFORCE],
    "Laptop part: clocks and power (95-150 W+) depend on the laptop, so throughput and TDP are left empty.")
 _s("NVIDIA RTX 5080 16GB", "NVIDIA", "Blackwell", "Blackwell", 2025, CON, 16, "GDDR7", 0.96,
-   56.3, None, None, None, True, "PCIe Gen5", None, "PCIe", 360, GI, [NV_GEFORCE], _gf_none)
+   56.3, 112.6, 112.6, 225.1, True, "PCIe Gen5", None, "PCIe", 360, GI, [NV_GEFORCE, NV_BLACKWELL_WP], _gf, **_WP)
 _s("NVIDIA RTX 5070 Ti 16GB", "NVIDIA", "Blackwell", "Blackwell", 2025, CON, 16, "GDDR7", 0.896,
-   43.9, None, None, None, True, "PCIe Gen5", None, "PCIe", 300, GI, [NV_GEFORCE], _gf_none)
+   43.9, 87.9, 87.9, 175.8, True, "PCIe Gen5", None, "PCIe", 300, GI, [NV_GEFORCE, NV_BLACKWELL_WP], _gf, **_WP)
 _s("NVIDIA RTX 5070 12GB", "NVIDIA", "Blackwell", "Blackwell", 2025, CON, 12, "GDDR7", 0.672,
-   30.9, None, None, None, True, "PCIe Gen5", None, "PCIe", 250, GI, [NV_GEFORCE], _gf_none)
+   30.9, 61.7, 61.7, 123.5, True, "PCIe Gen5", None, "PCIe", 250, GI, [NV_GEFORCE, NV_BLACKWELL_WP], _gf, **_WP)
 _s("NVIDIA RTX 5060 Ti 16GB", "NVIDIA", "Blackwell", "Blackwell", 2025, CON, 16, "GDDR7", 0.448,
-   23.7, None, None, None, True, "PCIe Gen5", None, "PCIe", 180, GI, [NV_GEFORCE], _gf_none)
+   23.7, 47.4, 47.4, 94.9, True, "PCIe Gen5", None, "PCIe", 180, GI, [NV_GEFORCE_5060, NV_BLACKWELL_WP],
+   _bw_tops(759), **_TOPS)
 _s("NVIDIA RTX 5060 8GB", "NVIDIA", "Blackwell", "Blackwell", 2025, CON, 8, "GDDR7", 0.448,
-   19.2, None, None, None, True, "PCIe Gen5", None, "PCIe", 145, GI, [NV_GEFORCE], _gf_none)
+   19.2, 38.4, 38.4, 76.8, True, "PCIe Gen5", None, "PCIe", 145, GI, [NV_GEFORCE_5060, NV_BLACKWELL_WP],
+   _bw_tops(614), **_TOPS)
 _s("NVIDIA RTX 4090 24GB", "NVIDIA", "Ada Lovelace", "Ada", 2022, CON, 24, "GDDR6X", 1.008,
-   82.6, 165.2, 165.2, None, True, "PCIe Gen4", None, "PCIe", 450, GI, [NV_GEFORCE, NV_ADA_WP], _gf)
+   82.6, 165.2, 165.2, 330.3, True, "PCIe Gen4", None, "PCIe", 450, GI, [NV_GEFORCE, NV_ADA_WP], _gf, **_WP)
 _s("NVIDIA RTX 4080 SUPER 16GB", "NVIDIA", "Ada Lovelace", "Ada", 2024, CON, 16, "GDDR6X", 0.736,
-   52.2, None, None, None, True, "PCIe Gen4", None, "PCIe", 320, GI, [NV_GEFORCE], _gf_none)
+   52.2, 104.5, 104.5, 209.0, True, "PCIe Gen4", None, "PCIe", 320, GI, [NV_GEFORCE_4080, NV_ADA_WP],
+   _ada_tops(836), **_TOPS)
 _s("NVIDIA RTX 4080 16GB", "NVIDIA", "Ada Lovelace", "Ada", 2022, CON, 16, "GDDR6X", 0.717,
-   48.7, 97.5, 97.5, None, True, "PCIe Gen4", None, "PCIe", 320, GI, [NV_GEFORCE, NV_ADA_WP], _gf)
+   48.7, 97.5, 97.5, 194.9, True, "PCIe Gen4", None, "PCIe", 320, GI, [NV_GEFORCE, NV_ADA_WP], _gf, **_WP)
 _s("NVIDIA RTX 4070 Ti SUPER 16GB", "NVIDIA", "Ada Lovelace", "Ada", 2024, CON, 16, "GDDR6X", 0.672,
-   44.1, None, None, None, True, "PCIe Gen4", None, "PCIe", 285, GI, [NV_GEFORCE], _gf_none)
+   44.1, 88.3, 88.3, 176.5, True, "PCIe Gen4", None, "PCIe", 285, GI, [NV_GEFORCE_4070, NV_ADA_WP],
+   _ada_tops(706), **_TOPS)
 _s("NVIDIA RTX 4070 Ti 12GB", "NVIDIA", "Ada Lovelace", "Ada", 2023, CON, 12, "GDDR6X", 0.504,
-   40.1, None, None, None, True, "PCIe Gen4", None, "PCIe", 285, GI, [NV_GEFORCE], _gf_none)
+   40.1, 80.2, 80.2, 160.4, True, "PCIe Gen4", None, "PCIe", 285, GI, [NV_GEFORCE, NV_BLACKWELL_WP],
+   _gf + " Figures from the RTX Blackwell whitepaper's 5070 Ti vs 4070 Ti vs 3070 Ti table.", **_WP)
 _s("NVIDIA RTX 4070 12GB", "NVIDIA", "Ada Lovelace", "Ada", 2023, CON, 12, "GDDR6X", 0.504,
-   29.1, None, None, None, True, "PCIe Gen4", None, "PCIe", 200, GI, [NV_GEFORCE], _gf_none)
+   29.1, 58.3, 58.3, 116.6, True, "PCIe Gen4", None, "PCIe", 200, GI, [NV_GEFORCE, NV_BLACKWELL_WP],
+   _gf + " Figures from the RTX Blackwell whitepaper's 5070 vs 4070 vs 3070 table.", **_WP)
 _s("NVIDIA RTX 4070 Laptop 8GB", "NVIDIA", "Ada Lovelace", "Ada", 2023, LAP, 8, "GDDR6", 0.256,
    None, None, None, None, True, "PCIe Gen4", None, "Laptop", None, GI, [NV_GEFORCE],
    "Laptop part: throughput depends on the laptop's power limit (35-115 W).")
 _s("NVIDIA RTX 4060 Ti 16GB", "NVIDIA", "Ada Lovelace", "Ada", 2023, CON, 16, "GDDR6", 0.288,
-   22.1, None, None, None, True, "PCIe Gen4", None, "PCIe", 165, GI, [NV_GEFORCE], _gf_none)
+   22.1, 44.1, 44.1, 88.3, True, "PCIe Gen4", None, "PCIe", 165, GI, [NV_GEFORCE_4060, NV_ADA_WP],
+   _ada_tops(353), **_TOPS)
 _s("NVIDIA RTX 4060 8GB", "NVIDIA", "Ada Lovelace", "Ada", 2023, CON, 8, "GDDR6", 0.272,
-   15.1, None, None, None, True, "PCIe Gen4", None, "PCIe", 115, GI, [NV_GEFORCE], _gf_none)
+   15.1, 30.3, 30.3, 60.5, True, "PCIe Gen4", None, "PCIe", 115, GI, [NV_GEFORCE_4060, NV_ADA_WP],
+   _ada_tops(242), **_TOPS)
 _s("NVIDIA RTX 3090 Ti 24GB", "NVIDIA", "Ampere", "Ampere", 2022, CON, 24, "GDDR6X", 1.008,
-   40.0, None, None, None, False, "PCIe Gen4", "NVLink bridge (pairs)", "PCIe", 450, GI, [NV_GEFORCE], _gf_none)
+   40.0, 80.0, 80.0, None, False, "PCIe Gen4", "NVLink bridge (pairs)", "PCIe", 450, GI, [NV_GEFORCE, NV_ADA_WP],
+   _gf + " Figures from the Ada whitepaper's RTX 4090 vs 3090 Ti vs 2080 Ti table. Ampere has no FP8.", **_WP)
 _s("NVIDIA RTX 3090 24GB", "NVIDIA", "Ampere", "Ampere", 2020, CON, 24, "GDDR6X", 0.936,
-   35.6, 71, 71, None, False, "PCIe Gen4", "NVLink bridge (pairs)", "PCIe", 350, GI, [NV_GEFORCE, NV_AMPERE_WP], _gf)
+   35.6, 71, 71, None, False, "PCIe Gen4", "NVLink bridge (pairs)", "PCIe", 350, GI, [NV_GEFORCE, NV_AMPERE_WP],
+   _gf + " Ampere has no FP8.", **_WP)
 _s("NVIDIA RTX 3080 Ti 12GB", "NVIDIA", "Ampere", "Ampere", 2021, CON, 12, "GDDR6X", 0.912,
-   34.1, None, None, None, False, "PCIe Gen4", None, "PCIe", 350, GI, [NV_GEFORCE], _gf_none)
+   34.1, 68.2, 68.2, None, False, "PCIe Gen4", None, "PCIe", 350, GI, [NV_GEFORCE, NV_ADA_WP],
+   _gf + " Figures from the Ada whitepaper's RTX 4080 vs 3080 Ti vs 2080 Super table. Ampere has no FP8.", **_WP)
 _s("NVIDIA RTX 3080 10GB", "NVIDIA", "Ampere", "Ampere", 2020, CON, 10, "GDDR6X", 0.76,
-   29.8, 59.5, 59.5, None, False, "PCIe Gen4", None, "PCIe", 320, GI, [NV_GEFORCE, NV_AMPERE_WP], _gf)
+   29.8, 59.5, 59.5, None, False, "PCIe Gen4", None, "PCIe", 320, GI, [NV_GEFORCE, NV_AMPERE_WP],
+   _gf + " Ampere has no FP8.", **_WP)
 _s("NVIDIA RTX 3070 Ti 8GB", "NVIDIA", "Ampere", "Ampere", 2021, CON, 8, "GDDR6X", 0.608,
-   21.7, None, None, None, False, "PCIe Gen4", None, "PCIe", 290, GI, [NV_GEFORCE], _gf_none)
+   21.7, 43.5, 43.5, None, False, "PCIe Gen4", None, "PCIe", 290, GI, [NV_GEFORCE, NV_BLACKWELL_WP],
+   _gf + " Figures from the RTX Blackwell whitepaper's 5070 Ti vs 4070 Ti vs 3070 Ti table. Ampere has no FP8.", **_WP)
 _s("NVIDIA RTX 3070 8GB", "NVIDIA", "Ampere", "Ampere", 2020, CON, 8, "GDDR6", 0.448,
-   20.3, 40.6, 40.6, None, False, "PCIe Gen4", None, "PCIe", 220, GI, [NV_GEFORCE, NV_AMPERE_WP], _gf)
+   20.3, 40.6, 40.6, None, False, "PCIe Gen4", None, "PCIe", 220, GI, [NV_GEFORCE, NV_AMPERE_WP],
+   _gf + " Ampere has no FP8.", **_WP)
 _s("NVIDIA RTX 3060 Ti 8GB", "NVIDIA", "Ampere", "Ampere", 2020, CON, 8, "GDDR6", 0.448,
    16.2, None, None, None, False, "PCIe Gen4", None, "PCIe", 200, GI, [NV_GEFORCE], _gf_none)
 _s("NVIDIA RTX 3060 12GB", "NVIDIA", "Ampere", "Ampere", 2021, CON, 12, "GDDR6", 0.36,
@@ -327,7 +377,8 @@ _s("NVIDIA RTX 3060 8GB", "NVIDIA", "Ampere", "Ampere", 2022, CON, 8, "GDDR6", 0
    "128-bit bus: two-thirds of the 12 GB card's bandwidth. " + _gf_none)
 _s("NVIDIA RTX 3050 8GB", "NVIDIA", "Ampere", "Ampere", 2022, CON, 8, "GDDR6", 0.224,
    9.1, None, None, None, False, "PCIe Gen4", None, "PCIe", 130, GI, [NV_GEFORCE], _gf_none)
-_turing = "Turing GeForce: no BF16/FP8. " + _gf_none
+_turing = ("Turing GeForce: no BF16/FP8. Tensor rate not recorded (NVIDIA's Turing figures are for Founders "
+           "Edition clocks, not the reference clocks the FP32 figure uses).")
 _s("NVIDIA RTX 2080 Ti 11GB", "NVIDIA", "Turing", "Turing", 2018, CON, 11, "GDDR6", 0.616,
    13.4, None, None, None, False, "PCIe Gen3", "NVLink bridge (pairs)", "PCIe", 250, GI, [NV_GEFORCE], _turing)
 _s("NVIDIA RTX 2080 8GB", "NVIDIA", "Turing", "Turing", 2018, CON, 8, "GDDR6", 0.448,

@@ -470,6 +470,20 @@ def _rec_reply(rec: dict, req: dict, intent: str) -> str:
                      f"({_money(jc['range_usd'][0])} to {_money(jc['range_usd'][1])}) for about "
                      f"{_num(rt['hours'])} hours. That is a theoretical estimate from spec-sheet throughput, not a "
                      f"benchmark.")
+    so = rec.get("scale_out") or {}
+    sref = ((so.get("picks") or {}).get("best_scale_out") or {}).get("scale_out_id")
+    sbest = next((o for o in so.get("options") or [] if o.get("scale_out_id") == sref), None)
+    if so.get("offered") and sbest:
+        provs = ", ".join(str(p.get("provider_display") or p.get("provider")) for p in sbest.get("providers") or [])
+        r1 = lambda v: None if v is None else round(float(v), 1)      # noqa: E731
+        lo, hi = (sbest.get("completion_range_hours") or [None, None])[:2]
+        lines.append(f"Or split it across {sbest['replicas']} separate {_short(sbest.get('gpu'))} GPUs on {provs}: about "
+                     f"{_num(r1(sbest['completion_hours']))} hours ({_num(r1(lo))} to {_num(r1(hi))}) for about "
+                     f"{_money(sbest['job_cost_usd'])}, including per-GPU setup and an allowance for slow or "
+                     f"interrupted machines. Theoretical estimate, not a benchmark.")
+        cmp_ = (so.get("comparison") or {}).get("verdicts") or []
+        if cmp_:
+            lines.append("Compared with one machine: " + "; ".join(str(v) for v in cmp_[:2]) + ".")
     budget = _get(req, "constraints.budget_usd")
     if budget is not None:
         hrs = _get(cheapest or {}, "cost.budget_hours")

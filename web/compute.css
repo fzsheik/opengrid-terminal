@@ -69,6 +69,8 @@
 .cx-alt-x { font-size: var(--fs-sm); color: var(--muted); grid-column: 1 / -1; }
 .cx-alt-r { text-align: right; }
 .cx-alt-r b { font-family: var(--mono); color: var(--text); font-size: var(--fs-base); }
+.cx-so-best { border-color: var(--line-2); }
+.cx-so-body { max-height: 260px; overflow: auto; font-size: var(--fs-2xs); white-space: pre; margin: 4px 0 0; }
 
 .cx-qs { border: 1px solid var(--line); border-radius: 3px; padding: 8px 10px; }
 .cx-qs-h { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; margin-bottom: 6px; }

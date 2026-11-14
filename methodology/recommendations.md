@@ -67,7 +67,7 @@ Two GPUs are not "twice one GPU", and a bigger GPU is not "faster" just because 
 
 ## Runtime and whole-job cost (training, when the data size is known)
 
-Runtime is estimated only for training and fine-tuning, and only when the amount of data is given: `training.dataset_tokens` (or `dataset_samples` x `seq_len`), times `epochs` (1 is assumed and stated when epochs are not given). Without it, `runtime.known` is false, no job cost is shown, and a question asks for the dataset size.
+For training and fine-tuning, runtime is estimated only when the amount of data is given (media batches and text LLM batches have their own work, in the sections below): `training.dataset_tokens` (or `dataset_samples` x `seq_len`), times `epochs` (1 is assumed and stated when epochs are not given). Without it, `runtime.known` is false, no job cost is shown, and a question asks for the dataset size.
 
 - **Work.** FLOPs = k x N x T, N = parameters (active parameters for a mixture of experts), T = tokens trained. k = 6 for full training (forward 2N + backward 4N per token, [Kaplan et al. 2020](https://arxiv.org/abs/2001.08361) section 2.1). k = 4 for LoRA / QLoRA: frozen base weights get no weight gradients, but activation gradients still flow through every layer ([LoRA](https://arxiv.org/abs/2106.09685)). +2 with gradient checkpointing (one extra forward pass, [Chen et al. 2016](https://arxiv.org/abs/1604.06174)). QLoRA's dequantization overhead is not modelled and the output says its real runtime is usually longer.
 - **Runtime.** hours = FLOPs / (effective throughput x utilization) / 3600. Utilization (model FLOPs utilization): 35%, range 20-50%, for models of 1B+ parameters. Well-tuned pretraining reaches 46-52% ([PaLM](https://arxiv.org/abs/2204.02311) 46.2%, [Megatron-LM](https://arxiv.org/abs/2104.04473) 52%); typical fine-tuning stacks land lower, so the central figure is conservative. Smaller models: 20%, range 5-40%. The range pairs the low utilization with the low scaling efficiency (slow end) and the high with the high (fast end). Startup, data-loading stalls, evaluation and checkpoint saving are not included.
@@ -208,6 +208,75 @@ It fills `media.modality`, `media.task` and (from vLLM) `images_per_request`. A 
 - **Video understanding** is modelled for Qwen2-VL only. An image-only VLM given video says so and counts no video tokens.
 - **Video generation:** activation and VAE-decode memory are rough. Text-encoder and VAE time are not in the runtime. Training memory for video and TTS models is a lower bound.
 - **HunyuanVideo's transformer** is counted at the "over 13 billion" lower bound.
+
+## Text LLM batches
+
+A text LLM inference request can state its total work: `inference.total_requests` (with `output_tokens` per request) or `inference.total_output_tokens`. Requests without these fields are unchanged.
+
+- **Work.** Output tokens = `total_output_tokens`, else `total_requests` x `output_tokens`. Prompt tokens = `total_requests` x (`context_len` - `output_tokens`) when all three are given; otherwise prefill is left out and the output says so.
+- **Runtime.** hours = output tokens / the option's aggregate decode tokens/s (the memory-bandwidth roofline under "Hardware suitability", at the request's concurrency) / 3600, plus prefill = 2 x active parameters x prompt tokens / (the GPU's dense 16-bit tensor peak x the tensor-parallel speedup x utilization) / 3600. The fast end pairs the high bandwidth share with the high utilization, the slow end the low with the low. The server is assumed full for the whole batch.
+- **Job cost and picks.** As for training: `performance.job_cost`, `cost.estimated_total`, `lowest_estimated_job_cost` and `shortest_estimated_runtime` are filled, and the estimate's `runtime.estimable` is true.
+
+## Scale-out
+
+Code: `intelligence/scale_out.py`. A **scale-out plan** is N independent one-GPU replicas of one card type, each processing 1/N of the items, placed across providers the way `/v1/batches` would place N shards. It is returned in a separate top-level `scale_out` block, never in `options`. So `limit`, the five `picks` and the rule that every pick references a listed option are unchanged; a client that ignores `scale_out` sees the response it saw before.
+
+**When it is offered** (`scale_out.offered`, else `scale_out.reason`):
+
+- the workload is inference with a total amount of independent work: a media batch (`media.total_audio_hours` / `total_items` with a runtime) or a text LLM batch (above);
+- there is no `inference.target_latency_ms`: replicas add throughput, they do not make one request faster;
+- `hardware_hints.gpu_count` is not set;
+- per card: the model fits on ONE GPU of that card (its minimum count is 1).
+
+It is never offered for training or fine-tuning, which is one job whose GPUs combine gradients every step, or for a model that needs several GPUs. Open-ended serving with no total is not a batch either.
+
+**Inputs per card.**
+
+- **T1:** the whole job on one GPU of the card (central, fast, slow). This is the theoretical runtime of the card's one-GPU option, or its **measured** runtime when a consented OpenGrid measurement of this workload exists. Measured first, and then the plan says `runtime_kind: measured`.
+- **Listings:** the card's fresh on-demand one-GPU listings that the recommender already ranked (same region, price cap and provider lists). A listing counts its reported capacity in GPUs (or instances of one GPU), else **1**.
+
+**Formulas.** The slots are central, fast end and slow end. Every overhead is an OpenGrid planning assumption, not a measurement.
+
+| term | central | fast end | slow end | what |
+|---|---|---|---|---|
+| setup | 0.25 h | 0.10 h | 0.50 h | per replica, in parallel: provisioning, image pull, model download and load |
+| sharding | 0.05 h | 0.02 h | 0.15 h | split the inputs, merge the outputs |
+| straggler allowance s | 10% | 5% | 25% | the slowest replica, and interrupted shards redone, on marketplace capacity |
+| replica efficiency e | 98% | 100% | 90% | shard imbalance |
+
+    completion(N) = setup + sharding + T1 x (1 + s) / (N x e)
+    cost(N)       = sum over the N placed replicas of price_i x completion(N), billed in each provider's unit
+
+Every replica is billed for the whole completion time. Replicas that finish early can be stopped, so the cost is an upper estimate on that count.
+
+**Sizing N.**
+
+- **Capacity.** N is feasible when the providers can hold it under the /v1/batches default diversification cap. Each provider takes at most max(1, floor(0.5 x N)) replicas, up to its listed GPUs; N is also at most `BATCH_MAX_SHARDS` (64) and `constraints.max_gpus`. One provider alone therefore never carries a scale-out plan: a card listed by one provider is reported in `scale_out.skipped`.
+- **With `constraints.deadline_hours`:** the smallest feasible N whose central completion meets the deadline. If none does, the largest feasible N, flagged `meets_deadline: no` and `capped_by_capacity`.
+- **Without a deadline:** the smallest feasible N, at least 2, whose central completion is no later than the **fastest single-machine option's** central completion. If capacity cannot reach that, the largest feasible N, flagged `capped_by_capacity`.
+- **Placement.** The cheapest listings first, under the per-provider cap.
+
+**Which plans are shown.** One plan per card type, at most three. The plans "in reach" come first, cheapest whole job first. A plan is in reach when it meets the deadline, or, without one, finishes within 1.5x the fastest single machine. Plans that cannot get there follow, soonest first. `scale_out.picks.best_scale_out` is the first plan.
+
+**Each plan** shows:
+
+- the card, `replicas`, `providers` (replicas, price range and listed GPUs per provider), `price_per_hour_total`;
+- `completion_hours` with its range and `job_cost_usd` with its range;
+- `single_gpu_hours` (T1 and its kind), `overheads`, and `sizing` (rule, target, replicas needed, capacity cap, in reach);
+- `meets_deadline`, `confidence` (low when theoretical; the measured confidence when measured), `limitations`;
+- `batch_hint`: a `POST /v1/batches/preview` body with N shards `{shard_index, shard_count}`, the price cap, the slow-end runtime, a budget at the slow-end cost + 10%, `max_share_per_provider` 0.5 and the providers used. Batches run allowlisted templates only, so for any other workload the body is the shape of the plan, and `runnable_today: false` says the preview will refuse it.
+
+**Comparison.** `scale_out.comparison.text`, also copied to `explanation.scale_out`, compares the best plan with the lowest-cost single machine and the fastest single machine. For example: "10 x RTX 5070 Ti 16GB across 2 provider(s): ~55.7 h, ~$104.16 vs 1 x Tesla V100S 32GB PCIe on Clore.ai (lowest-cost single machine): ~360 h, ~$21.60; vs 2 x H100 80GB SXM5 on Vast.ai (fastest single machine): ~43.2 h, ~$159.88." `comparison.verdicts` gives the ratio and difference against each, for example "about 6.5x sooner and $82.56 more than the lowest-cost single machine".
+
+**Visibility.** For anonymous callers and non-admin keys, plans and comparisons use **public** listings and public options only, so the block never depends on an internal price and `routing/disclosure.py` has nothing to hide in it. The operator and admin keys also see internal listings, labelled `visibility: internal` per provider and per plan.
+
+**Limits.**
+
+- Theoretical only: T1 inherits the option's assumptions (for Whisper, an uncalibrated pipeline efficiency), and the overheads above are uncalibrated.
+- A listing that reports no capacity counts as one GPU, so capacity is often understated. Capacity seen now can be gone at launch.
+- Only one-GPU replicas are proposed: no multi-GPU or multi-node replicas.
+- Per-replica egress and storage are not included.
+- Shown on /find (one compact block under the alternatives), in the assistant's answer, by `opengrid recommend` and in the MCP recommend tool's payload.
 
 ## What "executable" means
 

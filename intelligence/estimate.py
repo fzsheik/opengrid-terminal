@@ -10,7 +10,7 @@ fields that are unknown AND change the answer.
 
 from __future__ import annotations
 
-from intelligence import media, memory, performance
+from intelligence import media, memory, performance, scale_out
 from intelligence.requirements import WorkloadRequirements
 
 METHODOLOGY = "/methodology/recommendations"
@@ -151,6 +151,11 @@ def estimate(req: WorkloadRequirements) -> dict:
                    "reason": "runtime depends on the GPU: each option has a theoretical runtime range for the "
                              + what + " to process (compute at an assumed utilization + memory-bound decode; not a "
                              "benchmark)"}
+    elif (mem.get("method") == "inference" and not (md or {}).get("media_kind")
+          and scale_out.llm_batch_work(req, prof).get("known")):
+        runtime = {"known": False, "estimable": True, "kind": "estimated",
+                   "reason": "runtime depends on the GPU: each option has a theoretical runtime range for the batch's "
+                             "output tokens (memory-bandwidth decode roofline + prefill compute; not a benchmark)"}
     elif wk.get("flops"):
         runtime = {"known": False, "estimable": True, "kind": "estimated",
                    "reason": "runtime depends on the GPU: each option has a theoretical runtime range (vendor peak "

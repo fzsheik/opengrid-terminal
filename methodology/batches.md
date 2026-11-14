@@ -14,6 +14,10 @@ preview | list | status | cancel | sandbox`. MCP: `opengrid_preview_batch`, `ope
 multi-node job), and it is not inference load-balancing (nothing routes requests to the shards). It is N separate
 jobs that OpenGrid places, pays for and reports on together.
 
+`POST /v1/recommend` sizes such a batch for independent inference work (a media batch, or a text LLM batch with a
+stated total): its `scale_out` plans count the listed capacity under this page's diversification cap and carry a
+`/v1/batches/preview` body (methodology/recommendations.md, "Scale-out").
+
 ## 1. The request
 
 `POST /v1/batches/preview` and `POST /v1/batches` take the job request's shared fields plus the batch's own:

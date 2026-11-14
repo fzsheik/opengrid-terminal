@@ -62,7 +62,7 @@ Counts recomputed from the code on 2026-11-13.
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination. Built on top, tested against fake provider APIs only: **batches** (a sweep or shard list as one batch: placement across clouds, one budget, one approval), **resume** from a verified checkpoint, opt-in **OOM escalation** and **move** to another GPU; automatic relaunch / OOM escalation and move are off by default (`JOB_AUTO_RELAUNCH_ENABLED`, `JOB_MOVE_ENABLED`) |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
 | Workload intelligence | GPU memory estimator (text LLMs; recommendations also size audio, image + text and video workloads, section 6c), measured performance from completed real jobs (none yet), project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (hosted at `/mcp` with an API key: 15 tools, 2 prompts; local via uvx: 16 tools, 3 prompts), grounded assistant, RL post-training cost estimator |
-| Automated tests | **136** Python test files + **14** JavaScript test files, all 150 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
+| Automated tests | **137** Python test files + **14** JavaScript test files, all 151 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
 
 ---
 
@@ -846,6 +846,26 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
     fields shown per chosen kind.
   - **Limits.** Video understanding is modelled for Qwen2-VL only; the training memory of video and TTS models is
     a lower bound.
+- **Consumer GPU tensor specs** (`hardware.py`, methodology/hardware.md): every GeForce RTX 50 / 40-series row and
+  RTX 3090 Ti / 3090 / 3080 Ti / 3080 / 3070 Ti / 3070 carries dense FP16/BF16 (FP32 accumulate, the rate training and
+  ordinary inference GEMMs use, same meaning as the datacenter rows) and, Ada / Blackwell, dense FP8 (FP32
+  accumulate). 14 rows from NVIDIA whitepaper tables (`tensor_basis: whitepaper`), 6 (5060 Ti, 5060, 4080 SUPER,
+  4070 Ti SUPER, 4060 Ti, 4060) from the AI TOPS on NVIDIA's product pages with the exact ratio the whitepapers show
+  (`nvidia_ai_tops`). So consumer cards get theoretical runtimes and whole-job costs (they had none, so they could
+  never win `lowest_estimated_job_cost`). Still null: RTX 3060 Ti / 3060 / 3050 and Turing GeForce, RTX PRO Blackwell
+  (NVIDIA prints only sparse FP4 AI TOPS for them).
+- **Scale-out** (`intelligence/scale_out.py`; method: methodology/recommendations.md "Scale-out"): for a batch of
+  independent work (media totals, or the new `inference.total_requests` / `total_output_tokens` for a text LLM
+  batch) a separate `scale_out` block (not in `options`, so `limit` and every existing pick are unchanged) sizes N
+  independent one-GPU replicas of the best-value card types: to `deadline_hours`, else to finish near the fastest
+  single machine, capped by the listed capacity across providers under the /v1/batches 50% per-provider cap and by
+  `BATCH_MAX_SHARDS` / `max_gpus`. Each plan: replicas per provider, $/h total, completion and whole-job cost ranges,
+  overheads (per-replica setup, data sharding, a straggler / interruption allowance, replica efficiency), confidence
+  and a `/v1/batches/preview` body; `scale_out.picks.best_scale_out` and a comparison with the lowest-cost and
+  fastest single machines (also `explanation.scale_out`). Never offered for training, a model that needs several
+  GPUs, latency targets, a fixed GPU count or open-ended serving. Public and non-admin answers are sized on public
+  listings only. A text LLM batch also gives every option a theoretical runtime (decode roofline + prefill) and
+  whole-job cost. Shown compactly on /find, in the assistant's answer, the CLI and the MCP recommend tool.
 - **Local analyzer** (`cli/src/opengrid_cli/analyze`): allowlisted files only, `.gitignore`, symlink and size
   limits, never reads secrets/weights/datasets, never executes code, redacts secret-looking values, flags
   prompt-injection text; only the structured requirements ever leave the machine. Dry-run mode.
@@ -1257,7 +1277,7 @@ registered. `news` and `gpuhunt_snapshot` are always registered and skip their w
 
 ## 16. Testing
 
-136 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
+137 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
 Postgres database, no real provider calls), plus 5 CLI/MCP test files in `cli/tests/`. `tests/run_all.py` runs all
 150 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
 (`.github/workflows/tests.yml`) runs it on every push and pull request against a throwaway Postgres 16 whose zone is
@@ -1282,7 +1302,10 @@ deliberately not UTC. Beyond the per-module tests:
   status, terminate and list, pinned to the providers' API references (methodology/adapter-contract-audit.md);
 - **workload intelligence** (`test_workload_intelligence.py`, `test_media_workloads.py`, `test_recommend.py`):
   measured-performance rules, whole-job ranking, the audio / image + text / video sizing, and 24 golden payloads
-  without `media` whose estimates must stay byte-identical;
+  without `media` whose estimates must stay byte-identical; `test_scale_out.py`: the consumer tensor specs and their
+  sources, hand-computed scale-out sizing (deadline, default target, capacity and diversification cap), never for
+  training / multi-GPU models / latency targets, the comparison text, visibility, measured precedence, and golden
+  recommendation payloads from c89801f that must stay identical once the added `scale_out` keys are removed;
 - **hosted MCP** (`tests/test_mcp_remote.py`): the real app on uvicorn with real API keys and the official MCP
   client: tool list, the sandbox demo, scopes through the caller's key, every 401/403 path, the key never
   echoed, and a thread-starvation proof (48 concurrent calls on a 6-thread pool finish; without the gate's
@@ -1371,7 +1394,12 @@ a real GPU provider yet. The next step is one supervised **Lambda validation run
 - **Workload intelligence**: every runtime is theoretical until real jobs complete (no measured observation exists
   yet). Audio, image + text and video sizing is an internal accuracy improvement of recommendations: video
   generation memory is always low confidence, video understanding is modelled for Qwen2-VL only, the training
-  memory of video and TTS models is a lower bound, and the audio pipeline efficiency is uncalibrated.
+  memory of video and TTS models is a lower bound, and the audio pipeline efficiency is uncalibrated. Scale-out plans
+  are theoretical: the replica setup time, sharding time and straggler allowance are uncalibrated assumptions; a
+  listing that reports no capacity counts as one GPU (so capacity is often understated), capacity can disappear before
+  launch, and batches still run allowlisted templates only, so the `/v1/batches/preview` body is the shape of a plan,
+  refused (`unknown_template`) for any other workload today. Only single-GPU replicas are proposed (no multi-GPU or
+  multi-node replicas).
 - **Providers**: Alibaba Cloud is built but dormant until an AccessKey is set. RunPod's market-data poller reads pods
   from REST v2 when `RUNPOD_API_KEY` is set (REST needs a key; confirmed in production on 2026-11-14: the
   production key has `catalog:read`, 9 responses, 0 failed), but still reads RunPod's GraphQL API, which RunPod

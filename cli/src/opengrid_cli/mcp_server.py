@@ -188,7 +188,10 @@ class EstimateResult(_Out):
 class RecommendationResult(_Out):
     recommendation: dict[str, Any] = Field(description="contract section 3: estimate, picks (cheapest_market, "
                                                        "best_for_workload, best_executable, "
-                                                       "lowest_estimated_job_cost), options with tiers, performance "
+                                                       "lowest_estimated_job_cost), options with tiers, scale_out "
+                                                       "(N independent one-GPU replicas for batch work: replicas, "
+                                                       "providers, $/h, completion and job-cost ranges, overheads, "
+                                                       "picks.best_scale_out, comparison, batch_hint), performance "
                                                        "(totals over the GPUs, interconnect, scaling, runtime), "
                                                        "memory_fit, cost scenarios + assumptions, execution "
                                                        "readiness, excluded, questions")
@@ -401,7 +404,8 @@ def descriptions(*, remote: bool, site: str) -> dict[str, str]:
                                           f"when the dataset size is given. Only the requirements object is sent. "
                                           f"{DATA_NOTE}",
         "opengrid_recommend_compute": f"Recommendation: picks (cheapest, best fit, executable, lowest est. job "
-                                      f"cost), options, memory fit, costs, readiness. `performance` totals each "
+                                      f"cost), options, memory fit, costs, readiness, scale_out. "
+                                      f"`performance` totals each "
                                       f"option's GPUs (2x H100 vs 1x H200); with training.dataset_tokens, a runtime "
                                       f"and job-cost range. Spec-sheet estimates, not benchmarks. {rec_input} "
                                       f"Never launches; a "

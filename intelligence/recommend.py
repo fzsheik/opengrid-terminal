@@ -42,6 +42,16 @@ estimate already carries their tokens / windows / latents; per option `performan
 throughput (audio hours, requests or videos per GPU-hour) and, when the amount of work is known, the runtime and
 whole-job cost range (measured observations still win). Independent items (transcription windows, captions, videos)
 scale across GPUs as separate replicas, not tensor parallel; the notes say so and point to batch fan-out.
+
+Text LLM batches (`inference.total_requests` / `total_output_tokens`): each option's runtime = output tokens / its
+decode roofline + prefill compute, so the job-cost picks work for them too (intelligence/scale_out.llm_batch_runtime).
+
+Scale-out (intelligence/scale_out.py; methodology/recommendations.md "Scale-out"), additive: a separate top-level
+`scale_out` block (never in `options`, so `limit` and the five picks are untouched) with N independent one-GPU
+replicas per best-value card for a batch of independent work, sized to the deadline or the fastest single machine
+under the listed capacity and the /v1/batches diversification cap; `scale_out.picks.best_scale_out`, a comparison
+with the single machines (also `explanation.scale_out`), and a /v1/batches/preview body. Public and non-admin callers
+get plans built on public listings only.
 """
 
 from __future__ import annotations
@@ -57,6 +67,7 @@ from intelligence import explain as X
 from intelligence import measured as MS
 from intelligence import media as MD
 from intelligence import performance as P
+from intelligence import scale_out as SO
 from intelligence import workload_fit as F
 from intelligence.estimate import METHODOLOGY, estimate
 from intelligence.requirements import Constraints, WorkloadRequirements
@@ -329,6 +340,77 @@ def _media_option(x: dict, prof: dict, prec: str | None) -> None:
                                                              f"{mrt['parallelism']}"}
 
 
+def _scale_out(req, who, tier, mem, prof, pool, singles_src, c, fixed, media_batch, media_wk, llm_wk, supported,
+               budget) -> dict:
+    """The `scale_out` block (intelligence/scale_out.py): N independent one-GPU replicas for a batch of independent
+    work. Ranked on PUBLIC listings unless the caller may see internal data (operator / admin): a non-admin answer
+    never depends on an internal price, so routing.disclosure has nothing to hide in it."""
+    from config import settings
+    from routing import disclosure
+
+    see_internal = tier == "all" and disclosure.can_see_internal(who)
+    vis_ok = lambda v: see_internal or v == "public"      # noqa: E731
+    inf = req.inference
+    ok, why, kind = SO.eligibility(method=mem.get("method"), media_batch=media_batch,
+                                   llm_known=bool(llm_wk.get("known")),
+                                   latency_target=bool(inf is not None and inf.target_latency_ms), fixed=fixed,
+                                   has_pool=bool(pool))
+    base = {"offered": False, "reason": why, "options": [], "picks": {"best_scale_out": None}, "comparison": None,
+            "kind": "estimated", "methodology": SO.METHODOLOGY}
+    if not ok:
+        return base
+    cards = []
+    for g, (cands, rows, spec) in sorted(singles_src.items()):
+        xs = [x for x in pool if x["gpu"] == g and x["n"] == 1 and not x["scale"]]
+        meas = next((x for x in xs if x["perf"].get("job_cost_measured")), None)
+        if meas is not None:
+            rt, rk_, mc = meas["perf"]["measured"]["runtime"], "measured", MS.confidence(meas["perf"]["measured"])[0]
+        else:
+            th = next((x for x in xs if (x["perf"].get("runtime") or {}).get("known")), None)
+            if th is None:
+                continue
+            rt, rk_, mc = th["perf"]["runtime"], "theoretical", None
+        T1 = (rt["hours"], rt["range_hours"][0], rt["range_hours"][1])
+        caps = {(r["provider"], r["listing_id"]): (r.get("capacity"), r.get("capacity_unit")) for r in rows}
+        listings = []
+        for cd in cands:
+            if not vis_ok(cd.get("visibility")):
+                continue
+            cap, unit = caps.get((cd["provider"], cd["listing_id"]), (None, None))
+            units = int(cap) if cap is not None and int(cap) > 0 else 1     # GPUs or 1-GPU instances: the same here
+            listings.append({"provider": cd["provider"], "provider_display": cd["provider_display"],
+                             "listing_id": cd["listing_id"], "price": float(cd["price_per_gpu_hour"]),
+                             "units": units, "units_reported": cap is not None and int(cap) > 0,
+                             "visibility": cd.get("visibility") or "internal",
+                             "bill": wsel.billing(cd["provider"])})
+        if listings:
+            cards.append({"gpu": g, "spec": spec, "T1": T1, "runtime_kind": rk_, "measured_confidence": mc,
+                          "listings": listings})
+    if not cards:
+        return {**base, "reason": ("the model does not fit on one GPU of any listed card: scale-out replicas are one "
+                                   "GPU each (see the multi-GPU options)" if not singles_src else
+                                   "no one-GPU option has an estimable runtime")}
+    singles = []
+    for x in pool:
+        if x.get("job") and vis_ok(x["c"].get("visibility")):
+            singles.append({"option_id": x["option"]["option_id"], "gpu": x["gpu"], "n": x["n"],
+                            "provider_display": x["option"]["provider_display"], "hours": x["job"]["hours"],
+                            "range_hours": x["job"]["range_hours"], "usd": x["job"]["usd"],
+                            "range_usd": x["job"]["range_usd"]})
+    max_n = max(1, int(settings.batch_max_shards))
+    if c.max_gpus:
+        max_n = min(max_n, int(c.max_gpus))
+    billed = lambda li, h: wsel.billed_minutes(h * 60, li["bill"]) / 60      # noqa: E731
+    name = (req.model.name if req.model is not None else None) or None
+    label = (f"{media_wk['items']:,} {media_wk['item']}s" if kind == "media_batch" else
+             f"{llm_wk['output_tokens']:,.0f} output tokens")
+    blk = SO.build(kind=kind, cards=cards, deadline=c.deadline_hours, max_n=max_n, singles=singles, billed=billed,
+                   template=(name or "").strip().lower() if supported else None, supported=supported, req_name=name,
+                   budget=budget, work_label=label)
+    blk["methodology"] = SO.METHODOLOGY
+    return blk
+
+
 def tier_for(who) -> str:
     """'public' for an anonymous caller, 'all' for an API key or the operator."""
     return "public" if getattr(who, "kind", None) in (None, "public") else "all"
@@ -349,6 +431,9 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
     media_wk = md.get("work") or {}
     media_rt = bool(media_wk.get("known"))
     media_batch = bool(media_rt and media_wk.get("items"))
+    llm_wk = SO.llm_batch_work(req, prof) if mem.get("method") == "inference" and not md.get("media_kind") else \
+        {"known": False}
+    llm_rt = bool(llm_wk.get("known"))
     notes = ["Prices are observed list prices, not quotes: a route quotes and re-validates before any launch.",
              ("Runtimes and whole-job costs are theoretical estimates (vendor peak throughput x stated utilization "
               "and multi-GPU scaling assumptions), shown as ranges; no benchmark exists for this workload."
@@ -357,6 +442,10 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
               "scenarios at stated hours."),
              "Performance compares the total over all GPUs of an option (dense throughput for training, memory "
              "bandwidth for inference) after a multi-GPU scaling assumption; spec-sheet figures, not benchmarks."]
+    if llm_rt:
+        notes[1] = ("Runtimes and whole-job costs are theoretical estimates for this batch (" + llm_wk["basis"]
+                    + ": memory-bandwidth decode roofline + prefill compute), shown as ranges; no benchmark exists for "
+                    "this workload.")
     if media_rt:
         unit = media_wk["unit"]["name"]
         how = ("compute at an assumed utilization"
@@ -376,6 +465,8 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
            "picks_unavailable": {},
            "options": [], "excluded": [], "excluded_total": 0, "excluded_by_code": {}, "questions": est["questions"],
            "explanation": None, "multi_gpu": None,
+           "scale_out": {"offered": False, "reason": SO.NOT_EVALUATED, "options": [],
+                         "picks": {"best_scale_out": None}, "comparison": None},
            "notes": notes, "as_of": now.isoformat(), "methodology": METHODOLOGY, "tier": tier}
     if est["needs_gpu"] is False:
         out["notes"] = [f"This workload does not need a GPU: {est['needs_gpu_reason']}. No GPU options are shown; "
@@ -484,6 +575,7 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
     cands: list[dict] = []
     bills: dict[str, dict] = {}
     rows_by_gpu: dict[str, list] = {}       # one listings read per GPU, shared by its minimum and scale-up counts
+    singles_src: dict[str, tuple] = {}      # GPU -> (its one-GPU candidates, listing rows, spec): scale-out capacity
     for g, n, spec, why_n, scale in [f + (False,) for f in fitting] + [f + (True,) for f in scale_ups]:
         rows = rows_by_gpu.get(g)
         if rows is None:
@@ -511,6 +603,8 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
             excluded.append(_excl(g, "multi_instance", m.get("note") or "needs several instances",
                                   provider=m["provider"], listing_id=m["listing_id"], region=m.get("region"),
                                   price_per_gpu_hour=m["price_per_gpu_hour"]))
+        if n == 1:
+            singles_src[g] = (rk["candidates"], rows, spec)
         kept = 0
         for cd in rk["candidates"]:
             price_inst = cd["price_per_gpu_hour"] * n
@@ -587,6 +681,17 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
                 if inf:
                     inf["cost_per_million_tokens"] = F.cost_per_million_tokens(x["price_inst"], inf)
                 perf["inference"] = inf
+                if llm_rt:
+                    lrt = SO.llm_batch_runtime(inf, n, x["spec"], llm_wk, prof, params_b, perf["scaling"])
+                    if lrt:
+                        perf["runtime"] = lrt
+                        bill = x["bill"]
+                        perf["job_cost"] = P.job_cost(x["price_inst"], lrt["hours"], lrt["range_hours"],
+                                                      lambda m, bill=bill: wsel.billed_minutes(m, bill))
+                        perf["job_cost"]["runtime_kind"] = "theoretical"
+                    else:
+                        perf["runtime"] = {"known": False, "hours": None, "range_hours": None,
+                                           "reason": "no decode throughput estimate for this GPU"}
             ms = (meas.get(x["gpu"]) or {}).get(n)
             if ms:
                 lvl, why_c = MS.confidence(ms)
@@ -1001,6 +1106,12 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
             out["picks_unavailable"][k] = "no fresh, on-demand listing fits this workload under the constraints"
     if not pool:
         notes.append("No fresh, on-demand listing fits this workload under the constraints; see excluded.")
+
+    out["scale_out"] = _scale_out(req, who, tier, mem, prof, pool, singles_src, c, fixed, media_batch, media_wk,
+                                  llm_wk, supported, budget)
+    so_cmp = (out["scale_out"].get("comparison") or {}).get("text")
+    if so_cmp and isinstance(out.get("explanation"), dict):
+        out["explanation"]["scale_out"] = so_cmp
 
     excluded.sort(key=lambda e: (e["gpu"], e.get("provider") or "", str(e.get("listing_id") or ""), e["code"]))
     by_code: dict[str, int] = {}

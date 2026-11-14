@@ -41,7 +41,7 @@
       seq_len: I(1e8), gradient_checkpointing: B, lora_rank: I(100000), zero_stage: E(0, 1, 2, 3), cpu_offload: B, epochs: N(1e6), dataset_tokens: N(), dataset_samples: N(),
       max_steps: I(1e8) }),
     inference: O({ concurrency: I(1e6), context_len: I(1e8), output_tokens: I(1e8), target_latency_ms: N(1e9), target_tokens_per_s: N(1e9),
-      engine: E("vllm", "tgi", "transformers", "llama.cpp") }),
+      engine: E("vllm", "tgi", "transformers", "llama.cpp"), total_requests: I(1e10), total_output_tokens: N(1e15) }),
     media: O({ modality: A(E("text", "image", "audio", "video", "multimodal"), 5), task: E("understanding", "captioning", "transcription", "speech_synthesis", "generation"),
       images_per_request: I(256), image_resolution: S(11), audio_seconds: N(86400), total_audio_hours: N(1e7), video_seconds: N(86400), fps: N(240), video_resolution: S(11),
       output_video_seconds: N(600), output_fps: N(240), output_resolution: S(11), diffusion_steps: I(1000), total_items: I(1e9) }),
@@ -595,7 +595,7 @@
   const isTraining = wt => wt === "training" || wt === "fine_tuning";
   // The recommended option's runtime line -> {label, value, sub, estimated} | null: a theoretical runtime when the
   // server estimated one; else what the budget buys; else, for training only, the one input that unlocks it.
-  // Inference has no runtime estimate, so it gets no runtime line and no data-size hint.
+  // Inference has a runtime only for a batch with a stated total (media or text LLM); never a data-size hint.
   function runtimeFact(o, e) {
     const pi = perfInfo(o), c = costLines(o);
     if (pi.runtime && pi.runtime.measured) return { label: "Measured runtime", value: pi.runtime.text, sub: (pi.runtime.range ? pi.runtime.range + " · " : "") + `measured on ${pi.runtime.n} real OpenGrid run${pi.runtime.n === 1 ? "" : "s"} of this workload`, estimated: false, kind: "measured" };
@@ -605,12 +605,32 @@
     return null;
   }
 
+  // rec.scale_out -> {plans: [{id, best, title, providers, perHour, hours, hoursRange, cost, costRange, meets, confidence,
+  // limits, hint}], comparison, assumptions} | null when the server offered none. Server figures only: the browser
+  // never sizes replicas. A plan is N independent one-GPU replicas (methodology/recommendations#scale-out).
+  function scaleOutOf(rec) {
+    const so = rec && rec.scale_out;
+    if (!so || !so.offered || !arr(so.options).length) return null;
+    const bestId = ((so.picks || {}).best_scale_out || {}).scale_out_id || null;
+    const plans = arr(so.options).map(o => ({
+      id: o.scale_out_id, best: o.scale_out_id === bestId,
+      title: `${o.replicas}× ${OG.shortGpu ? OG.shortGpu(o.gpu || "") : o.gpu}`,
+      providers: arr(o.providers).map(p => `${p.provider_display || p.provider} ×${p.replicas}`).join(", "),
+      perHour: finite(o.price_per_hour_total) ? "$" + o.price_per_hour_total.toFixed(2) + "/h total" : "-",
+      hours: hoursText(o.completion_hours), hoursRange: arr(o.completion_range_hours).length === 2 ? `${hoursText(o.completion_range_hours[0])} to ${hoursText(o.completion_range_hours[1])}` : null,
+      cost: usd(o.job_cost_usd), costRange: arr(o.job_cost_range_usd).length === 2 ? `${usd(o.job_cost_range_usd[0])} to ${usd(o.job_cost_range_usd[1])}` : null,
+      meets: o.meets_deadline || null, confidence: (o.confidence || {}).level || null, limits: arr(o.limitations).map(String),
+      hint: o.batch_hint || null, kind: o.runtime_kind === "measured" ? "measured" : "estimated" }));
+    plans.sort((a, b) => (b.best ? 1 : 0) - (a.best ? 1 : 0));
+    return { plans, comparison: so.comparison && so.comparison.text ? String(so.comparison.text) : null, assumptions: arr(so.assumptions).map(String) };
+  }
+
   OG.find = { SCHEMA, TASKS, METHODS, MODELS, MEDIA_KINDS, PICKS, TIERS, FORM_KEYS, MAX_PASTE, DEMO_HREF, ANALYZER_KEYS,
     checkRequirements, validatePaste, prune, modelFromText, formErrors, requirementsFromForm, stateFromQuery, queryFromState,
     applyAnswers, answersFromQuery, answersToQuery, controlFor, leafSpec,
     pickCards, readiness, availability, memoryFit, fmtGb, runtimeInfo, componentRows, tiersOf, noGpu, costLines, gpuHref, routeHref,
     JOB_PICK, perfInfo, hoursText, tokensFromText, summaryOf,
-    questionsOf, noExecutableReason, optionById, heroOf, alternativesOf, budgetHelp, runStatus, runtimeFact, isTraining };
+    questionsOf, noExecutableReason, optionById, heroOf, alternativesOf, budgetHelp, runStatus, runtimeFact, isTraining, scaleOutOf };
 
   if (typeof OG.page !== "function" || typeof document === "undefined") return;   // node tests: pure part only
 
@@ -844,6 +864,26 @@
           : o.gpu_count > 1 && finite(o.price_per_instance_hour) ? h("div", { class: "dim" }, `${usd(o.price_per_instance_hour)}/h total`) : null),
       summaryOf(o) ? h("div", { class: "cx-alt-x" }, summaryOf(o)) : null);
   }
+  // Scale-out, compact: the best plan in one row, the comparison line, the other plans and the batch body folded.
+  function scaleOutBlock(so) {
+    const row = p => h("div", { class: "cx-alt" + (p.best ? " cx-so-best" : "") },
+      h("div", {}, h("div", { class: "cx-alt-l" }, p.best ? "Best scale-out" : "Scale-out"), h("div", { class: "cx-alt-g" }, p.title),
+        h("div", { class: "cx-alt-p" }, p.providers)),
+      h("div", { class: "cx-alt-p" }, h("span", {}, "≈ " + p.hours), p.hoursRange ? h("span", { class: "dim" }, "(" + p.hoursRange + ")") : null,
+        p.meets ? OG.badge(p.meets === "no" ? "misses deadline" : "meets deadline", p.meets === "no" ? "warn" : "good") : null),
+      h("div", { class: "cx-alt-r" }, h("b", {}, "≈ " + p.cost), h("div", { class: "dim" }, p.perHour)),
+      p.costRange || p.limits.length ? h("div", { class: "cx-alt-x" }, [p.costRange ? "job cost " + p.costRange : null].concat(p.limits.slice(0, 2)).filter(Boolean).join(" · ")) : null);
+    const best = so.plans[0];
+    const hint = best && best.hint ? h("details", { class: "cx-tech" }, h("summary", {}, "Run it as a batch"),
+      h("p", { class: "dim" }, String(best.hint.note || "")),
+      h("pre", { class: "mono cx-so-body" }, (best.hint.endpoint ? best.hint.endpoint + "\n" : "") + JSON.stringify(best.hint.body, (k, v) => (k === "shards" && Array.isArray(v) && v.length > 3 ? v.slice(0, 2).concat([`… ${v.length - 2} more shards`]) : v), 2))) : null;
+    return h("section", { class: "cx-alts cx-so", "aria-label": "Scale-out plans" },
+      h("div", { class: "cx-alts-h" }, h("h3", {}, "Or split it across many GPUs"), h("span", { class: "dim" }, "independent replicas, one GPU each · theoretical"), OG.kindBadge ? OG.kindBadge(best.kind) : null),
+      so.comparison ? h("p", { class: "cx-alt-x" }, so.comparison) : null,
+      row(best),
+      so.plans.length > 1 ? h("details", { class: "cx-tech" }, h("summary", {}, `${so.plans.length - 1} other plan${so.plans.length === 2 ? "" : "s"}`), so.plans.slice(1).map(row)) : null,
+      hint);
+  }
   function budgetBlock(bh, opts) {
     const limit = bh.by_price && bh.by_budget ? "your max price and budget" : bh.by_price ? "your max price per GPU-hour" : "your budget";
     return h("section", { class: "cx-budget", role: "status" },
@@ -891,6 +931,8 @@
       const alts = alternativesOf(rec, 2);
       if (alts.length) kids.push(h("section", { class: "cx-alts", "aria-label": "Alternatives" },
         h("div", { class: "cx-alts-h" }, h("h3", {}, "Also worth a look")), alts.map(a => altRow(a, e))));
+      const so = scaleOutOf(rec);
+      if (so) kids.push(scaleOutBlock(so));
     } else {
       const bh = budgetHelp(rec);
       kids.push(bh ? budgetBlock(bh, opts) : OG.empty("No GPU listing fits this workload right now. Relaxing the price or region usually helps; Advanced details lists what was left out and why."));

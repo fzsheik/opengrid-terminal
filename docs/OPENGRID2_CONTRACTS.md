@@ -46,7 +46,8 @@ optional: unknown is `null`, never a guess. The analyzer fills what it has evide
   "inference": {
     "concurrency": 8 | null, "context_len": 8192 | null, "output_tokens": null,
     "target_latency_ms": null, "target_tokens_per_s": null,
-    "engine": "vllm" | "tgi" | "transformers" | "llama.cpp" | null
+    "engine": "vllm" | "tgi" | "transformers" | "llama.cpp" | null,
+    "total_requests": null, "total_output_tokens": null   // a batch's total work: runtime, job cost, scale-out
   },
   "media": {                                   // optional: audio / image / video (methodology/recommendations.md)
     "modality": ["image"],                     // "text" | "image" | "audio" | "video" | "multimodal", one or a list
@@ -199,6 +200,18 @@ was renamed or removed:
   "multi_gpu": { "verdict": "single_gpu" | "scale_up_optional" | "multi_gpu_required", "summary",
                  "when_not_to_go_multi_gpu": [...], "scale_up": [ { "gpu", "provider", "from", "to", "speedup",
                  "speedup_range", "link", "parallelism", "job_cost_ratio", "option_ids" } ], "kind": "estimated" },
+  "scale_out": { "offered": bool, "reason": str | null, "workload": "media_batch" | "llm_batch",  // additive; not in options
+                 "options": [ { "scale_out_id", "gpu", "gpu_count_per_replica": 1, "replicas", "providers": [
+                     { "provider", "provider_display", "replicas", "price_per_gpu_hour_range", "listed_gpus",
+                       "listed_gpus_is_lower_bound", "visibility" } ], "providers_count", "price_per_hour_total",
+                   "completion_hours", "completion_range_hours", "job_cost_usd", "job_cost_range_usd",
+                   "single_gpu_hours", "runtime_kind", "overheads", "sizing", "meets_deadline", "confidence",
+                   "visibility", "limitations", "batch_hint": { "endpoint", "runnable_today", "body", "note" },
+                   "basis", "kind": "estimated" } ],
+                 "picks": { "best_scale_out": { "scale_out_id", "reason" } | null },
+                 "comparison": { "text", "verdicts", "single_machine": [...], "scale_out_id" } | null,
+                 "skipped": [ { "gpu", "reason" } ], "assumptions": [...], "methodology" },
+                 // explanation.scale_out = comparison.text when offered (methodology/recommendations.md "Scale-out")
   "options": [ {
     "meets_deadline": "yes" | "likely" | "no" | "unknown" | null,
     "cost": { ..., "estimated_total": { "usd", "range_usd", "completion_hours", "completion_range_hours",

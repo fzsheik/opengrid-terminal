@@ -318,6 +318,23 @@ const optA = { option_id: "a", gpu: "NVIDIA H100 80GB SXM5", gpu_count: 1, perfo
 eq([F.perfInfo(optA).throughput.text, F.perfInfo(optA).throughput.range], ["≈ 118 audio hours per GPU-hour", "12.9 to 859"], "throughput line (theoretical) with its range");
 eq(F.perfInfo({ performance: {} }).throughput, null, "no throughput line for other workloads");
 
+// ---------- scale-out (rec.scale_out; server figures only) ----------
+eq(F.scaleOutOf(REC), null, "no scale_out block (an older payload): nothing shown");
+eq(F.scaleOutOf({ scale_out: { offered: false, reason: "training run", options: [] } }), null, "not offered: nothing shown");
+const SOREC = { scale_out: { offered: true, options: [
+  { scale_out_id: "s:a:4", gpu: "NVIDIA RTX A4000 16GB", replicas: 4, providers: [{ provider: "clore", provider_display: "Clore.ai", replicas: 2 }, { provider: "runpod", replicas: 2 }],
+    price_per_hour_total: 0.46, completion_hours: 140.2, completion_range_hours: [20.1, 900], job_cost_usd: 70.1, job_cost_range_usd: [10, 450], meets_deadline: null,
+    confidence: { level: "low" }, limitations: [], runtime_kind: "theoretical", batch_hint: { endpoint: "POST /v1/batches/preview", body: { shards: [] }, note: "n" } },
+  { scale_out_id: "s:b:10", gpu: "NVIDIA RTX 5070 Ti 16GB", replicas: 10, providers: [{ provider: "clore", provider_display: "Clore.ai", replicas: 5 }, { provider: "lium", provider_display: "Lium", replicas: 5 }],
+    price_per_hour_total: 1.86, completion_hours: 55.66, completion_range_hours: [8.86, 515.4], job_cost_usd: 104.16, job_cost_range_usd: [16.74, 959.76], meets_deadline: "likely",
+    confidence: { level: "low" }, limitations: ["capped at 10 replicas"], runtime_kind: "theoretical", batch_hint: null }],
+  picks: { best_scale_out: { scale_out_id: "s:b:10" } }, comparison: { text: "10 x RTX 5070 Ti 16GB across 2 provider(s): ~55.7 h vs ..." }, assumptions: ["a"] } };
+const sop = F.scaleOutOf(SOREC);
+eq(sop.plans.map(p => [p.id, p.best]), [["s:b:10", true], ["s:a:4", false]], "the best scale-out plan leads, the rest follow");
+eq([sop.plans[0].providers, sop.plans[0].perHour, sop.plans[0].hours, sop.plans[0].cost, sop.plans[0].costRange, sop.plans[0].meets],
+  ["Clore.ai ×5, Lium ×5", "$1.86/h total", "2.3 days", "$104.16", "$16.74 to $959.76", "likely"], "plan facts from the server's numbers");
+ok(sop.comparison.startsWith("10 x RTX 5070 Ti"), "the comparison line is the server's");
+
 // ---------- the new page is registered (server route checked by tests/test_pages.py) ----------
 const src = fs.readFileSync(path.join(__dirname, "..", "web", "pages", "find.js"), "utf8");
 ok(/OG\.page\("\/find"/.test(src), "find.js registers /find");

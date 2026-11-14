@@ -66,6 +66,9 @@ class Inference(_M):
     target_latency_ms: float | None = Field(None, gt=0, le=1e7)
     target_tokens_per_s: float | None = Field(None, gt=0, le=1e9)
     engine: Engine | None = None
+    # a batch: the total work, for a runtime / whole-job cost and scale-out options (intelligence/scale_out.py)
+    total_requests: int | None = Field(None, ge=1, le=10_000_000_000)
+    total_output_tokens: float | None = Field(None, gt=0, le=1e15)
 
 
 class Constraints(_M):

@@ -652,6 +652,22 @@ def show_recommendation(r: dict) -> None:
         print(f"  {label:18}: {_opt_line(o) if o else p.get('option_id')}")
         if p.get("reason"):
             print(f"  {'':18}  why: {p['reason']}")
+    so = r.get("scale_out") or {}
+    if so.get("offered") and so.get("options"):
+        best = ((so.get("picks") or {}).get("best_scale_out") or {}).get("scale_out_id")
+        print("\nscale-out (independent one-GPU replicas; theoretical):")
+        for o in so["options"]:
+            provs = ", ".join(f"{p.get('provider')} x{p.get('replicas')}" for p in o.get("providers") or [])
+            lo, hi = (o.get("completion_range_hours") or [None, None])[:2]
+            clo, chi = (o.get("job_cost_range_usd") or [None, None])[:2]
+            print(f"  {'*' if o.get('scale_out_id') == best else ' '} {o.get('replicas')} x {o.get('gpu')} ({provs}): "
+                  f"{fmt_price(o.get('price_per_hour_total'))}/h total, ~{o.get('completion_hours')} h ({lo} to {hi} h), "
+                  f"~{fmt_price(o.get('job_cost_usd'))} ({fmt_price(clo)} to {fmt_price(chi)})")
+        if (so.get("comparison") or {}).get("text"):
+            print(f"  compare: {so['comparison']['text']}")
+        print("  run it as a batch: --json shows scale_out.options[].batch_hint (POST /v1/batches/preview)")
+    elif so.get("reason") and r.get("options"):
+        print(f"\nscale-out: not offered ({so['reason']})")
     if r.get("options"):
         print("\noptions:")
     for o in r.get("options") or []:
