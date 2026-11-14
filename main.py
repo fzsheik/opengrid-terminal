@@ -397,6 +397,9 @@ app.include_router(exports_api.router)
 from api import jobs as jobs_api  # noqa: E402  (OpenGrid Jobs; registers the job_sync background job)
 
 app.include_router(jobs_api.router)
+from api import batches as batches_api  # noqa: E402  (batch fan-out of jobs; registers the batch_advance job)
+
+app.include_router(batches_api.router)
 
 from api import settlement as settlement_api  # noqa: E402  (official index fixings; registers index_fixings)
 

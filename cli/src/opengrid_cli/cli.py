@@ -1,8 +1,10 @@
 """`opengrid`: OpenGrid from the terminal. Market data, local project analysis, workload-aware recommendations.
 
-No command can spend money. There is deliberately no launch / route execute / real job submit command. The only
-server-side writes are: `route preview` (records a preview ticket), `jobs cancel` (spend-reducing, needs --yes),
-and `demo train` (the MNIST SANDBOX: simulated, no GPU, no spend).
+No command can spend money on its own. There is deliberately no launch / route execute / real job submit command. The
+only server-side writes are: `route preview` (records a preview ticket), `jobs cancel` / `batch cancel` (spend-reducing,
+need --yes), `demo train` and `batch sandbox` (SANDBOX: simulated, no GPU, no spend), and `jobs resume` / `jobs move`
+(continue one of YOUR existing jobs on a new GPU through the server's quote / approval / cost-guard path, within the
+--max-total-cost-usd you give; without --yes they only show the quote). `batch preview` writes nothing.
 
 Exit codes:
   0  ok
@@ -780,7 +782,55 @@ def cmd_jobs(args) -> int:
                                         + f"\nidempotency key {d['idempotency_key']}"
                                         + (" (replayed)" if d["replayed"] else "")))
             return EXIT_OK
+        if args.jobs_cmd in ("resume", "move"):
+            return _continue(c, args, out)
     return EXIT_ERROR
+
+
+def _quote_lines(pv: dict) -> None:
+    q = pv.get("quote") or {}
+    ck = pv.get("checkpoint") or pv.get("latest_checkpoint")
+    if not pv.get("can_submit"):
+        r = pv.get("refusal") or {}
+        print(f"not possible now: {r.get('code')}: {r.get('message')}")
+        return
+    print(f"  provider  {q.get('provider')}  {q.get('region') or ''}".rstrip())
+    print(f"  gpu       {q.get('gpu_count') or 1}x {q.get('gpu')}  ${q.get('price_per_gpu_hour')}/GPU-h "
+          f"({q.get('price_kind') or 'observed'})")
+    print(f"  cost      est. at most ${q.get('est_max_total_usd')}  (your ceiling ${q.get('max_total_cost_usd')})")
+    if pv.get("action") == "move":
+        print("  checkpoint a NEW one is saved and verified before the current GPU is shut down"
+              + (f" (latest now: epoch {ck.get('epoch')})" if ck else ""))
+    elif pv.get("from_scratch"):
+        print("  checkpoint none: starts from scratch")
+    elif ck:
+        age = ck.get("age_seconds")
+        print(f"  checkpoint epoch {ck.get('epoch')} of {ck.get('job_id')}"
+              + (f", saved {int(age) // 60} min ago" if isinstance(age, (int, float)) else "") + " (sha256 verified)")
+
+
+def _continue(c: Client, args, out: Out) -> int:
+    """jobs resume / jobs move: the quote first; only --yes submits (Idempotency-Key, reusable)."""
+    act = args.jobs_cmd
+    extra = {"from_scratch": True if getattr(args, "from_scratch", False) else None,
+             "reason": getattr(args, "reason", None)}
+    body = actions._cont_body(provider=args.provider, max_total_cost_usd=args.max_total_cost_usd, **extra)
+    pv = actions.job_continue_preview(c, args.job_id, act, body)["preview"]
+    if not args.yes:
+        out.emit({"preview": pv, "submitted": False},
+                 lambda d: (print(f"{act} {args.job_id}: the quote (nothing submitted)"), _quote_lines(pv),
+                            print(f"add --yes to {act} (it can cost up to ${body['max_total_cost_usd']} once approved)")))
+        return EXIT_REFUSED      # the quote only: confirmation missing (or not possible now)
+    fn = actions.job_resume if act == "resume" else actions.job_move
+    d = fn(c, args.job_id, body, confirm=True, idempotency_key=args.idempotency_key)
+    if act == "resume":
+        out.emit(d, lambda d: print(f"resumed {args.job_id} as {d['job'].get('job_id')}: {d['job'].get('status')}"
+                                    f"\nidempotency key {d['idempotency_key']}" + (" (replayed)" if d["replayed"] else "")))
+    else:
+        out.emit(d, lambda d: print(f"move of {args.job_id} requested: {(d.get('move_request') or {}).get('status')} "
+                                    "(the job keeps running until a new checkpoint is verified)"
+                                    f"\nidempotency key {d['idempotency_key']}" + (" (replayed)" if d["replayed"] else "")))
+    return EXIT_OK
 
 
 FINISHED = {"reconciled", "validation_failed", "no_eligible_provider", "approval_rejected", "training_completed",
@@ -810,6 +860,82 @@ def _logs(c: Client, args, out: Out) -> int:
     if out.json:
         out.emit({"job_id": args.job_id, "items": collected, "next_after": after})
     return EXIT_OK
+
+
+# ---------------------------------------------------------------- batches (preview, read, cancel; sandbox submit)
+
+def _batch_file(path: str) -> dict:
+    try:
+        with open(path, encoding="utf-8") as f:
+            body = json.load(f)
+    except (OSError, ValueError) as e:
+        raise RefusedError(f"could not read the batch request {path}: {type(e).__name__}", code="invalid_request")
+    if not isinstance(body, dict):
+        raise RefusedError("the batch request file must hold a JSON object", code="invalid_request")
+    return body
+
+
+def cmd_batch(args) -> int:
+    out = Out(args)
+    with client(args) as c:
+        if args.batch_cmd == "preview":
+            d = actions.batch_preview(c, _batch_file(args.file))
+
+            def human(d):
+                t, sub = d.get("totals") or {}, d.get("submission") or {}
+                table([[s["shard_index"], json.dumps(s.get("config")), s.get("provider") or "-",
+                        s.get("price_per_gpu_hour"), s.get("est_max_total_usd"), s.get("reservation_usd")]
+                       for s in d["shards"]], ["SHARD", "CONFIG", "PROVIDER", "$/GPU-H", "EST MAX", "RESERVED"])
+                print(f"reserved ${t.get('reservation_total_usd')} of ${t.get('budget_usd')} budget; would: "
+                      f"{sub.get('would')}" + ("" if sub.get("can_submit") else
+                                               f"  REFUSED: {(sub.get('refusal') or {}).get('code')}"))
+                one = (d.get("alternatives") or {}).get("all_on_one")
+                if one:
+                    print(f"all on {one['provider']}: ${one['est_max_total_usd']}")
+                for w in d.get("warnings") or []:
+                    print(f"note: {w}")
+            out.emit(d, human)
+            return EXIT_OK
+        if args.batch_cmd == "list":
+            d = actions.batches_list(c, status=args.status, limit=args.limit)
+            out.emit(d, lambda d: (table([[b.get("batch_id"), b.get("name"), b.get("status"), b.get("outcome"),
+                                           b.get("shards_total"), "SIMULATED" if b.get("sandbox") else "real"]
+                                          for b in d["items"]], ["BATCH", "NAME", "STATUS", "OUTCOME", "SHARDS", "KIND"])
+                                   if d["items"] else print("no batches")))
+            return EXIT_OK
+        if args.batch_cmd == "status":
+            d = actions.batch_status(c, args.batch_id)
+
+            def human(d):
+                b = d["batch"]
+                print(f"{b.get('batch_id')}: {b.get('status')}  outcome {b.get('outcome') or '-'}  "
+                      f"{json.dumps(b.get('counts'))}" + ("  (SIMULATED)" if b.get("sandbox") else ""))
+                bu = b.get("budget") or {}
+                print(f"  budget ${bu.get('max_total_usd')}: committed ${bu.get('committed_usd')}, spent "
+                      f"${bu.get('spent_usd')}")
+                if (b.get("approval") or {}).get("required"):
+                    print(f"  waiting for the batch approval ({b['approval']['waiting']} shard(s))")
+                for s in b.get("shards") or []:
+                    print(f"  shard {s['shard_index']}: {s['status']}  {s.get('provider') or '-'}  {s.get('job_id') or ''}")
+            out.emit(d, human)
+            return EXIT_OK
+        if args.batch_cmd == "cancel":
+            actions.check_batch_id(args.batch_id)
+            if not args.yes:
+                raise RefusedError(f"batch cancel {args.batch_id}: add --yes to confirm (queued shards are cancelled, "
+                                   "submitted ones cancelled like any job)", code="confirmation_required")
+            d = actions.batch_cancel(c, args.batch_id, confirm=True, idempotency_key=args.idempotency_key)
+            out.emit(d, lambda d: print(f"{d['batch'].get('batch_id')}: {d['batch'].get('status')}\nidempotency key "
+                                        f"{d['idempotency_key']}" + (" (replayed)" if d["replayed"] else "")))
+            return EXIT_OK
+        if args.batch_cmd == "sandbox":
+            out.note("batch sandbox: every shard runs as a SANDBOX job: SIMULATED, no provider is called, nothing is "
+                     "billed. A real batch is submitted on the website, where it is confirmed and approved.")
+            d = actions.batch_sandbox(c, _batch_file(args.file), idempotency_key=args.idempotency_key)
+            out.emit(d, lambda d: print(f"batch {d['batch'].get('batch_id')}: {d['batch'].get('status')} "
+                                        f"{json.dumps(d['batch'].get('counts'))}  (SIMULATED: no GPU, no spend)"))
+            return EXIT_OK
+    return EXIT_ERROR
 
 
 # ---------------------------------------------------------------- demo (sandbox only)
@@ -982,7 +1108,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--mode", default="BALANCED", choices=["CHEAPEST", "FASTEST_AVAILABLE", "BALANCED", "MOST_STABLE"],
                    type=str.upper)
 
-    jobs = sub.add_parser("jobs", help="your jobs (needs deployments:read; cancel needs route:execute)", parents=[common])
+    jobs = sub.add_parser("jobs", aliases=["job"], help="your jobs (needs deployments:read; cancel / resume / move "
+                                                         "need route:execute)", parents=[common])
     jsub = jobs.add_subparsers(dest="jobs_cmd", required=True, metavar="ACTION")
     s = add("list", "list your jobs", cmd_jobs, jsub)
     s.add_argument("--status", help="open or a job state")
@@ -999,6 +1126,41 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("job_id")
     s.add_argument("--yes", "-y", action="store_true", help="confirm the cancel")
     s.add_argument("--idempotency-key", help="reuse to retry the same cancel safely")
+    s = add("resume", "continue a stopped / interrupted job from its latest verified checkpoint (shows the quote; "
+                      "--yes submits; needs route:execute)", cmd_jobs, jsub)
+    s.add_argument("job_id")
+    s.add_argument("--provider", default="best", help="same | best | <provider id> (default best)")
+    s.add_argument("--max-total-cost-usd", type=float, required=True, help="the new attempt's total cost ceiling")
+    s.add_argument("--from-scratch", action="store_true", help="allowed only when no verified checkpoint exists")
+    s.add_argument("--yes", "-y", action="store_true", help="submit after showing the quote")
+    s.add_argument("--idempotency-key", help="reuse to retry the same resume safely")
+    s = add("move", "move a RUNNING job to another GPU: checkpoint, verify, terminate, continue (shows the quote; "
+                    "--yes requests it)", cmd_jobs, jsub)
+    s.add_argument("job_id")
+    s.add_argument("--provider", default="best", help="best | <provider id> (default best: another provider)")
+    s.add_argument("--max-total-cost-usd", type=float, required=True, help="the new attempt's total cost ceiling")
+    s.add_argument("--reason", required=True, help="why (recorded on the job)")
+    s.add_argument("--yes", "-y", action="store_true", help="request the move after showing the quote")
+    s.add_argument("--idempotency-key", help="reuse to retry the same move safely")
+
+    batch = sub.add_parser("batch", help="batches of jobs: preview a plan, status, cancel, run a SANDBOX batch",
+                           parents=[common])
+    bsub = batch.add_subparsers(dest="batch_cmd", required=True, metavar="ACTION")
+    s = add("preview", "placement plan for a batch request (JSON file; writes nothing)", cmd_batch, bsub)
+    s.add_argument("--file", "-f", required=True, help="the POST /v1/batches request body (JSON)")
+    s = add("list", "list your batches", cmd_batch, bsub)
+    s.add_argument("--status", help="open, active, stopping, cancelling or finished")
+    s.add_argument("--limit", type=int, default=20)
+    s = add("status", "one batch: shards, budget, approval, best result", cmd_batch, bsub)
+    s.add_argument("batch_id")
+    s = add("cancel", "cancel a batch (needs --yes; never launches anything)", cmd_batch, bsub)
+    s.add_argument("batch_id")
+    s.add_argument("--yes", "-y", action="store_true", help="confirm the cancel")
+    s.add_argument("--idempotency-key", help="reuse to retry the same cancel safely")
+    s = add("sandbox", "run a batch request as a SANDBOX (simulated, no GPU, no spend; needs route:execute)",
+            cmd_batch, bsub)
+    s.add_argument("--file", "-f", required=True, help="the batch request (JSON); sandbox=true is forced")
+    s.add_argument("--idempotency-key")
 
     demo = sub.add_parser("demo", help="the MNIST SANDBOX demo (simulated, no GPU, no spend)", parents=[common])
     dsub = demo.add_subparsers(dest="demo_cmd", required=True, metavar="ACTION")
@@ -1033,6 +1195,7 @@ def main(argv: list[str] | None = None) -> int:
             setattr(args, k, v)
     args._command = " ".join(x for x in (args.cmd, getattr(args, "gpu_cmd", None), getattr(args, "auth_cmd", None),
                                          getattr(args, "route_cmd", None), getattr(args, "jobs_cmd", None),
+                                         getattr(args, "batch_cmd", None),
                                          getattr(args, "demo_cmd", None), getattr(args, "mcp_cmd", None)) if x)
     try:
         return args.fn(args)

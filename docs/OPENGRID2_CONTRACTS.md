@@ -40,7 +40,8 @@ optional: unknown is `null`, never a guess. The analyzer fills what it has evide
     "gradient_checkpointing": true | null,
     "lora_rank": 16 | null,
     "zero_stage": 0 | 1 | 2 | 3 | null, "cpu_offload": false | null,
-    "epochs": null, "dataset_tokens": null, "dataset_samples": null
+    "epochs": null, "dataset_tokens": null, "dataset_samples": null,
+    "max_steps": null                          // optimizer steps; with global_batch_size x seq_len gives the tokens
   },
   "inference": {
     "concurrency": 8 | null, "context_len": 8192 | null, "output_tokens": null,
@@ -49,6 +50,7 @@ optional: unknown is `null`, never a guess. The analyzer fills what it has evide
   },
   "constraints": {
     "budget_usd": 50 | null, "max_price_per_gpu_hour": null, "runtime_hours": null,
+    "deadline_hours": null,                    // finish within: options estimated to finish later are flagged
     "region": "us" | "eu" | null, "max_gpus": null, "allow_spot": false,
     "vendor": "NVIDIA" | "AMD" | null, "include_providers": [], "exclude_providers": []
   },
@@ -158,6 +160,45 @@ Rules every interface must keep:
 - "Executable" requires the existing readiness checks AND a supported workload (today: the MNIST template).
 - `needs_gpu=false` recommendations must say so plainly and return no options.
 - `allow_spot: null` means not stated (treated as on-demand only); unknown `region` values are a 422 `unknown_region`.
+- A runtime labelled `kind: "measured"` comes only from consented, completed REAL OpenGrid jobs of the same workload
+  signature on that GPU and count (never a sandbox run); everything else stays labelled theoretical / estimated.
+
+Additive fields (workload-intelligence review, 2026-11; methodology/workload-intelligence-review.md). Nothing above
+was renamed or removed:
+
+```jsonc
+{
+  "picks": { ..., "shortest_estimated_runtime": <option-ref> | null },   // never called "fastest": an estimate
+  "explanation": { "recommended_option_id", "label", "rule", "rank_basis": "whole_job_cost" | "hourly_price",
+                   "why": [...], "confidence": {...}, "alternatives": [ { "option_id", "label", "tier", "summary",
+                   "recommended_wins_on": [factor], "this_wins_on": [factor], "confidence": "high|medium|low" } ] },
+  "multi_gpu": { "verdict": "single_gpu" | "scale_up_optional" | "multi_gpu_required", "summary",
+                 "when_not_to_go_multi_gpu": [...], "scale_up": [ { "gpu", "provider", "from", "to", "speedup",
+                 "speedup_range", "link", "parallelism", "job_cost_ratio", "option_ids" } ], "kind": "estimated" },
+  "options": [ {
+    "meets_deadline": "yes" | "likely" | "no" | "unknown" | null,
+    "cost": { ..., "estimated_total": { "usd", "range_usd", "completion_hours", "completion_range_hours",
+              "runtime_kind": "measured" | "theoretical", "startup", "includes_startup", "includes_setup",
+              "unknown_costs", "total_is_lower_bound": true, "basis", "kind": "estimated" } | null },
+    "performance": { ...,
+      "interconnect": { ..., "evidence": { "gpu_link", "gpu_link_source": "listing" | "spec_sheet" | "single_gpu",
+                        "per_direction_gbps", "node_fabric", "node_fabric_gbps", "node_fabric_source", ... } },
+      "parallelism": { "strategy": "single_gpu" | "ddp" | "zero1" | "zero2" | "fsdp" | "tensor_parallel", "label",
+                       "configure" },
+      "communication": { "comm_seconds_lower_bound", "compute_seconds", "comm_to_compute", "verdict", ... } | null,
+      "inference": { "aggregate_tokens_per_s", "aggregate_range", "per_stream_tokens_per_s", "meets_target",
+                     "meets_latency", "cost_per_million_tokens", ... } | null,          // inference only
+      "measured": { "kind": "measured", "n", "unit", "throughput_median", "throughput_range", "confidence",
+                    "runtime": {...} | null, ... } | absent,                            // only with real data
+      "job_cost_measured": { "usd", "range_usd", "runtime_kind": "measured", ... } | absent
+    },
+    "decision": { "confidence": { "level": "high" | "medium" | "low", "limited_by": [...], "reasons": [...],
+                                  "components": {...} },
+                  "vs_recommended": [ { "factor", "this", "recommended", "better": "this" | "recommended" | "same" |
+                                        "unknown", "unit", "kind" } ] | null }
+  } ]
+}
+```
 
 ## 4. Local analyzer output: `opengrid analyze <dir> --json`
 

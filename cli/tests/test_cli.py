@@ -299,6 +299,90 @@ def test_jobs_cancel_needs_yes_and_idempotency_key():
     assert code == 3 and "route:execute" in err
 
 
+def test_jobs_resume_and_move_show_the_quote_then_need_yes():
+    from _support import env
+    api = MockAPI()
+    jid = "job-a37ddf8cf1c1c13f"
+    pv = {"job_id": jid, "action": "resume", "can_submit": True, "from_scratch": False,
+          "quote": {"provider": "lambda", "gpu": "NVIDIA H100 80GB SXM5", "gpu_count": 1, "price_per_gpu_hour": 2.49,
+                    "est_max_total_usd": 1.25, "max_total_cost_usd": 2},
+          "checkpoint": {"job_id": jid, "epoch": 2, "age_seconds": 600}}
+    api.overrides[f"/v1/jobs/{jid}/resume/preview"] = lambda r: httpx.Response(200, json=env(pv))
+    api.overrides[f"/v1/jobs/{jid}/move/preview"] = lambda r: httpx.Response(200, json=env({**pv, "action": "move"}))
+    api.overrides[f"/v1/jobs/{jid}/resume"] = lambda r: httpx.Response(202, json=env({"job_id": "job-b2", "status":
+                                                                                      "pending_approval"}))
+    api.overrides[f"/v1/jobs/{jid}/move"] = lambda r: httpx.Response(202, json=env({"job_id": jid, "status": "training",
+                                                                                    "move_request": {"status":
+                                                                                                     "checkpointing"}}))
+    code, out, err = run_cli(["jobs", "resume", jid, "--max-total-cost-usd", "2"], api, key=SECRET)
+    assert code == 6 and "epoch 2" in out and "--yes" in out, (code, out, err)
+    assert [r.url.path for r in api.requests] == [f"/v1/jobs/{jid}/resume/preview"], "the quote only: nothing submitted"
+    code, out, err = run_cli(["job", "resume", jid, "--max-total-cost-usd", "2", "--provider", "same", "--yes",
+                              "--json"], api, key=SECRET)
+    assert code == 0, err
+    req = api.requests[-1]
+    assert req.url.path == f"/v1/jobs/{jid}/resume" and req.headers["idempotency-key"].startswith("cli-")
+    assert json.loads(req.content) == {"max_total_cost_usd": 2.0, "provider": "same"}
+    code, out, err = run_cli(["jobs", "move", jid, "--max-total-cost-usd", "2", "--reason", "cheaper", "--yes"], api,
+                             key=SECRET)
+    assert code == 0 and "checkpointing" in out, (code, out, err)
+    assert json.loads(api.requests[-1].content) == {"max_total_cost_usd": 2.0, "provider": "best", "reason": "cheaper"}
+    code, out, err = run_cli(["jobs", "resume", jid, "--max-total-cost-usd", "0", "--yes"], api, key=SECRET)
+    assert code == 6 and "max-total-cost-usd" in err
+
+
+BATCH_ID = "bat-0123456789abcdef"
+
+
+def _batch_api(sandbox_ok=True):
+    api = MockAPI()
+    batch = {"batch_id": BATCH_ID, "name": "sweep", "template": "pytorch-mnist", "status": "finished",
+             "outcome": "simulated", "finished": True, "sandbox": sandbox_ok, "simulated": sandbox_ok,
+             "shards_total": 2, "counts": {"succeeded": 2},
+             "budget": {"max_total_usd": 5, "committed_usd": 0, "spent_usd": 0, "remaining_usd": 5},
+             "approval": {"status": "not_required", "required": False, "waiting": []},
+             "shards": [{"shard_index": i, "config": {"learning_rate": 0.001 * (i + 1)}, "status": "succeeded",
+                         "provider": "lambda", "job_id": "job-a37ddf8cf1c1c13f"} for i in range(2)]}
+    plan = {"shards": [{"shard_index": 0, "config": {"learning_rate": 0.001}, "provider": "lambda",
+                        "price_per_gpu_hour": 2.49, "est_max_total_usd": 1.245, "reservation_usd": 1.27}],
+            "totals": {"reservation_total_usd": 1.27, "budget_usd": 5}, "warnings": [],
+            "alternatives": {"all_on_one": {"provider": "lambda", "est_max_total_usd": 1.245}}}
+    meta = {"simulated": sandbox_ok}
+    api.overrides["/v1/batches/preview"] = lambda r: httpx.Response(
+        200, json={"data": {"plan": plan, "submission": {"can_submit": True, "would": "simulated"}}, "meta": {}})
+    api.overrides["/v1/batches"] = lambda r: httpx.Response(201, json={"data": batch, "meta": meta})
+    api.overrides[f"/v1/batches/{BATCH_ID}"] = lambda r: httpx.Response(200, json={"data": batch, "meta": meta})
+    api.overrides[f"/v1/batches/{BATCH_ID}/cancel"] = lambda r: httpx.Response(
+        200, json={"data": {**batch, "cancel": {"requested": False, "jobs": []}}, "meta": {}})
+    return api
+
+
+def test_batch_commands():
+    f = Path(tempfile.mkdtemp()) / "batch.json"
+    f.write_text(json.dumps({"template": "pytorch-mnist", "sweep": {"grid": {"learning_rate": [0.001]}},
+                             "sandbox": False}))
+    api = _batch_api()
+    code, out, err = run_cli(["batch", "preview", "--file", str(f)], api, key=SECRET)
+    assert code == 0 and "lambda" in out and "1.27" in out, (code, out, err)
+    assert all("idempotency-key" not in r.headers for r in api.requests), "a preview is not a submission"
+    code, out, err = run_cli(["batch", "sandbox", "--file", str(f), "--json"], api, key=SECRET)
+    assert code == 0, err
+    [body] = api.bodies("/v1/batches")
+    assert body["sandbox"] is True, "the CLI forces sandbox=true: it never submits a real batch"
+    assert [r for r in api.requests if r.url.path == "/v1/batches"][0].headers["idempotency-key"].startswith("cli-")
+    code, out, err = run_cli(["batch", "status", BATCH_ID], api, key=SECRET)
+    assert code == 0 and "SIMULATED" in out and "shard 1" in out, out
+    code, out, err = run_cli(["batch", "status", "../admin"], api, key=SECRET)
+    assert code == 6 and "not a batch id" in err
+    code, out, err = run_cli(["batch", "cancel", BATCH_ID], api, key=SECRET)
+    assert code == 6 and "--yes" in err
+    code, out, err = run_cli(["batch", "cancel", BATCH_ID, "--yes", "--idempotency-key", "retry-key-123"], api,
+                             key=SECRET)
+    assert code == 0 and api.requests[-1].headers["idempotency-key"] == "retry-key-123"
+    code, out, err = run_cli(["batch", "sandbox", "--file", str(f)], _batch_api(sandbox_ok=False), key=SECRET)
+    assert code != 0 and "SANDBOX" in err, (code, err)
+
+
 def test_demo_train_is_sandbox_only():
     api = MockAPI()
     code, out, err = run_cli(["demo", "train", "--epochs", "2"], api, key=SECRET)
@@ -380,7 +464,7 @@ def test_doctor():
     checks = {c["check"]: c for c in d["checks"]}
     assert checks["health"]["ok"] and checks["auth"]["scopes"] and checks["mcp"]["ok"], checks
     assert checks["capabilities"]["capabilities"]["route:preview"] is True
-    assert len(checks["mcp"]["tools"]) == 13
+    assert len(checks["mcp"]["tools"]) == 16
     code, out, err = run_cli(["doctor"], MockAPI())
     assert "anonymous" in out
     code, out, err = run_cli(["doctor"], MockAPI(), key=BAD_KEY)

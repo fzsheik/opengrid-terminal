@@ -9,11 +9,11 @@
 (() => {
   const { h } = OG;
   const GROUPS = [
-    ["Prices & data", ["data-kinds", "data-visibility", "fx", "data-trust", "freshness", "data-quality", "historical-context", "archived-history", "reserved-prices", "full-cost", "market-context", "power-markets", "live-feeds", "gcp-regions", "dispersion", "families", "hardware"]],
+    ["Prices & data", ["data-kinds", "data-visibility", "fx", "data-trust", "freshness", "data-quality", "historical-context", "archived-history", "reserved-prices", "full-cost", "rl-cost", "market-context", "power-markets", "live-feeds", "gcp-regions", "dispersion", "families", "hardware"]],
     ["Indices & settlement", ["indices", "settlement"]],
     ["Market signals", ["events", "shifts", "opportunities", "news", "news-history", "provider-value", "capacity", "reliability", "uptime", "probes"]],
-    ["Recommendations", ["recommendations", "workloads", "best-execution"]],
-    ["Running jobs", ["jobs", "execution-safety", "runner", "routing", "routing-quality", "provider-capabilities", "adapter-contract-audit", "reservations", "first-live-route"]],
+    ["Recommendations", ["recommendations", "workloads", "workload-intelligence-review", "best-execution"]],
+    ["Running jobs", ["jobs", "batches", "execution-safety", "runner", "routing", "routing-quality", "provider-capabilities", "adapter-contract-audit", "reservations", "first-live-route"]],
     ["Accounts, billing & security", ["security", "billing", "reconciliation", "economics", "alerts"]],
   ];
   const groupOf = name => (GROUPS.find(g => g[1].includes(name)) || ["Other"])[0];

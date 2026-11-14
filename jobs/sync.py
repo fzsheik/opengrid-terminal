@@ -28,7 +28,11 @@ Enforcement (sync_job(enforce=True); terminate = the EXISTING deployments.termin
         deployment degraded / uncertain / stopped on request                     -> one note per silence (state
                                                                                      kept: never papered over)
         deployment terminating / terminated                                      -> nothing: _follow owns it
-    Silence is measured from the later of last_runner_event_at and the newest artifact upload. A gpu sample
+        A provider-initiated stop on UNAMBIGUOUS evidence (_provider_stop: running -> stopped on a provider status read,
+    flagged an interruption, confirmed by a later read settings.job_provider_stop_confirm_seconds on, runner silent
+    since) does not wait for the silence limit: runner_lost (gpu_interrupted) + terminate at once. A stop OpenGrid
+    asked for (a user / operator stop) never is.
+Silence is measured from the later of last_runner_event_at and the newest artifact upload. A gpu sample
     every ~15 s (runner/reporter.py) keeps a live trainer far inside it even through retry backoff (cap 60 s).
 The deployment ending before the runner completed -> failure_code gpu_interrupted when it was an interruption
 (routing/deployments._apply: detail.interruption, it left running without OpenGrid asking), otherwise
@@ -491,6 +495,14 @@ def complete(job_id: str, body: dict, *, token_id: int | None = None, source: st
         status, out_outcome = job.status, job.outcome
     if not sim:
         sync_job(job_id, enforce=True)
+    if not sim and out_outcome == "succeeded":
+        # a completed REAL job becomes a measured performance observation (intelligence/measured.py); it re-checks
+        # every rule itself and never raises, so completion can never fail because of it
+        try:
+            from intelligence import measured
+            measured.record_safely(job_id)
+        except Exception:  # noqa: BLE001
+            pass
     return {"replayed": False, "job_status": status, "outcome": out_outcome}
 
 
@@ -769,6 +781,53 @@ def _silence(s, job, dep, now) -> None:
                        f"{dep.status}; the {dep.status} state stands (resolved by the tracker / reconciliation)", ev)
 
 
+def _provider_stop(s, job, dep, now) -> bool:
+    """A provider-initiated stop taken as an interruption, only on UNAMBIGUOUS evidence (otherwise _silence keeps the
+    old behaviour): the deployment is `stopped`; it got there DIRECTLY from `running` on a provider status read (the
+    event carries the read's state 'stopped' and the provider's own status word) that routing.deployments._apply
+    flagged as an interruption (OpenGrid never asked: no requested_action stop, no stop_requested_at, no terminate);
+    a LATER provider read still said stopped at least settings.job_provider_stop_confirm_seconds after it; the runner
+    has not reported since the stop (a runner still talking contradicts it); the job is running, not completed, not
+    cancelled. Then: runner_lost with failure_code gpu_interrupted and the evidence; _enforce terminates the stopped
+    machine through the existing path and the automatic relaunch treats it like any interruption."""
+    from store.routing import DeploymentEvent
+    secs = int(settings.job_provider_stop_confirm_seconds or 0)
+    if secs <= 0 or dep is None or dep.status != "stopped":
+        return False
+    if job.status not in _WORKLOAD or _completed(job) or job.cancel_requested_at is not None:
+        return False
+    md = dep.provider_metadata or {}
+    if md.get("requested_action") == "stop" or md.get("stop_requested_at") or dep.terminate_requested_at is not None:
+        return False      # OpenGrid (a user or an operator) asked for the stop: never an interruption
+    e = s.scalars(select(DeploymentEvent).where(DeploymentEvent.deployment_id == dep.deployment_id,
+                                                DeploymentEvent.to_status == "stopped")
+                  .order_by(DeploymentEvent.at.desc(), DeploymentEvent.id.desc())).first()
+    if e is None or e.from_status != "running" or not (e.detail or {}).get("interruption"):
+        return False
+    rev = e.evidence or {}
+    if rev.get("state") != "stopped" or not rev.get("provider_status"):
+        return False      # not a provider status read (e.g. a manual transition): ambiguous
+    later = md.get("last_stopped_read") or {}
+    at = _parse_at(later.get("at")) if isinstance(later, dict) else None
+    if at is None or (at - e.at).total_seconds() < secs:
+        return False      # not confirmed by a later read yet
+    last = _last_sign_of_life(s, job)
+    if last is not None and last > e.at:
+        return False      # the runner reported after the provider said stopped: contradictory
+    ev = {**_dep_ev(dep), "provider_stop": {"stopped_at": e.at.isoformat(), "from": e.from_status,
+                                            "provider_status": rev.get("provider_status"),
+                                            "confirmed_by_read_at": at.isoformat(),
+                                            "confirm_seconds": int((at - e.at).total_seconds()),
+                                            "last_runner_event_at": last.isoformat() if last else None,
+                                            "interruptions": dep.interruptions}}
+    _walk(s, job, "runner_lost", actor="system",
+          reason=f"the provider stopped the GPU machine without OpenGrid asking (provider status "
+                 f"{rev.get('provider_status')!r}, still stopped on a read {int((at - e.at).total_seconds())} s "
+                 "later, no runner report since): an interruption; terminating it", evidence=ev, outcome="failed",
+          failure_code="gpu_interrupted", now=now)
+    return True
+
+
 def _enforce(s, job, dep, now) -> str | None:
     from routing import deployments as D
 
@@ -829,7 +888,8 @@ def sync_job(job_id: str, *, enforce: bool = True, now: datetime | None = None, 
             _follow(s, job, dep, now)
             _deployment_checks(s, job, dep)
             if enforce:
-                _silence(s, job, dep, now)
+                if not _provider_stop(s, job, dep, now):
+                    _silence(s, job, dep, now)
                 term = _enforce(s, job, dep, now)
             dep_id = dep.deployment_id
         if S.is_finished(job) or job.status in ("termination_confirmed", "reconciliation_pending"):

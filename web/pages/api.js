@@ -82,6 +82,8 @@
       ["GET", "/v1/costs/billing", "Billing increment and minimum per provider", ""],
       ["GET", "/v1/costs/sources", "Machine-readable cost sources: last fetch, last success, error", ""],
       ["GET", "/v1/costs/presets", "The published reference jobs R0-R3", ""],
+      ["POST", "/v1/costs/rl-estimate", "RL post-training job cost: trainer + rollouts + sandboxes + weight syncs, one cloud vs split, break-even, unknowns named", "JSON body: trainer, rollouts, sandboxes, weights_gb, syncs_per_hour, sync_fanout, hours, storage_gb, or preset"],
+      ["GET", "/v1/costs/rl-presets", "The RL reference jobs RL1-RL3", ""],
       ["GET", "/v1/macro/series", "Market-context series (EIA electricity prices, SEC EDGAR revenue and capex): the catalogue", "source, entity, geo"],
       ["GET", "/v1/macro/series/{series}", "One market-context series: source, unit, latest value", "series*"],
       ["GET", "/v1/macro/series/{series}/history", "One market-context series over time", "series*, since"],

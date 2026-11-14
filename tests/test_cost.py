@@ -360,7 +360,11 @@ def test_never_imported_by_statistics():
     users = sorted(str(p.relative_to(ROOT)) for p in ROOT.rglob("*.py")
                    if ".venv" not in p.parts and "tests" not in p.parts and p.parts[len(ROOT.parts)] != "cost"
                    and pat.search(p.read_text(encoding="utf-8", errors="ignore")))
-    assert users == ["api/cost.py"], f"only the read-only API imports cost/: {users}"
+    # intelligence/workload_fit.py reads only the documented node-fabric SPEC of a listing (estimate.listing_specs),
+    # never a cost component or estimate: it must call nothing else from cost/.
+    assert users == ["api/cost.py", "intelligence/workload_fit.py"], f"only the read-only API imports cost/: {users}"
+    wf = (ROOT / "intelligence" / "workload_fit.py").read_text(encoding="utf-8")
+    assert set(re.findall(r"cost_estimate\.(\w+)", wf)) == {"listing_specs"}, "workload_fit uses only listing_specs"
     print("test_never_imported_by_statistics ok")
 
 

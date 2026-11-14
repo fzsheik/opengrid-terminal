@@ -20,6 +20,9 @@ then a `checkpoint_saved` phase {epoch, name, sha256, bytes}; the reporter uploa
 stay on disk. --resume PATH [--resume-sha256 HEX]: verify the file's sha256, load it weights-only, check it is this
 template's checkpoint for an epoch < config.epochs, restore model/optimizer/RNG and continue at epoch+1 (phase
 `resumed` {from_epoch, next_epoch}); param_l2_change then measures THIS run's change from the loaded weights.
+OUT/.og-checkpoint-now (written by the reporter on OpenGrid's checkpoint_now instruction, a move): a checkpoint is saved
+at the end of the current epoch even off the checkpoint_every_epochs schedule (never after the last epoch), its
+checkpoint_saved phase carries `requested` = the instruction id, and the file is removed.
 
 stdout protocol: one JSON object per line {"og": 1, "type": phase|metric|result|error|log, "at": iso, "data": {..}}.
 Anything else on stdout/stderr is forwarded by the reporter as a plain log line.
@@ -114,6 +117,19 @@ def checkpoint_name(epoch: int) -> str:
 def should_checkpoint(epoch: int, every: int, total: int) -> bool:
     """Every `every` epochs, never after the last one (that state is model.pt, a result)."""
     return bool(every) and every > 0 and epoch < total and epoch % every == 0
+
+
+CHECKPOINT_REQUEST = ".og-checkpoint-now"   # written by runner.reporter on a checkpoint_now instruction
+
+
+def checkpoint_requested(out_dir) -> str | None:
+    """The instruction id the reporter left in OUT/.og-checkpoint-now (a move: OpenGrid asked for a checkpoint now),
+    else None. Consumed by the caller once the checkpoint is saved."""
+    p = Path(out_dir) / CHECKPOINT_REQUEST
+    try:
+        return p.read_text(encoding="utf-8").strip()[:64] or "requested"
+    except OSError:
+        return None
 
 
 def resume_start(ck: dict, cfg: dict) -> int:
@@ -434,15 +450,24 @@ def train(cfg: dict, *, out_dir, data_dir, allow_cpu=False, max_seconds=None, nu
         emit("metric", **row)
         phase("epoch_completed", epoch=epoch, of=cfg["epochs"], train_loss=row["train_loss"],
               test_accuracy=row["test_accuracy"], test_loss=row["test_loss"])
-        if should_checkpoint(epoch, cfg.get("checkpoint_every_epochs", 0), cfg["epochs"]):
+        # A checkpoint_now instruction (a move) forces one at this epoch boundary, the next safe point
+        asked = checkpoint_requested(out_dir) if epoch < cfg["epochs"] else None
+        if asked or should_checkpoint(epoch, cfg.get("checkpoint_every_epochs", 0), cfg["epochs"]):
             try:   # a checkpoint is a convenience: failing to write one never fails the training
                 ck = save_checkpoint(out_dir / CKPT_DIR, epoch, {
                     "format": CKPT_FORMAT, "template": TEMPLATE, "epoch": epoch, "config": dict(cfg),
                     "model": model.state_dict(), "optimizer": opt.state_dict(), "torch_rng": torch.get_rng_state(),
                     "loader_rng": g.get_state(), "history": prior + epochs})
+                if asked:
+                    ck["requested"] = asked
                 emit("phase", phase="checkpoint_saved", **ck)   # ck carries `name`: not phase()
             except OSError as e:
                 phase("checkpoint_failed", epoch=epoch, message=f"{type(e).__name__}: {str(e)[:300]}")
+            if asked:
+                try:
+                    (Path(out_dir) / CHECKPOINT_REQUEST).unlink()
+                except OSError:
+                    pass
 
     final = _param_vector(model)
     l2 = float(torch.linalg.vector_norm(final - initial).item())

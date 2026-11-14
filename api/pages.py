@@ -55,6 +55,7 @@ PAGES: list[tuple[str, str, str, bool]] = [
     ("/events", "Market events", "GPU market events: price moves, new lows and highs, sold-outs, outages.", True),
     ("/reserved", "Reserved prices", "Reserved and committed GPU prices by term (1 month to 5 years), per GPU-hour, with the saving against on-demand. Never mixed into on-demand prices or indices.", True),
     ("/cost", "True cost", "What a GPU job costs per provider once internet egress, storage and billing increments are added to the hourly price. Unpublished components are named, never counted as $0.", True),
+    ("/rl-cost", "RL cost", "What an RL post-training job costs with the trainer and rollout GPUs on one cloud or split across clouds, with weight-sync transfer priced, a break-even, and every unknown named.", True),
     ("/capacity", "Capacity", "What each GPU cloud provider says it can supply right now, by SKU and region.", True),
     ("/uptime", "Provider uptime", "External control-plane uptime and latency for the GPU cloud providers OpenGrid tracks, measured by UptimeProject (CC BY 4.0).", True),
     ("/probes", "Provider probes", "OpenGrid's own probes of GPU cloud APIs from multiple vantage points: availability, latency, failure reasons, and regional vs global.", True),
@@ -64,6 +65,8 @@ PAGES: list[tuple[str, str, str, bool]] = [
     ("/jobs", "Jobs", "Your training jobs: state, outcome, cost and results.", False),
     ("/jobs/new", "New job", "Start a training job: preview the route, submit for approval.", False),
     ("/jobs/{id}", "Job", "One training job: lifecycle, progress, logs, artifacts and cost.", False),
+    ("/batches", "Batches", "Batches of jobs: sweeps and shards spread across GPU clouds under one budget.", False),
+    ("/batch/{id}", "Batch", "One batch: shards, placement, budget, approval and the best result.", False),
     ("/reserve", "Reserve", "Reserved-compute price-lock requests: request, indicative reference, offer, accept.", False),
     ("/reserve/{id}", "Price-lock request", "One price-lock request: status, indicative reference, offer and history.", False),
     ("/route", "Route", "Best-execution routing for GPU workloads.", False),
@@ -105,9 +108,9 @@ PUBLIC_V1 = ("gpus", "markets", "listings", "indices", "events", "news", "provid
 # quotes; the market read is routing.scoring.rank_listings). Exactly these paths; the anonymous rate limit applies.
 # /v1/assistant: the OpenGrid Assistant is READ-ONLY (assistant/tools.py has no mutation tools; it writes no rows,
 # issues no quote, calls no provider); POST only because the question and context are a body.
-PUBLIC_POST = ("/v1/recommend/estimate", "/v1/recommend", "/v1/assistant", "/v1/costs/estimate")
+PUBLIC_POST = ("/v1/recommend/estimate", "/v1/recommend", "/v1/assistant", "/v1/costs/estimate", "/v1/costs/rl-estimate")
 # Never public, whatever else matches: money, private data, operator functions.
-PRIVATE_V1 = ("route", "deployments", "keys", "admin", "ops", "me", "usage", "billing", "watchlists", "alerts", "credentials", "jobs", "quotes",
+PRIVATE_V1 = ("route", "deployments", "keys", "admin", "ops", "me", "usage", "billing", "watchlists", "alerts", "credentials", "jobs", "batches", "quotes",
               "reservations")
 # /internal areas readable without the site password when PUBLIC_PAGES is on (UI-only views that were public at
 # /v1). Not "live" (operator-only, as before).

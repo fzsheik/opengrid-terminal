@@ -15,6 +15,11 @@
                         claimed -> relaunched | stopped | blocked; jobs.retry_of is UNIQUE (one successor per
                         attempt), jobs.root_job_id / attempt link the chain (jobs/relaunch.py)
 
+    job_moves           (migration 0037) one user-requested move of a running job (jobs/continuation.py); at most one
+                        open per job
+    job_runner_instructions  (migration 0037) instructions for the runner (checkpoint_now), delivered on the existing
+                        runner channel
+
 A job's account_id is a plain integer (no cross-domain foreign key); None is the site operator. A job
 references route_request_id / deployment_id / quote_id of the EXISTING execution layer; it never duplicates
 the deployment's state.
@@ -83,6 +88,10 @@ class Job(Base):
     retry_of: Mapped[str | None] = mapped_column(String(40))                   # the failed attempt this one relaunches
     root_job_id: Mapped[str | None] = mapped_column(String(40))                # the chain's first attempt
     attempt: Mapped[int | None] = mapped_column(Integer)                       # 2, 3, ...
+    # How this attempt continues its predecessor (migration 0037_job_resume_move; jobs/continuation.py):
+    # relaunch (automatic, after an interruption) | resume (user, after the machine is gone) | oom_escalation
+    # (automatic, a larger-VRAM GPU after out_of_memory) | move (user, checkpoint -> terminate -> successor).
+    succession_kind: Mapped[str | None] = mapped_column(String(16))
 
 
 class JobEvent(Base):
@@ -197,3 +206,55 @@ class JobRelaunch(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # relaunch (interrupted / lost) | oom_escalation (out_of_memory on a larger-VRAM GPU); migration 0037
+    kind: Mapped[str] = mapped_column(String(16), default="relaunch", server_default="relaunch")
+
+
+class JobMove(Base):
+    """A user-requested move of a running job to another GPU (migration 0037; jobs/continuation.py). At most ONE
+    open move per job (partial unique index on job_id while open): requested -> checkpointing -> terminating ->
+    submitting -> moved | aborted | failed. Nothing is terminated before a NEW verified checkpoint exists."""
+    __tablename__ = "job_moves"
+    __table_args__ = (
+        Index("ux_job_moves_open", "job_id", unique=True,
+              postgresql_where=text("status IN ('requested', 'checkpointing', 'terminating', 'submitting')")),
+        Index("ix_job_moves_job", "job_id", "created_at"),
+    )
+
+    move_id: Mapped[str] = mapped_column(String(40), primary_key=True)         # mv-<hex>
+    job_id: Mapped[str] = mapped_column(String(40))
+    account_id: Mapped[int | None] = mapped_column(Integer)
+    key_id: Mapped[int | None] = mapped_column(Integer)
+    principal_kind: Mapped[str | None] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(16))
+    provider: Mapped[str] = mapped_column(String(32))                          # best | <provider id>
+    max_total_cost_usd: Mapped[float] = mapped_column(Numeric(14, 4))
+    reason: Mapped[str | None] = mapped_column(Text)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    checkpoint_deadline_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    checkpoint: Mapped[dict | None] = mapped_column(JSONB)                     # the NEW verified checkpoint used
+    terminate_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    successor_job_id: Mapped[str | None] = mapped_column(String(40))
+    outcome_code: Mapped[str | None] = mapped_column(String(48))
+    outcome_reason: Mapped[str | None] = mapped_column(Text)
+    detail: Mapped[dict | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class JobRunnerInstruction(Base):
+    """An instruction for the runner on the GPU (migration 0037), delivered on the existing runner channel: the
+    response of POST /v1/jobs/{id}/runner/events and GET /v1/jobs/{id}/runner/instructions (job token only).
+    kind checkpoint_now: save a checkpoint at the next safe point (the end of the current epoch) and upload it."""
+    __tablename__ = "job_runner_instructions"
+    __table_args__ = (Index("ix_job_runner_instructions_job", "job_id", "id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    job_id: Mapped[str] = mapped_column(String(40))
+    kind: Mapped[str] = mapped_column(String(32))
+    ref: Mapped[str | None] = mapped_column(String(40))                         # e.g. the move_id
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

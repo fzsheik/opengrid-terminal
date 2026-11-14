@@ -193,6 +193,15 @@ ROUTE = {"route_request_id": "rr_0123456789abcdef", "preview": True, "gpu": "NVI
 PRIVATE = ("/v1/me", "/v1/jobs", "/v1/route")
 
 
+RL_ESTIMATE = {"same_cluster": {"strategy": "same_cluster", "total": 1477.2, "total_is_lower_bound": False},
+               "split": {"strategy": "split", "total": 630.0, "total_is_lower_bound": False},
+               "best": {"strategy": "best", "total": 630.0, "total_is_lower_bound": False},
+               "comparison": {"split_vs_same_cluster": {"saving": 847.2, "saving_pct": 57.4, "bound": "exact"}},
+               "break_even": {"available": True, "break_even_price_per_gb": 0.4236},
+               "rollout_ranking": {"basis": "Theoretical heuristic", "rows": []},
+               "caveats": ["List prices only."], "unavailable": {}}
+
+
 class MockAPI:
     """Routes requests like the real server: public GETs anonymous; private paths need a valid key + scope."""
 
@@ -259,6 +268,9 @@ class MockAPI:
                                                  "key": {"prefix": key[:13]}, "scopes": scopes}), headers=h)
         if path == "/v1/recommend/estimate":
             return httpx.Response(200, json=env(ESTIMATE, kind="estimated"), headers=h)
+        if path == "/v1/costs/rl-estimate":
+            return httpx.Response(200, json=env(RL_ESTIMATE, kind="estimated", job={"preset": "RL1"},
+                                                notes=["List prices, not quotes."]), headers=h)
         if path == "/v1/recommend":
             return httpx.Response(200, json=env(RECOMMENDATION), headers=h)
         if path == "/v1/route/preview":

@@ -18,6 +18,7 @@ Read 2026-11-01 from the pages listed (research pass for the full-cost spec). Re
 from __future__ import annotations
 
 V = "2026-11-01"  # verified_at for every row read in the 2026-11-01 pass
+V_INGRESS = "2026-11-13"  # the ingress rows (a row's own `verified_at` overrides V)
 
 # --------------------------------------------------------------------------- cost components
 # (provider, component, product, tiers [(start, end|None, price)], raw_unit, extra)
@@ -108,6 +109,42 @@ COMPONENTS: list[dict] = [
     dict(provider="voltagepark", component="egress_internet", product="Data transfer",
          tiers=[(0, None, 0.0)], raw_unit="GB", status="checked", source="https://www.voltagepark.com/pricing",
          notes='"no hidden ingress/egress fees"'),
+    # ---- internet ingress (data in): read for the RL estimator's weight syncs (cost/rl.py), 2026-11-13 unless noted.
+    # Absent = unknown. The hyperscalers' "data in is free" lines could not be read on their pages in this pass
+    # (rendered by script, or refused), so they are listed unverified and count as unknown.
+    dict(provider="azure", component="ingress_internet", product="Data Transfer In", tiers=[(0, None, 0.0)],
+         raw_unit="GB", status="checked", source="https://azure.microsoft.com/en-us/pricing/details/bandwidth/",
+         verified_at=V_INGRESS, notes='"inbound data transfer is free"'),
+    dict(provider="aws", component="ingress_internet", product="Data Transfer IN to EC2 from the internet",
+         tiers=[(0, None, 0.0)], raw_unit="GB", status="unverified", source="https://aws.amazon.com/ec2/pricing/on-demand/",
+         verified_at=V_INGRESS, notes="the page's data-transfer table is rendered by script and was not read"),
+    dict(provider="gcp", component="ingress_internet", product="Ingress", tiers=[(0, None, 0.0)], raw_unit="GB",
+         status="unverified", source="https://cloud.google.com/vpc/network-pricing", verified_at=V_INGRESS,
+         notes="the ingress line was not read on the page in this pass"),
+    dict(provider="oracle", component="ingress_internet", product="Inbound data transfer", tiers=[(0, None, 0.0)],
+         raw_unit="GB", status="unverified", source="https://www.oracle.com/cloud/networking/pricing/",
+         verified_at=V_INGRESS, notes="the page refused the read (HTTP 403)"),
+    dict(provider="nebius", component="ingress_internet", product="Egress/Ingress traffic", tiers=[(0, None, 0.0)],
+         raw_unit="GB", status="checked", source="https://nebius.com/prices", verified_at=V_INGRESS),
+    dict(provider="hyperstack", component="ingress_internet", product="Egress/Ingress traffic", tiers=[(0, None, 0.0)],
+         raw_unit="GB", status="checked", source="https://www.hyperstack.cloud/gpu-pricing", verified_at=V_INGRESS),
+    dict(provider="crusoe", component="ingress_internet", product="Network ingress", tiers=[(0, None, 0.0)],
+         raw_unit="GB", status="checked", source="https://www.crusoe.ai/cloud/pricing", verified_at=V_INGRESS,
+         notes='"does not charge for network ingress or egress" ("at this time")'),
+    dict(provider="runpod", component="ingress_internet", product="Data ingress (Pods)", tiers=[(0, None, 0.0)],
+         raw_unit="GB", status="checked", source="https://docs.runpod.io/pods/pricing", verified_at=V_INGRESS,
+         notes='"no fees for data ingress or egress"'),
+    dict(provider="coreweave", component="ingress_internet", product="Data transfer between CoreWeave and internet",
+         tiers=[(0, None, 0.0)], raw_unit="GB", status="checked", source="https://www.coreweave.com/pricing",
+         verified_at=V_INGRESS, notes="listed at no charge; the page does not name the direction"),
+    dict(provider="lambda", component="ingress_internet", product="Data transfer", tiers=[(0, None, 0.0)],
+         raw_unit="GB", status="checked", source="https://lambda.ai/pricing", notes="no ingress or egress charges"),
+    dict(provider="voltagepark", component="ingress_internet", product="Data transfer", tiers=[(0, None, 0.0)],
+         raw_unit="GB", status="checked", source="https://www.voltagepark.com/pricing",
+         notes='"no hidden ingress/egress fees"'),
+    dict(provider="digitalocean", component="ingress_internet", product="Inbound transfer", tiers=[(0, None, 0.0)],
+         raw_unit="GB", status="checked", source="https://docs.digitalocean.com/products/droplets/details/pricing/",
+         notes="inbound transfer is free"),
     dict(provider="lium", component="block_storage", product="Volume",
          tiers=[(0, None, 0.00005)], raw_unit="GB-hour", status="checked", billed_when_stopped=True,
          source="https://docs.lium.io/billing", notes="billed while detached too"),

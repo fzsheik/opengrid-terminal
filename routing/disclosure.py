@@ -248,4 +248,56 @@ def _recommendation(src: dict, out: dict) -> dict:
     for o in out.get("options") or []:
         if o.get("visibility") == "internal":
             o["summary"] = "Recommended" if best.get("option_id") == o.get("option_id") else LABEL
+    _recommendation_explanations(out, hidden, best.get("option_id") in hidden)
     return out
+
+
+# Factor-by-factor comparisons (intelligence/explain.deltas) that say nothing about an internal option's price,
+# stock or listing score: the only ones kept when the comparison is anchored on an internal option.
+SAFE_DELTA_FACTORS = {"memory_headroom_pct", "effective_throughput", "decode_tokens_per_s", "gpu_link",
+                      "executable_via_opengrid", "estimated_completion_hours"}
+
+
+def _recommendation_explanations(out: dict, hidden: set, best_hidden: bool) -> None:
+    """The workload-intelligence additions (decision, explanation, multi_gpu): an internal option's price, stock and
+    score never show through a comparison with it."""
+    by_id = {o.get("option_id"): o for o in out.get("options") or [] if isinstance(o, dict)}
+    if best_hidden:
+        for o in by_id.values():
+            d = o.get("decision")
+            if isinstance(d, dict) and isinstance(d.get("vs_recommended"), list):
+                d["vs_recommended"] = [e for e in d["vs_recommended"] if e.get("factor") in SAFE_DELTA_FACTORS]
+    ex = out.get("explanation")
+    if isinstance(ex, dict):
+        alts = []
+        for a in ex.get("alternatives") or []:
+            o = by_id.get(a.get("option_id")) or {}
+            if a.get("option_id") in hidden:
+                alts.append({"option_id": a.get("option_id"), "label": a.get("label"), "summary": LABEL})
+                continue
+            a = dict(a, summary=o.get("summary", a.get("summary")))
+            if best_hidden:
+                a["recommended_wins_on"] = [f for f in a.get("recommended_wins_on") or [] if f in SAFE_DELTA_FACTORS]
+                a["this_wins_on"] = [f for f in a.get("this_wins_on") or [] if f in SAFE_DELTA_FACTORS]
+            alts.append(a)
+        if best_hidden:
+            out["explanation"] = {"recommended_option_id": ex.get("recommended_option_id"), "label": ex.get("label"),
+                                  "summary": f"{LABEL}; {QUOTE_NOTE}", "alternatives": alts, "kind": ex.get("kind")}
+        else:
+            ex["alternatives"] = alts
+    mg = out.get("multi_gpu")
+    if isinstance(mg, dict) and isinstance(mg.get("scale_up"), list):
+        touched = False
+        for p in mg["scale_up"]:
+            if any(i in hidden for i in p.get("option_ids") or []) and p.get("job_cost_ratio") is not None:
+                p["job_cost_ratio"] = None
+                touched = True
+        if touched and mg.get("verdict") == "scale_up_optional":
+            ok = sorted({p["gpu"] for p in mg["scale_up"]
+                         if p.get("job_cost_ratio") is not None and p["job_cost_ratio"] <= 1.0})
+            if ok:
+                mg["summary"] = ("fits on one GPU; for " + ", ".join(ok) + " more GPUs are estimated to finish "
+                                 "sooner for the same or a lower whole-job cost")
+            else:
+                mg["verdict"] = "single_gpu"
+                mg["summary"] = "fits on one GPU: stay on one unless you need it finished sooner"

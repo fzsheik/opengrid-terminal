@@ -45,6 +45,17 @@ Decision (consider(job_id); the `job_relaunch` background job every settings.job
        Both carry evidence.relaunch_event for the jobs feed (alerts/channels.py). An internal error -> `blocked`,
        retried next pass, ops alert relaunch_blocked (alerts/ops.py)
 
+OOM escalation (jobs/continuation.consider_oom; retry.on_oom "escalate") runs in the same pass with its own claim row
+(job_relaunches.kind oom_escalation). Resume and Move (user-triggered) are jobs/continuation.py; every successor of an
+attempt, whatever its kind, is the one row allowed by UNIQUE(retry_of).
+
+A batch shard (jobs/batches.py) relaunches through exactly this path; the batch adds an OUTER ceiling: no relaunch
+once the batch is cancelled / stopping (stop batch_stopped), the remaining chain budget is also capped by the batch's
+remaining budget, the successor's routing follows the batch's provider allow / deny lists (not the first attempt's
+placement pin), and a reservation in the batch ledger is taken under the batch's Postgres lock BEFORE the submission
+(stop batch_budget_exhausted otherwise; released if the submission is refused) and attached to the successor in the
+job-creating transaction.
+
 Reliability (routing/reliability.py) reads deployments, never jobs: the interrupted attempt's deployment is counted
 once (its own interruption), the successor is a NEW deployment counted like any other launch.
 """
@@ -356,6 +367,9 @@ def _dec(v):
 
 
 def _stop(job, exc: Stop, ctx: dict) -> dict:
+    if ctx.get("batch_attempt_id"):      # a batch reservation that no successor will use (jobs/batches.py)
+        from jobs import batches as B
+        B.release(ctx["batch_attempt_id"])
     _decide(job.job_id, "stopped", code=exc.code, reason=exc.message, detail=S._jsonable({**ctx, **exc.detail}),
             excluded_providers=ctx.get("excluded_providers"), spend_so_far_usd=_dec(ctx.get("spend_so_far_usd")),
             max_total_usd=_dec(ctx.get("max_total_usd")), est_next_usd=_dec(ctx.get("est_next_usd")),
@@ -493,11 +507,24 @@ def _relaunch(job, ctx: dict) -> dict:
     if remaining <= 0:
         raise Stop("retry_budget_exhausted", f"retry budget exhausted: ${spend['usd']:.2f} spent of the "
                                              f"${p['max_total_usd']:.2f} ceiling")
+    from jobs import batches as B
+    bt = B.relaunch_terms(job)          # None unless a batch shard; raises Stop when the batch forbids it
+    budget_code = "retry_budget_exhausted"
+    if bt is not None:
+        ctx.update(batch_id=bt["batch_id"], batch_remaining_usd=bt["remaining_usd"])
+        if bt["remaining_usd"] < remaining:
+            budget_code = "batch_budget_exhausted"     # the batch, not the shard's retry policy, is the binding limit
+        remaining = min(remaining, bt["remaining_usd"])
+        if remaining <= 0:
+            raise Stop("batch_budget_exhausted", f"batch {bt['batch_id']} budget exhausted: "
+                                                 f"${bt['committed_usd']:.2f} committed of ${bt['max_total_usd']:.2f}")
     epochs = int((root.config or {}).get("epochs") or 1)
     resume, rnotes = pick_resume(job, chain, epochs)
     ctx.update(resume_from=resume, resume_notes=rnotes)
     body = _body(root.spec, exclude=exclude, resume=resume, max_total=remaining,
                  ssh_public_key=_customer_key(job, prev_dep))
+    if bt is not None:
+        B.shape_relaunch_body(bt, body, remaining=remaining)
     # The estimate for the next attempt: the same workload-aware selection submit() runs (no provider call).
     try:
         sel = W.select(body, who)
@@ -508,9 +535,9 @@ def _relaunch(job, ctx: dict) -> dict:
     if not ready:
         by = sel.get("exclusions_by_code") or {}
         if by.get("over_budget") and sel.get("market_best") is None:
-            raise Stop("retry_budget_exhausted", f"retry budget exhausted: no eligible GPU fits the remaining "
-                                                 f"${remaining:.2f} (spent ${spend['usd']:.2f} of "
-                                                 f"${p['max_total_usd']:.2f})", exclusions_by_code=by)
+            raise Stop(budget_code, f"{budget_code.split('_')[0]} budget exhausted: no eligible GPU fits the "
+                                    f"remaining ${remaining:.2f} (spent ${spend['usd']:.2f} of "
+                                    f"${p['max_total_usd']:.2f})", exclusions_by_code=by)
         r = O.refusal_for(sel)
         raise Stop("no_eligible_provider", f"{STOP_TEXT['no_eligible_provider']} ({', '.join(exclude) or 'none'} "
                                            f"excluded): {r.message}"[:2000], refusal_code=r.code,
@@ -520,16 +547,20 @@ def _relaunch(job, ctx: dict) -> dict:
     if spend["usd"] + est > p["max_total_usd"] + 1e-9:
         raise Stop("retry_budget_exhausted", f"retry budget exhausted: ${spend['usd']:.2f} spent + up to ${est:.2f} "
                                              f"for the next attempt > ${p['max_total_usd']:.2f}")
+    batch_ref = None
+    if bt is not None:      # the batch ledger reservation under the batch lock (raises Stop batch_budget_exhausted);
+        batch_ref = B.reserve_relaunch(bt, job.job_id, est=est, body=body)     # _stop() releases it on a refusal
+        ctx.update(batch_attempt_id=batch_ref["attempt_id"], batch_reserved_usd=batch_ref["reserved_usd"])
     cause = CAUSE.get(job.failure_code, job.failure_code)
     from_txt = (f"resuming from epoch {resume['epoch']} of {resume['job_id']}" if resume else
                 "starting from scratch (no stored checkpoint to resume from)")
     chain_info = {"retry_of": job.job_id, "root_job_id": root_of(job), "attempt": n + 1, "max_attempts": m,
-                  "reason": f"attempt {n + 1} of {m}, relaunched after {job.failure_code} on {prev_provider or '?'} "
+                  "kind": "relaunch", "reason": f"attempt {n + 1} of {m}, relaunched after {job.failure_code} on {prev_provider or '?'} "
                             f"({cause}); {from_txt}"}
 
     def run():
         try:
-            code, out = O.submit(body, who, chain=chain_info)
+            code, out = O.submit(body, who, chain=chain_info, batch=batch_ref)
         except O.JobRefused as r:
             raise HTTPException(r.status, r.detail()) from None
         return code, {"job_id": out["job_id"], "status": out["status"],
@@ -596,6 +627,10 @@ def run_all() -> dict:
         out["considered"] += 1
         if r.get("decision") in ("relaunched", "stopped", "blocked"):
             out[r["decision"]] += 1
+    from jobs import continuation     # OOM escalation (opt-in per job: retry.on_oom escalate) rides the same pass
+    oom = continuation.run_oom()
+    if oom["considered"]:
+        out["oom"] = oom
     return out
 
 
@@ -611,7 +646,7 @@ def _job_relaunch():
 def _row_dict(r: JobRelaunch | None) -> dict | None:
     if r is None:
         return None
-    return {"status": r.status, "code": r.reason_code, "reason": r.reason, "next_job_id": r.successor_job_id,
+    return {"status": r.status, "kind": getattr(r, "kind", None) or "relaunch", "code": r.reason_code, "reason": r.reason, "next_job_id": r.successor_job_id,
             "excluded_providers": r.excluded_providers, "resume_from": r.resume_from,
             "spend_so_far_usd": _f(r.spend_so_far_usd), "max_total_usd": _f(r.max_total_usd),
             "est_next_usd": _f(r.est_next_usd), "decided_at": r.decided_at.isoformat() if r.decided_at else None}
@@ -619,7 +654,12 @@ def _row_dict(r: JobRelaunch | None) -> dict | None:
 
 def chain_infos(jobs) -> dict:
     """job_id -> the chain block, for the jobs that have a retry policy or belong to a chain. One query per kind."""
-    jobs = [j for j in jobs if j is not None and (policy(j) or j.retry_of or j.root_job_id)]
+    jobs = [j for j in jobs if j is not None]
+    if not jobs:
+        return {}
+    with normalize.SessionLocal() as s:     # a job that was resumed / moved has a chain block even without a policy
+        has_succ = set(s.scalars(select(Job.retry_of).where(Job.retry_of.in_([j.job_id for j in jobs]))))
+    jobs = [j for j in jobs if policy(j) or j.retry_of or j.root_job_id or j.job_id in has_succ]
     if not jobs:
         return {}
     ids = [j.job_id for j in jobs]
@@ -628,7 +668,9 @@ def chain_infos(jobs) -> dict:
     with normalize.SessionLocal() as s:
         rows = {r.failed_job_id: r for r in s.scalars(select(JobRelaunch).where(
             JobRelaunch.failed_job_id.in_(ids + prev_ids)))}
-        succ = {j.retry_of: j.job_id for j in s.scalars(select(Job).where(Job.retry_of.in_(ids)))}
+        succ_rows = list(s.scalars(select(Job).where(Job.retry_of.in_(ids))))
+        succ = {j.retry_of: j.job_id for j in succ_rows}
+        succ_kind = {j.retry_of: j.succession_kind or "relaunch" for j in succ_rows}
         prevs = {j.job_id: j for j in s.scalars(select(Job).where(Job.job_id.in_(prev_ids)))} if prev_ids else {}
         dep_ids = [j.deployment_id for j in list(jobs) + list(prevs.values()) if j.deployment_id]
         deps = {d.deployment_id: d for d in s.scalars(select(Deployment).where(
@@ -644,6 +686,8 @@ def chain_infos(jobs) -> dict:
                  "next_job_id": (mine.successor_job_id if mine is not None and mine.status == "relaunched" else None)
                  or succ.get(j.job_id),
                  "auto_relaunch_enabled": on, "simulated": bool(j.sandbox), "relaunched_after": None,
+                 "kind": j.succession_kind or ("relaunch" if j.retry_of else None),
+                 "next_kind": succ_kind.get(j.job_id),
                  "relaunch": _row_dict(mine), "stopped": None}
         if mine is not None and mine.status == "stopped":
             block["stopped"] = {"code": mine.reason_code, "reason": mine.reason}
@@ -652,6 +696,7 @@ def chain_infos(jobs) -> dict:
             pd = deps.get(pr.deployment_id) if pr is not None and pr.deployment_id else None
             rf = (prow.resume_from if prow is not None else None) or (j.spec or {}).get("resume_from") or None
             block["relaunched_after"] = {
+                "kind": j.succession_kind or "relaunch",
                 "previous_job_id": j.retry_of, "code": pr.failure_code if pr is not None else None,
                 "cause": CAUSE.get(pr.failure_code) if pr is not None else None,
                 "provider": (pd.provider if pd is not None else None) or ((pr.selection or {}).get("provider")

@@ -55,6 +55,8 @@ class Training(_M):
     epochs: float | None = Field(None, gt=0, le=100_000)
     dataset_tokens: float | None = Field(None, ge=0, le=1e15)
     dataset_samples: float | None = Field(None, ge=0, le=1e13)
+    max_steps: int | None = Field(None, ge=1, le=100_000_000)   # optimizer steps (HF Trainer max_steps); with
+    #                                                             global_batch_size x seq_len it gives the tokens
 
 
 class Inference(_M):
@@ -70,6 +72,7 @@ class Constraints(_M):
     budget_usd: float | None = Field(None, gt=0, le=10_000_000)
     max_price_per_gpu_hour: float | None = Field(None, gt=0, le=10_000)
     runtime_hours: float | None = Field(None, gt=0, le=100_000)
+    deadline_hours: float | None = Field(None, gt=0, le=100_000)   # finish within: options estimated slower are flagged
     region: str | None = Field(None, max_length=32)
     max_gpus: int | None = Field(None, ge=1, le=1_024)
     allow_spot: bool | None = None  # null = not stated: treated as on-demand only

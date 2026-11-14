@@ -446,10 +446,23 @@ def test_constraints():
         assert e.code == "unknown_region"
     else:
         raise AssertionError("unknown region accepted")
-    out = rec(LORA7, limit=2)
-    assert len(out["options"]) <= 3
-    picked = {r["option_id"] for r in out["picks"].values() if r}
-    assert picked <= {o["option_id"] for o in out["options"]}, "picks always reference a listed option"
+    # `limit` caps the list even when the picks are more numerous; the request with the most distinct picks
+    npicks = lambda o: len({r["option_id"] for r in o["picks"].values() if r})
+    body = max((LORA7, FULL8, RESNET, VLLM8), key=lambda b: npicks(rec(b, limit=20)))
+    full = rec(body, limit=20)
+    for lim in (1, 2, 3):
+        out = rec(body, limit=lim)
+        assert len(out["options"]) == min(lim, len(full["options"])), (lim, len(out["options"]))
+        picked = {r["option_id"] for r in out["picks"].values() if r}
+        assert picked <= {o["option_id"] for o in out["options"]}, "picks always reference a listed option"
+        assert out["picks"]["best_for_workload"] == full["picks"]["best_for_workload"], "the recommendation is kept"
+        for k, r in full["picks"].items():      # a pick the limit leaves out is named, never silently dropped
+            if r and not out["picks"][k]:
+                assert "limit=" in out["picks_unavailable"][k], (k, out["picks_unavailable"])
+    distinct = {r["option_id"] for r in full["picks"].values() if r}
+    assert len(distinct) > 1, "the fixture has several distinct picks: limit=1 must drop some"
+    one = rec(body, limit=1)
+    assert [o["option_id"] for o in one["options"]] == [full["picks"]["best_for_workload"]["option_id"]]
 
 
 def test_deterministic_and_read_only():

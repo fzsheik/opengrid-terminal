@@ -35,7 +35,8 @@ OUTSIDE = Path(tempfile.mkdtemp(prefix="og-mcp-outside-")).resolve()
 EXPECTED = {"opengrid_search_gpus", "opengrid_compare_gpus", "opengrid_get_gpu_specs", "opengrid_get_market_context",
             "opengrid_analyze_project", "opengrid_estimate_requirements", "opengrid_recommend_compute",
             "opengrid_preview_route", "opengrid_list_jobs", "opengrid_get_job_status", "opengrid_cancel_job",
-            "opengrid_get_job_logs", "opengrid_start_demo"}
+            "opengrid_get_job_logs", "opengrid_start_demo", "opengrid_preview_batch", "opengrid_batch_status",
+            "opengrid_rl_estimate"}
 WRITES = {"opengrid_preview_route", "opengrid_cancel_job", "opengrid_start_demo"}
 
 
@@ -308,6 +309,28 @@ def test_cancel_needs_confirm():
                                              "idempotency_key": "bad key with spaces"}).is_error
 
 
+def test_batch_preview_and_status_write_nothing():
+    api = MockAPI()
+    bid = "bat-0123456789abcdef"
+    api.overrides["/v1/batches/preview"] = lambda r: httpx.Response(200, json={"data": {
+        "plan": {"shards": [{"shard_index": i, "provider": "lambda", "price_per_gpu_hour": 2.49} for i in range(80)],
+                 "totals": {"reservation_total_usd": 1.27}, "cap": {"max_shards_per_provider": 2}, "unplaced": []},
+        "submission": {"can_submit": True, "would": "pending_approval"}}, "meta": {}})
+    api.overrides[f"/v1/batches/{bid}"] = lambda r: httpx.Response(200, json={"data": {
+        "batch_id": bid, "status": "active", "counts": {"running": 1}, "sandbox": False,
+        "approval": {"status": "none", "required": True, "waiting": [{"shard_index": 0}]}}, "meta": {}})
+    srv, _ = server(api, key=SECRET)
+    r = call(srv, "opengrid_preview_batch", {"request": {"template": "pytorch-mnist", "sandbox": True}})
+    assert not r.is_error, text(r)
+    sc = r.structured_content
+    assert len(sc["shards"]) == 64 and sc["shards_truncated"] and sc["submission"]["would"] == "pending_approval"
+    assert all("idempotency-key" not in q.headers for q in api.requests)
+    r = call(srv, "opengrid_batch_status", {"batch_id": bid})
+    assert not r.is_error and r.structured_content["batch"]["approval"]["waiting"] == 1, text(r)
+    assert call(srv, "opengrid_batch_status", {"batch_id": "../admin"}).is_error
+    assert [q.method for q in api.requests] == ["POST", "GET"]
+
+
 # ---------------------------------------------------------------- logs, the sandbox demo, prompts, the hosted variant
 
 def test_job_logs_paged_and_bounded():
@@ -364,6 +387,25 @@ def test_start_demo_is_sandbox_only():
     srv3, _ = server(MockAPI(), key=LIMITED_KEY)
     r = call(srv3, "opengrid_start_demo", {})
     assert r.is_error and "route:execute" in text(r)
+
+
+def test_rl_estimate():
+    srv, api = server()
+    r = call(srv, "opengrid_rl_estimate", {"preset": "RL1", "rollout_gpus": 64, "interruptible": True, "hours": 24})
+    sc = r.structured_content
+    assert not r.is_error, text(r)
+    assert sc["split"]["total"] == 630.0 and sc["comparison"]["split_vs_same_cluster"]["bound"] == "exact"
+    assert sc["caveats"] and sc["kind"] == "estimated" and sc["job"] == {"preset": "RL1"}
+    assert api.bodies("/v1/costs/rl-estimate")[-1] == {"preset": "RL1", "hours": 24,
+                                                       "rollouts": {"count": 64, "interruptible": True}}
+    assert call(srv, "opengrid_rl_estimate", {}).is_error  # neither a preset nor a trainer
+    assert call(srv, "opengrid_rl_estimate", {"preset": "RL9"}).is_error
+    r = call(srv, "opengrid_rl_estimate", {"trainer_gpu": "h100-80gb-sxm5", "trainer_gpus_per_node": 8, "rollout_gpus": 16,
+                                          "weights_gb": 100, "syncs_per_hour": 2, "hours": 10, "sandbox_count": 4,
+                                          "sandbox_vcpu": 2})
+    assert not r.is_error and api.bodies("/v1/costs/rl-estimate")[-1] == {
+        "weights_gb": 100.0, "syncs_per_hour": 2.0, "hours": 10.0, "trainer": {"gpu": "h100-80gb-sxm5", "count": 8},
+        "rollouts": {"count": 16}, "sandboxes": {"count": 4, "vcpu": 2.0}}
 
 
 def test_prompts():

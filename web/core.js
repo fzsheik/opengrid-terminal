@@ -92,7 +92,7 @@ Full docs: web/README.md.
     const seg0 = parts[1] || "";
     if (seg0 === "admin") return parts[2] ? "admin-" + parts[2] : "admin-execution";
     return { "": "home", gpu: "gpus", gpus: "gpus", provider: "providers", indices: "indices", compare: "compare", methodology: "methodology",
-      markets: "markets", overview: "markets", job: "jobs", jobs: "jobs", deployment: "deployments", developers: "developers" }[seg0] ?? seg0;
+      markets: "markets", overview: "markets", job: "jobs", jobs: "jobs", batch: "batches", deployment: "deployments", developers: "developers" }[seg0] ?? seg0;
   }
 
   // Old hash URLs from the first web UI -> new paths
@@ -861,6 +861,7 @@ Full docs: web/README.md.
     observed: "Read directly from a provider and normalized",
     estimated: "A model or assumption fills a gap",
     transaction: "What an OpenGrid execution actually quoted or paid",
+    measured: "Timed on completed real OpenGrid jobs of this workload (never a sandbox run)",
     archived: "Read by OpenGrid from a public archive (an archived price page or price-list version), not observed live",
   };
   OG.badge = (text, tone, title) => h("span", { class: "badge " + (tone || ""), title: title || null }, text);
