@@ -742,7 +742,9 @@ _LISTINGS_SQL = """
 """
 
 
-def load(job: dict) -> dict:
+def load_inputs() -> dict:
+    """The database read every estimate starts from: fresh public listings, cost components, context. Read-only
+    for the estimate (api/cost.py caches it briefly)."""
     from sqlalchemy import text
 
     import market
@@ -754,6 +756,11 @@ def load(job: dict) -> dict:
         listings = [dict(r._mapping) for r in s.execute(text(_LISTINGS_SQL))]
     listings = [lst for lst in listings if now - lst["observed_at"] <= market.stale_after(lst["provider"])]
     comps += est.vast_components(extra["raw"], listings)
-    out = estimate(job, listings, comps, est.context(extra["raw"], listings))
-    out["notes"] = notes + ["List prices, not quotes. Unknown components are named and never counted as $0."]
+    return {"listings": listings, "components": comps, "notes": notes, "ctx": est.context(extra["raw"], listings)}
+
+
+def load(job: dict, inputs: dict | None = None) -> dict:
+    inp = inputs if inputs is not None else load_inputs()
+    out = estimate(job, inp["listings"], inp["components"], inp["ctx"])
+    out["notes"] = list(inp["notes"]) + ["List prices, not quotes. Unknown components are named and never counted as $0."]
     return out

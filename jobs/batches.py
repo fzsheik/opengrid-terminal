@@ -40,7 +40,8 @@ shard (batch_shard_conflict) and every job of a batch is covered by a reservatio
 
 Approval (SUPERVISED). A shard submitted after the approval (the queue) or re-quoted on expiry is approved by advance()
 under the SAME approval only when its quote is on the approved provider at <= approved price x (1 + tolerance); else
-it waits in needs_reapproval for the next batch approval (a relaunch on another provider always does). The approver
+it waits in needs_reapproval for the next batch approval. Only queue submissions are covered: a relaunch, resume, OOM
+escalation or move of a shard always waits for a fresh batch approval (fresh_approval_required). The approver
 is re-verified each time (the operator, or a key that still exists, is not revoked / expired and is admin +
 platform_admin). LIVE providers launch without approval, exactly as a plain job. Sandbox: every shard is a SIMULATED
 job (no provider, no spend, no approval).
@@ -958,9 +959,28 @@ def _jobs_deps(s, shards) -> tuple[dict, dict]:
     return jobs, deps
 
 
-def _derive(b: Batch, sh: BatchShard, job, chain: dict | None) -> tuple[str, str | None, str | None]:
-    """(status, reason_code, reason) of a shard from its current job."""
+def _submit_pending(sh: BatchShard, att: BatchAttempt | None) -> bool:
+    """A claimed shard whose submission has not attached its job yet: `sh.job_id` is still the job the attempt
+    replaces (a refused earlier try, or None), which says nothing about this submission."""
+    return sh.status == "submitting" and att is not None and att.job_id is None and sh.job_id == att.prev_job_id
+
+
+def _latest_submits(s, batch_id: str) -> dict[int, BatchAttempt]:
+    """shard_index -> its latest submit reservation (a claim of the queue)."""
+    out: dict[int, BatchAttempt] = {}
+    for a in s.scalars(select(BatchAttempt).where(BatchAttempt.batch_id == batch_id, BatchAttempt.kind == "submit")
+                       .order_by(BatchAttempt.id)):
+        out[a.shard_index] = a
+    return out
+
+
+def _derive(b: Batch, sh: BatchShard, job, chain: dict | None, *, submitting: bool = False
+            ) -> tuple[str, str | None, str | None]:
+    """(status, reason_code, reason) of a shard from its current job. submitting: a claimed submission is in flight
+    and `job` is the earlier (refused) try it replaces: the shard stays `submitting` until the new job attaches."""
     stopping = b.cancel_requested_at is not None or b.status in ("stopping", "cancelling")
+    if submitting:
+        return "submitting", None, None
     if job is None:
         return sh.status, sh.reason_code, sh.reason
     if (chain or {}).get("continuation_pending") and not stopping:
@@ -993,7 +1013,8 @@ def _derive(b: Batch, sh: BatchShard, job, chain: dict | None) -> tuple[str, str
 
 def sync_batch(batch_id: str) -> Batch | None:
     """Recompute every shard's status from its job (DB only, never a provider call); recover a submission that
-    crashed before creating a job; finish the batch when every shard is terminal and settled."""
+    crashed before attaching its job (no job yet, or a retry whose new job never attached); finish the batch when
+    every shard is terminal and settled."""
     from jobs import relaunch
     now = _now()
     with normalize.SessionLocal() as s:
@@ -1008,13 +1029,16 @@ def sync_batch(batch_id: str) -> Batch | None:
         chains[jid] = {**(chains.get(jid) or {}), "continuation_pending": True}
     with normalize.SessionLocal.begin() as s:
         b = s.get(Batch, batch_id, with_for_update=True)
+        latest = _latest_submits(s, batch_id)
         for sh0 in shards:
             sh = s.get(BatchShard, sh0.id, with_for_update=True)
             if sh.job_id != sh0.job_id:      # moved on concurrently: the next pass follows the new job
                 continue
             job = jobs.get(sh.job_id) if sh.job_id else None
-            if sh.status == "submitting" and job is None and now - sh.updated_at > STALE_SUBMIT:
-                # crashed before any job existed (attach is atomic with the job): nothing was created
+            pending = _submit_pending(sh, latest.get(sh.shard_index))
+            if sh.status == "submitting" and (job is None or pending) and now - sh.updated_at > STALE_SUBMIT:
+                # crashed before its job attached (attach is atomic with the job): this submission created nothing;
+                # a retry's `job` is the earlier refused try, not this submission
                 for a in s.scalars(select(BatchAttempt).where(BatchAttempt.batch_id == batch_id,
                                                               BatchAttempt.shard_index == sh.shard_index,
                                                               BatchAttempt.job_id.is_(None),
@@ -1024,7 +1048,7 @@ def sync_batch(batch_id: str) -> Batch | None:
                 _event(s, batch_id, "shard_recovered", "a submission that never created a job was put back in the "
                                                        "queue", shard_index=sh.shard_index)
                 continue
-            st, code, why = _derive(b, sh, job, chains.get(sh.job_id) if sh.job_id else None)
+            st, code, why = _derive(b, sh, job, chains.get(sh.job_id) if sh.job_id else None, submitting=pending)
             if st != sh.status or code != sh.reason_code:
                 if st != sh.status:
                     _event(s, batch_id, "shard_" + st, f"shard {sh.shard_index}: {sh.status} -> {st}"
@@ -1184,9 +1208,13 @@ def _within(terms: dict | None, dep, q: dict) -> bool:
 
 def _apply_batch_approval(b: Batch) -> list[dict]:
     """advance(): a shard submitted (or re-quoted) after the batch approval launches under it ONLY within the
-    approved terms; otherwise it waits in needs_reapproval for the next batch approval."""
+    approved terms; otherwise it waits in needs_reapproval for the next batch approval. Only a QUEUE submission (a
+    `submit` reservation) is covered: a resume, OOM escalation, move or relaunch is a new decision about the shard
+    and needs a fresh batch approval, whatever its price."""
     with normalize.SessionLocal() as s:
         waiting = [w for w in _waiting(s, b) if w[0].status == "pending_approval"]
+        kinds = {w[1].job_id: (a.kind if (a := _attempt_of_job(s, w[1].job_id)) is not None else None)
+                 for w in waiting}
     if not waiting:
         return []
     try:
@@ -1195,8 +1223,11 @@ def _apply_batch_approval(b: Batch) -> list[dict]:
         who, why = None, e
     out = []
     for sh, job, dep, q in waiting:
-        if who is None or not _within(sh.approved, dep, q):
+        kind = kinds.get(job.job_id)
+        if who is None or kind != "submit" or not _within(sh.approved, dep, q):
             reason = (f"the batch approver cannot be re-verified ({why.code})" if who is None else
+                      f"a {kind or 'non-queue'} attempt needs a fresh batch approval (the batch approval covers "
+                      "queue submissions only)" if kind != "submit" else
                       f"quote ${float(q.get('quote_price_per_gpu_hour') or 0):.4f}/GPU-h on {dep.provider} is outside "
                       f"the approved terms ({(sh.approved or {}).get('provider') or 'none'} at "
                       f"${float((sh.approved or {}).get('price_per_gpu_hour') or 0):.4f} + "
@@ -1205,7 +1236,8 @@ def _apply_batch_approval(b: Batch) -> list[dict]:
                 row = s.get(BatchShard, sh.id, with_for_update=True)
                 if row.status == "pending_approval":
                     row.status, row.reason_code, row.reason, row.updated_at = "needs_reapproval", \
-                        "outside_approved_terms" if who is not None else why.code, reason, _now()
+                        (why.code if who is None else "fresh_approval_required" if kind != "submit" else
+                         "outside_approved_terms"), reason, _now()
                     _event(s, b.batch_id, "needs_reapproval", f"shard {sh.shard_index}: {reason}",
                            shard_index=sh.shard_index, evidence={"job_id": job.job_id, "quote_id": dep.quote_id})
             out.append({"shard_index": sh.shard_index, "result": "needs_reapproval", "reason": reason})
@@ -1322,10 +1354,19 @@ def _submit_shard(b: Batch, sh: BatchShard, who) -> str:
         _refused_shard(b, row, r.code, r.message, int(row.tries or 0))
         return "refused"
     except Exception:
-        release(att["attempt_id"])
+        release(att["attempt_id"])          # a no-op once the job attached: that job's own spend counts
         with normalize.SessionLocal.begin() as s:
-            s.execute(update(BatchShard).where(BatchShard.id == sh.id, BatchShard.status == "submitting")
-                      .values(status="queued", updated_at=_now()))
+            a = s.get(BatchAttempt, att["attempt_id"], with_for_update=True)
+            if a is not None and a.job_id is None:
+                # nothing attached: back to the queue
+                s.execute(update(BatchShard).where(BatchShard.id == sh.id, BatchShard.status == "submitting")
+                          .values(status="queued", updated_at=_now()))
+            else:
+                # the job exists (and may own a deployment): requeueing would submit a SECOND job for the shard and
+                # orphan this one. The shard stays with its job; sync_batch derives the shard from it.
+                _event(s, b.batch_id, "shard_submit_error", f"shard {sh.shard_index}: the submission of "
+                       f"{a.job_id} raised after the job was created; the shard follows that job",
+                       shard_index=sh.shard_index, evidence={"job_id": a.job_id})
         raise
     with normalize.SessionLocal.begin() as s:
         _event(s, b.batch_id, "shard_submitted", f"shard {sh.shard_index} submitted as {out['job_id']}"

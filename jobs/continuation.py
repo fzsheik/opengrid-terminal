@@ -383,7 +383,9 @@ def resume_check(job, dep) -> tuple[bool, str | None, str | None]:
         return False, "already_continued", f"this job already continues as {succ.job_id}"
     if open_move(job.job_id) is not None:
         return False, "move_in_progress", "a move of this job is in progress"
-    cancelled = job.outcome == "cancelled" and job.failure_code != "moved"
+    # a cancelled job resumes; so does one whose move FAILED after its GPU was terminated (failure_code moved, no
+    # successor, no open move: both checked above), as the move_failed message says
+    cancelled = job.outcome == "cancelled"
     if not cancelled and job.failure_code not in RESUMABLE_CODES:
         if job.outcome in ("succeeded",):
             return False, "not_resumable", "the job finished successfully"
@@ -1072,18 +1074,31 @@ def _step_checkpoint(m: JobMove, now: datetime) -> dict:
             return {"move_id": m.move_id, "status": "aborted", "acted": True}
         return {"move_id": m.move_id, "status": m.status, "acted": False, "waiting": "checkpoint"}
     # The target is re-selected now (the market moved since the request); nothing eligible -> abort, job untouched.
-    who = _mover(m, job)
+    # A refusal from here until the old GPU is terminated (the requester can no longer launch, the batch stopped or
+    # has no budget left) is final too: the move is aborted with its reason, never retried every pass.
+    def abort(code: str, message: str) -> dict:
+        _move_end(m, "aborted", code, f"{message[:300]}: nothing was moved, the job keeps running", event="move_aborted")
+        return {"move_id": m.move_id, "status": "aborted", "acted": True, "code": code}
+
+    try:
+        who = _mover(m, job)
+    except R.Stop as e:
+        return abort(e.code, f"the requester cannot launch now ({e.message})")
     body = successor_body(job, provider=m.provider, prev_provider=_provider_of(job, dep), resume=ck,
                           max_total=float(m.max_total_cost_usd), ssh_public_key=R._customer_key(job, dep))
     prev = _provider_of(job, dep)
     if m.provider == "best" and prev:
         body["routing"]["exclude_providers"] = sorted(set(body["routing"].get("exclude_providers") or ()) | {prev})
-    bt = _batch_terms(job)
-    if bt is not None:
-        _batch_shape(bt, body, remaining=bt["remaining_usd"],
-                     explicit=None if m.provider == "best" else [m.provider])
-        if m.provider == "best" and prev:
-            body["routing"]["exclude_providers"] = sorted(set(body["routing"].get("exclude_providers") or ()) | {prev})
+    try:
+        bt = _batch_terms(job)
+        if bt is not None:
+            _batch_shape(bt, body, remaining=bt["remaining_usd"],
+                         explicit=None if m.provider == "best" else [m.provider])
+            if m.provider == "best" and prev:
+                body["routing"]["exclude_providers"] = sorted(set(body["routing"].get("exclude_providers") or ())
+                                                              | {prev})
+    except Refused as e:
+        return abort(e.code, e.message)
     sel = _select(body, who)
     ready = sel.get("execution_ready")
     if not ready:
@@ -1092,8 +1107,11 @@ def _step_checkpoint(m: JobMove, now: datetime) -> dict:
                   event="move_aborted")
         return {"move_id": m.move_id, "status": "aborted", "acted": True}
     est = float((ready.get("cost") or {}).get("est_max_total") or 0)
-    batch_ref = _batch_reserve(bt, m.job_id, kind="move", est=est, body=body, ref=m.move_id) \
-        if bt is not None else None
+    try:
+        batch_ref = _batch_reserve(bt, m.job_id, kind="move", est=est, body=body, ref=m.move_id) \
+            if bt is not None else None
+    except Refused as e:
+        return abort(e.code, e.message)
     det = {**(m.detail or {}), "batch_ref": batch_ref, "target_at_checkpoint": _quote_view(sel, body)}
     if not _move_set(m.move_id, ("requested", "checkpointing"), status="terminating", checkpoint=S._jsonable(ck),
                      terminate_requested_at=_now(), detail=S._jsonable(det)):

@@ -103,8 +103,9 @@ One approval for the batch: `POST /v1/batches/{id}/approve` (scope `admin`, Idem
   quote: it is never launched silently.
 * A shard submitted LATER (the queue) or re-quoted on expiry is approved by the batch pass under the same approval
   ONLY when its quote is on the approved provider at no more than the approved price x (1 + tolerance). Anything
-  else (a higher price, another provider, a relaunch elsewhere) waits in `needs_reapproval` for the next batch
-  approval. The approver is re-verified each time (the operator, or a key that still exists, is not revoked or
+  else (a higher price, another provider) waits in `needs_reapproval` for the next batch approval. A relaunch,
+  resume, OOM escalation or move of a shard is a new decision, not a queue submission: it always waits in
+  `needs_reapproval` (`fresh_approval_required`) for the next batch approval, whatever its price. The approver is re-verified each time (the operator, or a key that still exists, is not revoked or
   expired, and is still admin + platform_admin).
 * LIVE providers launch without per-launch approval exactly as a plain job does. A sandbox batch needs none
   (`approval_not_required`).
@@ -159,8 +160,11 @@ Diversification is not re-applied to relaunches: a relaunch goes to the best rem
   `UNIQUE(job_id)`. A job is attached to its reservation AND made the shard's current job (compare-and-set on the job
   it replaces) in the same transaction that creates the job row (`orchestrator._create_job` -> `batches.attach`): a
   second live job for one shard is refused by the database (`batch_shard_conflict`) and rolled back.
-* A submission that crashed after its claim but before creating a job (nothing was created: the attach is atomic with
-  the job) is put back in the queue after 15 minutes, its reservation released.
+* A submission that crashed after its claim but before its job attached (nothing was created: the attach is atomic
+  with the job) is put back in the queue after 15 minutes, its reservation released; this includes a retry of a
+  refused shard, whose current job is still the refused try until the new one attaches (the shard stays `submitting`
+  meanwhile, never derived from the refused try). A submission that raised AFTER its job attached is never requeued:
+  the shard follows that job.
 * `POST /v1/batches` uses the idempotency store (same key + same body replays, a different body is 422, a crashed
   attempt that may have created a batch is never re-run).
 

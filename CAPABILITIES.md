@@ -18,11 +18,11 @@ important) what it deliberately does not claim.
 1. [At a glance](#1-at-a-glance)
 2. [Architecture](#2-architecture)
 3. [Market data layer](#3-market-data-layer) (incl. capacity, live feeds, public and internal data tiers)
-4. [Market intelligence](#4-market-intelligence) (incl. 4.2a settlement-grade fixings, reserved prices, full cost)
+4. [Market intelligence](#4-market-intelligence) (incl. 4.2a settlement-grade fixings, reserved prices, full cost, RL cost)
 5. [News & external signals](#5-news--external-signals)
    - [Market context, equities and power markets (beside GPU prices, never mixed)](#5a-market-context-equities-and-power-markets-beside-gpu-prices-never-mixed)
 6. [Execution layer: routing & provisioning](#6-execution-layer-routing--provisioning)
-   - [Training jobs (OpenGrid Jobs)](#6a-training-jobs-opengrid-jobs)
+   - [Training jobs (OpenGrid Jobs)](#6a-training-jobs-opengrid-jobs) (incl. relaunch, resume, OOM escalation, move, batches)
    - [Reserved compute: price-lock requests](#6b-reserved-compute-price-lock-requests-reservations-methodologyreservationsmd)
    - [Workload intelligence, CLI, MCP and assistant](#6c-workload-intelligence-cli-mcp-and-assistant-opengrid-20)
 7. [Reconciliation, billing & cost accounting](#7-reconciliation-billing--cost-accounting)
@@ -49,18 +49,18 @@ important) what it deliberately does not claim.
 | Canonical GPU models | **100**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL); each has a hardware spec row |
 | OpenGrid indices defined | **269**: 100 per-GPU, 100 spot, 40 regional, 25 provider-class, 4 composites (H100 / H200 / A100 class and the overall GPU Compute Index) |
 | News & signal sources | **81** registered, **66** enabled (41 RSS, 4 Atom, 3 US Federal Register, 16 SEC EDGAR, 2 GDELT queries); the 15 disabled ones are listed with the reason. About 55k items stored in production, history backfill included |
-| API operations | **236** in the OpenAPI schema: 214 under `/v1` (73 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 9 admin-only reads (7 power, 2 equities), 4 runner-callback routes, `/v1/openapi.json` and the page routes |
-| Web pages | **42** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar |
-| Database tables | **103** in a freshly migrated database (102 application tables plus `alembic_version`; Postgres, migrated by Alembic: 37 migrations, head `0035_power_markets`) |
-| Background jobs | **31** registered when every optional source is configured, beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync and relaunch, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets…; table 15.2) |
+| API operations | **249** in the OpenAPI schema: 227 under `/v1` (74 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 9 admin-only reads (7 power, 2 equities), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login / logout and the page routes |
+| Web pages | **45** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar. RL cost (`/rl-cost`) sits under GPUs; Batches (`/batches`, `/batch/{id}`) under My Jobs |
+| Database tables | **109** in a freshly migrated database (108 application tables plus `alembic_version`; Postgres, migrated by Alembic: 40 migrations, head `0038_measured_performance`) |
+| Background jobs | **33** registered when every optional source is configured, beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets…; table 15.2) |
 | Capacity (stock) feeds | **32** providers report in-stock state or counts from their own APIs (section 3.6) |
 | Power markets (internal) | EIA-930 grid data, EIA natural gas, CAISO, NYISO, SPP and ERCOT wholesale prices in their own `power_*` tables (about 511 MB in production); admin-only reads, never in a GPU statistic (section 5a) |
 | Provisioning adapters | **9 providers** (Lambda, RunPod, Hyperstack, DigitalOcean, Crusoe/Denvr/Latitude via Shadeform, Vast, Verda) |
 | Discord channels | **4** (ops, deployments, market, news) with OpenGrid-branded embeds |
-| Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination |
+| Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination. Built on top, tested against fake provider APIs only: **batches** (a sweep or shard list as one batch: placement across clouds, one budget, one approval), **resume** from a verified checkpoint, opt-in **OOM escalation** and **move** to another GPU; automatic relaunch / OOM escalation and move are off by default (`JOB_AUTO_RELAUNCH_ENABLED`, `JOB_MOVE_ENABLED`) |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
-| Workload intelligence | GPU memory estimator, project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (14 tools, 3 prompts; hosted at `/mcp` with an API key, or local via uvx), grounded assistant |
-| Automated tests | **124** Python test files + **12** JavaScript test files, all 136 run in parallel by `tests/run_all.py` (and by CI on every push), + **4** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
+| Workload intelligence | GPU memory estimator, project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (hosted at `/mcp` with an API key: 15 tools, 2 prompts; local via uvx: 16 tools, 3 prompts), grounded assistant, RL post-training cost estimator |
+| Automated tests | **135** Python test files + **14** JavaScript test files, all 149 run in parallel by `tests/run_all.py` (and by CI on every push), + **4** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
 
 ---
 
@@ -96,6 +96,9 @@ important) what it deliberately does not claim.
    Training job ─► workload-aware selection ─► the route path above (quote · approval · launch)
         │            cloud-init runner on the GPU ─► callbacks (logs · metrics · artifacts) ─► job_sync
         └── job state machine ◄── automatic termination + reconciliation ◄──────────────────────┘
+
+   Batch ─► placement plan (diversification cap) ─► budget ledger (advisory lock) ─► N ordinary training jobs
+        └── batch_advance: queue · failure policy · one batch approval · relaunch / resume / move inside the budget
 
    index_levels ─► index_fixings (final hours only) ─► hash-chained ledger ─► /v1/fixings + verify
 
@@ -466,7 +469,8 @@ the full-cost estimator (billing increments, storage, egress tiers) and adds per
 Oracle, unknown elsewhere). Returns line items with data kind and source, totals that are lower bounds when anything
 is unknown (never $0), the saving with its bound (exact / at most / at least), a **break-even** transfer $/GB and
 sync rate, a sensitivity table (overhead x syncs/hour), a rollout GPU ranking by memory bandwidth per dollar
-(labelled a theoretical heuristic) and the applicable gaps in plain words. Page `/rl-cost`; MCP tool
+(labelled a theoretical heuristic) and the applicable gaps in plain words. Computed in the threadpool, never on the
+event loop; the listings / components read and each job's result are cached for 5 minutes. Page `/rl-cost`; MCP tool
 `opengrid_rl_estimate`. **Does not:** measure tokens/s, spot reclaim rates or CPU sandbox prices (no dataset yet);
 price inter-region transfer inside one provider (assumed $0 in one cluster), rollout-side storage, engineering
 overhead, enterprise discounts, or compression / partial weight updates; convert a tokens-per-hour target into GPUs.
@@ -706,7 +710,9 @@ One real workload end to end: **"Train Your First AI Model: PyTorch MNIST"** (al
   next larger-VRAM GPU tier from the hardware catalog (same family first) within `retry.max_total_usd`. **Move**
   (`POST /v1/jobs/{id}/move`, owner, off unless `JOB_MOVE_ENABLED`): target selected first, a `checkpoint_now`
   instruction on the runner channel, a NEW verified checkpoint, only then the normal terminate, provider-confirmed
-  gone, then the successor; no checkpoint in time → aborted, job keeps running; at most one open move per job. A
+  gone, then the successor; no checkpoint in time, or a refusal before the terminate (requester's key revoked,
+  batch stopped or out of budget) → aborted with its reason, job keeps running; a successor refused after the
+  terminate → `move_failed`, and the job can then be resumed from that checkpoint; at most one open move per job. A
   read-only **move suggestion** on `GET /v1/jobs/{id}` (≥ 20% cheaper estimated remaining cost after the move
   overhead, or a degraded provider); never automatic. Every successor is an ordinary job through the one submit path
   (`UNIQUE(retry_of)`: one successor per attempt); batch shards reserve in the batch ledger first. Job page Resume… /
@@ -722,8 +728,12 @@ One real workload end to end: **"Train Your First AI Model: PyTorch MNIST"** (al
   and estimate and the total vs all on one cloud. **Budget** `max_total_usd` over all shards AND relaunches: each
   submission reserves its ceiling in a ledger under a Postgres advisory lock (no overspend under concurrency), and the
   reservation is the shard's cost limit, so the launch price cap binds it. **One approval** (`POST
-  /v1/batches/{id}/approve`, admin) approves every shard's exact quote via the existing `engine.approve`; a later shard
-  launches under it only within the approved provider + price tolerance, else waits for re-approval. Concurrency limit
+  /v1/batches/{id}/approve`, admin) approves every shard's exact quote via the existing `engine.approve`; a shard
+  submitted later from the queue launches under it only within the approved provider + price tolerance, else waits
+  for re-approval; a relaunch, resume, OOM escalation or move of a shard always waits for a fresh batch approval
+  (`fresh_approval_required`). A shard never gets a second job from one submission: a submission that errors after
+  its job exists stays with that job, and a retry in flight is never judged by the refused try it replaces (a
+  crashed one is requeued after 15 min). Concurrency limit
   with a queue (`batch_advance` pass, `BATCH_QUEUE_ENABLED`), `continue` / `stop_on_first_failure`, cancel through
   the jobs cancel path, interrupted shards relaunched by `jobs/relaunch.py` inside the batch budget, a SIMULATED
   sandbox mode. Web `/batches`, `/batch/<id>`; CLI `opengrid batch`; MCP `opengrid_preview_batch` /
@@ -733,7 +743,7 @@ One real workload end to end: **"Train Your First AI Model: PyTorch MNIST"** (al
   nvidia-smi and CUDA, trains a small CNN, uploads `model.pt`, `config.json`, `metrics.json`, `env.json`,
   `manifest.json` (sha256-verified) and calls back with a per-job HMAC-derived token (never stored).
   OpenGrid, not the instance, terminates the GPU.
-- **Results**: website `/jobs`, `/jobs/new`, `/jobs/{id}`; API logs / metrics / artifacts; Discord
+- **Results**: website `/jobs`, `/jobs/new`, `/jobs/{id}` (and `/batches`, `/batch/{id}`); API logs / metrics / artifacts; Discord
   `#opengrid-deployments`. Artifacts live in Postgres (optional S3 backend).
   - **My Jobs** (`/jobs`) leads with a plain-English box ("What do you want to run?", see Assistant in 6c), then
     one card per job (Active / Finished) with a one-line status in plain words ("Training", "Waiting for OpenGrid
@@ -782,7 +792,9 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
 - **Recommender** (`intelligence/recommend.py`, `POST /v1/recommend`, `/v1/recommend/estimate`, public, read-only):
   compatible GPUs and counts → fresh on-demand listings via `rank_listings` (never `engine.preview`, no rows
   written) → tiers (lower cost / balanced / higher performance by total effective theoretical throughput) and
-  picks (cheapest advertised, best for the workload, best OpenGrid can run, lowest estimated whole-job cost).
+  picks (cheapest advertised, best for the workload, best OpenGrid can run, lowest estimated whole-job cost,
+  shortest estimated runtime). `limit` caps the option list; every pick is a listed option (with a limit below the
+  number of distinct picks the lower-priority ones are `null`, the reason in `picks_unavailable`).
   Multi-GPU aware (`intelligence/performance.py`): each GPU model's smallest fitting count plus one scale-up
   (2n) option, so 2 x H100 competes with 1 x H200; every option totals its GPUs (TFLOPS, VRAM, bandwidth),
   names the GPU-to-GPU link (NVLink / bridged pairs / PCIe) and applies a stated scaling assumption with a range.
@@ -804,8 +816,10 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
   limits, never reads secrets/weights/datasets, never executes code, redacts secret-looking values, flags
   prompt-injection text; only the structured requirements ever leave the machine. Dry-run mode.
 - **CLI** (`cli/`, `uv tool install ./cli`): doctor, gpu search/show/compare/market, providers, analyze,
-  estimate, recommend, route preview, jobs list/status/logs/cancel, batch preview/list/status/cancel/sandbox
-  (sandbox only), demo train (sandbox only), mcp; `--json`. No command can provision.
+  estimate, recommend, route preview, jobs list/status/logs/cancel/resume/move, batch
+  preview/list/status/cancel/sandbox (sandbox only), demo train (sandbox only), mcp; `--json`. No command provisions
+  directly: `jobs resume` / `jobs move` show the quote first and, with `--yes`, submit through the server's ordinary
+  job path (approval, cost guards, max-price cap); there is no `jobs submit` or real `batch submit`.
 - **MCP server**, one tool set (`cli/src/opengrid_cli/mcp_server.py`) in two deployments:
   - **hosted** at `<server>/mcp` (`api/mcp_remote.py`): streamable HTTP, stateless, JSON responses; connect with
     only the URL and `Authorization: Bearer opg_...` (never the site login, never anonymous, cross-site Origin
@@ -974,9 +988,9 @@ monospaced market tables, and plain-language copy, access states and errors arou
 description is in docs/UI_GUIDE.md.
 
 **Navigation and access**
-- **Home**, then **Explore** (free, no account): **GPUs** (Compare, Explorer, Heatmaps, Providers, Capacity, Reserved prices, True cost, Provider uptime, Provider probes), **Find
+- **Home**, then **Explore** (free, no account): **GPUs** (Compare, Explorer, Heatmaps, Providers, Capacity, Reserved prices, True cost, RL cost, Provider uptime, Provider probes), **Find
   Compute** (Ask the assistant), **Markets** (Indices, Opportunities, Events, News, Watchlists), **Developers**
-  (API docs, API keys, Onboarding). Then **Your workspace** (needs an account): **My Jobs** (Deployments,
+  (API docs, API keys, Onboarding). Then **Your workspace** (needs an account): **My Jobs** (Batches, Deployments,
   Reserve, Route). Methodology at the bottom. **Operator** tools (Execution, Checklist, Partners, Value, Ops)
   appear only for the operator / an admin key.
 - Pages whose data needs an account carry a lock until you are signed in. The top bar shows **"Public access"**
@@ -1007,7 +1021,7 @@ description is in docs/UI_GUIDE.md.
 | Market | Overview · Indices · Index detail · GPUs · GPU detail · GPU family · Providers · Provider detail · Compare · Explorer · Heatmaps · Capacity · Reserved prices · True cost (full-cost estimator) · RL cost (RL post-training estimator) · Provider uptime · Provider probes |
 | Signals | Opportunities · Events · News (feed + timeline) |
 | Find Compute | four guided steps (what you are doing, model or project, what matters incl. **training data** and epochs, recommendation); one recommended option with price, memory per GPU, availability, estimated runtime and whole-job cost, and whether OpenGrid can run it; up to three alternatives; the three or four answers kept apart (lowest advertised price, best fit, execution-ready, lowest cost for the whole job); per-option performance across its GPUs; everything else under Advanced details |
-| Workspace | My Jobs (Needs attention / Active / Completed, simulation vs real tags, a plain-English box) · New job (example job as a free simulation, a real-GPU card with readiness, run your own model) · Job page (at a glance, next step, timeline) · Route (a simple ticket; technical panel folded) · Deployments · Deployment detail · Reserve (price-lock requests) · Request detail · Watchlists |
+| Workspace | My Jobs (Needs attention / Active / Completed, simulation vs real tags, a plain-English box) · New job (example job as a free simulation, a real-GPU card with readiness, run your own model) · Job page (at a glance, next step, timeline; Resume… / Move… with the quote first, a move suggestion banner) · Batches (list) · Batch page (shards, placement, budget, approval, best result) · Route (a simple ticket; technical panel folded) · Deployments · Deployment detail · Reserve (price-lock requests) · Request detail · Watchlists |
 | Developers | three paths (AI assistant over MCP, CLI, REST) with what each needs; two first successes without a key; per-client MCP setup (Claude Code, Cursor, VS Code, Codex, Claude Desktop / claude.ai), each marked tested or not; access requests via GitHub issues · API docs (curated public reference with Try it; the full schema for the operator) · API keys (one access state when signed out; presets) · Onboarding (design partners) |
 | Reference | Methodology · Assistant |
 | Operator | Execution control (modes, kill switches, flags, orphans, resources, validation) · First-route checklist · Partners · Value (economics, quality, reliability, funnel) · Ops (data quality) |
@@ -1082,17 +1096,18 @@ the app:
 | Routing | `/v1/best/{gpu}`, `/v1/route/preview`, `/v1/route`, `/v1/route/{id}`, `…/approve`, `…/reject`, `/v1/quotes/{id}` |
 | Deployments | `/v1/deployments`, `/v1/deployments/{id}`, `…/terminate`, `…/stop`, `…/feedback`, `…/outcome`; launch reliability `/v1/execution/reliability` |
 | MCP (hosted) | `/mcp`: the MCP tool set over streamable HTTP; Bearer API key only (section 6c) |
-| Training jobs | `/v1/jobs/templates`, `/v1/jobs/readiness`, `/v1/jobs/preview`, `/v1/jobs`, `/v1/jobs/{id}`, `…/logs`, `…/metrics`, `…/artifacts`, `…/artifacts/{name}`, `…/cancel`; 4 runner callbacks outside the schema (job token only) |
+| Training jobs | `/v1/jobs/templates`, `/v1/jobs/readiness`, `/v1/jobs/preview`, `/v1/jobs`, `/v1/jobs/{id}`, `…/logs`, `…/metrics`, `…/artifacts`, `…/artifacts/{name}`, `…/cancel`, `…/resume`, `…/resume/preview`, `…/move`, `…/move/preview`; 5 runner callbacks outside the schema (job token only: events, instructions, artifacts, resume, complete) |
+| Batches | `/v1/batches/preview`, `/v1/batches` (GET list, POST submit), `/v1/batches/{id}`, `…/approve` (admin), `…/cancel` |
 | Reservations | `/v1/reservations/reference`, `/v1/reservations/requests`, `/v1/reservations`, `/v1/reservations/{id}`, `…/accept`, `…/withdraw` |
 | Accounts & billing | `/v1/me`, `/v1/keys`, `/v1/scopes`, `/v1/usage`, `/v1/credentials`, `/v1/billing/usage`, `/v1/billing/invoices`, `/v1/billing/policy` |
 | Watchlists | `/v1/watchlists`, `…/items`, `/v1/alerts`, `/v1/alerts/{id}`, `…/test`, `/v1/alerts/firings` |
 | Analytics | `/v1/economics`, `/v1/onboarding`, `/v1/partners/me`, `POST /v1/events/track` (anonymous product analytics) |
-| Admin & ops (73 in the schema, 9 more outside it) | execution control, kill switches, validation, reconciliation, orphans, resources, channels, ops, metrics, traces, checklist, partners, funnel, accounts, fee policies, reservation offers, fixing restatements, methodology change notices; outside the schema: `/v1/ops/power/*` (7) and `/v1/ops/context/equities` (2) |
+| Admin & ops (74 in the schema, 9 more outside it) | execution control, kill switches, validation, reconciliation, orphans, resources, channels, ops, metrics, traces, checklist, partners, funnel, accounts, fee policies, reservation offers, fixing restatements, methodology change notices; outside the schema: `/v1/ops/power/*` (7) and `/v1/ops/context/equities` (2) |
 
-Counts (from `main.app.openapi()` on a freshly migrated database): 236 operations, 214 under `/v1`, 73 of them under
+Counts (from `main.app.openapi()` on a freshly migrated database): 249 operations, 227 under `/v1`, 74 of them under
 `/v1/ops` or `/v1/admin`, 15 under `/internal`, and 7 operator/debug routes at the root (`/health`, `/fetch`,
 `/normalize`, `/raw`, `/raw/summary`, `/raw/payload`, `/unmapped`). The public customer docs at
-**docs.tryopengrid.com** (`docs-site/`) publish one page per customer endpoint (67), generated by
+**docs.tryopengrid.com** (`docs-site/`) publish one page per customer endpoint (69), generated by
 `python -m api.docs_openapi` (internal, website-only and write-side routes left out), with a key-holders-only
 playground that calls the Data API host directly. Full interactive reference: `/api` in the terminal, or `/docs`
 (OpenAPI).
@@ -1104,7 +1119,7 @@ playground that calls the Data API host directly. Full interactive reference: `/
 ### 15.1 Deployment
 Railway, one service + Postgres, built from `pyproject.toml` / `uv.lock`, started by
 `railway.toml` with **exactly one worker** (the poller lives in the web process). Migrations run
-automatically at startup (one head, `0035_power_markets`). A push to GitHub does not trigger a Railway build on its
+automatically at startup (one head, `0038_measured_performance`). A push to GitHub does not trigger a Railway build on its
 own: deploy with `railway up --service opengrid-terminal --detach`. The app **refuses to start in production**
 without `APP_PASSWORD` and `API_KEY_PEPPER`. `RAILPACK_DEPLOY_APT_PACKAGES=git` puts `git` in the image (the dataset
 backfill needs it). Long one-off backfills (`python -m backfill …`, `python -m news.history run`,
@@ -1113,7 +1128,7 @@ deploy, because a deploy restarts the container and stops them; each resumes whe
 deploy separately (`cd docs-site && vercel deploy --prod`).
 
 ### 15.2 Background jobs
-31 jobs are registered when every optional source is configured (`jobs.JOBS`; the provider poll loops run beside
+33 jobs are registered when every optional source is configured (`jobs.JOBS`; the provider poll loops run beside
 them). `OPENGRID_NO_JOBS` starts none; with `POLLER_ENABLED` off, the jobs marked "poller" are not registered.
 
 | Job | Every | Purpose |
@@ -1128,7 +1143,8 @@ them). `OPENGRID_NO_JOBS` starts none; with `POLLER_ENABLED` off, the jobs marke
 | `routing_tracker` | 1 min | deployment status, uptime, usage metering |
 | `job_sync` | 30 s | training jobs: deployment state + runner callbacks → job state; terminate on completion, failure, timeout |
 | `job_relaunch` | 1 min | automatic relaunch of an interrupted job and opt-in OOM escalation (acts only with `JOB_AUTO_RELAUNCH_ENABLED` and a per-job retry) |
-| `job_move` | 30 s | drives user-requested moves: verified checkpoint → terminate → confirmed gone → successor (acts only with `JOB_MOVE_ENABLED`) |
+| `job_move` | 30 s | drives user-requested moves: verified checkpoint → terminate → confirmed gone → successor; a refusal before the terminate aborts the move (acts only with `JOB_MOVE_ENABLED`) |
+| `batch_advance` | 30 s | batches: follow each shard's job, the failure policy, the batch approval for queue shards, submit queued shards into free slots, requeue a crashed submission (`BATCH_QUEUE_ENABLED` off: nothing new is submitted; status, approval and cancel still run) |
 | `reservation_expiry` | 5 min | expire stale price-lock offers and requests |
 | `channel_feeds` | 1 min | Discord deployments / market / news posts |
 | `silence_alerts` | 10 min | ops alert when a provider's prices, listings or capacity go silent; recovery |
@@ -1149,7 +1165,7 @@ them). `OPENGRID_NO_JOBS` starts none; with `POLLER_ENABLED` off, the jobs marke
 | `power_forward` | 12 h | power markets: forward read with overlap, then the cross-analysis (poller; only with `POWER_ENABLED=true`, on in production) |
 
 ### 15.3 Key configuration
-`config.py` defines 153 settings; the ones an operator sets:
+`config.py` defines 171 settings; the ones an operator sets:
 
 | Variable | Purpose |
 |---|---|
@@ -1185,6 +1201,7 @@ them). `OPENGRID_NO_JOBS` starts none; with `POLLER_ENABLED` off, the jobs marke
 | `JOB_PROVIDER_STOP_CONFIRM_SECONDS` | a provider-initiated stop counts as an interruption once a later read confirms it this long after (default 60; 0 = off) |
 | `JOB_MOVE_ENABLED`, `JOB_MOVE_INTERVAL_SECONDS`, `JOB_MOVE_CHECKPOINT_TIMEOUT_MINUTES`, `JOB_MOVE_TERMINATION_TIMEOUT_MINUTES` | moving a running job (default off; 30 s pass; abort after 30 min without a new checkpoint; alert after 60 min unconfirmed) |
 | `JOB_MOVE_SUGGEST_MIN_SAVINGS_PCT`, `JOB_MOVE_OVERHEAD_MINUTES` | the read-only move suggestion (default 20%, 10 min overhead) |
+| `BATCH_MAX_SHARDS`, `BATCH_QUEUE_ENABLED`, `BATCH_ADVANCE_INTERVAL_SECONDS` | batches: at most 64 shards per batch; the queue (default on); the `batch_advance` pass (30 s) |
 | `ASSISTANT_LLM_PROVIDER`, `ANTHROPIC_API_KEY`, `ASSISTANT_LLM_MODEL` | optional LLM for the assistant (off unless both provider and key are set) |
 
 `deploy/make_env.py` builds the Railway variables file and generates the secrets.
@@ -1193,9 +1210,9 @@ them). `OPENGRID_NO_JOBS` starts none; with `POLLER_ENABLED` off, the jobs marke
 
 ## 16. Testing
 
-124 Python test files and 12 JavaScript web test files in `tests/` (plain scripts, each with its own scratch
+135 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
 Postgres database, no real provider calls), plus 4 CLI/MCP test files in `cli/tests/`. `tests/run_all.py` runs all
-136 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
+149 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
 (`.github/workflows/tests.yml`) runs it on every push and pull request against a throwaway Postgres 16 whose zone is
 deliberately not UTC. Beyond the per-module tests:
 - unit and integration tests for every analytics module, API and page;
@@ -1210,6 +1227,10 @@ deliberately not UTC. Beyond the per-module tests:
 - **training jobs**: GPU selection, the job state machine, API, security (token, quotas, injection), the
   runner and bootstrap, and an **end-to-end simulation** (real reporter + real CPU training over HTTP
   against a fake Lambda);
+- **batches, resume and move** (`test_batches.py`, `test_job_resume_move.py`): the budget ledger under concurrent
+  threads, one approval and re-approval, the queue, no second job for a shard after a submission error, a retry in
+  flight never judged by its refused try, relaunch / resume / move inside the batch budget, a move never terminating
+  before a new verified checkpoint, aborts and failed moves, provider-initiated stops;
 - **hosted MCP** (`tests/test_mcp_remote.py`): the real app on uvicorn with real API keys and the official MCP
   client: tool list, the sandbox demo, scopes through the caller's key, every 401/403 path, the key never
   echoed, and a thread-starvation proof (48 concurrent calls on a 6-thread pool finish; without the gate's
@@ -1229,8 +1250,8 @@ deliberately not UTC. Beyond the per-module tests:
 - **archived history, news history, shifts, capacity, freshness, full cost, reserved prices, FX, live feeds, uptime,
   probes, market context, equities and power** (four power files: sources, cross-analysis, NYISO / MISO, SPP / ERCOT
   / PJM / ISO-NE), each parsed from saved real responses in `tests/fixtures_*`;
-- JavaScript tests for the terminal's core, shell, navigation, charts, Find Compute, jobs, cost, reserve, reserved,
-  developers, assistant and execution UI.
+- JavaScript tests for the terminal's core, shell, navigation, charts, Find Compute, jobs, batches, cost, RL cost,
+  reserve, reserved, developers, assistant and execution UI.
 
 Known flaky: `test_jobs_e2e` has failed intermittently ("no usage slice metered"), and `test_money_invariants` can
 exceed the 10-minute timeout on a busy machine.
@@ -1280,7 +1301,8 @@ exceed the 10-minute timeout on a busy machine.
 - **News**: GDELT throttles (HTTP 429 "limit requests"), so GDELT history runs are paced at one request per 5.5 s
   and are slow; the GDELT GPU-cloud query returned nothing before d2fad60.
 - **Execution**: built, hardened, and independently reviewed; **all adapters are still
-  simulated**. Training jobs (§6a) are built and tested but have not run on a real GPU provider yet. The next step is one supervised **Lambda validation run** (≈ $1 realistic, ≤ $1.85
+  simulated**. Training jobs (§6a), batches, resume, OOM escalation and move are built and tested but have not run on
+a real GPU provider yet. The next step is one supervised **Lambda validation run** (≈ $1 realistic, ≤ $1.85
   worst case with the operator abort rule). Customer routes follow only after validation.
 - **Settlement fixings** (§4.2a) and **price-lock requests** (§6b): built and tested; fixing history starts at
   deployment. **No futures, swaps or trading of any kind**: see docs/FUTURES_REGULATORY_PATH.md for the regulated
@@ -1299,7 +1321,7 @@ exceed the 10-minute timeout on a busy machine.
 ## 19. Methodology documents
 
 Every number OpenGrid publishes traces to a document in `methodology/` (also served at
-`/methodology` in the terminal and listed at `GET /v1/methodology`). The 46 documents:
+`/methodology` in the terminal and listed at `GET /v1/methodology`). The 49 documents:
 
 - **Market data:** `data-kinds` · `data-quality` · `data-trust` · `data-visibility` · `freshness` · `capacity` ·
   `live-feeds` · `families` · `hardware` · `fx` · `gcp-regions`
@@ -1309,7 +1331,7 @@ Every number OpenGrid publishes traces to a document in `methodology/` (also ser
 - **Reliability:** `uptime` · `probes` · `reliability`
 - **Execution:** `routing` · `best-execution` · `execution-safety` · `reconciliation` · `provider-capabilities` · `adapter-contract-audit` ·
   `first-live-route` · `routing-quality` · `economics` · `billing`
-- **Jobs, workloads and reservations:** `jobs` · `workloads` · `runner` · `recommendations` · `workload-intelligence-review` · `reservations`
+- **Jobs, workloads and reservations:** `jobs` · `batches` · `workloads` · `runner` · `recommendations` · `workload-intelligence-review` · `reservations`
 - **Operations:** `alerts` · `security`
 
 Two internal-only methodology notes (`methodology/internal/equities.md`, `methodology/internal/natural-gas.md`) are

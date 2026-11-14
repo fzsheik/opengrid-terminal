@@ -818,19 +818,16 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
         elif budget and jc["usd"] > budget + 1e-9:
             x["option"]["limitations"].append(f"estimated job cost ${jc['usd']:,.2f} may exceed your ${budget:,.2f} budget")
 
-    chosen = [x for x in pool][:limit]
-    # every pick must be a listed option: make room by dropping the last option that is NOT a pick (a pick never
-    # displaces another pick, so with a tiny limit the list can exceed it by the number of distinct picks)
-    musts = [m for m in (cheapest, bfw, exe, lowjob, quick) if m is not None]
-    for must in musts:
-        if any(must is y for y in chosen):
-            continue
-        if len(chosen) >= limit:
-            drop = next((i for i in range(len(chosen) - 1, -1, -1)
-                         if not any(chosen[i] is m for m in musts)), None)
-            if drop is not None:
-                chosen.pop(drop)
-        chosen.append(must)
+    # `limit` caps the list. The picks are listed first, in priority order (the recommendation, the executable one,
+    # the cheapest, the lowest job cost, the shortest runtime); the best-ranked other options fill the rest. With a
+    # limit smaller than the distinct picks, the lower-priority picks are not listed and move to picks_unavailable
+    # (below), so a pick always references a listed option.
+    musts: list[dict] = []
+    for m in (bfw, exe, cheapest, lowjob, quick):
+        if m is not None and not any(m is y for y in musts):
+            musts.append(m)
+    musts = musts[:limit]
+    chosen = musts + [x for x in pool if not any(x is m for m in musts)][:limit - len(musts)]
     # presented lower cost -> balanced -> higher performance, cheapest first within a tier (value order breaks ties)
     order = {id(x): i for i, x in enumerate(pool)}
     tier_rank = {"lower_cost": 0, "balanced": 1, "higher_performance": 2}
@@ -904,6 +901,12 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
         out["picks_unavailable"]["best_executable"] = why_not
         notes.append("No option is executable through OpenGrid for this request: " + why_not
                      + ". The market recommendations above still apply.")
+    listed = {x["option"]["option_id"] for x in chosen}
+    for k in [k for k, r in out["picks"].items() if r and r["option_id"] not in listed]:
+        out["picks"][k] = None
+        out["picks_unavailable"][k] = (f"not listed: limit={limit} keeps the higher-priority picks (recommended, "
+                                       "executable, cheapest, lowest job cost, shortest runtime); raise the limit to "
+                                       "see it")
     if not pool:
         for k in ("cheapest_market", "best_for_workload", "best_executable", "lowest_estimated_job_cost",
                   "shortest_estimated_runtime"):

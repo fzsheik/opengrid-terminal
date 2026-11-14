@@ -22,6 +22,7 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 import jobs.batches as B
 from accounts.auth import Principal, require_scope
@@ -73,7 +74,7 @@ def _batches_since(who):
 @router.post("/v1/batches/preview", tags=["batches"], summary="Preview a batch: shards, placement plan, budget")
 async def batch_preview(request: Request, who: Principal = Depends(require_scope("route:preview"))):
     body = await _json_body(request)
-    out = _refused(lambda: B.preview(body, who))
+    out = await run_in_threadpool(_refused, lambda: B.preview(body, who))   # selection + plan: off the event loop
     return envelope(disclosure.redact(out, who), kind=ESTIMATED, methodology=METH,
                     also=["/methodology/jobs", "/methodology/best-execution"])
 
@@ -88,8 +89,10 @@ async def batch_submit(request: Request, who: Principal = Depends(require_scope(
                               methodology=METH, simulated=bool(out.get("sandbox")),
                               also=["/methodology/jobs", "/methodology/execution-safety"])
 
-    return _idem(request, who, "batches", body, run, resource_of=lambda p: (p.get("data") or {}).get("batch_id"),
-                 reclaim_check=_batches_since(who))
+    # the first wave: N ordinary job submissions (selection, quotes, routes): in the threadpool, never on the loop
+    return await run_in_threadpool(_idem, request, who, "batches", body, run,
+                                   resource_of=lambda p: (p.get("data") or {}).get("batch_id"),
+                                   reclaim_check=_batches_since(who))
 
 
 @router.get("/v1/batches", tags=["batches"], summary="Your batches")
@@ -121,13 +124,13 @@ async def batch_approve(batch_id: str, request: Request, who: Principal = Depend
         raise HTTPException(422, {"code": "invalid_quotes", "message": "quotes must map shard_index to quote_id"})
     if reason is not None and (not isinstance(reason, str) or len(reason) > 500):
         raise HTTPException(422, {"code": "invalid_reason", "message": "reason must be a string of at most 500 chars"})
-    _refused(lambda: B._load_batch(batch_id, who, admin_ok=True))   # 404 before claiming a key
+    await run_in_threadpool(_refused, lambda: B._load_batch(batch_id, who, admin_ok=True))   # 404 before a key
 
     def run():
         code, out = _refused(lambda: B.approve(batch_id, who, quotes=quotes, reason=reason))
         return code, envelope(out, kind=TRANSACTION, methodology=METH)
 
-    return _idem(request, who, f"batch_approve:{batch_id}", body, run)
+    return await run_in_threadpool(_idem, request, who, f"batch_approve:{batch_id}", body, run)  # launches: off the loop
 
 
 @router.post("/v1/batches/{batch_id}/cancel", tags=["batches"], summary="Cancel a batch (Idempotency-Key required)")

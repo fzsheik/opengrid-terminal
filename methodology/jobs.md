@@ -390,13 +390,16 @@ killing it unprotected:
    job stored AFTER the request that re-verifies (sha256). None within `JOB_MOVE_CHECKPOINT_TIMEOUT_MINUTES` (default
    30) -> **aborted** (`checkpoint_timeout`): the instruction is withdrawn and the job keeps running untouched. The
    target is re-selected now (nothing eligible -> aborted, untouched); a batch shard reserves the successor's
-   ceiling in the batch ledger here, before anything is terminated.
+   ceiling in the batch ledger here, before anything is terminated. Any refusal at this point (the requester can no
+   longer launch, e.g. `owner_key_revoked`; the batch stopped or has no budget left) is final too: **aborted** with
+   that code, the job untouched, never retried pass after pass.
 3. **terminating.** Only then: the job -> `terminating` (`outcome cancelled`, `failure.code moved`) and the GPU is
    terminated through the existing terminate path; the pass waits for the provider-confirmed termination (an alert
    `move_termination_stalled` after `JOB_MOVE_TERMINATION_TIMEOUT_MINUTES`; never a successor before).
 4. **submitting.** The successor through the ordinary submit path (`succession_kind = move`, `resume_from` = that
    checkpoint), inside the idempotency store (`move:<move_id>`) and `UNIQUE(retry_of)`; **moved**. A refusal here is
-   **failed**: the old machine is gone, the checkpoint is kept, Resume works.
+   **failed**: the old machine is gone, the checkpoint is kept, Resume works (a job cancelled by a failed move,
+   `failure.code moved` with no successor and no open move, is resumable like any cancelled job).
 
 At most one open move per job (a partial unique index; a second request is `move_in_progress`). Each step is a job
 event (`move_requested`, `move_checkpoint_verified`, `move_terminated`, `moved` | `move_aborted` | `move_failed`).

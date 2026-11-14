@@ -325,6 +325,37 @@ def test_api():
         assert d["split"]["trainer"]["gpu"] != H100 and d["split"]["trainer"]["gpu_name"] == H100  # public id + name
         assert m["job"]["rollouts"]["interruption_overhead"] == 1.15
         assert client.post("/v1/costs/rl-estimate", json={"preset": "RL1"}).status_code == 200
+        # public + CPU-heavy: computed off the event loop (a threadpool worker has no running loop), the listings /
+        # components read once per TTL for every job, the result cached per normalized job (never mutated by a reply)
+        import asyncio
+
+        from api import cost as api_cost
+        calls = {"inputs": 0, "on_loop": []}
+        real_inputs, real_load = rl.load_inputs, rl.load
+
+        def counting():
+            calls["inputs"] += 1
+            return real_inputs()
+
+        def probing(j, inputs=None):
+            try:
+                asyncio.get_running_loop()
+                calls["on_loop"].append(True)
+            except RuntimeError:
+                calls["on_loop"].append(False)
+            return real_load(j, inputs)
+
+        api_cost._rl_inputs.cache_clear()
+        api_cost._rl_cached.cache_clear()
+        rl.load_inputs, rl.load = counting, probing
+        try:
+            r1 = client.post("/v1/costs/rl-estimate", json=body).json()
+            r2 = client.post("/v1/costs/rl-estimate", json=body).json()
+            r3 = client.post("/v1/costs/rl-estimate", json={"preset": "RL2"})
+        finally:
+            rl.load_inputs, rl.load = real_inputs, real_load
+        assert r3.status_code == 200 and r1["data"] == r2["data"] and r1["meta"]["notes"] == r2["meta"]["notes"]
+        assert calls == {"inputs": 1, "on_loop": [False, False]}, calls
         for bad, code in (({"preset": "RL9"}, "invalid_preset"), ({"preset": "RL1", "hours": -1}, "invalid_hours"),
                           ({"x": 1}, "unknown_field")):
             r = client.post("/v1/costs/rl-estimate", json=bad)

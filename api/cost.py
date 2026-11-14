@@ -18,9 +18,11 @@ Errors: 413 body over 16 KB, 415 not JSON, 422 {code, message}.
 
 from __future__ import annotations
 
+import copy
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from starlette.concurrency import run_in_threadpool
 
 from accounts.auth import Principal, require_scope
 from api.common import ESTIMATED, OBSERVED, envelope, resolve_gpu
@@ -166,6 +168,21 @@ def rl_presets(limit: int = Query(100, ge=1, le=1000), cursor: str | None = None
                     methodology="rl-cost")
 
 
+@ttl_cache(300, maxsize=1)
+def _rl_inputs() -> dict:
+    """The listings + components read every RL estimate starts from (one scan of compute_listings per 5 minutes)."""
+    return rl.load_inputs()
+
+
+@ttl_cache(300, maxsize=128)
+def _rl_cached(key: str) -> dict:
+    return rl.load(json.loads(key), _rl_inputs())
+
+
+def _rl_estimate(key: str) -> dict:
+    return copy.deepcopy(_rl_cached(key))      # the handler shapes its copy; the cached result stays intact
+
+
 @router.post("/v1/costs/rl-estimate", tags=["cost"],
              summary="RL post-training cost: trainer + rollouts + sandboxes + weight syncs, same cluster vs split")
 async def rl_estimate(request: Request, who: Principal = Depends(READ)):
@@ -173,7 +190,8 @@ async def rl_estimate(request: Request, who: Principal = Depends(READ)):
         job = rl.parse(await _body(request), lambda v: resolve_gpu(v, strict=False))
     except rl.RLInputError as e:
         raise HTTPException(422, {"code": e.code, "message": e.message}) from None
-    out = rl.load(job)
+    # public and CPU-heavy (every plan over every fresh listing): off the event loop, and cached briefly per job
+    out = await run_in_threadpool(_rl_estimate, json.dumps(job, sort_keys=True, default=str))
     notes = out.pop("notes")
     return envelope(out, kind=ESTIMATED, methodology="rl-cost", job=job, notes=notes, rule=RULE,
                     price_concept="list_price")

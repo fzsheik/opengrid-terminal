@@ -723,12 +723,22 @@ def test_batch_shard_budget():
     # over the per-shard limit / what the batch has left -> refused before anything is reserved
     refused(lambda: C.resume(j0, w, {"max_total_cost_usd": 50}), "batch_budget_exhausted", 422)
     n_res = scalar("SELECT count(*) FROM batch_attempts WHERE batch_id = :b", b=bid)
-    code, res = C.resume(j0, w, {"max_total_cost_usd": 2})
+    code, res = C.resume(j0, w, {"provider": "same", "max_total_cost_usd": 2})
     succ = res["job_id"]
     a = q("SELECT kind, status, reserved_usd, prev_job_id FROM batch_attempts WHERE job_id = :j", j=succ)[0]
     assert a[0] == "resume" and a[1] == "attached" and a[3] == j0 and float(a[2]) <= 2, a
     assert scalar("SELECT count(*) FROM batch_attempts WHERE batch_id = :b", b=bid) == n_res + 1
     assert _shard_job(bid)[0] == succ, "the successor is the shard's current job (compare-and-set)"
+    # the same provider, within the batch's approved terms: still NOT launched under the batch approval (a resume
+    # is a new decision; only queue submissions are covered)
+    assert T.job_row(succ).selection["provider"] == p
+    n_creates = len(sim.creates()) + len(RL.SIM2.creates())
+    B.advance(bid)
+    assert _shard_job(bid)[1] == "needs_reapproval", _shard_job(bid)
+    assert q("SELECT reason_code FROM batch_shards WHERE job_id = :j", j=succ)[0][0] == "fresh_approval_required"
+    assert len(sim.creates()) + len(RL.SIM2.creates()) == n_creates, "nothing launched without a fresh approval"
+    B.approve(bid, OPERATOR)
+    assert len(sim.creates()) + len(RL.SIM2.creates()) == n_creates + 1
     with normalize.SessionLocal() as s:
         led = B.ledger(s, bid)
     assert led["committed_usd"] <= 20 and any(x["kind"] == "resume" for x in led["attempts"]), led
@@ -784,6 +794,73 @@ def test_batch_shard_budget():
     assert a[1] == "attached" and a[2] == succ and _shard_job(bid)[0] == succ, a
     B.advance(bid)
     assert _shard_job(bid)[1] in ("pending_approval", "needs_reapproval", "running"), _shard_job(bid)
+
+
+def test_failed_move_resumes_and_refusals_abort():
+    """A move whose successor was refused AFTER the old GPU was terminated (move_failed, failure_code moved, no
+    successor) can be resumed, as its message says; a refusal between the new checkpoint and the termination (the
+    requester's key revoked, the batch stopped) aborts the move with its reason instead of retrying it every pass."""
+    sim = world()
+    w = RL.owner()
+    jid = _running(w, sim)
+    C.request_move(jid, w, {"max_total_cost_usd": 2, "reason": "cheaper"})
+    mv = C.open_move(jid)
+    T._ckpt(jid, 3)
+    assert C.advance_move(mv.move_id)["status"] == "terminating"
+    T.drive_to_end(jid, 8)
+    before = n_jobs()
+    adapters.unregister("lambdb")            # the only other provider disappears: the successor is refused
+    try:
+        r = C.advance_move(mv.move_id)
+    finally:
+        adapters.register("lambdb", RL.LambdbAdapter)
+    assert r["status"] == "failed", r
+    j = T.job_row(jid)
+    assert (j.outcome, j.failure_code) == ("cancelled", "moved") and successors(jid) == [] and n_jobs() == before
+    assert "Resume the job to try again" in C.latest_move(jid).outcome_reason
+    act = O.get(jid, w)["actions"]["resume"]
+    assert act["available"], act
+    code, out = C.resume(jid, w, {"provider": "same", "max_total_cost_usd": 2})
+    assert code == 202 and T.job_row(out["job_id"]).spec["resume_from"]["epoch"] == 3, out
+    refused(lambda: C.resume(jid, w, {"max_total_cost_usd": 2}), "already_continued", 409)
+
+    # the requester's key is revoked once the new checkpoint exists: aborted (before anything is terminated)
+    sim = world()
+    w = RL.owner()
+    jid = _running(w, sim)
+    C.request_move(jid, w, {"max_total_cost_usd": 2, "reason": "cheaper"})
+    mv = C.open_move(jid)
+    T._ckpt(jid, 3)
+    keys.revoke_key(w.key_id)
+    r = C.advance_move(mv.move_id)
+    assert r["status"] == "aborted" and r["acted"], r
+    m = C.latest_move(jid)
+    assert m.status == "aborted" and m.outcome_code == "owner_key_revoked", (m.status, m.outcome_code)
+    assert T.job_row(jid).status == "training" and not sim.terminates() and C.open_move(jid) is None
+    assert C.run_moves()["open"] == 0
+
+    # a shard whose batch stopped once the new checkpoint exists: aborted, nothing reserved, nothing terminated
+    sim = world()
+    w = RL.owner()
+    code, out = B.submit(_bbody(n=1), w)
+    bid = out["batch_id"]
+    B.approve(bid, OPERATOR)
+    j0 = _shard_job(bid)[0]
+    for _ in range(3):
+        T.workers(1)
+    evs, _ = T.happy_events()
+    T.runner_events(j0, evs[:-1])
+    T._ckpt(j0, 1)
+    C.request_move(j0, w, {"max_total_cost_usd": 2, "reason": "cheaper"})
+    mv = C.open_move(j0)
+    T._ckpt(j0, 3)
+    with normalize.SessionLocal.begin() as s:
+        s.execute(text("UPDATE batches SET status = 'stopping' WHERE batch_id = :b"), {"b": bid})
+    n_term = len(sim.terminates()) + len(RL.SIM2.terminates())
+    r = C.advance_move(mv.move_id)
+    assert r["status"] == "aborted" and C.latest_move(j0).outcome_code == "batch_stopped", r
+    assert len(sim.terminates()) + len(RL.SIM2.terminates()) == n_term
+    assert scalar("SELECT count(*) FROM batch_attempts WHERE batch_id = :b AND kind = 'move'", b=bid) == 0
 
 
 # --------------------------------------------------------------------------
@@ -872,7 +949,8 @@ def test_migration_matches_models():
 
 TESTS = [test_provider_stop_classification, test_resume_happy_path_and_refusals, test_resume_http_scope_and_idempotency,
          test_oom_escalation, test_move_order_and_abort, test_move_no_double_move_concurrency,
-         test_runner_side_instruction, test_batch_shard_budget, test_move_suggestion, test_migration_matches_models]
+         test_runner_side_instruction, test_batch_shard_budget, test_failed_move_resumes_and_refusals_abort,
+         test_move_suggestion, test_migration_matches_models]
 
 
 def main(only=None) -> int:

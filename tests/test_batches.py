@@ -450,6 +450,96 @@ def test_live_queue_switch_owner_and_recovery():
     assert g["status"] == "finished" and g["outcome"] == "partial", (g["status"], g["outcome"])
 
 
+def test_submit_error_after_attach_never_double_submits():
+    """A submission that raised AFTER its job attached (e.g. a transient error once engine.route created the
+    deployment) is never put back in the queue: the next pass must not create a second job for the shard."""
+    world()
+    w = owner()
+    settings.batch_queue_enabled = False
+    code, out = B.submit(bbody(n=1), w)
+    bid = out["batch_id"]
+    settings.batch_queue_enabled = True
+    real_get = O.get
+
+    def boom(*a, **kw):
+        raise RuntimeError("transient database error after the route")
+
+    O.get = boom
+    try:
+        try:
+            B.advance(bid)
+            raise AssertionError("the error propagates")
+        except RuntimeError:
+            pass
+    finally:
+        O.get = real_get
+    sh = shards(bid)[0]
+    j1 = sh["job_id"]
+    assert j1 and sh["status"] == "submitting", sh
+    assert T.dep_row(j1) is not None and scalar("SELECT count(*) FROM jobs") == 1
+    assert scalar("SELECT status FROM batch_attempts WHERE job_id = :j", j=j1) == "attached"
+    B.advance(bid)
+    B.advance(bid)
+    sh = shards(bid)[0]
+    assert sh["job_id"] == j1 and sh["status"] == "pending_approval" and sh["attempts"] == 1, sh
+    assert scalar("SELECT count(*) FROM jobs") == 1 and scalar("SELECT count(*) FROM deployments") == 1
+    assert "shard_submit_error" in [r[0] for r in q("SELECT kind FROM batch_events WHERE batch_id = :b", b=bid)]
+    B.approve(bid, OPERATOR)
+    assert creates() == {"lambda": 1, "lambdb": 0}
+
+
+def test_retry_in_flight_never_derived_from_refused_try():
+    """A retryable-refused shard still points at its refused job; while its retry is claimed (submitting), a
+    concurrent sync (UI polling) must not mark it failed from the refused try (with stop_on_first_failure that would
+    stop the batch); a retry that crashed before its job attached goes back to the queue."""
+    world()
+    w = owner()
+    settings.batch_queue_enabled = False
+    code, out = B.submit(bbody(n=2, policy={"on_failure": "stop_on_first_failure"}), w)
+    bid = out["batch_id"]
+    settings.batch_queue_enabled = True
+    real_route = O._route
+
+    def refuse(job_id, *a, **kw):
+        raise O.JobRefused("price_changed", "the price moved", 409)
+
+    O._route = refuse
+    try:
+        B.advance(bid)
+    finally:
+        O._route = real_route
+    sh = shards(bid)
+    j0 = sh[0]["job_id"]
+    assert sh[0]["status"] == "queued" and sh[0]["reason_code"] == "price_changed" and j0, sh[0]
+    assert T.job_row(j0).outcome == "failed" and T.job_row(j0).deployment_id is None
+    # a retry is claimed (queued -> submitting, reservation) and is in flight; the UI polls the batch
+    att = B.reserve(bid, 0, amount=1.27, kind="submit", claim_shard=True, check_slots=True)
+    B.sync_batch(bid)
+    B.get(bid, w)
+    s0 = shards(bid)[0]
+    assert s0["status"] == "submitting" and s0["job_id"] == j0, s0
+    assert scalar("SELECT count(*) FROM batch_events WHERE batch_id = :b AND kind = 'shard_failed'", b=bid) == 0
+    with normalize.SessionLocal.begin() as s:     # keep shard 1 out of the queue: only shard 0 is under test
+        s.execute(text("UPDATE batch_shards SET status = 'refused' WHERE batch_id = :b AND shard_index = 1"),
+                  {"b": bid})
+    settings.batch_queue_enabled = False
+    B.advance(bid)
+    settings.batch_queue_enabled = True
+    g = B.get(bid, w)
+    assert g["status"] == "active", ("stop_on_first_failure never fires on a refused earlier try", g["policy"])
+    # the retry crashed before its job attached: after the stale window it is put back, its reservation released
+    with normalize.SessionLocal.begin() as s:
+        s.execute(text("UPDATE batch_shards SET updated_at = now() - interval '1 hour' WHERE batch_id = :b AND "
+                       "shard_index = 0"), {"b": bid})
+    B.sync_batch(bid)
+    assert shards(bid)[0]["status"] == "queued"
+    assert scalar("SELECT status FROM batch_attempts WHERE id = :a", a=att["attempt_id"]) == "released"
+    B.advance(bid)
+    s0 = shards(bid)[0]
+    assert s0["job_id"] != j0 and s0["status"] == "pending_approval", s0
+    assert T.job_row(s0["job_id"]).deployment_id is not None and B.get(bid, w)["status"] == "active"
+
+
 def shards_quote(bid, idx):
     return T.dep_row(shards(bid)[idx]["job_id"]).quote_id
 
@@ -796,6 +886,33 @@ def test_api_scopes_idempotency_status_codes():
     # a shard's job links back to its batch
     jid = rb["shards"][0]["job_id"]
     assert client.get(f"/v1/jobs/{jid}", headers=h).json()["data"]["batch"]["batch_id"] == rb["batch_id"]
+    # preview / submit / approve run in the threadpool (a worker thread has no running event loop), never on the
+    # single worker's loop
+    import asyncio
+    seen = []
+
+    def probe(fn):
+        def wrapped(*a, **kw):
+            try:
+                asyncio.get_running_loop()
+                seen.append((fn.__name__, "loop"))
+            except RuntimeError:
+                seen.append((fn.__name__, "thread"))
+            return fn(*a, **kw)
+        return wrapped
+
+    real = (B.preview, B.submit, B.approve)
+    B.preview, B.submit, B.approve = (probe(f) for f in real)
+    try:
+        assert client.post("/v1/batches/preview", headers=h, json=bbody(n=2)).status_code == 200
+        r = client.post("/v1/batches", headers={**h, "Idempotency-Key": str(uuid.uuid4())}, json=bbody(n=2))
+        assert r.status_code == 202, r.text
+        r = client.post(f"/v1/batches/{r.json()['data']['batch_id']}/approve",
+                        headers={**HDR, "Idempotency-Key": str(uuid.uuid4())}, json={})
+        assert r.status_code == 200, r.text
+    finally:
+        B.preview, B.submit, B.approve = real
+    assert seen == [("preview", "thread"), ("submit", "thread"), ("approve", "thread")], seen
 
 
 # --------------------------------------------------------------------------
@@ -838,6 +955,7 @@ def test_migration_matches_models():
 
 TESTS = [test_validation_and_grid, test_placement_and_diversification_cap, test_sandbox_end_to_end,
          test_one_approval_and_queue, test_requote_needs_reapproval, test_live_queue_switch_owner_and_recovery,
+         test_submit_error_after_attach_never_double_submits, test_retry_in_flight_never_derived_from_refused_try,
          test_budget_atomic_under_concurrency,
          test_interruption_relaunch_within_batch_budget, test_stop_on_first_failure_and_continue, test_cancel,
          test_api_scopes_idempotency_status_codes, test_migration_matches_models]
