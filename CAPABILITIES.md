@@ -43,23 +43,25 @@ important) what it deliberately does not claim.
 
 ## 1. At a glance
 
+Counts recomputed from the code on 2026-11-13.
+
 | | |
 |---|---|
-| GPU clouds monitored | **60**, 59 published (Fireworks AI is the only wholly internal provider: used for routing, never republished; two more sources of public providers are internal, DeepInfra's container-API prices and AWS's Spot Advisor bands, section 3.8) (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb, Civo, Atlantic.Net, E2E Networks, Modal, Replicate, Baseten, Beam, Arkane Cloud, VESSL AI, Mithril, DeepInfra, SimplePod, Nosana, Thunder Compute, Clore.ai, Paperspace, Akash Network, Hydra Host, CUDO Compute, GPU.ai, Exoscale, Hugging Face Inference Endpoints, Gcore, Fireworks AI, IONOS Cloud, Hetzner, Yotta Shakti Cloud, Sakura Internet) |
-| Canonical GPU models | **100**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL); each has a hardware spec row |
+| GPU clouds monitored | **60** polled, 59 published, out of **61** registered (`providers.PROVIDERS`; Alibaba Cloud is built but dormant until an AccessKey is set, section 3.1) (Fireworks AI is the only wholly internal provider: used for routing, never republished; two more sources of public providers are internal, DeepInfra's container-API prices and AWS's Spot Advisor bands, section 3.8) (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb, Civo, Atlantic.Net, E2E Networks, Modal, Replicate, Baseten, Beam, Arkane Cloud, VESSL AI, Mithril, DeepInfra, SimplePod, Nosana, Thunder Compute, Clore.ai, Paperspace, Akash Network, Hydra Host, CUDO Compute, GPU.ai, Exoscale, Hugging Face Inference Endpoints, Gcore, Fireworks AI, IONOS Cloud, Hetzner, Yotta Shakti Cloud, Sakura Internet) |
+| Canonical GPU models | **100**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL); each has a hardware spec row (100 in `hardware.py`) |
 | OpenGrid indices defined | **269**: 100 per-GPU, 100 spot, 40 regional, 25 provider-class, 4 composites (H100 / H200 / A100 class and the overall GPU Compute Index) |
 | News & signal sources | **81** registered, **66** enabled (41 RSS, 4 Atom, 3 US Federal Register, 16 SEC EDGAR, 2 GDELT queries); the 15 disabled ones are listed with the reason. About 55k items stored in production, history backfill included |
-| API operations | **249** in the OpenAPI schema: 227 under `/v1` (74 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 9 admin-only reads (7 power, 2 equities), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login / logout and the page routes |
+| API operations | **249** in the OpenAPI schema: 227 under `/v1` (74 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 9 admin-only reads (7 power, 2 equities), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 45 page routes |
 | Web pages | **45** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar. RL cost (`/rl-cost`) sits under GPUs; Batches (`/batches`, `/batch/{id}`) under My Jobs |
 | Database tables | **109** in a freshly migrated database (108 application tables plus `alembic_version`; Postgres, migrated by Alembic: 40 migrations, head `0038_measured_performance`) |
-| Background jobs | **33** registered when every optional source is configured, beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets…; table 15.2) |
+| Background jobs | **33** registered when every optional source is configured (**30** with the defaults: no EIA / SEC / Alpaca keys, `POWER_ENABLED` off), beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets…; table 15.2) |
 | Capacity (stock) feeds | **32** providers report in-stock state or counts from their own APIs (section 3.6) |
 | Power markets (internal) | EIA-930 grid data, EIA natural gas, CAISO, NYISO, SPP and ERCOT wholesale prices in their own `power_*` tables (about 511 MB in production); admin-only reads, never in a GPU statistic (section 5a) |
 | Provisioning adapters | **9 providers** (Lambda, RunPod, Hyperstack, DigitalOcean, Crusoe/Denvr/Latitude via Shadeform, Vast, Verda) |
 | Discord channels | **4** (ops, deployments, market, news) with OpenGrid-branded embeds |
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination. Built on top, tested against fake provider APIs only: **batches** (a sweep or shard list as one batch: placement across clouds, one budget, one approval), **resume** from a verified checkpoint, opt-in **OOM escalation** and **move** to another GPU; automatic relaunch / OOM escalation and move are off by default (`JOB_AUTO_RELAUNCH_ENABLED`, `JOB_MOVE_ENABLED`) |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
-| Workload intelligence | GPU memory estimator (text LLMs, plus audio, image + text and video workloads: Whisper, wav2vec2, Parler-TTS, LLaVA, Qwen2-VL, Llama 3.2 Vision, PaliGemma, CogVideoX, Wan2.1, HunyuanVideo), project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (hosted at `/mcp` with an API key: 15 tools, 2 prompts; local via uvx: 16 tools, 3 prompts), grounded assistant, RL post-training cost estimator |
+| Workload intelligence | GPU memory estimator (text LLMs; recommendations also size audio, image + text and video workloads, section 6c), measured performance from completed real jobs (none yet), project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (hosted at `/mcp` with an API key: 15 tools, 2 prompts; local via uvx: 16 tools, 3 prompts), grounded assistant, RL post-training cost estimator |
 | Automated tests | **136** Python test files + **14** JavaScript test files, all 150 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
 
 ---
@@ -130,13 +132,14 @@ Each provider is one module with `fetch()` (network) and `normalize()` (pure, re
 Every provider polls on its own schedule; a slow or failing provider never holds up the others. Polling is
 tiered (methodology/freshness.md): each provider has a price and a capacity cadence and a request budget (a token
 bucket at about half of each documented limit), and rate-limit answers are stored as `throttled`, not as failures.
-Fast: Lambda, Hyperstack, RunPod 2 min, Vast 5 min; medium: Salad, DigitalOcean, Linode, GPU.ai 5 min, AWS spot every
+Fast: Lambda, Hyperstack, RunPod 2 min, Vast 5 min, Verda (capacity 2 min, prices 6 min); medium: Salad, DigitalOcean, Linode, GPU.ai 5 min, AWS spot every
 5 min on the clock (:00:30, :05:30: AWS reprices on the hour), Nebius spot 5 min, most others 15 min; slow: GCP 1 h
 (Spot), Azure, Oracle, IBM, OVHcloud, E2E, Mithril 6 h, scraped pages, Vultr and
 Exoscale 1 h. Lium is also read live from its public WebSocket (section 3.7).
 
 | Provider | Class | How OpenGrid reads prices |
 |---|---|---|
+| Alibaba Cloud | hyperscaler | authenticated API (ECS: GPU spot per zone and the pay-as-you-go price it is stated against); **dormant**: not polled until `ALIBABA_ACCESS_KEY_ID` + `ALIBABA_ACCESS_KEY_SECRET` are set |
 | AWS | hyperscaler | public pricing files (on-demand in 15 regions; Compute Savings Plans, reserved section only); with a read-only IAM key, the EC2 API for spot prices per AZ in 15 regions and spot placement scores (six regions) (capacity tiers) |
 | Google Cloud | hyperscaler | Cloud Billing Catalog API, in every region Compute Engine offers the shape (read-only service account; us-central1 without it; attachable T4/V100 are GPU-only and kept out of market statistics); on-demand and Spot (Spot proven against Google's page; H100 x1/2/4 and B200 Spot-only shapes) |
 | Microsoft Azure | hyperscaler | public API (Retail Prices, eastus + eastus2) |
@@ -146,6 +149,8 @@ Exoscale 1 h. Lium is also read live from its public WebSocket (section 3.7).
 | RunPod | neocloud | authenticated API (pods); serverless pools' flex and active prices from the same GraphQL (listed, never in market statistics) |
 | Hyperstack | neocloud | authenticated API |
 | Thunder Compute | neocloud | authenticated API (account key, as its terms require; live stock) |
+| Jarvislabs | neocloud | authenticated API (`misc/server_meta`, `JARVIS_API_KEY`: regions, on-demand and spot prices, reserved terms, free GPUs; replaced the page scraper 2026-10-30) |
+| Massed Compute | neocloud | authenticated API (`gpu-inventory`, `MASSEDCOMPUTE_API_KEY`: prices and launchable counts); the public price page without the key or when the API call fails |
 | DigitalOcean | general cloud | authenticated API |
 | Salad | decentralized | authenticated API |
 | Vast.ai | marketplace | public API |
@@ -156,11 +161,9 @@ Exoscale 1 h. Lium is also read live from its public WebSocket (section 3.7).
 | Clore.ai | marketplace | authenticated API (USD price per server per day plus the renter fee; median and cheapest ask) |
 | Verda (ex-DataCrunch) | neocloud | public API |
 | Voltage Park | neocloud | public API |
-| Nebius | neocloud | public page |
-| Massed Compute | neocloud | public page |
+| Nebius | neocloud | public page (on-demand); spot per region from its public spot-price API (no key) |
 | CoreWeave | neocloud | public page (on-demand and spot kept separate) |
 | Together AI (GPU Clusters) | neocloud | public page (per GPU-hour; preemptible = spot) |
-| Jarvislabs | neocloud | public page |
 | Hot Aisle (AMD MI300X) | neocloud | public page; a `HOTAISLE_API_KEY` (+ `HOTAISLE_TEAM`) adds VM stock counts from its own API; prices stay from the page |
 | Vultr | general cloud | public API |
 | Akamai/Linode | general cloud | public API |
@@ -609,19 +612,21 @@ reconciles.
 ### 6.2 Provider capability registry
 | Provider | API supports | OpenGrid implements | Status |
 |---|---|---|---|
-| Lambda | full lifecycle (no stop) | L3 | simulated → **first validation target** |
-| RunPod | full lifecycle | L3 | simulated |
-| Hyperstack | full lifecycle | L3 | simulated |
-| DigitalOcean | full lifecycle | L3 | simulated |
-| Crusoe · Denvr · Latitude (Shadeform) | full lifecycle | L3 | simulated |
+| Lambda | full lifecycle, no stop endpoint (host `cloud.lambda.com`) | L3 | simulated → **first validation target** |
+| RunPod | full lifecycle on REST v2 (`api.runpod.io/v2`; v1 retires 2026-11-15) | L3 | simulated |
+| Hyperstack | full lifecycle; stop not offered (a shut-off VM keeps billing) | L3 | simulated |
+| DigitalOcean | full lifecycle; stop not offered (a powered-off GPU Droplet is still billed) | L3 | simulated |
+| Crusoe · Denvr · Latitude (Shadeform) | full lifecycle, no stop endpoint | L3 | simulated |
 | Vast.ai | full lifecycle | L3 | simulated |
-| Verda | full lifecycle | L3 | simulated |
-| AWS · Nebius · Massed Compute · Voltage Park · Hyperbolic · Lium · Salad | varies | L0 (market data) | no adapter |
+| Verda | full lifecycle; stop not offered (shutdown keeps charging) | L3 | simulated |
+| AWS · Nebius · Massed Compute · Voltage Park · Hyperbolic · Lium · Salad | full lifecycle documented (AWS, Nebius, Salad from recall) | L0 (market data) | no adapter |
 
 Each adapter declares a capability matrix with evidence: quote, live availability, launch, SSH key
 injection, startup script, status, stop, terminate, region selection, GPU-count selection, price
 known before launch, billing unit, minimum commitment, interruptible, name/tag at launch, list
-instances, idempotency token, stopped-time billing, forced account SSH keys, and risks.
+instances, idempotency token, stopped-time billing, forced account SSH keys, and risks. Every call each adapter makes
+was compared with the provider's current API reference on 2026-11-13, without an authenticated or billable call
+(methodology/adapter-contract-audit.md); the exact requests are pinned in `tests/test_adapter_contracts.py`.
 
 ### 6.3 Best execution scoring
 Transparent weighted scoring, never just "cheapest wins". Factors (each 0-1, with raw value and
@@ -666,7 +671,8 @@ POST /v1/deployments/{id}/terminate | /stop
   shown before approval and enforced by reconciliation even through outages and restarts.
 - **SSH access**: customer launches install **only the customer's own public key** (validated,
   fingerprinted, never logged). Operator keys are used only for validation launches. Providers
-  that may inject account keys (RunPod, Vast, unknown) require an explicit admin override. The
+  whose account keys may be installed too (Vast: yes; every adapter but Lambda: unknown until validated) require an
+  explicit admin override. The
   approval screen shows *"Customer supplied key: SHA256:… · OpenGrid operator access: NONE"*.
 - **Pinned credentials**: each deployment is bound to the credential (and its fingerprint) that
   launched it; a different key can never manage (or "confirm termination" of) the instance.
@@ -739,14 +745,14 @@ One real workload end to end: **"Train Your First AI Model: PyTorch MNIST"** (al
   sandbox mode. Web `/batches`, `/batch/<id>`; CLI `opengrid batch`; MCP `opengrid_preview_batch` /
   `opengrid_batch_status`. Not a distributed training run and not inference load-balancing: N separate jobs placed,
   paid for and reported together. Tested against fake provider APIs only; no real batch has run.
-- **Runner** (`runner/`): a cloud-init bootstrap (≈ 197 KB) installs hash-locked torch 2.4.1+cu121, checks
+- **Runner** (`runner/`): a cloud-init bootstrap (≈ 216 KB) installs hash-locked torch 2.4.1+cu121, checks
   nvidia-smi and CUDA, trains a small CNN, uploads `model.pt`, `config.json`, `metrics.json`, `env.json`,
   `manifest.json` (sha256-verified) and calls back with a per-job HMAC-derived token (never stored).
   OpenGrid, not the instance, terminates the GPU.
 - **Results**: website `/jobs`, `/jobs/new`, `/jobs/{id}` (and `/batches`, `/batch/{id}`); API logs / metrics / artifacts; Discord
   `#opengrid-deployments`. Artifacts live in Postgres (optional S3 backend).
   - **My Jobs** (`/jobs`) leads with a plain-English box ("What do you want to run?", see Assistant in 6c), then
-    one card per job (Active / Finished) with a one-line status in plain words ("Training", "Waiting for OpenGrid
+    one card per job (Needs attention / Active / Completed) with a one-line status in plain words ("Training", "Waiting for OpenGrid
     approval", "Needs attention: the GPU may still be billing"); the full table is folded under "Show all details".
   - **New job** (`/jobs/new`) opens on three choices: the free demo (one click), the MNIST template on a real GPU
     ("Check price", then "Run it" with confirmation; when it cannot run, the root-cause reason in plain words, with
@@ -803,8 +809,9 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
   labelled; without the dataset size runtime stays unknown and cost is scenarios. "Executable" needs the readiness checks and a
   supported workload (today only the MNIST template).
 - **Measured performance** (`intelligence/measured.py`, migration 0038): every completed REAL job (never sandbox /
-  simulated metrics / a mismatched GPU) becomes a consented `measured` observation keyed by workload signature; the
-  recommender prefers it over the theoretical runtime for that GPU and labels it. No data yet: until real runs
+  simulated metrics / a mismatched GPU) is recorded as a `measured` observation keyed by workload signature; only
+  consented rows (OpenGrid's own runs, or accounts that opted in) are read back, and the recommender prefers them
+  over the theoretical runtime for that GPU and labels them. No data yet: until real runs
   complete, every runtime stays theoretical. Backfill: `python -m intelligence.measured backfill`.
 - **Suitability, whole-job cost and explanations** (`intelligence/workload_fit.py`, `explain.py`): listing / spec
   interconnect evidence and node fabric, parallelism strategy, communication vs compute per step, an inference
@@ -842,9 +849,9 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
 - **Local analyzer** (`cli/src/opengrid_cli/analyze`): allowlisted files only, `.gitignore`, symlink and size
   limits, never reads secrets/weights/datasets, never executes code, redacts secret-looking values, flags
   prompt-injection text; only the structured requirements ever leave the machine. Dry-run mode.
-- **CLI** (`cli/`, `uv tool install ./cli`): doctor, gpu search/show/compare/market, providers, analyze,
+- **CLI** (`cli/`, `uv tool install ./cli`): version, doctor, auth login/status/logout, gpu search/show/compare/market, providers, analyze,
   estimate, recommend, route preview, jobs list/status/logs/cancel/resume/move, batch
-  preview/list/status/cancel/sandbox (sandbox only), demo train (sandbox only), mcp; `--json`. No command provisions
+  preview/list/status/cancel/sandbox (sandbox only), demo train (sandbox only), mcp / mcp config; `--json`. No command provisions
   directly: `jobs resume` / `jobs move` show the quote first and, with `--yes`, submit through the server's ordinary
   job path (approval, cost guards, max-price cap); there is no `jobs submit` or real `batch submit`.
 - **MCP server**, one tool set (`cli/src/opengrid_cli/mcp_server.py`) in two deployments:
@@ -982,7 +989,7 @@ data. Delivery: in-app feed and signed webhooks (email not implemented).
 ## 11. Accounts, API keys & security
 
 - **One OpenGrid account, one API key**: `opg_live_…` keys (256-bit), stored only as an HMAC with a
-  server-side pepper; shown once; scoped (`data:read`, `route:preview`, `route:execute`,
+  server-side pepper; shown once; scoped (`data:read`, `route:preview`, `probes:write`, `route:execute`,
   `deployments:read/write`, `watchlists`, `billing:read`, `keys:read`, `account:manage`, `admin`);
   revocable with cascade to child keys; expiry; last-used tracking; usage logging.
 - **Rate limits** per key **and** per account by request class (read / write / execute);
@@ -997,14 +1004,17 @@ data. Delivery: in-app feed and signed webhooks (email not implemented).
   isolation on every resource.
 - **Public pages** (optional, `PUBLIC_PAGES=true`) expose only read-only market data; anything that
   spends money or reads private data still requires a key.
-- **Operator sign-in** (`/login`): never public, always asks the browser for the site login, then returns to a
-  same-site page. Needed because with public pages on the browser is otherwise never asked. The return path must
-  match an allowlist of URL-safe characters (no open redirect: browsers drop tabs and newlines and read `\` as
-  `/`); it is the only server-side redirect, enforced by the security re-audit test. Sign-in-required states link
-  to it.
-  With public pages on, only `/login` sends the browser's site-login challenge; every other request without
-  a login or key gets `401` with `WWW-Authenticate: Bearer`, so a visitor never sees a password popup from a
-  background call (each page asks `/v1/me`).
+- **Site sign-in** (`/login`, `accounts/sitelogin.py`): a styled form (throttled, same-origin only) that sets a
+  signed session cookie (7 days) for one of two logins: the operator (`APP_USER` / `APP_PASSWORD`) or the optional
+  read-only viewer (`VIEWER_USER` / `VIEWER_PASSWORD`: market data and `data:read` only, no admin pages, keys or
+  money paths). Basic auth still works for scripts. The return path must match an allowlist of URL-safe characters
+  (no open redirect: browsers drop tabs and newlines and read `\` as `/`). The app has five server-side redirects,
+  each to a constant or allowlisted same-site target (the redirect to `/login`, `/login` x2, `/logout`, `/classic` →
+  `/gpus`), enforced by the security re-audit test. Sign-in-required states link to `/login`.
+  With public pages on, a request without a login or key gets `401` with `WWW-Authenticate: Bearer`, so a visitor
+  never sees a password popup from a background call (each page asks `/v1/me`), and a browser asking for an unknown
+  page gets the app's own "Page not found" (404). With public pages off, a browser page request is redirected to
+  `/login`.
 
 ---
 
@@ -1022,8 +1032,9 @@ description is in docs/UI_GUIDE.md.
   appear only for the operator / an admin key.
 - Pages whose data needs an account carry a lock until you are signed in. The top bar shows **"Public access"**
   (a popover says what a visitor can use, that accounts are invite-only, and offers the operator sign-in for
-  staff only) or **"Operator"**. The browser login is the operator's site login at `/login`; customers use
-  API keys, and no customer sign-up is offered (none exists).
+  staff only), **"Operator"** or **"Signed in"** (an API key or the read-only viewer login). The site logins at
+  `/login` are the operator's and the viewer's; customers use API keys, and no customer sign-up is offered (none
+  exists).
 - Errors are a title, one plain sentence and the next step; the HTTP status and endpoint sit in a folded
   "Technical details". A missing sign-in is an access state ("accounts are invite-only"), not a failure.
   Unknown pages show "Page not found" with links.
@@ -1060,21 +1071,22 @@ description is in docs/UI_GUIDE.md.
 - **Index detail pages** for the settlement indices carry a **Settlement fixings** panel (latest daily TWAP
   and hourly fixings in UTC, status, surveillance flags, evidence, a Verify button).
 - Shareable URLs for every view, CSV export on every table, honest "insufficient data" states,
-  data-kind badges (observed / inferred / estimated / transaction) and freshness badges.
+  data-kind badges (observed / estimated / transaction / archived; `inferred` is not shown as a badge) and
+  freshness badges.
 - **SEO** renderers for GPU, family, provider and compare pages with real numbers, structured data
   and a sitemap (active when `PUBLIC_PAGES` is on).
-- **Known UI gaps:** an unknown URL answers a visitor with a plain-text 401 from the server (the app's own
-  "Page not found" is reached only by in-app navigation); the New job page offers visitors a "Sign in" that is
-  the operator login; the same provider can appear twice for one GPU when it lists two regions.
+- **Known UI gaps:** the New job page offers visitors a "Sign in" that is the operator / viewer site login; the
+  same provider can appear twice for one GPU when it lists two regions.
 
 ---
 
 ## 13. Text terminal (TUI)
 
 `python terminal.py` is a Textual app with a command bar:
-`listings`, `avail`, `history`, `mapping`, `indices`, `idx <id>`, `ctx <gpu>`, `mkt <gpu>`,
-`best <gpu> [count] [region] [mode]`, `preview <gpu> <count> [region] [max]` (never provisions),
-`ev`, `opp`, `news`, `prov <name>`, `ops`, `caps`, `fam <family>`, `help`.
+`listings`, `avail`, `cheapest [n]`, `history`, `refs`, `mapping`, `quirks`, `unmapped`, `raw`, `summary`, `fetch`,
+`normalize`, `reset`, `indices`, `idx <id>`, `ctx <gpu>`, `mkt <gpu>`, `best <gpu> [count] [region] [mode]`,
+`preview <gpu> <count> [region] [max]` (never provisions), `ev`, `opp`, `news`, `prov <name>`, `ops`, `caps`,
+`fam <family>`, `help`, `quit`; any other text filters the listings.
 
 ---
 
@@ -1114,7 +1126,7 @@ the app:
 | Indices & fixings | `/v1/indices`, `/v1/indices/{id}`, `…/history`, `…/fixings`; `/v1/fixings`, `/v1/fixings/{id}`, `…/verify`, `/v1/fixings/chain/verify`, `/v1/fixings/restatements`, `/v1/fixings/methodology` |
 | Capacity, reserved, costs, FX | `/v1/capacity`, `/v1/capacity/history`, `/v1/reserved`, `/v1/reserved/summary`, `/v1/costs/components`, `/v1/costs/billing`, `/v1/costs/sources`, `/v1/costs/presets`, `POST /v1/costs/estimate`, `/v1/costs/rl-presets`, `POST /v1/costs/rl-estimate`, `/v1/fx/rates`, `/v1/fx/rates/history` |
 | Reliability | `/v1/reliability/providers`, `/v1/reliability/providers/{provider}`, `…/dips`, `/v1/reliability/targets`, `/v1/reliability/agents`, `/v1/reliability/probes`, `/v1/reliability/incidents`; probe agents: `/v1/probes/targets`, `POST /v1/probes/ingest` |
-| Signals | `/v1/events`, `/v1/events/types`, `/v1/events/shifts`, `/v1/events/shifts/{id}`, `/v1/events/shifts/definition`, `/v1/news`, `/v1/news/{id}`, `/v1/news/sources`, `/v1/news/topics`, `/v1/news/families`, `/v1/timeline`, `/v1/timeline/around` |
+| Signals | `/v1/events`, `/v1/events/types`, `/v1/events/shifts`, `/v1/events/shifts/{id}`, `/v1/events/shifts/definition`, `/v1/news`, `/v1/news/{id}`, `/v1/news/sources`, `/v1/news/topics`, `/v1/news/families`, `/v1/timeline`, `/v1/timeline/around`; admin: `POST /v1/news/refresh`, `POST /v1/news/reclassify` |
 | Market context | `/v1/macro/series`, `/v1/macro/series/{series}`, `…/history`, `/v1/macro/power` (power markets and equities: admin only, section 5a) |
 | Exports | `/v1/exports`, `/v1/exports/{dataset}` |
 | Website reads | `/internal/overview`, `/internal/tape`, `/internal/opportunities`, `/internal/heatmaps/{kind}`, `/internal/compare`, `/internal/trust/providers`, `/internal/polling`, `/internal/mapping`, `/internal/uptime/*` (5), `/internal/live/status`, `/internal/live/events` |
@@ -1126,10 +1138,10 @@ the app:
 | Training jobs | `/v1/jobs/templates`, `/v1/jobs/readiness`, `/v1/jobs/preview`, `/v1/jobs`, `/v1/jobs/{id}`, `…/logs`, `…/metrics`, `…/artifacts`, `…/artifacts/{name}`, `…/cancel`, `…/resume`, `…/resume/preview`, `…/move`, `…/move/preview`; 5 runner callbacks outside the schema (job token only: events, instructions, artifacts, resume, complete) |
 | Batches | `/v1/batches/preview`, `/v1/batches` (GET list, POST submit), `/v1/batches/{id}`, `…/approve` (admin), `…/cancel` |
 | Reservations | `/v1/reservations/reference`, `/v1/reservations/requests`, `/v1/reservations`, `/v1/reservations/{id}`, `…/accept`, `…/withdraw` |
-| Accounts & billing | `/v1/me`, `/v1/keys`, `/v1/scopes`, `/v1/usage`, `/v1/credentials`, `/v1/billing/usage`, `/v1/billing/invoices`, `/v1/billing/policy` |
-| Watchlists | `/v1/watchlists`, `…/items`, `/v1/alerts`, `/v1/alerts/{id}`, `…/test`, `/v1/alerts/firings` |
+| Accounts & billing | `/v1/me`, `/v1/keys` (+ `DELETE /v1/keys/{id}`), `/v1/scopes`, `/v1/usage`, `/v1/credentials` (+ `DELETE /v1/credentials/{id}`), `/v1/billing/usage`, `/v1/billing/invoices`, `/v1/billing/policy` |
+| Watchlists | `/v1/watchlists`, `/v1/watchlists/{id}`, `…/items`, `…/items/{item_id}`, `/v1/alerts`, `/v1/alerts/{id}`, `…/test`, `/v1/alerts/firings` |
 | Analytics | `/v1/economics`, `/v1/onboarding`, `/v1/partners/me`, `POST /v1/events/track` (anonymous product analytics) |
-| Admin & ops (74 in the schema, 9 more outside it) | execution control, kill switches, validation, reconciliation, orphans, resources, channels, ops, metrics, traces, checklist, partners, funnel, accounts, fee policies, reservation offers, fixing restatements, methodology change notices; outside the schema: `/v1/ops/power/*` (7) and `/v1/ops/context/equities` (2) |
+| Admin & ops (74 in the schema, 9 more outside it) | execution control, kill switches, validation, reconciliation, orphans, resources, channels, ops, metrics, traces, checklist, partners, funnel, accounts, credits, draft invoices, fee policies, exposures, feedback, quality and quarantine, product analytics / PostHog, usage, internal-data registry, reservation offers, fixing restatements, methodology change notices; outside the schema: `/v1/ops/power/*` (7) and `/v1/ops/context/equities` (2) |
 
 Counts (from `main.app.openapi()` on a freshly migrated database): 249 operations, 227 under `/v1`, 74 of them under
 `/v1/ops` or `/v1/admin`, 15 under `/internal`, and 7 operator/debug routes at the root (`/health`, `/fetch`,
@@ -1145,7 +1157,8 @@ playground that calls the Data API host directly. Full interactive reference: `/
 
 ### 15.1 Deployment
 Railway, one service + Postgres (+ two probe-agent services), built from `pyproject.toml` / `uv.lock`. Service settings
-(start command, healthcheck, replicas, domains) live in Railway infrastructure-as-code, `.railway/railway.ts` (preview
+(start command, healthcheck, replicas, domains) live in Railway infrastructure-as-code, `.railway/railway.ts` (it replaced `railway.toml`, which Railway stops reading on
+2026-12-01; preview
 `railway config plan`, apply `railway config apply`; variables stay unmanaged), with **exactly one worker** (the poller lives in the web process). Migrations run
 automatically at startup (one head, `0038_measured_performance`). A push to GitHub does not trigger a Railway build on its
 own: deploy with `railway up --service opengrid-terminal --detach`. The app **refuses to start in production**
@@ -1157,7 +1170,10 @@ deploy separately (`cd docs-site && vercel deploy --prod`).
 
 ### 15.2 Background jobs
 33 jobs are registered when every optional source is configured (`jobs.JOBS`; the provider poll loops run beside
-them). `OPENGRID_NO_JOBS` starts none; with `POLLER_ENABLED` off, the jobs marked "poller" are not registered.
+them); 30 with the defaults (`context_series`, `context_equities` and `power_forward` need keys or `POWER_ENABLED`).
+`OPENGRID_NO_JOBS` registers them but starts none; with `POLLER_ENABLED` off, the jobs marked "poller" are not
+registered. `news` and `gpuhunt_snapshot` are always registered and skip their work when `NEWS_ENABLED` /
+`GPUHUNT_SNAPSHOT_ENABLED` is off.
 
 | Job | Every | Purpose |
 |---|---|---|
@@ -1183,8 +1199,8 @@ them). `OPENGRID_NO_JOBS` starts none; with `POLLER_ENABLED` off, the jobs marke
 | `db_latency` | 1 min | database latency metric |
 | `api_usage_flush`, `api_usage_retention` | 10 s / daily | API usage logging |
 | `gpuhunt_snapshot` | daily | raw copy of dstack's expiring gpuhunt catalogues (`GPUHUNT_SNAPSHOT_ENABLED`) |
-| `uptime`, `provider_incidents` | 1 h / 10 min | UptimeProject uptime and latency; providers' status-page incidents (`UPTIME_ENABLED`) |
-| `probe_local`, `probe_rollup` | 30 s / 5 min | OpenGrid's own probes from this process (`PROBES_LOCAL_ENABLED`); hourly rollups |
+| `uptime`, `provider_incidents` | 1 h / 10 min | UptimeProject uptime and latency; providers' status-page incidents (registered only with `UPTIME_ENABLED`, default on) |
+| `probe_local`, `probe_rollup` | 30 s / 5 min | OpenGrid's own probes from this process (registered only with `PROBES_LOCAL_ENABLED`, default on); hourly rollups |
 | `fx_rates` | 1 h | ECB reference rates (poller) |
 | `cost_components` | daily | full-cost sources into `cost_snapshots` (poller) |
 | `lium_stream` | 1 min | supervisor of the Lium WebSocket consumer (poller, `LIUM_STREAM_ENABLED`) |
@@ -1205,6 +1221,7 @@ them). `OPENGRID_NO_JOBS` starts none; with `POLLER_ENABLED` off, the jobs marke
 | `SALAD_*`, `HYPERSTACK_API_KEY`, `LAMBDA_API_KEY`, `RUNPOD_API_KEY`, `DIGITALOCEAN_API_KEY` | provider market data (and routing where supported) |
 | `JARVIS_API_KEY`, `MASSEDCOMPUTE_API_KEY`, `THUNDER_API_KEY`, `CLORE_API_KEY`, `DEEPINFRA_API_KEY`, `HOTAISLE_API_KEY` + `HOTAISLE_TEAM`, `LATITUDE_API_KEY`, `CRUSOE_ACCESS_KEY_ID` + `CRUSOE_SECRET_KEY` | further provider prices, stock or capacity (read-only) |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | read-only EC2 market calls: spot price history, spot placement scores, capacity blocks |
+| `ALIBABA_ACCESS_KEY_ID`, `ALIBABA_ACCESS_KEY_SECRET` | Alibaba Cloud ECS spot and pay-as-you-go prices (read-only RAM user, international site); unset: the provider is not polled |
 | `GCP_API_KEY`, `GCP_SERVICE_ACCOUNT_JSON`, `GCP_PROJECT_ID` | Cloud Billing Catalog; the read-only service account opens GCP regions beyond Iowa |
 | `SHADEFORM_API_KEY`, `VAST_API_KEY`, `VERDA_CLIENT_ID/SECRET` | optional additional routing credentials |
 | `POLLER_ENABLED`, `LIUM_STREAM_ENABLED`, `NEWS_ENABLED`, `SEC_USER_AGENT` | background polling, the Lium stream, news feeds; the SEC fair-access User-Agent (news EDGAR sources and market context) |
@@ -1220,10 +1237,12 @@ them). `OPENGRID_NO_JOBS` starts none; with `POLLER_ENABLED` off, the jobs marke
 | `OPS_ALERT_WEBHOOK_URL`, `OPS_ALERT_WEBHOOK_SECRET` | ops alerts (+ signing secret used by all channels) |
 | `DEPLOYMENTS_WEBHOOK_URL`, `MARKET_WEBHOOK_URL`, `NEWS_WEBHOOK_URL` | channel feeds |
 | `SILENCE_ALERT_MIN_HOURS`, `SILENCE_ALERT_POLLS`, `SILENCE_ALERT_EMPTY_GRACE_MINUTES`, `SILENCE_ALERT_MUTED`, `SILENCE_ALERTS_ENABLED` | alert on silence (defaults 3h, 6 polls, 30 min, none, on) |
-| `PUBLIC_PAGES` | open read-only market pages to anonymous visitors |
+| `PUBLIC_PAGES` | open read-only market pages to anonymous visitors (default off) |
+| `POSTHOG_KEY`, `POSTHOG_HOST`, `POSTHOG_PROJECT_ID`, `POSTHOG_PERSONAL_API_KEY` | optional PostHog product analytics (the CSP's connect-src adds the ingest origin only with `POSTHOG_KEY`) |
 | `RAW_PAYLOAD_RETENTION_DAYS`, `RAW_SNAPSHOT_RETENTION_DAYS` | raw storage retention (payloads referenced by settlement fixings are always kept) |
 | `JOB_CALLBACK_BASE_URL` | where GPU runners call back (default `PUBLIC_BASE_URL`; https required) |
-| `JOB_ARTIFACT_STORE`, `JOB_ARTIFACT_MAX_MB`, `JOB_ARTIFACT_S3_*` | training artifacts: Postgres (default) or S3-compatible |
+| `JOB_ARTIFACT_STORE`, `JOB_ARTIFACT_MAX_MB`, `JOB_ARTIFACT_S3_*` | training artifacts: Postgres (default) or S3-compatible; 64 MB per artifact |
+| `JOB_CHECKPOINT_MAX_MB`, `JOB_CHECKPOINT_KEEP` | resume checkpoints: at most 32 MB each, the newest 2 kept |
 | `JOB_SYNC_INTERVAL_SECONDS`, `JOB_BOOTSTRAP_TIMEOUT_MINUTES`, `JOB_RUNNER_SILENCE_MINUTES`, `JOB_TOKEN_GRACE_MINUTES` | training-job timing |
 | `JOB_AUTO_RELAUNCH_ENABLED` | automatic relaunch of interrupted jobs and opt-in OOM escalation (default off) |
 | `JOB_PROVIDER_STOP_CONFIRM_SECONDS` | a provider-initiated stop counts as an interruption once a later read confirms it this long after (default 60; 0 = off) |
@@ -1238,16 +1257,16 @@ them). `OPENGRID_NO_JOBS` starts none; with `POLLER_ENABLED` off, the jobs marke
 
 ## 16. Testing
 
-135 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
-Postgres database, no real provider calls), plus 4 CLI/MCP test files in `cli/tests/`. `tests/run_all.py` runs all
-149 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
+136 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
+Postgres database, no real provider calls), plus 5 CLI/MCP test files in `cli/tests/`. `tests/run_all.py` runs all
+150 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
 (`.github/workflows/tests.yml`) runs it on every push and pull request against a throwaway Postgres 16 whose zone is
 deliberately not UTC. Beyond the per-module tests:
 - unit and integration tests for every analytics module, API and page;
 - **routing benchmark**: 50 deterministic decision scenarios;
 - **chaos suite**: 22 failure scenarios (timeouts, 5xx, crashes mid-launch, restarts, expired
   credentials, concurrent workers…);
-- **money-loss invariants**: 28 scenarios proving OpenGrid never loses track of a resource that
+- **money-loss invariants**: 30 scenarios (17 test functions) proving OpenGrid never loses track of a resource that
   can cost money: every case ends either proven terminated and billed, or flagged as possibly
   billing with escalating alerts;
 - **concurrency proofs**: simultaneous approvals across threads and separate processes;
@@ -1259,6 +1278,11 @@ deliberately not UTC. Beyond the per-module tests:
   threads, one approval and re-approval, the queue, no second job for a shard after a submission error, a retry in
   flight never judged by its refused try, relaunch / resume / move inside the batch budget, a move never terminating
   before a new verified checkpoint, aborts and failed moves, provider-initiated stops;
+- **adapter contracts** (`tests/test_adapter_contracts.py`): the exact request each adapter sends for quote, launch,
+  status, terminate and list, pinned to the providers' API references (methodology/adapter-contract-audit.md);
+- **workload intelligence** (`test_workload_intelligence.py`, `test_media_workloads.py`, `test_recommend.py`):
+  measured-performance rules, whole-job ranking, the audio / image + text / video sizing, and 24 golden payloads
+  without `media` whose estimates must stay byte-identical;
 - **hosted MCP** (`tests/test_mcp_remote.py`): the real app on uvicorn with real API keys and the official MCP
   client: tool list, the sandbox demo, scopes through the caller's key, every 401/403 path, the key never
   echoed, and a thread-starvation proof (48 concurrent calls on a 6-thread pool finish; without the gate's
@@ -1290,7 +1314,8 @@ exceed the 10-minute timeout on a busy machine.
 
 1. Never fabricate market data: no number without coverage; "insufficient data + reason" instead.
 2. Never guess GPU mappings; never merge materially different variants.
-3. Label every number: **observed**, **inferred**, **estimated** or **transaction**.
+3. Label every number by how it was obtained: **observed**, **derived**, **estimated**, **measured**, **archived** or
+   **transaction** (methodology/data-kinds.md); availability is explicit, inferred or unknown.
 4. Never mix list price, observed market price, quote and execution price.
 5. Never claim provisioning support, a completed route, or reliability that isn't real.
 6. Never claim news caused a market move.
@@ -1335,8 +1360,16 @@ a real GPU provider yet. The next step is one supervised **Lambda validation run
 - **Settlement fixings** (§4.2a) and **price-lock requests** (§6b): built and tested; fixing history starts at
   deployment. **No futures, swaps or trading of any kind**: see docs/FUTURES_REGULATORY_PATH.md for the regulated
   paths (index licensing to an exchange is the recommended one).
+- **Workload intelligence**: every runtime is theoretical until real jobs complete (no measured observation exists
+  yet). Audio, image + text and video sizing is an internal accuracy improvement of recommendations: video
+  generation memory is always low confidence, video understanding is modelled for Qwen2-VL only, the training
+  memory of video and TTS models is a lower bound, and the audio pipeline efficiency is uncalibrated.
+- **Providers**: Alibaba Cloud is built but dormant until an AccessKey is set. The market-data poller and probe
+  target for Lambda still use the deprecated `cloud.lambdalabs.com` host (the adapter uses `cloud.lambda.com`), and
+  RunPod's market-data poller still reads its GraphQL API, which RunPod retires in early 2027.
 - Not implemented (deliberately): real payment processing, email alerts, AWS/Nebius/Massed
-  Compute provisioning (need IAM/partner access), workload-performance benchmarks.
+  Compute provisioning (need IAM/partner access), workload-performance benchmarks (measured performance comes from
+  completed real jobs only).
 - Known limits: rate limits and login throttling are per process; rotating a provider key during
   live deployments strands them as `credentials_unavailable` (alerted, never marked terminated);
   Lambda's API exposes no termination timestamp, so billing end is an observed estimate. Full cost: Verda publishes
