@@ -190,11 +190,16 @@ def _variants(fid: str) -> list[str]:
 
 _NUM = r"(\d+(?:[.,]\d+)?)"
 _MODEL_NAMES = re.compile(
-    r"\b((?:meta[- ]?)?llama[- ]?\d(?:\.\d)?(?:[- ]?\d+(?:\.\d+)?b)?(?:[- ](?:instruct|chat))?|llama|"
+    r"\b((?:meta[- ]?)?llama[- ]?3\.2[- ]?\d+b[- ]?vision(?:[- ]instruct)?|"
+    r"llava(?:[- ]?(?:v?1\.[56]|next))?(?:[- ](?:vicuna|mistral))?(?:[- ]\d+b)?|qwen\s?2(?:\.5)?[- ]?vl(?:[- ]\d+b)?|"
+    r"paligemma(?:[- ]3b)?|cogvideox?(?:[- ]\d+b)?|wan\s?2\.1(?:[- ](?:t2v[- ])?\d+(?:\.\d+)?b)?|"
+    r"hunyuan[- ]?video|parler[- ]?tts(?:[- ](?:mini|large))?|kokoro(?:[- ]82m)?|wav2vec\s?2?(?:[- ](?:base|large))?|"
+    r"whisper(?:[- ](?:tiny|base|small|medium|turbo|large(?:[- ]v\d)?(?:[- ]turbo)?))?|"
+    r"(?:meta[- ]?)?llama[- ]?\d(?:\.\d)?(?:[- ]?\d+(?:\.\d+)?b)?(?:[- ](?:instruct|chat))?|llama|"
     r"mistral(?:[- ]\d+b)?|mixtral(?:[- ]\d+x\d+b)?|qwen\s?\d?(?:\.\d)?(?:[- ]\d+(?:\.\d+)?b)?|"
     r"gemma\s?\d?(?:[- ]\d+b)?|phi[- ]?\d(?:\.\d)?(?:[- ](?:mini|small|medium))?|deepseek(?:[- ][a-z0-9.]+)?|"
     r"falcon(?:[- ]\d+b)?|gpt[- ]?2|gpt[- ]?j|bert(?:[- ](?:base|large))?|t5(?:[- ](?:small|base|large))?|"
-    r"stable diffusion(?: xl)?|sdxl|flux(?:\.1)?|whisper(?:[- ](?:small|medium|large))?|resnet[- ]?\d*|mnist)\b",
+    r"stable diffusion(?: xl)?|sdxl|flux(?:\.1)?|resnet[- ]?\d*|mnist)\b",
     re.I)
 _HF_ID = re.compile(r"\b([A-Za-z][\w.-]{1,40}/[A-Za-z][\w.-]{1,80})\b")
 _PARAMS = re.compile(r"(?<![\w.])(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*b\b|(?<![\w.$])(\d+(?:\.\d+)?)\s*(b|bn|billion|m|million)\b"
@@ -212,6 +217,99 @@ def _set(d: dict, path: str, value) -> None:
     for k in keys[:-1]:
         d = d.setdefault(k, {})
     d[keys[-1]] = value
+
+
+_COUNT = r"(\d+(?:[.,]\d+)?)\s*(k|thousand|m|million)?"
+_MULT = {"k": 1e3, "thousand": 1e3, "m": 1e6, "million": 1e6}
+_RES_WORDS = {"480p": "854x480", "720p": "1280x720", "1080p": "1920x1080", "4k": "3840x2160"}
+
+
+def _count(num: str, mult: str | None) -> float:
+    return _f(num) * _MULT.get((mult or "").lower(), 1)
+
+
+_MEDIA_NAME = [
+    (re.compile(r"whisper|wav2vec", re.I), "audio", "transcription"),
+    (re.compile(r"parler|kokoro", re.I), "audio", "speech_synthesis"),
+    (re.compile(r"cogvideo|wan\s?2|hunyuan", re.I), "video", "generation"),
+    (re.compile(r"llava|qwen\s?2(?:\.5)?[- ]?vl|paligemma|vision", re.I), "image", "understanding"),
+]
+
+
+def media_slots(message: str, slots: dict, sig: list[str]) -> None:
+    """Audio / image / video asks in plain language -> requirements.media (only what the text says)."""
+    low = message.lower()
+    m_mod = None
+    task = None
+    if re.search(r"\btranscri(?:be|bing|ption|pts?)\b|\bspeech[- ]to[- ]text\b|\basr\b|\bsubtitl", low):
+        m_mod, task = "audio", "transcription"
+    elif re.search(r"\btext[- ]to[- ]speech\b|\btts\b|\bspeech synthesis\b|\bvoice[- ]?over\b|\bread (?:it |them )?aloud\b|"
+                   r"\bnarrat(?:e|ion)\b", low):
+        m_mod, task = "audio", "speech_synthesis"
+    elif re.search(r"\b(?:generat\w*|creat\w*|make|render\w*)\b[^.?!]{0,40}\b(?:videos?|clips?|animations?)\b|"
+                   r"\btext[- ]to[- ]video\b", low):
+        m_mod, task = "video", "generation"
+    elif re.search(r"\b(?:summari[sz]\w*|analy[sz]\w*|understand\w*|describ\w*|watch\w*|question\w* about)\b[^.?!]{0,40}"
+                   r"\bvideos?\b|\bvideo (?:understanding|qa|question|captioning)\b", low):
+        m_mod, task = "video", "understanding"
+    elif re.search(r"\bcaption\w*\b|\balt[- ]text\b", low) and re.search(r"\b(images?|photos?|pictures?|screenshots?)\b",
+                                                                           low):
+        m_mod, task = "image", "captioning"
+    elif re.search(r"\b(images?|photos?|pictures?|screenshots?|charts?|documents? images?)\b", low) and re.search(
+            r"\b(vision|vlm|multimodal|describe|caption|ocr|ask about|questions? about|read|understand)\b", low):
+        m_mod, task = "image", "understanding"
+    elif re.search(r"\b(audio|speech|podcasts?|recordings?)\b", low) and re.search(r"\bwhisper\b", low):
+        m_mod, task = "audio", "transcription"
+    name = (slots.get("model") or {}).get("name") or ""
+    by_name = next(((mo, t) for rx, mo, t in _MEDIA_NAME if rx.search(name)), None)
+    if m_mod is None and by_name:
+        m_mod, task = by_name
+    if by_name and (slots.get("model") or {}).get("parameters_b") is not None and re.search(r"\d\s*b\b", name, re.I):
+        # "Qwen2-VL 7B" names the LLM size, "Wan2.1 14B" the transformer: the catalog's published total is used
+        slots["model"].pop("parameters_b")
+    if m_mod is None:
+        return
+    _set(slots, "media.modality", [m_mod]); sig.append(f"media:{m_mod}:{task}")
+    _set(slots, "media.task", task)
+    # amounts
+    m = re.search(_COUNT + r"\s*(?:hours?|hrs?|h)\b(?:\s+(?:of|worth of))?\s*(?:[\w-]+\s+){0,2}?(?:audio|speech|recordings?|"
+                  r"podcasts?|calls?|meetings?|interviews?|video)?", low)
+    if m and m_mod == "audio":
+        _set(slots, "media.total_audio_hours", _count(m.group(1), m.group(2)))
+    m = re.search(r"(\d+(?:\.\d+)?)\s*[- ]?(?:s|sec|secs|second|seconds)\b[- ]?(?:long\s+)?(?:videos?|clips?|of video)?", low)
+    m2 = re.search(r"(\d+(?:\.\d+)?)\s*[- ]?(?:min|mins|minute|minutes)\b[- ]?(?:long\s+)?(?:videos?|clips?)", low)
+    secs = _f(m.group(1)) if m else (_f(m2.group(1)) * 60 if m2 else None)
+    if secs:
+        if m_mod == "video" and task == "generation":
+            _set(slots, "media.output_video_seconds", secs)
+        elif m_mod == "video":
+            _set(slots, "media.video_seconds", secs)
+        elif m_mod == "audio":
+            _set(slots, "media.audio_seconds", secs)
+    m = re.search(r"(?<![\w.,])" + _COUNT + r"\s+(?:[\w-]+\s+){0,2}?(?:images?|photos?|pictures?|screenshots?|videos?|"
+                  r"clips?|files?|utterances?|sentences?)\b(?!\s*(?:per|each|a|an)\s+(?:request|prompt|query|message|call))",
+                  low)
+    if m:
+        n = int(_count(m.group(1), m.group(2)))
+        if n >= 2 or m_mod == "video":
+            _set(slots, "media.total_items", n)
+    m = re.search(r"(\d+)\s*(?:images?|photos?|pictures?)\s*(?:per|each|a|an)\s+(?:request|prompt|query|message|call)", low)
+    if m:
+        _set(slots, "media.images_per_request", int(m.group(1)))
+    res = None
+    m = re.search(r"\b(\d{3,4})\s*[x×]\s*(\d{3,4})\b", low)
+    if m:
+        res = f"{m.group(1)}x{m.group(2)}"
+    else:
+        m = re.search(r"\b(480p|720p|1080p|4k)\b", low)
+        res = _RES_WORDS.get(m.group(1)) if m else None
+    if res:
+        key = {("video", "generation"): "media.output_resolution", ("video", "understanding"): "media.video_resolution"}
+        _set(slots, key.get((m_mod, task), "media.image_resolution"), res)
+    big = slots.get("media", {}).get("total_audio_hours") or slots.get("media", {}).get("total_items")
+    if not slots.get("workload_type") or slots.get("workload_type") == "inference":
+        _set(slots, "workload_type", "batch" if big and task != "generation" else "inference")
+        sig.append("workload:" + slots["workload_type"])
 
 
 def extract_slots(message: str) -> tuple[dict, list[str]]:
@@ -334,6 +432,7 @@ def extract_slots(message: str) -> tuple[dict, list[str]]:
         _set(slots, "constraints.vendor", "NVIDIA")
     if re.search(r"\b(spot|interruptible|preemptible)\b", low):
         _set(slots, "constraints.allow_spot", True)
+    media_slots(message, slots, sig)
     return slots, sig
 
 
@@ -492,7 +591,8 @@ def parse(message: str) -> Parsed:
     low = " ".join((message or "").lower().split())
     slots, sig = extract_slots(message or "")
     gpus = find_gpus(message or "")
-    workloadish = bool(slots.get("workload_type") or slots.get("model") or slots.get("training"))
+    workloadish = bool(slots.get("workload_type") or slots.get("model") or slots.get("training")
+                       or slots.get("media"))
 
     jid = find_job_id(message or "")
     pron = bool(_PRONOUN.search(_jobtext(message or "")))

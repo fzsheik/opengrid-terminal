@@ -48,6 +48,15 @@ optional: unknown is `null`, never a guess. The analyzer fills what it has evide
     "target_latency_ms": null, "target_tokens_per_s": null,
     "engine": "vllm" | "tgi" | "transformers" | "llama.cpp" | null
   },
+  "media": {                                   // optional: audio / image / video (methodology/recommendations.md)
+    "modality": ["image"],                     // "text" | "image" | "audio" | "video" | "multimodal", one or a list
+    "task": "understanding" | "captioning" | "transcription" | "speech_synthesis" | "generation" | null,
+    "images_per_request": 2 | null, "image_resolution": "1024x768" | null,       // WIDTHxHEIGHT
+    "audio_seconds": null, "total_audio_hours": 10000 | null,                    // per item / whole batch
+    "video_seconds": null, "fps": null, "video_resolution": null,                // input video (understanding)
+    "output_video_seconds": null, "output_fps": null, "output_resolution": null, // generation
+    "diffusion_steps": null, "total_items": null                               // items in a batch job
+  },
   "constraints": {
     "budget_usd": 50 | null, "max_price_per_gpu_hour": null, "runtime_hours": null,
     "deadline_hours": null,                    // finish within: options estimated to finish later are flagged
@@ -90,9 +99,24 @@ Body: WorkloadRequirements. Pure computation (no DB writes, no provider calls). 
             "formula": "8 x parameters x tokens (...)", "assumptions": [...], "kind": "estimated" },
   "questions": [ { "field": "training.method", "question": "Full fine-tuning, LoRA or QLoRA?",
                    "why": "changes optimizer memory by ~10x" } ],
+  "media": {                                    // only for audio / image / video workloads (absent otherwise)
+    "media_kind": "vlm" | "asr" | "audio_encoder" | "tts" | "video_diffusion" | null,
+    "modality": ["audio"], "task": "transcription", "model": "openai/whisper-large-v3",
+    "inputs": { ... },                          // windows, tokens per image, video tokens, latent tokens, ...
+    "formulas": ["windows = ceil(audio seconds / 30); 1500 encoder positions per window", ...],
+    "breakdown_gb": { "decoder_cross_attention_kv": 3.932, ... },
+    "work": { "known": true, "items": 1200000, "item": "window", "unit": {...}, "assumptions": [...] },
+    "headline": "Whisper: 16 x 30 s window(s) decoded together keep 5.1 GB of decoder caches ...",
+    "publisher": { "vram_gb": 60, "condition": "...", "seconds": {} } | null,   // cross-check only
+    "notes": [...], "confidence_cap": "low" | null, "kind": "estimated"
+  },
   "methodology": "/methodology/recommendations"
 }
 ```
+
+For media workloads each option also carries `performance.media` (`throughput` in audio hours / requests / videos
+per GPU-hour with a range, `parallelism`, `replicas`, `seconds_per_item`), its theoretical `performance.runtime`
+and job cost when the amount of work is known, and `multi_gpu.independent_items` when the items are independent.
 
 ## 3. Recommendation: `POST /v1/recommend`
 

@@ -11,7 +11,7 @@ from typing import Any
 from . import extract as ex
 from . import policy
 from . import modelsize
-from .facts import CONF_RANK, P_CODE, P_DERIVED, PACKAGES, Collector, Fact, params_from_name
+from .facts import CONF_RANK, P_CODE, P_DERIVED, PACKAGES, Collector, Fact, media_of_name, params_from_name
 from .pyextract import PyAnalyzer
 from .redact import find_injections, find_secrets, redact_obj
 
@@ -361,7 +361,7 @@ def merge(c: Collector, inspected: list[dict]) -> dict[str, Any]:
     weak_training = c.first("distributed_launch")
     inference_engine = c.first("inference_engine")
     serving = [s for s in c.signals if s["kind"] == "server"]
-    inference_sig = inference_engine or c.first("inference_call", "offline_inference")
+    inference_sig = inference_engine or c.first("inference_call", "offline_inference", "media_inference")
     method_fact = choose("training.method")
     gpu_evidence = (chosen.get("hardware_hints.gpu_count") or chosen.get("hardware_hints.cuda_min")
                     or c.first("gpu_base_image", "gpu_runtime"))
@@ -379,7 +379,7 @@ def merge(c: Collector, inspected: list[dict]) -> dict[str, Any]:
             else "medium"
         wl_val = workload
     elif inference_sig:
-        offline_only = not serving and bool(c.first("offline_inference", "inference_call"))
+        offline_only = not serving and bool(c.first("offline_inference", "inference_call", "media_inference"))
         batchy = any(re.search(r"(?i)batch|offline|predict|bulk", i["path"]) for i in inspected)
         workload = "batch" if offline_only and batchy else "inference"
         wl_src = (serving[0] if serving else inference_sig)["source"]
@@ -468,6 +468,12 @@ def merge(c: Collector, inspected: list[dict]) -> dict[str, Any]:
         base["frameworks"] = req["frameworks"]
         req = base
 
+    # audio / image / video (requirements.media): only when the project shows it; absent otherwise
+    if workload != "no_gpu":
+        media = _media(c, req, chosen, ev, choose)
+        if media:
+            req["media"] = media
+
     # GPU names mentioned anywhere: hardware hints only
     gpus = []
     for s in c.signals:
@@ -480,6 +486,36 @@ def merge(c: Collector, inspected: list[dict]) -> dict[str, Any]:
 
     req["evidence"] = evidence
     return req
+
+
+def _media(c: Collector, req: dict[str, Any], chosen: dict[str, Fact], ev, choose) -> dict[str, Any] | None:
+    """Modality and task from model classes, pipelines, whisper loaders, vLLM multimodal limits, config.json
+    model_type and the model name. Only the inferred values leave the machine (never file contents)."""
+    found: list[tuple[str, str, str, str]] = []
+    for s in c.signals:
+        if s["kind"] == "media" and isinstance(s["value"], str) and ":" in s["value"]:
+            mod, task = s["value"].split(":", 1)
+            found.append((mod, task, s["source"], "high"))
+    name = req["model"]["name"]
+    mt = media_of_name(name)
+    if mt:
+        found.append((mt[0], mt[1], chosen["model.name"].source if "model.name" in chosen else "", "medium"))
+    if not found:
+        return None
+    mods: list[str] = []
+    for f in found:
+        if f[0] not in mods:
+            mods.append(f[0])
+    gen = [f for f in found if f[1] in ("generation", "speech_synthesis", "transcription")]
+    task = (gen[0] if gen else found[0])[1]
+    out: dict[str, Any] = {"modality": mods, "task": task}
+    ev("media.modality", ", ".join(mods), found[0][2], found[0][3])
+    ev("media.task", task, (gen[0] if gen else found[0])[2], (gen[0] if gen else found[0])[3])
+    f = choose("media.images_per_request")
+    if f is not None:
+        out["images_per_request"] = f.value
+        ev("media.images_per_request", f.value, f.source, f.confidence)
+    return out
 
 
 # ------------------------------------------------------------------------------------------------
@@ -503,7 +539,8 @@ def questions(req: dict[str, Any], c: Collector) -> list[dict[str, str]]:
                       "question": "Which model (Hugging Face id) or how many parameters does it have?",
                       "why": "weights, gradients and optimizer state all scale with the parameter count; no model "
                              "name or size was found in the project"})
-        else:
+        elif not (req.get("media") and media_of_name(m["name"]) and "/" in m["name"]):
+            # (a well-known audio / image / video checkpoint id is sized by the server's catalog)
             q.append({"field": "model.parameters_b",
                       "question": f"How many parameters does {m['name']} have (in billions)?",
                       "why": "the size could not be read from the name or a config.json"})
@@ -524,7 +561,27 @@ def questions(req: dict[str, Any], c: Collector) -> list[dict[str, str]]:
             q.append({"field": "training.dataset_tokens",
                       "question": "How large is the training dataset (samples or tokens), and how many epochs?",
                       "why": "datasets are never read by the analyzer; size drives runtime and cost"})
-    if wl in ("inference", "batch"):
+    media = req.get("media") or {}
+    mods = set(media.get("modality") or [])
+    if wl in ("inference", "batch") and media:
+        if "audio" in mods and media.get("task") == "transcription":
+            q.append({"field": "media.total_audio_hours", "question": "How many hours of audio in total, and how "
+                                                                      "long is each file?",
+                      "why": "sets the number of 30-second windows to transcribe: runtime and whole-job cost"})
+        elif "audio" in mods:
+            q.append({"field": "media.audio_seconds", "question": "How many seconds of speech per item, and how many "
+                                                                  "items?",
+                      "why": "the decoder cache grows with seconds of audio; the count sets runtime and cost"})
+        if media.get("task") == "generation" and "video" in mods:
+            q.append({"field": "media.output_resolution", "question": "What resolution and length per video, and "
+                                                                      "how many videos?",
+                      "why": "latent video tokens grow with frames x height x width; attention grows with their "
+                             "square"})
+        elif "image" in mods and media.get("images_per_request") is None:
+            q.append({"field": "media.images_per_request", "question": "How many images per request, at what "
+                                                                       "resolution?",
+                      "why": "every image adds its tokens to the KV cache"})
+    if wl in ("inference", "batch") and not (mods and mods <= {"audio", "video"}):
         if inf["concurrency"] is None:
             q.append({"field": "inference.concurrency", "question": "How many concurrent requests or sequences?",
                       "why": "KV-cache memory scales with concurrency"})

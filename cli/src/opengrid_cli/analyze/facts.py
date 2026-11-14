@@ -109,6 +109,10 @@ PACKAGES: dict[str, tuple[str, str]] = {
     "triton": ("ml", "triton"), "megatron": ("ml", "megatron"), "megatron-core": ("ml", "megatron"),
     "colossalai": ("ml", "colossalai"), "sglang": ("ml", "sglang"), "mlx": ("ml", "mlx"),
     "text-generation-inference": ("ml", "tgi"), "optimum": ("ml", "optimum"), "liger-kernel": ("ml", "liger-kernel"),
+    "faster-whisper": ("ml", "faster-whisper"), "faster_whisper": ("ml", "faster-whisper"),
+    "whisperx": ("ml", "whisperx"), "openai-whisper": ("ml", "openai-whisper"), "ctranslate2": ("ml", "ctranslate2"),
+    "parler-tts": ("ml", "parler-tts"), "parler_tts": ("ml", "parler-tts"), "kokoro": ("ml", "kokoro"),
+    "qwen-vl-utils": ("ml", "qwen-vl-utils"), "qwen_vl_utils": ("ml", "qwen-vl-utils"),
     "sklearn": ("cpu_ml", "scikit-learn"), "scikit-learn": ("cpu_ml", "scikit-learn"),
     "xgboost": ("cpu_ml", "xgboost"), "lightgbm": ("cpu_ml", "lightgbm"), "catboost": ("cpu_ml", "catboost"),
     "statsmodels": ("cpu_ml", "statsmodels"),
@@ -119,6 +123,83 @@ PACKAGES: dict[str, tuple[str, str]] = {
     "celery": ("web", "celery"), "express": ("web", "express"), "next": ("web", "next"), "react": ("web", "react"),
     "vue": ("web", "vue"), "streamlit": ("web", "streamlit"), "gradio": ("web", "gradio"),
 }
+
+# python import names that are NOT pip names of the same project ("whisper" on PyPI is Graphite's database library;
+# `import whisper` is openai-whisper)
+IMPORT_ONLY: dict[str, tuple[str, str]] = {"whisper": ("ml", "openai-whisper")}
+
+# ---------------------------------------------------------------- audio / image / video workloads
+# A model class, diffusers pipeline or transformers pipeline task -> (modality, task) for requirements.media.
+MEDIA_CLASSES: dict[str, tuple[str, str]] = {
+    "WhisperForConditionalGeneration": ("audio", "transcription"), "WhisperModel": ("audio", "transcription"),
+    "AutoModelForSpeechSeq2Seq": ("audio", "transcription"), "Wav2Vec2ForCTC": ("audio", "transcription"),
+    "HubertForCTC": ("audio", "transcription"), "AutoModelForCTC": ("audio", "transcription"),
+    "LlavaForConditionalGeneration": ("image", "understanding"),
+    "LlavaNextForConditionalGeneration": ("image", "understanding"),
+    "LlavaOnevisionForConditionalGeneration": ("image", "understanding"),
+    "LlavaNextVideoForConditionalGeneration": ("video", "understanding"),
+    "Qwen2VLForConditionalGeneration": ("image", "understanding"),
+    "Qwen2_5_VLForConditionalGeneration": ("image", "understanding"),
+    "MllamaForConditionalGeneration": ("image", "understanding"),
+    "PaliGemmaForConditionalGeneration": ("image", "understanding"),
+    "Idefics2ForConditionalGeneration": ("image", "understanding"),
+    "Idefics3ForConditionalGeneration": ("image", "understanding"),
+    "AutoModelForVision2Seq": ("image", "understanding"), "AutoModelForImageTextToText": ("image", "understanding"),
+    "ParlerTTSForConditionalGeneration": ("audio", "speech_synthesis"), "KPipeline": ("audio", "speech_synthesis"),
+    "CogVideoXPipeline": ("video", "generation"), "CogVideoXImageToVideoPipeline": ("video", "generation"),
+    "WanPipeline": ("video", "generation"), "WanImageToVideoPipeline": ("video", "generation"),
+    "HunyuanVideoPipeline": ("video", "generation"), "LTXPipeline": ("video", "generation"),
+    "LTXImageToVideoPipeline": ("video", "generation"), "MochiPipeline": ("video", "generation"),
+    "AnimateDiffPipeline": ("video", "generation"), "StableVideoDiffusionPipeline": ("video", "generation"),
+}
+PIPELINE_TASKS: dict[str, tuple[str, str]] = {
+    "automatic-speech-recognition": ("audio", "transcription"), "image-to-text": ("image", "captioning"),
+    "image-text-to-text": ("image", "understanding"), "visual-question-answering": ("image", "understanding"),
+    "text-to-speech": ("audio", "speech_synthesis"), "text-to-audio": ("audio", "speech_synthesis"),
+}
+# model id / name -> (modality, task); first match wins (video-LLaVA before LLaVA)
+MEDIA_NAMES: list[tuple[re.Pattern, str, str]] = [
+    (re.compile(r"(?i)whisper"), "audio", "transcription"),
+    (re.compile(r"(?i)wav2vec2|hubert"), "audio", "transcription"),
+    (re.compile(r"(?i)parler-tts|kokoro|\bbark\b|xtts|f5-tts"), "audio", "speech_synthesis"),
+    (re.compile(r"(?i)llava-video|video-llava|llava-next-video"), "video", "understanding"),
+    (re.compile(r"(?i)cogvideo|wan2\.\d-(?:t2v|i2v)|wan-ai/|hunyuanvideo|ltx-video|mochi-1"), "video", "generation"),
+    (re.compile(r"(?i)llava|qwen2(?:\.5)?-vl|paligemma|idefics|llama-3\.2-\d+b-vision|pixtral|internvl|minicpm-v"),
+     "image", "understanding"),
+]
+# config.json model_type -> (modality, task)
+MEDIA_ARCH: dict[str, tuple[str, str]] = {
+    "whisper": ("audio", "transcription"), "wav2vec2": ("audio", "transcription"), "hubert": ("audio", "transcription"),
+    "llava": ("image", "understanding"), "llava_next": ("image", "understanding"),
+    "llava_onevision": ("image", "understanding"), "qwen2_vl": ("image", "understanding"),
+    "qwen2_5_vl": ("image", "understanding"), "mllama": ("image", "understanding"),
+    "paligemma": ("image", "understanding"), "idefics2": ("image", "understanding"),
+    "idefics3": ("image", "understanding"), "parler_tts": ("audio", "speech_synthesis"),
+}
+WHISPER_SIZES = {"tiny", "base", "small", "medium", "large", "large-v1", "large-v2", "large-v3", "large-v3-turbo",
+                 "turbo", "tiny.en", "base.en", "small.en", "medium.en"}
+
+
+def media_of_name(name: Any) -> tuple[str, str] | None:
+    if not isinstance(name, str):
+        return None
+    for rx, modality, task in MEDIA_NAMES:
+        if rx.search(name):
+            return modality, task
+    return None
+
+
+def whisper_model_id(size: Any) -> str | None:
+    """faster-whisper / openai-whisper / whisperx size names -> the Hugging Face id ("large-v3" ->
+    openai/whisper-large-v3; "turbo" -> openai/whisper-large-v3-turbo; "large" is large-v3 in current releases)."""
+    if not isinstance(size, str):
+        return None
+    s = size.strip().lower()
+    if s not in WHISPER_SIZES:
+        return None
+    s = {"turbo": "large-v3-turbo", "large": "large-v3"}.get(s, s)
+    return f"openai/whisper-{s}"
+
 
 GPU_NAMES = re.compile(
     r"(?<![A-Za-z0-9_])(GB200|GB300|B200|B300|H200|H100|H800|GH200|A100|A800|A10G|A10|A30|A40|A6000|A5000|A4000|"

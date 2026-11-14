@@ -10,7 +10,7 @@ from typing import Any
 
 from . import yamlish
 from .facts import (GPU_NAMES, P_CODE, P_CONFIG, P_DEFAULT, P_README, P_TRAINCFG, PACKAGES, Collector, apply_key,
-                    as_int, map_dtype, map_quant, readme_model_candidates)
+                    as_int, map_dtype, map_quant, readme_model_candidates, MEDIA_ARCH)
 
 try:
     import tomllib
@@ -259,6 +259,9 @@ def hf_config(c: Collector, rel: str, text: str) -> None:
     c.signal("hf_model_config", data.get("model_type") or "unknown", src("model_type"))
     if isinstance(data.get("model_type"), str):
         c.fact("model.architecture", data["model_type"], src("model_type"), "high", P_CONFIG)
+        mt = MEDIA_ARCH.get(data["model_type"])
+        if mt:
+            c.signal("media", f"{mt[0]}:{mt[1]}", src("model_type"))
     name = data.get("_name_or_path")
     if isinstance(name, str) and name and not name.startswith(("/", ".")):
         c.fact("model.name", name, src("_name_or_path"), "high", P_CONFIG)
@@ -491,6 +494,12 @@ def command(c: Collector, tokens: list[str], src: str) -> None:
                 n = as_int(value)
                 if n:
                     c.fact("hardware_hints.gpu_count", n, src, "high", P_CODE)
+            elif key_n == "limit_mm_per_prompt":
+                from .pyextract import multimodal_limit
+                raw = str(val).strip("'\"")
+                pairs = re.findall(r"\"?(image|video|audio)\"?\s*[:=]\s*(\d+)", raw)
+                for k_, n_ in pairs:
+                    multimodal_limit(c, k_, int(n_), src)
             elif key_n == "max_input_length":
                 n = as_int(value)
                 if n:

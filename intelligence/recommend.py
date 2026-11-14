@@ -36,6 +36,12 @@ Workload-intelligence review (2026-11; methodology/workload-intelligence-review.
       (inference), cost per million output tokens; `constraints.deadline_hours`
     - explanations: per option `decision` {confidence, vs_recommended deltas}; top-level `explanation` and
       `multi_gpu` (when not to go multi-GPU)
+
+Audio, image + text and video workloads (`media` in the request; intelligence/media.py), all additive: the memory
+estimate already carries their tokens / windows / latents; per option `performance.media` gives a theoretical
+throughput (audio hours, requests or videos per GPU-hour) and, when the amount of work is known, the runtime and
+whole-job cost range (measured observations still win). Independent items (transcription windows, captions, videos)
+scale across GPUs as separate replicas, not tensor parallel; the notes say so and point to batch fan-out.
 """
 
 from __future__ import annotations
@@ -49,6 +55,7 @@ import provider_meta
 from api.common import gpu_slug
 from intelligence import explain as X
 from intelligence import measured as MS
+from intelligence import media as MD
 from intelligence import performance as P
 from intelligence import workload_fit as F
 from intelligence.estimate import METHODOLOGY, estimate
@@ -283,6 +290,45 @@ def _summary(x: dict, bfw: dict | None, basis: str | None) -> str:
     return f"{more}, with no advantage for this workload"
 
 
+MEDIA_NO_DECODE_ROOFLINE = ("asr", "audio_encoder", "tts", "video_diffusion")   # not an LLM token-decode workload
+
+
+def _media_option(x: dict, prof: dict, prec: str | None) -> None:
+    """Theoretical media runtime / throughput for one option (intelligence/media.py), labelled estimated. Independent
+    items run as replicas: the option's minimum GPU count holds one model copy."""
+    perf = x["perf"]
+    n_min = x["n"] // 2 if x["scale"] else x["n"]
+    mrt = MD.option_runtime(x["spec"], x["n"], n_min, prof, perf["interconnect"]["kind"])
+    if not mrt:
+        return
+    perf["media"] = {k: mrt.get(k) for k in ("kind", "throughput", "parallelism", "replicas", "seconds_per_item")
+                     if k in mrt}
+    if mrt.get("replicas", 1) > 1 and n_min == 1:
+        sp = mrt["speedup"]
+        perf["scaling"] = {"efficiency": round(sp[0] / x["n"], 3), "range": [round(sp[1] / x["n"], 3), round(sp[2] / x["n"], 3)],
+                           "speedup": sp[0], "speedup_range": [sp[1], sp[2]], "kind": "estimated",
+                           "basis": f"independent items: {x['n']} replicas (one model copy per GPU, no GPU-to-GPU "
+                                    f"traffic); OpenGrid assumes {MD.REPLICA_EFF[0]:.0%} of linear scaling (range "
+                                    f"{MD.REPLICA_EFF[1]:.0%} to {MD.REPLICA_EFF[2]:.0%}) for shard imbalance. Planning "
+                                    "assumption, not a benchmark"}
+    if mrt.get("known"):
+        perf["runtime"] = {k: mrt[k] for k in ("known", "kind", "hours", "range_hours", "basis", "assumptions",
+                                               "sources")}
+    else:
+        perf["runtime"] = {"known": False, "hours": None, "range_hours": None,
+                           "reason": mrt.get("reason") or "media work unknown"}
+    if MD.compute_bound(prof):
+        b = P.throughput_basis("training_full", prec, x["spec"])
+        if b and mrt.get("speedup"):
+            perf["basis"] = {**b, "label": b["label"].split(" (")[0] + " (diffusion / speech encoding is compute "
+                                                                         "bound)"}
+            sp = mrt["speedup"]
+            perf["effective"] = {"value": round(b["per_gpu"] * sp[0], 2),
+                                 "range": [round(b["per_gpu"] * sp[1], 2), round(b["per_gpu"] * sp[2], 2)],
+                                 "unit": b["unit"], "basis": f"{x['n']} x {b['per_gpu']:g} {b['unit']} as "
+                                                             f"{mrt['parallelism']}"}
+
+
 def tier_for(who) -> str:
     """'public' for an anonymous caller, 'all' for an API key or the operator."""
     return "public" if getattr(who, "kind", None) in (None, "public") else "all"
@@ -299,6 +345,10 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
     mem = est["memory"]
     prof = mem["profile"]
     wk = est.get("work") or {}
+    md = est.get("media") or {}
+    media_wk = md.get("work") or {}
+    media_rt = bool(media_wk.get("known"))
+    media_batch = bool(media_rt and media_wk.get("items"))
     notes = ["Prices are observed list prices, not quotes: a route quotes and re-validates before any launch.",
              ("Runtimes and whole-job costs are theoretical estimates (vendor peak throughput x stated utilization "
               "and multi-GPU scaling assumptions), shown as ranges; no benchmark exists for this workload."
@@ -307,6 +357,19 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
               "scenarios at stated hours."),
              "Performance compares the total over all GPUs of an option (dense throughput for training, memory "
              "bandwidth for inference) after a multi-GPU scaling assumption; spec-sheet figures, not benchmarks."]
+    if media_rt:
+        unit = media_wk["unit"]["name"]
+        how = ("compute at an assumed utilization"
+               + (" plus memory-bandwidth-bound decode" if media_wk.get("decode") else "")
+               + (", divided by an assumed end-to-end pipeline efficiency" if media_wk.get("pipeline_eff") else ""))
+        notes[1] = (("Runtimes and whole-job costs are theoretical estimates for the " + unit + " in this job (" + how
+                     + "), shown as ranges; no benchmark exists for this workload.") if media_batch else
+                    ("Runtime is not estimated (" + str(media_wk.get("items_reason") or "the amount of work is unknown")
+                     + "); each option shows a theoretical throughput in " + unit + " per GPU-hour."))
+        if MD.compute_bound(prof):
+            notes[2] = ("Performance compares the total dense tensor throughput over all GPUs of an option (video "
+                        "diffusion and speech encoders are compute bound) after a multi-GPU scaling assumption; "
+                        "spec-sheet figures, not benchmarks.")
     # picks_unavailable: for each pick that is null, why (so no interface shows an unexplained blank)
     out = {"estimate": est, "picks": {"cheapest_market": None, "best_for_workload": None, "best_executable": None,
                                       "lowest_estimated_job_cost": None, "shortest_estimated_runtime": None},
@@ -330,6 +393,15 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
         notes.insert(0, f"This is a small model ({params_b * 1e3:,.1f}M parameters): it can likely train on a CPU, and "
                         "if you rent a GPU the cheapest one that fits is enough; a bigger GPU won't be needed for "
                         "memory. Runtime has not been benchmarked.")
+    if md.get("headline"):
+        notes.append("Media: " + md["headline"] + ".")
+    for n_ in (md.get("notes") or [])[:3]:
+        notes.append("Media: " + n_ + ".")
+    if media_batch and md.get("media_kind") in ("asr", "audio_encoder", "tts", "vlm", "video_diffusion"):
+        notes.append(f"The {media_wk['items']:,} {media_wk['item']}s are independent: more GPUs run more replicas side by "
+                     "side (near-linear, no GPU-to-GPU traffic), so a multi-GPU option is one model copy per GPU, not "
+                     "tensor parallelism. OpenGrid's batch fan-out (methodology/batches) spreads independent shards "
+                     "across instances; it runs allowlisted templates only today.")
     if c.allow_spot:
         notes.append("allow_spot is set, but spot / interruptible listings are not ranked in this release: on-demand "
                      "only.")
@@ -400,7 +472,7 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
     # scale-up: the next count of each fitting GPU (2n), so more GPUs of one model compete with fewer larger ones
     scale_ups: list[tuple] = []
     if not fixed and mem["method"] in ("training_full", "training_lora", "training_qlora", "inference"):
-        if params_b is not None and params_b < SCALE_UP_MIN_B:
+        if params_b is not None and params_b < SCALE_UP_MIN_B and not media_batch:
             notes.append(f"No multi-GPU scale-up options: a {params_b:g}B-parameter model gains little from more "
                          "GPUs (communication outweighs the extra compute).")
         else:
@@ -472,6 +544,8 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
         for x in pool:
             x["perf"] = P.option_performance(x["spec"], x["n"], method=mem["method"], precision=prec, wk=wk,
                                              params_b=params_b)
+            if media_rt:
+                _media_option(x, prof, prec)
             rt = x["perf"]["runtime"]
             if rt.get("known"):
                 bill = x["bill"]
@@ -494,12 +568,16 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
             link = perf["interconnect"]["kind"]
             perf["parallelism"] = F.parallelism(mem["method"], n, zero_stage=x["need"].get("zero_stage"),
                                                 link_kind=ev["gpu_link"], lora=lora)
+            if (perf.get("media") or {}).get("replicas", 1) > 1 and (x["n"] // 2 if x["scale"] else x["n"]) == 1:
+                perf["parallelism"] = {"strategy": "replicas", "label": f"{n} independent replicas, one per GPU",
+                                       "configure": "one process per GPU (CUDA_VISIBLE_DEVICES=0..n-1), each on its "
+                                                    "own share of the items; no GPU-to-GPU traffic"}
             if n > 1 and mem["method"] != "inference":
                 perf["communication"] = F.communication(
                     mem["method"], n, params_b=params_b, trainable_params=mem.get("trainable_parameters"),
                     zero_stage=x["need"].get("zero_stage"), profile=prof, spec=x["spec"], link_kind=link,
                     precision=prof.get("precision"))
-            if mem["method"] == "inference":
+            if mem["method"] == "inference" and md.get("media_kind") not in MEDIA_NO_DECODE_ROOFLINE:
                 inf = F.inference_throughput(
                     x["spec"], n, per_gpu_gb=(by_count.get(n) or {}).get("components_gb"), profile=prof,
                     params_b=params_b, active_params_b=active_b, ic_kind=link,
@@ -762,6 +840,8 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
             if x is bfw:
                 o["tier"] = "balanced"
                 o["why"].insert(1, _bfw_sentence(bfw, bfw_rule, bfw_basis))
+                if md.get("headline"):
+                    o["why"].insert(2, md["headline"][0].upper() + md["headline"][1:])
                 continue
             if ref_eff and eff:
                 higher = eff > ref_eff * HIGHER_PERF
@@ -867,6 +947,13 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
     out["multi_gpu"] = F.multi_gpu_advice(method=mem["method"], params_b=params_b, suggested=gc.get("suggested"),
                                           zero_stage=prof.get("zero_stage"), fits_one=gc.get("suggested") == 1,
                                           scale_pairs=pairs)
+    if media_batch:
+        out["multi_gpu"]["independent_items"] = {
+            "items": media_wk["items"], "item": media_wk["item"], "kind": "estimated",
+            "advice": "independent items: one model copy per GPU (replicas) scales near-linearly with no GPU-to-GPU "
+                      "link needed; split the work into shards and run them side by side (OpenGrid batch fan-out, "
+                      "methodology/batches, for allowlisted templates). Tensor parallelism only when one copy does "
+                      "not fit a GPU."}
 
     if cheapest is not None:
         out["picks"]["cheapest_market"] = ref(cheapest, f"lowest instance price that fits: "
@@ -881,7 +968,8 @@ def recommend(req: WorkloadRequirements, who, *, limit: int = 10, now: datetime 
                                                                 f"({_kind_word(jc)} runtime x observed price)")
     elif pool:
         out["picks_unavailable"]["lowest_estimated_job_cost"] = (
-            "runtime not estimated: " + str(wk.get("reason") or "training work unknown")
+            "runtime not estimated: " + (str(media_wk.get("items_reason") or media_wk.get("reason") or "media work unknown")
+                                         if md.get("media_kind") else str(wk.get("reason") or "training work unknown"))
             + (" (give dataset tokens and epochs)" if (mem["method"] or "").startswith("training") else ""))
     if quick is not None:
         jq = quick["job"]

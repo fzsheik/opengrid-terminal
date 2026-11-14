@@ -293,6 +293,31 @@ eq([ans1(psOrph, "action").tone, ans1(psOrph, "money").tone], ["bad", "bad"], "o
 const psVf = J.plainStatus({ status: "validation_failed", sandbox: false, outcome: "failed", finished: true, failure: { code: "validation_failed", reason: "epochs must be ≤ 10" } }, null, []);
 eq([ans1(psVf, "money").a, ans1(psVf, "success").a, ans1(psVf, "success").detail, ans1(psVf, "cost").a], ["No", "No", "epochs must be ≤ 10", "$0.00 (nothing launched)"], "failed before launch");
 
+// ---------- audio / image / video (requirements.media): optional fields, only for the chosen kind ----------
+const asr = F.requirementsFromForm({ task: "infer", model: "Whisper large-v3", mod: "asr", ahours: "10000", asec: "600", imgs: "4", ores: "1280x720" });
+eq(asr.media, { modality: ["audio"], task: "transcription", total_audio_hours: 10000, audio_seconds: 600 }, "transcription: hours + seconds; fields of other kinds are not sent");
+eq(asr.model, { name: "openai/whisper-large-v3" }, "a media suggestion is sent by name only (the server catalog sizes it)");
+ok(F.checkRequirements(asr).ok, "media body passes the contract check");
+const vg = F.requirementsFromForm({ task: "infer", model: "Wan2.1 14B", mod: "vgen", ores: "1280X720", osec: "5", items: "100" });
+eq(vg.media, { modality: ["video"], task: "generation", total_items: 100, output_resolution: "1280x720", output_video_seconds: 5 }, "video generation fields");
+const img = F.requirementsFromForm({ task: "infer", model: "Qwen2-VL 7B", mod: "image", imgs: "2", ires: "big" });
+eq(img.media, { modality: ["image"], task: "understanding", images_per_request: 2 }, "an invalid WxH is not sent");
+eq(F.formErrors({ ires: "big", imgs: "300" }).ires, "Size as WIDTHxHEIGHT, e.g. 1280x720", "WxH error");
+ok(F.formErrors({ imgs: "300" }).imgs, "images per request bounded");
+eq(F.requirementsFromForm({ task: "finetune", model: "7B", mod: "asr", ahours: "5" }).media, undefined, "media fields only with inference");
+eq(F.requirementsFromForm({ task: "infer", model: "7B" }).media, undefined, "text only (default): no media block, request unchanged");
+const mq = F.queryFromState(Object.assign(F.stateFromQuery({}), { task: "infer", mod: "asr", ahours: "10", imgs: "3" }));
+eq([mq.mod, mq.ahours, mq.imgs], ["asr", "10", null], "deep link keeps only the chosen kind's fields");
+eq(F.stateFromQuery({ task: "infer", mod: "nope", ires: "1x" }).mod, "", "unknown kind dropped from the URL");
+const mst = F.stateFromQuery({ task: "infer", mod: "vgen", ores: "1280x720", osec: "5" });
+eq(F.stateFromQuery(F.queryFromState(mst)), mst, "media round trip");
+ok(F.checkRequirements({ media: { modality: ["image"], images_per_request: 300 } }).ok === false, "contract check bounds media");
+ok(F.checkRequirements({ media: { pixels: 1 } }).ok === false, "unknown media field rejected");
+eq(F.MEDIA_KINDS.map(k => k[0]), ["", "image", "asr", "tts", "video", "vgen"], "the input / output kinds");
+const optA = { option_id: "a", gpu: "NVIDIA H100 80GB SXM5", gpu_count: 1, performance: { media: { throughput: { value: 118.07, range: [12.87, 858.66], unit: "audio hours per GPU-hour" } } } };
+eq([F.perfInfo(optA).throughput.text, F.perfInfo(optA).throughput.range], ["≈ 118 audio hours per GPU-hour", "12.9 to 859"], "throughput line (theoretical) with its range");
+eq(F.perfInfo({ performance: {} }).throughput, null, "no throughput line for other workloads");
+
 // ---------- the new page is registered (server route checked by tests/test_pages.py) ----------
 const src = fs.readFileSync(path.join(__dirname, "..", "web", "pages", "find.js"), "utf8");
 ok(/OG\.page\("\/find"/.test(src), "find.js registers /find");

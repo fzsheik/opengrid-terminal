@@ -350,15 +350,61 @@ def _blocking(req: dict, asked: list[str]) -> list[dict]:
                             "different memory", [("Fine-tuning", "fine-tuning"), ("Training from scratch", "training"),
                                                  ("Inference / serving", "inference")]))
     if _get(req, "model.parameters_b") is None and not _get(req, "model.name"):
-        qs.append(_question("model.parameters_b", "Which model, or how many parameters?",
-                            "model size drives the memory estimate",
-                            [("7B", "7B parameters"), ("13B", "13B parameters"), ("70B", "70B parameters"),
-                             ("Llama 3 8B", "Llama 3 8B")]))
+        mods = set(_get(req, "media.modality") or [])
+        task = _get(req, "media.task")
+        opts = MEDIA_MODEL_OPTIONS.get((next(iter(sorted(mods))) if len(mods) == 1 else None, task))
+        if opts:
+            qs.append(_question("model.name", "Which model?", "the model's architecture and size drive the memory "
+                                "estimate", opts))
+        else:
+            qs.append(_question("model.parameters_b", "Which model, or how many parameters?",
+                                "model size drives the memory estimate",
+                                [("7B", "7B parameters"), ("13B", "13B parameters"), ("70B", "70B parameters"),
+                                 ("Llama 3 8B", "Llama 3 8B")]))
     if wt == "fine_tuning" and not _get(req, "training.method") and "training.method" not in asked:
         qs.append(_question("training.method", "Full fine-tuning, LoRA or QLoRA?",
                             "changes optimizer and weight memory by up to ~10x",
                             [("LoRA", "LoRA"), ("QLoRA", "QLoRA"), ("Full fine-tuning", "full fine-tuning")]))
     return qs
+
+
+# model suggestions for an audio / image / video ask with no model named (catalog ids; the reply text names them)
+MEDIA_MODEL_OPTIONS = {
+    ("audio", "transcription"): [("Whisper large-v3", "openai/whisper-large-v3"),
+                                 ("Whisper large-v3 turbo", "openai/whisper-large-v3-turbo"),
+                                 ("Whisper small", "openai/whisper-small")],
+    ("audio", "speech_synthesis"): [("Parler-TTS mini", "parler-tts/parler-tts-mini-v1"),
+                                    ("Parler-TTS large", "parler-tts/parler-tts-large-v1"),
+                                    ("Kokoro 82M", "hexgrad/Kokoro-82M")],
+    ("image", "captioning"): [("LLaVA-1.5 7B", "llava-hf/llava-1.5-7b-hf"),
+                              ("Qwen2-VL 7B", "Qwen/Qwen2-VL-7B-Instruct"),
+                              ("Llama 3.2 11B Vision", "meta-llama/Llama-3.2-11B-Vision")],
+    ("image", "understanding"): [("Qwen2-VL 7B", "Qwen/Qwen2-VL-7B-Instruct"),
+                                 ("LLaVA-1.6 Mistral 7B", "llava-hf/llava-v1.6-mistral-7b-hf"),
+                                 ("Llama 3.2 11B Vision", "meta-llama/Llama-3.2-11B-Vision")],
+    ("video", "understanding"): [("Qwen2-VL 7B", "Qwen/Qwen2-VL-7B-Instruct"),
+                                 ("Qwen2-VL 72B", "Qwen/Qwen2-VL-72B-Instruct")],
+    ("video", "generation"): [("CogVideoX-5B", "THUDM/CogVideoX-5b"), ("Wan2.1 1.3B", "Wan-AI/Wan2.1-T2V-1.3B"),
+                              ("Wan2.1 14B", "Wan-AI/Wan2.1-T2V-14B"), ("HunyuanVideo", "tencent/HunyuanVideo")],
+}
+
+
+def _media_lines(rec: dict, opts: dict) -> list[str]:
+    """What the audio / image / video inputs cost, and the theoretical throughput of the recommended option."""
+    est = rec.get("estimate") or {}
+    md = est.get("media") or {}
+    out = []
+    if md.get("headline"):
+        h = str(md["headline"])
+        out.append(h[0].upper() + h[1:] + ".")
+    ref = (rec.get("picks") or {}).get("best_for_workload")
+    o = opts.get(ref.get("option_id")) if isinstance(ref, dict) else None
+    thr = _get(o or {}, "performance.media.throughput")
+    if o and thr and thr.get("value"):
+        cnt = f"{o['gpu_count']}x " if (o.get("gpu_count") or 1) > 1 else ""
+        out.append(f"Estimated throughput on {cnt}{_short(o.get('gpu'))}: about {_num(thr['value'])} {thr['unit']} "
+                   f"({_num(thr['range'][0])} to {_num(thr['range'][1])}), theoretical, not a benchmark.")
+    return out
 
 
 def _opt_line(label: str, o: dict) -> str:
@@ -411,6 +457,7 @@ def _rec_reply(rec: dict, req: dict, intent: str) -> str:
                          "Every option above can be rented directly from its provider.")
         elif key == "cheapest_market":
             lines.append("No fresh listing that fits the estimate is available right now.")
+    lines += _media_lines(rec, opts)
     # the whole job, when the training work is known: more GPUs can cost more per hour and less overall
     ref = picks.get("lowest_estimated_job_cost")
     low = opts.get(ref.get("option_id")) if isinstance(ref, dict) else None
@@ -459,7 +506,7 @@ def do_recommend(p: intents.Parsed, ctx: dict, who) -> tuple[str, list, dict]:
     if qs:
         state["asked"] = sorted(set(asked) | {q["field"] for q in qs})[:12]
         lead = {"workload_type": "what you will run", "model.parameters_b": "the model size",
-                "training.method": "the fine-tuning method"}
+                "model.name": "the model", "training.method": "the fine-tuning method"}
         what = " and ".join(lead[q["field"]] for q in qs[:2])
         return f"To recommend a GPU I need {what}.", [_questions_card(qs)], state
     rec = tools.recommend(req, who)

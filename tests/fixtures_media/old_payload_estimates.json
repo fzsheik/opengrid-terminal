@@ -1,0 +1,4758 @@
+{
+ "cases": [
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": null,
+     "reason": "not estimated: workload type unknown",
+     "suggested": null
+    },
+    "interconnect": {
+     "needed": null,
+     "reason": "not estimated: workload type unknown"
+    },
+    "memory": {
+     "assumptions": [],
+     "components_gb": null,
+     "confidence": "none",
+     "kind": "estimated",
+     "margin_pct": 20,
+     "method": "unavailable",
+     "min_total_gb": null,
+     "per_gpu_by_count": {},
+     "per_gpu_gb": null,
+     "profile": {
+      "catalog_id": null,
+      "catalog_match": null,
+      "catalog_source": null,
+      "engine": null,
+      "kind": null,
+      "known": {},
+      "method": null,
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": null,
+       "hidden_size": null,
+       "max_context": null,
+       "name": null,
+       "num_attention_heads": null,
+       "num_kv_heads": null,
+       "num_layers": null,
+       "parameters_b": null,
+       "vocab_size": null
+      },
+      "precision": null,
+      "quantization": null,
+      "workload_class": null
+     },
+     "range_gb": null,
+     "recommended_gb": null,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "unavailable_reason": "workload type unknown",
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": null,
+    "needs_gpu_reason": "not enough information to tell whether this workload needs a GPU",
+    "questions": [
+     {
+      "field": "workload_type",
+      "question": "Is this training, fine-tuning or inference?",
+      "why": "training needs gradients and optimizer states (about 16 bytes per parameter for full AdamW training) where inference needs only weights and a KV cache"
+     },
+     {
+      "field": "model.name",
+      "question": "Which model (Hugging Face id) or how many parameters?",
+      "why": "weights dominate GPU memory: without a parameter count no memory estimate is possible"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: no memory estimate, and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "no memory estimate",
+     "tokens": null
+    },
+    "workload_type": null
+   },
+   "payload": {}
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (43.68 GB with 20% margin) fits the largest GPU on record (288 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'meta-llama/Llama-3.1-8B' matched to meta-llama/Llama-3.1-8B: parameters_b, num_layers, hidden_size, num_attention_heads, num_kv_heads, head_dim, vocab_size, max_context from its published config (https://huggingface.co/meta-llama/Llama-3.1-8B/blob/main/config.json)",
+      "precision not stated: bf16 weights assumed (no quantization)"
+     ],
+     "components_gb": {
+      "activations": 0.0,
+      "framework_overhead": 3.16,
+      "gradients": 0.0,
+      "kv_cache": 17.18,
+      "optimizer": 0.0,
+      "weights": 16.06
+     },
+     "confidence": "medium",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "inference",
+     "min_total_gb": 36.4,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 3.16,
+        "gradients": 0.0,
+        "kv_cache": 17.18,
+        "optimizer": 0.0,
+        "weights": 16.06
+       },
+       "min_gb": 36.4,
+       "parallelism": "single GPU",
+       "range_gb": [
+        36.4,
+        36.4
+       ],
+       "recommended_gb": 43.68,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 2.33,
+        "gradients": 0.0,
+        "kv_cache": 8.59,
+        "optimizer": 0.0,
+        "weights": 8.03
+       },
+       "min_gb": 18.95,
+       "parallelism": "tensor parallel x2",
+       "range_gb": [
+        18.95,
+        18.95
+       ],
+       "recommended_gb": 22.74,
+       "zero_stage": null
+      },
+      "4": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.92,
+        "gradients": 0.0,
+        "kv_cache": 4.29,
+        "optimizer": 0.0,
+        "weights": 4.01
+       },
+       "min_gb": 10.23,
+       "parallelism": "tensor parallel x4",
+       "range_gb": [
+        10.23,
+        10.23
+       ],
+       "recommended_gb": 12.27,
+       "zero_stage": null
+      },
+      "8": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.71,
+        "gradients": 0.0,
+        "kv_cache": 2.15,
+        "optimizer": 0.0,
+        "weights": 2.01
+       },
+       "min_gb": 5.86,
+       "parallelism": "tensor parallel x8",
+       "range_gb": [
+        5.86,
+        5.86
+       ],
+       "recommended_gb": 7.04,
+       "zero_stage": null
+      }
+     },
+     "per_gpu_gb": 43.68,
+     "profile": {
+      "catalog_id": "meta-llama/Llama-3.1-8B",
+      "catalog_match": "exact",
+      "catalog_source": "https://huggingface.co/meta-llama/Llama-3.1-8B/blob/main/config.json",
+      "concurrency": [
+       16,
+       16,
+       16
+      ],
+      "context": [
+       8192,
+       8192,
+       8192
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": "decoder",
+      "known": {
+       "head_dim": "catalog",
+       "hidden_size": "catalog",
+       "max_context": "catalog",
+       "name": "request",
+       "num_attention_heads": "catalog",
+       "num_kv_heads": "catalog",
+       "num_layers": "catalog",
+       "parameters_b": "catalog",
+       "precision": "assumed",
+       "vocab_size": "catalog"
+      },
+      "method": "inference",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": 128,
+       "hidden_size": 4096,
+       "max_context": 131072,
+       "name": "meta-llama/Llama-3.1-8B",
+       "num_attention_heads": 32,
+       "num_kv_heads": 8,
+       "num_layers": 32,
+       "parameters_b": 8.03,
+       "vocab_size": 128256
+      },
+      "precision": "bf16",
+      "quantization": null,
+      "workload_class": "inference",
+      "zero_stage": null
+     },
+     "range_gb": null,
+     "recommended_gb": 43.68,
+     "single_gpu_total_gb": 36.4,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 0,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "inference workload",
+    "questions": [
+     {
+      "field": "precision",
+      "question": "Which precision or quantization (bf16, fp8, int8, 4-bit)?",
+      "why": "weights take 2 bytes per parameter in bf16, 1 in 8-bit, about 0.5 in 4-bit"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: runtime is only estimated for training and fine-tuning, and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "runtime is only estimated for training and fine-tuning",
+     "tokens": null
+    },
+    "workload_type": "inference"
+   },
+   "payload": {
+    "inference": {
+     "concurrency": 16,
+     "context_len": 8192
+    },
+    "model": {
+     "name": "meta-llama/Llama-3.1-8B"
+    },
+    "workload_type": "inference"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (24.67 GB with 20% margin) fits the largest GPU on record (288 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'meta-llama/Llama-3.1-8B' matched to meta-llama/Llama-3.1-8B: parameters_b, num_layers, hidden_size, num_attention_heads, num_kv_heads, head_dim, vocab_size, max_context from its published config (https://huggingface.co/meta-llama/Llama-3.1-8B/blob/main/config.json)",
+      "optimizer not stated: AdamW assumed (fp32 m and v states)",
+      "LoRA rank not stated: r=16 assumed on the q, k, v, o attention projections",
+      "attention assumed FlashAttention / PyTorch SDPA (attention scores not stored); eager attention adds Korthikanti's 5*a*s/h term per layer"
+     ],
+     "components_gb": {
+      "activations": 1.87,
+      "framework_overhead": 2.41,
+      "gradients": 0.05,
+      "kv_cache": 0.0,
+      "optimizer": 0.11,
+      "weights": 16.11
+     },
+     "confidence": "high",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "training_lora",
+     "min_total_gb": 20.56,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 1.87,
+        "framework_overhead": 2.41,
+        "gradients": 0.05,
+        "kv_cache": 0.0,
+        "optimizer": 0.11,
+        "weights": 16.11
+       },
+       "min_gb": 20.56,
+       "parallelism": "single GPU",
+       "range_gb": [
+        20.56,
+        20.56
+       ],
+       "recommended_gb": 24.67,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 1.87,
+        "framework_overhead": 2.0,
+        "gradients": 0.03,
+        "kv_cache": 0.0,
+        "optimizer": 0.05,
+        "weights": 8.06
+       },
+       "min_gb": 12.01,
+       "parallelism": "ZeRO-3 / FSDP data parallel x2",
+       "range_gb": [
+        12.01,
+        12.01
+       ],
+       "recommended_gb": 14.41,
+       "zero_stage": 3
+      },
+      "4": {
+       "components_gb": {
+        "activations": 1.87,
+        "framework_overhead": 1.8,
+        "gradients": 0.01,
+        "kv_cache": 0.0,
+        "optimizer": 0.03,
+        "weights": 4.03
+       },
+       "min_gb": 7.74,
+       "parallelism": "ZeRO-3 / FSDP data parallel x4",
+       "range_gb": [
+        7.74,
+        7.74
+       ],
+       "recommended_gb": 9.29,
+       "zero_stage": 3
+      },
+      "8": {
+       "components_gb": {
+        "activations": 1.87,
+        "framework_overhead": 1.7,
+        "gradients": 0.01,
+        "kv_cache": 0.0,
+        "optimizer": 0.01,
+        "weights": 2.01
+       },
+       "min_gb": 5.6,
+       "parallelism": "ZeRO-3 / FSDP data parallel x8",
+       "range_gb": [
+        5.6,
+        5.6
+       ],
+       "recommended_gb": 6.72,
+       "zero_stage": 3
+      }
+     },
+     "per_gpu_gb": 24.67,
+     "profile": {
+      "batch": [
+       1,
+       1,
+       1
+      ],
+      "catalog_id": "meta-llama/Llama-3.1-8B",
+      "catalog_match": "exact",
+      "catalog_source": "https://huggingface.co/meta-llama/Llama-3.1-8B/blob/main/config.json",
+      "ckpt": [
+       true,
+       true,
+       true
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": "decoder",
+      "known": {
+       "head_dim": "catalog",
+       "hidden_size": "catalog",
+       "max_context": "catalog",
+       "name": "request",
+       "num_attention_heads": "catalog",
+       "num_kv_heads": "catalog",
+       "num_layers": "catalog",
+       "parameters_b": "catalog",
+       "vocab_size": "catalog"
+      },
+      "lora_rank": 16,
+      "method": "training_lora",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": 128,
+       "hidden_size": 4096,
+       "max_context": 131072,
+       "name": "meta-llama/Llama-3.1-8B",
+       "num_attention_heads": 32,
+       "num_kv_heads": 8,
+       "num_layers": 32,
+       "parameters_b": 8.03,
+       "vocab_size": 128256
+      },
+      "optimizer": "adamw",
+      "precision": "bf16",
+      "quantization": null,
+      "seq": [
+       2048,
+       2048,
+       2048
+      ],
+      "workload_class": "training",
+      "zero_stage": null
+     },
+     "range_gb": null,
+     "recommended_gb": 24.67,
+     "single_gpu_total_gb": 20.56,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 13631488,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "fine-tuning workload",
+    "questions": [],
+    "runtime": {
+     "estimable": true,
+     "kind": "estimated",
+     "known": false,
+     "reason": "runtime depends on the GPU: each option has a theoretical runtime range (vendor peak throughput x stated utilization and multi-GPU scaling assumptions, not a benchmark)"
+    },
+    "work": {
+     "assumptions": [],
+     "epochs": 1.0,
+     "flops": 9.635999999999998e+18,
+     "flops_per_token_factor": 6,
+     "formula": "6 x parameters x tokens (LoRA/QLoRA: forward 2N + activation gradients 2N, no base-weight gradients; + 2N for recomputing activations (gradient checkpointing))",
+     "kind": "estimated",
+     "sources": {
+      "checkpointing": "https://arxiv.org/abs/1604.06174",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "training_flops": "https://arxiv.org/abs/2001.08361"
+     },
+     "tokens": 200000000.0,
+     "tokens_basis": "200,000,000 dataset tokens"
+    },
+    "workload_type": "fine_tuning"
+   },
+   "payload": {
+    "model": {
+     "name": "meta-llama/Llama-3.1-8B"
+    },
+    "precision": "bf16",
+    "training": {
+     "dataset_tokens": 200000000.0,
+     "epochs": 1,
+     "gradient_checkpointing": true,
+     "method": "lora",
+     "micro_batch_size": 1,
+     "seq_len": 2048
+    },
+    "workload_type": "fine_tuning"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 8,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (201.41 GB with 20% margin) fits the largest GPU on record (288 GB usable); sharding: ZeRO-3 / FSDP data parallel x8",
+     "suggested": 8
+    },
+    "interconnect": {
+     "needed": true,
+     "reason": "sharded training (ZeRO-3 / FSDP) across 8 GPUs gathers weights and reduces gradients every step: NVLink / SXM strongly preferred"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'meta-llama/Llama-3.1-70B' matched to meta-llama/Llama-3.1-70B: parameters_b, num_layers, hidden_size, num_attention_heads, num_kv_heads, head_dim, vocab_size, max_context from its published config (https://huggingface.co/meta-llama/Llama-3.1-70B/blob/main/config.json)",
+      "training method not stated: full training assumed (workload_type 'training')",
+      "precision not stated: bf16 mixed precision assumed",
+      "optimizer not stated: AdamW assumed (fp32 m and v states)",
+      "micro batch size not stated: 4 per GPU assumed (range 1-8)",
+      "sequence length not stated: 2048 tokens assumed (range 512-4096)",
+      "gradient checkpointing not stated: on assumed (usual for billion-parameter fine-tuning recipes); turning it off multiplies stored activations roughly 17x",
+      "attention assumed FlashAttention / PyTorch SDPA (attention scores not stored); eager attention adds Korthikanti's 5*a*s/h term per layer"
+     ],
+     "components_gb": {
+      "activations": 17.22,
+      "framework_overhead": 9.42,
+      "gradients": 17.65,
+      "kv_cache": 0.0,
+      "optimizer": 105.9,
+      "weights": 17.65
+     },
+     "confidence": "medium",
+     "for_gpu_count": 8,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "training_full",
+     "min_total_gb": 167.84,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 17.22,
+        "framework_overhead": 58.84,
+        "gradients": 141.2,
+        "kv_cache": 0.0,
+        "optimizer": 847.2,
+        "weights": 141.2
+       },
+       "min_gb": 1205.66,
+       "parallelism": "single GPU",
+       "range_gb": [
+        1188.71,
+        1259.91
+       ],
+       "recommended_gb": 1446.8,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 17.22,
+        "framework_overhead": 30.6,
+        "gradients": 70.6,
+        "kv_cache": 0.0,
+        "optimizer": 423.6,
+        "weights": 70.6
+       },
+       "min_gb": 612.62,
+       "parallelism": "ZeRO-3 / FSDP data parallel x2",
+       "range_gb": [
+        595.67,
+        666.87
+       ],
+       "recommended_gb": 735.15,
+       "zero_stage": 3
+      },
+      "4": {
+       "components_gb": {
+        "activations": 17.22,
+        "framework_overhead": 16.48,
+        "gradients": 35.3,
+        "kv_cache": 0.0,
+        "optimizer": 211.8,
+        "weights": 35.3
+       },
+       "min_gb": 316.1,
+       "parallelism": "ZeRO-3 / FSDP data parallel x4",
+       "range_gb": [
+        299.15,
+        370.35
+       ],
+       "recommended_gb": 379.32,
+       "zero_stage": 3
+      },
+      "8": {
+       "components_gb": {
+        "activations": 17.22,
+        "framework_overhead": 9.42,
+        "gradients": 17.65,
+        "kv_cache": 0.0,
+        "optimizer": 105.9,
+        "weights": 17.65
+       },
+       "min_gb": 167.84,
+       "parallelism": "ZeRO-3 / FSDP data parallel x8",
+       "range_gb": [
+        150.89,
+        222.09
+       ],
+       "recommended_gb": 201.41,
+       "zero_stage": 3
+      }
+     },
+     "per_gpu_gb": 201.41,
+     "profile": {
+      "batch": [
+       1,
+       4,
+       8
+      ],
+      "catalog_id": "meta-llama/Llama-3.1-70B",
+      "catalog_match": "exact",
+      "catalog_source": "https://huggingface.co/meta-llama/Llama-3.1-70B/blob/main/config.json",
+      "ckpt": [
+       true,
+       true,
+       true
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": "decoder",
+      "known": {
+       "head_dim": "catalog",
+       "hidden_size": "catalog",
+       "max_context": "catalog",
+       "name": "request",
+       "num_attention_heads": "catalog",
+       "num_kv_heads": "catalog",
+       "num_layers": "catalog",
+       "parameters_b": "catalog",
+       "precision": "assumed",
+       "training.gradient_checkpointing": "assumed",
+       "training.method": "assumed",
+       "training.micro_batch_size": "assumed",
+       "training.seq_len": "assumed",
+       "vocab_size": "catalog"
+      },
+      "lora_rank": null,
+      "method": "training_full",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": 128,
+       "hidden_size": 8192,
+       "max_context": 131072,
+       "name": "meta-llama/Llama-3.1-70B",
+       "num_attention_heads": 64,
+       "num_kv_heads": 8,
+       "num_layers": 80,
+       "parameters_b": 70.6,
+       "vocab_size": 128256
+      },
+      "optimizer": "adamw",
+      "precision": "bf16",
+      "quantization": null,
+      "seq": [
+       512,
+       2048,
+       4096
+      ],
+      "workload_class": "training",
+      "zero_stage": null
+     },
+     "range_gb": [
+      150.89,
+      222.09
+     ],
+     "recommended_gb": 201.41,
+     "single_gpu_total_gb": 1205.66,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 70600000000,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "training workload",
+    "questions": [
+     {
+      "field": "training.micro_batch_size",
+      "question": "What micro batch size per GPU?",
+      "why": "activation memory grows linearly with the micro batch"
+     },
+     {
+      "field": "training.seq_len",
+      "question": "What sequence length do you train with?",
+      "why": "activation memory grows linearly (quadratically without FlashAttention) with it"
+     },
+     {
+      "field": "training.gradient_checkpointing",
+      "question": "Is gradient checkpointing on?",
+      "why": "it cuts stored activations by roughly the per-layer factor (~17x) at ~30% more compute"
+     },
+     {
+      "field": "precision",
+      "question": "Which precision or quantization (bf16, fp8, int8, 4-bit)?",
+      "why": "weights take 2 bytes per parameter in bf16, 1 in 8-bit, about 0.5 in 4-bit"
+     },
+     {
+      "field": "training.dataset_tokens",
+      "question": "How many tokens will you train on (and for how many epochs)?",
+      "why": "lets OpenGrid estimate the runtime and the whole-job cost of each GPU option, including whether more GPUs finish it for less"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: the amount of training data is unknown (dataset tokens, samples and sequence length, or max_steps with global batch size and sequence length), and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "the amount of training data is unknown (dataset tokens, samples and sequence length, or max_steps with global batch size and sequence length)",
+     "tokens": null
+    },
+    "workload_type": "training"
+   },
+   "payload": {
+    "model": {
+     "name": "meta-llama/Llama-3.1-70B"
+    },
+    "workload_type": "training"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (18.74 GB with 20% margin) fits the largest GPU on record (288 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'llama 2 13b' loosely matched (candidates: meta-llama/Llama-2-13b-hf) to meta-llama/Llama-2-13b-hf: parameters_b, num_layers, hidden_size, num_attention_heads, num_kv_heads, head_dim, vocab_size, max_context from its published config (https://huggingface.co/meta-llama/Llama-2-13b-hf/blob/main/config.json)",
+      "precision not stated: bf16 mixed precision assumed",
+      "QLoRA base weights assumed NF4 4-bit with double quantization (Dettmers et al. 2023)",
+      "optimizer not stated: AdamW assumed (fp32 m and v states)",
+      "LoRA rank not stated: r=16 assumed on the q, k, v, o attention projections",
+      "micro batch size not stated: 4 per GPU assumed (range 1-8)",
+      "sequence length not stated: 2048 tokens assumed (range 512-4096)",
+      "gradient checkpointing not stated: on assumed (usual for billion-parameter fine-tuning recipes); turning it off multiplies stored activations roughly 17x",
+      "attention assumed FlashAttention / PyTorch SDPA (attention scores not stored); eager attention adds Korthikanti's 5*a*s/h term per layer"
+     ],
+     "components_gb": {
+      "activations": 5.83,
+      "framework_overhead": 2.17,
+      "gradients": 0.1,
+      "kv_cache": 0.0,
+      "optimizer": 0.21,
+      "weights": 7.3
+     },
+     "confidence": "medium",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "training_qlora",
+     "min_total_gb": 15.61,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 5.83,
+        "framework_overhead": 2.17,
+        "gradients": 0.1,
+        "kv_cache": 0.0,
+        "optimizer": 0.21,
+        "weights": 7.3
+       },
+       "min_gb": 15.61,
+       "parallelism": "single GPU",
+       "range_gb": [
+        9.88,
+        33.98
+       ],
+       "recommended_gb": 18.74,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 5.83,
+        "framework_overhead": 1.98,
+        "gradients": 0.05,
+        "kv_cache": 0.0,
+        "optimizer": 0.1,
+        "weights": 3.65
+       },
+       "min_gb": 11.62,
+       "parallelism": "ZeRO-3 / FSDP data parallel x2",
+       "range_gb": [
+        5.88,
+        29.98
+       ],
+       "recommended_gb": 13.94,
+       "zero_stage": 3
+      },
+      "4": {
+       "components_gb": {
+        "activations": 5.83,
+        "framework_overhead": 1.89,
+        "gradients": 0.03,
+        "kv_cache": 0.0,
+        "optimizer": 0.05,
+        "weights": 1.82
+       },
+       "min_gb": 9.62,
+       "parallelism": "ZeRO-3 / FSDP data parallel x4",
+       "range_gb": [
+        3.88,
+        27.98
+       ],
+       "recommended_gb": 11.54,
+       "zero_stage": 3
+      },
+      "8": {
+       "components_gb": {
+        "activations": 5.83,
+        "framework_overhead": 1.84,
+        "gradients": 0.01,
+        "kv_cache": 0.0,
+        "optimizer": 0.03,
+        "weights": 0.91
+       },
+       "min_gb": 8.62,
+       "parallelism": "ZeRO-3 / FSDP data parallel x8",
+       "range_gb": [
+        2.88,
+        26.99
+       ],
+       "recommended_gb": 10.34,
+       "zero_stage": 3
+      }
+     },
+     "per_gpu_gb": 18.74,
+     "profile": {
+      "batch": [
+       1,
+       4,
+       8
+      ],
+      "catalog_id": "meta-llama/Llama-2-13b-hf",
+      "catalog_match": "loose",
+      "catalog_source": "https://huggingface.co/meta-llama/Llama-2-13b-hf/blob/main/config.json",
+      "ckpt": [
+       true,
+       true,
+       true
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": "decoder",
+      "known": {
+       "head_dim": "catalog",
+       "hidden_size": "catalog",
+       "max_context": "catalog",
+       "name": "request",
+       "num_attention_heads": "catalog",
+       "num_kv_heads": "catalog",
+       "num_layers": "catalog",
+       "parameters_b": "catalog",
+       "precision": "assumed",
+       "training.gradient_checkpointing": "assumed",
+       "training.micro_batch_size": "assumed",
+       "training.seq_len": "assumed",
+       "vocab_size": "catalog"
+      },
+      "lora_rank": 16,
+      "method": "training_qlora",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": 128,
+       "hidden_size": 5120,
+       "max_context": 4096,
+       "name": "llama 2 13b",
+       "num_attention_heads": 40,
+       "num_kv_heads": 40,
+       "num_layers": 40,
+       "parameters_b": 13.0,
+       "vocab_size": 32000
+      },
+      "optimizer": "adamw",
+      "precision": "bf16",
+      "quantization": "nf4",
+      "seq": [
+       512,
+       2048,
+       4096
+      ],
+      "workload_class": "training",
+      "zero_stage": null
+     },
+     "range_gb": [
+      9.88,
+      33.98
+     ],
+     "recommended_gb": 18.74,
+     "single_gpu_total_gb": 15.61,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 26214400,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "fine-tuning workload",
+    "questions": [
+     {
+      "field": "training.micro_batch_size",
+      "question": "What micro batch size per GPU?",
+      "why": "activation memory grows linearly with the micro batch"
+     },
+     {
+      "field": "training.seq_len",
+      "question": "What sequence length do you train with?",
+      "why": "activation memory grows linearly (quadratically without FlashAttention) with it"
+     },
+     {
+      "field": "training.gradient_checkpointing",
+      "question": "Is gradient checkpointing on?",
+      "why": "it cuts stored activations by roughly the per-layer factor (~17x) at ~30% more compute"
+     },
+     {
+      "field": "precision",
+      "question": "Which precision or quantization (bf16, fp8, int8, 4-bit)?",
+      "why": "weights take 2 bytes per parameter in bf16, 1 in 8-bit, about 0.5 in 4-bit"
+     },
+     {
+      "field": "training.dataset_tokens",
+      "question": "How many tokens will you train on (and for how many epochs)?",
+      "why": "lets OpenGrid estimate the runtime and the whole-job cost of each GPU option, including whether more GPUs finish it for less"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: the amount of training data is unknown (dataset tokens, samples and sequence length, or max_steps with global batch size and sequence length), and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "the amount of training data is unknown (dataset tokens, samples and sequence length, or max_steps with global batch size and sequence length)",
+     "tokens": null
+    },
+    "workload_type": "fine_tuning"
+   },
+   "payload": {
+    "model": {
+     "name": "llama 2 13b"
+    },
+    "training": {
+     "method": "qlora"
+    },
+    "workload_type": "fine_tuning"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (1.91 GB with 20% margin) fits the largest GPU on record (288 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'pytorch-mnist' matched to opengrid/pytorch-mnist-cnn: parameters_b from its published config (https://github.com/pytorch/examples/blob/main/mnist/main.py)",
+      "training method not stated: full training assumed (workload_type 'training')",
+      "optimizer not stated: AdamW assumed (fp32 m and v states)"
+     ],
+     "components_gb": {
+      "activations": 0.07,
+      "framework_overhead": 1.5,
+      "gradients": 0.0,
+      "kv_cache": 0.0,
+      "optimizer": 0.01,
+      "weights": 0.0
+     },
+     "confidence": "medium",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "training_full",
+     "min_total_gb": 1.59,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 0.07,
+        "framework_overhead": 1.5,
+        "gradients": 0.0,
+        "kv_cache": 0.0,
+        "optimizer": 0.01,
+        "weights": 0.0
+       },
+       "min_gb": 1.59,
+       "parallelism": "single GPU",
+       "range_gb": [
+        1.59,
+        1.6
+       ],
+       "recommended_gb": 1.91,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 0.07,
+        "framework_overhead": 1.5,
+        "gradients": 0.0,
+        "kv_cache": 0.0,
+        "optimizer": 0.0,
+        "weights": 0.0
+       },
+       "min_gb": 1.58,
+       "parallelism": "ZeRO-3 / FSDP data parallel x2",
+       "range_gb": [
+        1.58,
+        1.59
+       ],
+       "recommended_gb": 1.9,
+       "zero_stage": 3
+      },
+      "4": {
+       "components_gb": {
+        "activations": 0.07,
+        "framework_overhead": 1.5,
+        "gradients": 0.0,
+        "kv_cache": 0.0,
+        "optimizer": 0.0,
+        "weights": 0.0
+       },
+       "min_gb": 1.58,
+       "parallelism": "ZeRO-3 / FSDP data parallel x4",
+       "range_gb": [
+        1.58,
+        1.59
+       ],
+       "recommended_gb": 1.89,
+       "zero_stage": 3
+      },
+      "8": {
+       "components_gb": {
+        "activations": 0.07,
+        "framework_overhead": 1.5,
+        "gradients": 0.0,
+        "kv_cache": 0.0,
+        "optimizer": 0.0,
+        "weights": 0.0
+       },
+       "min_gb": 1.58,
+       "parallelism": "ZeRO-3 / FSDP data parallel x8",
+       "range_gb": [
+        1.58,
+        1.59
+       ],
+       "recommended_gb": 1.89,
+       "zero_stage": 3
+      }
+     },
+     "per_gpu_gb": 1.91,
+     "profile": {
+      "batch": [
+       128,
+       128,
+       128
+      ],
+      "catalog_id": "opengrid/pytorch-mnist-cnn",
+      "catalog_match": "exact",
+      "catalog_source": "https://github.com/pytorch/examples/blob/main/mnist/main.py",
+      "ckpt": [
+       false,
+       false,
+       false
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": "cnn",
+      "known": {
+       "name": "request",
+       "parameters_b": "catalog",
+       "training.method": "assumed"
+      },
+      "lora_rank": null,
+      "method": "training_full",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": null,
+       "hidden_size": null,
+       "max_context": null,
+       "name": "pytorch-mnist",
+       "num_attention_heads": null,
+       "num_kv_heads": null,
+       "num_layers": null,
+       "parameters_b": 0.001199882,
+       "vocab_size": null
+      },
+      "optimizer": "adamw",
+      "precision": "fp32",
+      "quantization": null,
+      "seq": [
+       null,
+       null,
+       null
+      ],
+      "workload_class": "training",
+      "zero_stage": null
+     },
+     "range_gb": [
+      1.59,
+      1.6
+     ],
+     "recommended_gb": 1.91,
+     "single_gpu_total_gb": 1.59,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 1199882,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "training workload (pytorch)",
+    "questions": [
+     {
+      "field": "training.dataset_tokens",
+      "question": "How many tokens will you train on (and for how many epochs)?",
+      "why": "lets OpenGrid estimate the runtime and the whole-job cost of each GPU option, including whether more GPUs finish it for less"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: the amount of training data is unknown (dataset tokens, samples and sequence length, or max_steps with global batch size and sequence length), and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "the amount of training data is unknown (dataset tokens, samples and sequence length, or max_steps with global batch size and sequence length)",
+     "tokens": null
+    },
+    "workload_type": "training"
+   },
+   "payload": {
+    "frameworks": [
+     "pytorch"
+    ],
+    "model": {
+     "name": "pytorch-mnist"
+    },
+    "precision": "fp32",
+    "training": {
+     "epochs": 3,
+     "micro_batch_size": 128
+    },
+    "workload_type": "training"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (19.44 GB with 20% margin) fits the largest GPU on record (288 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "precision not stated: bf16 weights assumed (no quantization)"
+     ],
+     "components_gb": {
+      "activations": 0.0,
+      "framework_overhead": 2.2,
+      "gradients": 0.0,
+      "kv_cache": 0.0,
+      "optimizer": 0.0,
+      "weights": 14.0
+     },
+     "confidence": "medium",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "inference",
+     "min_total_gb": 16.2,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 2.2,
+        "gradients": 0.0,
+        "kv_cache": 0.0,
+        "optimizer": 0.0,
+        "weights": 14.0
+       },
+       "min_gb": 16.2,
+       "parallelism": "single GPU",
+       "range_gb": [
+        16.2,
+        16.2
+       ],
+       "recommended_gb": 19.44,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.85,
+        "gradients": 0.0,
+        "kv_cache": 0.0,
+        "optimizer": 0.0,
+        "weights": 7.0
+       },
+       "min_gb": 8.85,
+       "parallelism": "tensor parallel x2",
+       "range_gb": [
+        8.85,
+        8.85
+       ],
+       "recommended_gb": 10.62,
+       "zero_stage": null
+      },
+      "4": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.68,
+        "gradients": 0.0,
+        "kv_cache": 0.0,
+        "optimizer": 0.0,
+        "weights": 3.5
+       },
+       "min_gb": 5.17,
+       "parallelism": "tensor parallel x4",
+       "range_gb": [
+        5.17,
+        5.17
+       ],
+       "recommended_gb": 6.21,
+       "zero_stage": null
+      },
+      "8": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.59,
+        "gradients": 0.0,
+        "kv_cache": 0.0,
+        "optimizer": 0.0,
+        "weights": 1.75
+       },
+       "min_gb": 3.34,
+       "parallelism": "tensor parallel x8",
+       "range_gb": [
+        3.34,
+        3.34
+       ],
+       "recommended_gb": 4.0,
+       "zero_stage": null
+      }
+     },
+     "per_gpu_gb": 19.44,
+     "profile": {
+      "catalog_id": null,
+      "catalog_match": null,
+      "catalog_source": null,
+      "concurrency": [
+       1,
+       1,
+       1
+      ],
+      "context": [
+       null,
+       null,
+       null
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": null,
+      "known": {
+       "parameters_b": "request",
+       "precision": "assumed"
+      },
+      "method": "inference",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": null,
+       "hidden_size": null,
+       "max_context": null,
+       "name": null,
+       "num_attention_heads": null,
+       "num_kv_heads": null,
+       "num_layers": null,
+       "parameters_b": 7.0,
+       "vocab_size": null
+      },
+      "precision": "bf16",
+      "quantization": null,
+      "workload_class": "inference",
+      "zero_stage": null
+     },
+     "range_gb": null,
+     "recommended_gb": 19.44,
+     "single_gpu_total_gb": 16.2,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 0,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "inference workload",
+    "questions": [
+     {
+      "field": "model.name",
+      "question": "Which model architecture (Hugging Face id, or layers / hidden size / heads)?",
+      "why": "activation and KV-cache memory depend on the architecture, not just the parameter count"
+     },
+     {
+      "field": "precision",
+      "question": "Which precision or quantization (bf16, fp8, int8, 4-bit)?",
+      "why": "weights take 2 bytes per parameter in bf16, 1 in 8-bit, about 0.5 in 4-bit"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: runtime is only estimated for training and fine-tuning, and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "runtime is only estimated for training and fine-tuning",
+     "tokens": null
+    },
+    "workload_type": "inference"
+   },
+   "payload": {
+    "model": {
+     "parameters_b": 7
+    },
+    "workload_type": "inference"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 0,
+     "reason": "no ML framework among flask, requests and no model found: this looks like an application that does not need a GPU",
+     "suggested": 0
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "no GPU needed"
+    },
+    "memory": {
+     "assumptions": [],
+     "components_gb": null,
+     "confidence": "none",
+     "kind": "estimated",
+     "method": "unavailable",
+     "min_total_gb": null,
+     "per_gpu_by_count": {},
+     "per_gpu_gb": null,
+     "profile": {
+      "catalog_id": null,
+      "catalog_match": null,
+      "catalog_source": null,
+      "engine": null,
+      "kind": null,
+      "known": {},
+      "method": null,
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": null,
+       "hidden_size": null,
+       "max_context": null,
+       "name": null,
+       "num_attention_heads": null,
+       "num_kv_heads": null,
+       "num_layers": null,
+       "parameters_b": null,
+       "vocab_size": null
+      },
+      "precision": null,
+      "quantization": null,
+      "workload_class": null
+     },
+     "range_gb": null,
+     "recommended_gb": null,
+     "unavailable_reason": "no GPU needed"
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": false,
+    "needs_gpu_reason": "no ML framework among flask, requests and no model found: this looks like an application that does not need a GPU",
+    "questions": [],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: no memory estimate, and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "no memory estimate",
+     "tokens": null
+    },
+    "workload_type": null
+   },
+   "payload": {
+    "frameworks": [
+     "flask",
+     "requests"
+    ]
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (20.72 GB with 20% margin) fits the largest GPU on record (259.2 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'mistralai/Mistral-7B-v0.1' matched to mistralai/Mistral-7B-v0.1: parameters_b, num_layers, hidden_size, num_attention_heads, num_kv_heads, head_dim, vocab_size, max_context from its published config (https://huggingface.co/mistralai/Mistral-7B-v0.1/blob/main/config.json)",
+      "vLLM plans memory against 90% of VRAM (gpu_memory_utilization 0.9 default): fits are checked against 0.9 x VRAM",
+      "precision not stated: bf16 weights assumed (no quantization)",
+      "context length not stated: 4096 tokens per sequence assumed (range 2048-8192)",
+      "concurrency not stated: 1 sequence at a time assumed (range 1-8)"
+     ],
+     "components_gb": {
+      "activations": 0.0,
+      "framework_overhead": 2.25,
+      "gradients": 0.0,
+      "kv_cache": 0.54,
+      "optimizer": 0.0,
+      "weights": 14.48
+     },
+     "confidence": "medium",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "inference",
+     "min_total_gb": 17.27,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 2.25,
+        "gradients": 0.0,
+        "kv_cache": 0.54,
+        "optimizer": 0.0,
+        "weights": 14.48
+       },
+       "min_gb": 17.27,
+       "parallelism": "single GPU",
+       "range_gb": [
+        16.99,
+        25.72
+       ],
+       "recommended_gb": 20.72,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.88,
+        "gradients": 0.0,
+        "kv_cache": 0.27,
+        "optimizer": 0.0,
+        "weights": 7.24
+       },
+       "min_gb": 9.38,
+       "parallelism": "tensor parallel x2",
+       "range_gb": [
+        9.24,
+        13.61
+       ],
+       "recommended_gb": 11.26,
+       "zero_stage": null
+      },
+      "4": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.69,
+        "gradients": 0.0,
+        "kv_cache": 0.13,
+        "optimizer": 0.0,
+        "weights": 3.62
+       },
+       "min_gb": 5.44,
+       "parallelism": "tensor parallel x4",
+       "range_gb": [
+        5.37,
+        7.56
+       ],
+       "recommended_gb": 6.53,
+       "zero_stage": null
+      },
+      "8": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.59,
+        "gradients": 0.0,
+        "kv_cache": 0.07,
+        "optimizer": 0.0,
+        "weights": 1.81
+       },
+       "min_gb": 3.47,
+       "parallelism": "tensor parallel x8",
+       "range_gb": [
+        3.44,
+        4.53
+       ],
+       "recommended_gb": 4.17,
+       "zero_stage": null
+      }
+     },
+     "per_gpu_gb": 20.72,
+     "profile": {
+      "catalog_id": "mistralai/Mistral-7B-v0.1",
+      "catalog_match": "exact",
+      "catalog_source": "https://huggingface.co/mistralai/Mistral-7B-v0.1/blob/main/config.json",
+      "concurrency": [
+       1,
+       1,
+       8
+      ],
+      "context": [
+       2048,
+       4096,
+       8192
+      ],
+      "cpu_offload": false,
+      "engine": "vllm",
+      "kind": "decoder",
+      "known": {
+       "head_dim": "catalog",
+       "hidden_size": "catalog",
+       "inference.concurrency": "assumed",
+       "inference.context_len": "assumed",
+       "max_context": "catalog",
+       "name": "request",
+       "num_attention_heads": "catalog",
+       "num_kv_heads": "catalog",
+       "num_layers": "catalog",
+       "parameters_b": "catalog",
+       "precision": "assumed",
+       "vocab_size": "catalog"
+      },
+      "method": "inference",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": 128,
+       "hidden_size": 4096,
+       "max_context": 32768,
+       "name": "mistralai/Mistral-7B-v0.1",
+       "num_attention_heads": 32,
+       "num_kv_heads": 8,
+       "num_layers": 32,
+       "parameters_b": 7.24,
+       "vocab_size": 32000
+      },
+      "precision": "bf16",
+      "quantization": null,
+      "workload_class": "inference",
+      "zero_stage": null
+     },
+     "range_gb": [
+      16.99,
+      25.72
+     ],
+     "recommended_gb": 20.72,
+     "single_gpu_total_gb": 17.27,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 0,
+     "usable_vram_fraction": 0.9
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "inference workload (vllm)",
+    "questions": [
+     {
+      "field": "inference.concurrency",
+      "question": "How many requests at once?",
+      "why": "the KV cache grows linearly with concurrent sequences"
+     },
+     {
+      "field": "inference.context_len",
+      "question": "What context length (prompt + output tokens) per request?",
+      "why": "the KV cache grows linearly with context"
+     },
+     {
+      "field": "precision",
+      "question": "Which precision or quantization (bf16, fp8, int8, 4-bit)?",
+      "why": "weights take 2 bytes per parameter in bf16, 1 in 8-bit, about 0.5 in 4-bit"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: runtime is only estimated for training and fine-tuning, and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "runtime is only estimated for training and fine-tuning",
+     "tokens": null
+    },
+    "workload_type": "inference"
+   },
+   "payload": {
+    "frameworks": [
+     "vllm"
+    ],
+    "model": {
+     "name": "mistralai/Mistral-7B-v0.1"
+    }
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (6.82 GB with 20% margin) fits the largest GPU on record (288 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'resnet50' matched to microsoft/resnet-50: parameters_b from its published config (https://pytorch.org/vision/stable/models/generated/torchvision.models.resnet50.html)",
+      "training method not stated: full training assumed (workload_type 'training')",
+      "precision not stated: bf16 mixed precision assumed",
+      "optimizer not stated: AdamW assumed (fp32 m and v states)"
+     ],
+     "components_gb": {
+      "activations": 3.58,
+      "framework_overhead": 1.7,
+      "gradients": 0.05,
+      "kv_cache": 0.0,
+      "optimizer": 0.31,
+      "weights": 0.05
+     },
+     "confidence": "medium",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "training_full",
+     "min_total_gb": 5.69,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 3.58,
+        "framework_overhead": 1.7,
+        "gradients": 0.05,
+        "kv_cache": 0.0,
+        "optimizer": 0.31,
+        "weights": 0.05
+       },
+       "min_gb": 5.69,
+       "parallelism": "single GPU",
+       "range_gb": [
+        5.69,
+        6.98
+       ],
+       "recommended_gb": 6.82,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 3.58,
+        "framework_overhead": 1.69,
+        "gradients": 0.03,
+        "kv_cache": 0.0,
+        "optimizer": 0.15,
+        "weights": 0.03
+       },
+       "min_gb": 5.47,
+       "parallelism": "ZeRO-3 / FSDP data parallel x2",
+       "range_gb": [
+        5.47,
+        6.76
+       ],
+       "recommended_gb": 6.57,
+       "zero_stage": 3
+      },
+      "4": {
+       "components_gb": {
+        "activations": 3.58,
+        "framework_overhead": 1.68,
+        "gradients": 0.01,
+        "kv_cache": 0.0,
+        "optimizer": 0.08,
+        "weights": 0.01
+       },
+       "min_gb": 5.36,
+       "parallelism": "ZeRO-3 / FSDP data parallel x4",
+       "range_gb": [
+        5.36,
+        6.65
+       ],
+       "recommended_gb": 6.44,
+       "zero_stage": 3
+      },
+      "8": {
+       "components_gb": {
+        "activations": 3.58,
+        "framework_overhead": 1.68,
+        "gradients": 0.01,
+        "kv_cache": 0.0,
+        "optimizer": 0.04,
+        "weights": 0.01
+       },
+       "min_gb": 5.31,
+       "parallelism": "ZeRO-3 / FSDP data parallel x8",
+       "range_gb": [
+        5.31,
+        6.6
+       ],
+       "recommended_gb": 6.37,
+       "zero_stage": 3
+      }
+     },
+     "per_gpu_gb": 6.82,
+     "profile": {
+      "batch": [
+       64,
+       64,
+       64
+      ],
+      "catalog_id": "microsoft/resnet-50",
+      "catalog_match": "exact",
+      "catalog_source": "https://pytorch.org/vision/stable/models/generated/torchvision.models.resnet50.html",
+      "ckpt": [
+       false,
+       false,
+       false
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": "cnn",
+      "known": {
+       "name": "request",
+       "parameters_b": "catalog",
+       "precision": "assumed",
+       "training.method": "assumed"
+      },
+      "lora_rank": null,
+      "method": "training_full",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": null,
+       "hidden_size": null,
+       "max_context": null,
+       "name": "resnet50",
+       "num_attention_heads": null,
+       "num_kv_heads": null,
+       "num_layers": null,
+       "parameters_b": 0.025557,
+       "vocab_size": null
+      },
+      "optimizer": "adamw",
+      "precision": "bf16",
+      "quantization": null,
+      "seq": [
+       null,
+       null,
+       null
+      ],
+      "workload_class": "training",
+      "zero_stage": null
+     },
+     "range_gb": [
+      5.69,
+      6.98
+     ],
+     "recommended_gb": 6.82,
+     "single_gpu_total_gb": 5.69,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 25557000,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "training workload",
+    "questions": [
+     {
+      "field": "precision",
+      "question": "Which precision or quantization (bf16, fp8, int8, 4-bit)?",
+      "why": "weights take 2 bytes per parameter in bf16, 1 in 8-bit, about 0.5 in 4-bit"
+     },
+     {
+      "field": "training.dataset_tokens",
+      "question": "How many tokens will you train on (and for how many epochs)?",
+      "why": "lets OpenGrid estimate the runtime and the whole-job cost of each GPU option, including whether more GPUs finish it for less"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: the amount of training data is unknown (dataset tokens, samples and sequence length, or max_steps with global batch size and sequence length), and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "the amount of training data is unknown (dataset tokens, samples and sequence length, or max_steps with global batch size and sequence length)",
+     "tokens": null
+    },
+    "workload_type": "training"
+   },
+   "payload": {
+    "model": {
+     "name": "resnet50"
+    },
+    "training": {
+     "micro_batch_size": 64
+    },
+    "workload_type": "training"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (3.86 GB with 20% margin) fits the largest GPU on record (288 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'google/vit-base-patch16-224' matched to google/vit-base-patch16-224: parameters_b, num_layers, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_context from its published config (https://huggingface.co/google/vit-base-patch16-224/blob/main/config.json)",
+      "training method not stated: full training assumed (workload_type 'training')",
+      "precision not stated: bf16 mixed precision assumed",
+      "optimizer not stated: AdamW assumed (fp32 m and v states)",
+      "micro batch size not stated: 4 per GPU assumed (range 1-8)",
+      "gradient checkpointing not stated: off assumed (small model); turning it on cuts activations",
+      "attention assumed FlashAttention / PyTorch SDPA (attention scores not stored); eager attention adds Korthikanti's 5*a*s/h term per layer"
+     ],
+     "components_gb": {
+      "activations": 0.25,
+      "framework_overhead": 1.58,
+      "gradients": 0.17,
+      "kv_cache": 0.0,
+      "optimizer": 1.04,
+      "weights": 0.17
+     },
+     "confidence": "medium",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "training_full",
+     "min_total_gb": 3.21,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 0.25,
+        "framework_overhead": 1.58,
+        "gradients": 0.17,
+        "kv_cache": 0.0,
+        "optimizer": 1.04,
+        "weights": 0.17
+       },
+       "min_gb": 3.21,
+       "parallelism": "single GPU",
+       "range_gb": [
+        3.02,
+        3.47
+       ],
+       "recommended_gb": 3.86,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 0.25,
+        "framework_overhead": 1.55,
+        "gradients": 0.09,
+        "kv_cache": 0.0,
+        "optimizer": 0.52,
+        "weights": 0.09
+       },
+       "min_gb": 2.49,
+       "parallelism": "ZeRO-3 / FSDP data parallel x2",
+       "range_gb": [
+        2.29,
+        2.75
+       ],
+       "recommended_gb": 2.98,
+       "zero_stage": 3
+      },
+      "4": {
+       "components_gb": {
+        "activations": 0.25,
+        "framework_overhead": 1.53,
+        "gradients": 0.04,
+        "kv_cache": 0.0,
+        "optimizer": 0.26,
+        "weights": 0.04
+       },
+       "min_gb": 2.12,
+       "parallelism": "ZeRO-3 / FSDP data parallel x4",
+       "range_gb": [
+        1.93,
+        2.38
+       ],
+       "recommended_gb": 2.55,
+       "zero_stage": 3
+      },
+      "8": {
+       "components_gb": {
+        "activations": 0.25,
+        "framework_overhead": 1.52,
+        "gradients": 0.02,
+        "kv_cache": 0.0,
+        "optimizer": 0.13,
+        "weights": 0.02
+       },
+       "min_gb": 1.94,
+       "parallelism": "ZeRO-3 / FSDP data parallel x8",
+       "range_gb": [
+        1.75,
+        2.2
+       ],
+       "recommended_gb": 2.33,
+       "zero_stage": 3
+      }
+     },
+     "per_gpu_gb": 3.86,
+     "profile": {
+      "batch": [
+       1,
+       4,
+       8
+      ],
+      "catalog_id": "google/vit-base-patch16-224",
+      "catalog_match": "exact",
+      "catalog_source": "https://huggingface.co/google/vit-base-patch16-224/blob/main/config.json",
+      "ckpt": [
+       false,
+       false,
+       false
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": "vit",
+      "known": {
+       "head_dim": "catalog",
+       "hidden_size": "catalog",
+       "max_context": "catalog",
+       "name": "request",
+       "num_attention_heads": "catalog",
+       "num_kv_heads": "catalog",
+       "num_layers": "catalog",
+       "parameters_b": "catalog",
+       "precision": "assumed",
+       "training.gradient_checkpointing": "assumed",
+       "training.method": "assumed",
+       "training.micro_batch_size": "assumed"
+      },
+      "lora_rank": null,
+      "method": "training_full",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": 64,
+       "hidden_size": 768,
+       "max_context": 197,
+       "name": "google/vit-base-patch16-224",
+       "num_attention_heads": 12,
+       "num_kv_heads": 12,
+       "num_layers": 12,
+       "parameters_b": 0.0866,
+       "vocab_size": null
+      },
+      "optimizer": "adamw",
+      "precision": "bf16",
+      "quantization": null,
+      "seq": [
+       197,
+       197,
+       197
+      ],
+      "workload_class": "training",
+      "zero_stage": null
+     },
+     "range_gb": [
+      3.02,
+      3.47
+     ],
+     "recommended_gb": 3.86,
+     "single_gpu_total_gb": 3.21,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 86600000,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "training workload",
+    "questions": [
+     {
+      "field": "training.micro_batch_size",
+      "question": "What micro batch size per GPU?",
+      "why": "activation memory grows linearly with the micro batch"
+     },
+     {
+      "field": "training.gradient_checkpointing",
+      "question": "Is gradient checkpointing on?",
+      "why": "it cuts stored activations by roughly the per-layer factor (~17x) at ~30% more compute"
+     },
+     {
+      "field": "precision",
+      "question": "Which precision or quantization (bf16, fp8, int8, 4-bit)?",
+      "why": "weights take 2 bytes per parameter in bf16, 1 in 8-bit, about 0.5 in 4-bit"
+     },
+     {
+      "field": "training.dataset_tokens",
+      "question": "How many tokens will you train on (and for how many epochs)?",
+      "why": "lets OpenGrid estimate the runtime and the whole-job cost of each GPU option, including whether more GPUs finish it for less"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: the amount of training data is unknown (dataset tokens, samples and sequence length, or max_steps with global batch size and sequence length), and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "the amount of training data is unknown (dataset tokens, samples and sequence length, or max_steps with global batch size and sequence length)",
+     "tokens": null
+    },
+    "workload_type": "training"
+   },
+   "payload": {
+    "model": {
+     "name": "google/vit-base-patch16-224"
+    },
+    "workload_type": "training"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (10.62 GB with 20% margin) fits the largest GPU on record (288 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'sdxl' matched to stabilityai/stable-diffusion-xl-base-1.0: parameters_b from its published config (https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0)",
+      "precision not stated: bf16 weights assumed (no quantization)"
+     ],
+     "components_gb": {
+      "activations": 0.0,
+      "framework_overhead": 1.85,
+      "gradients": 0.0,
+      "kv_cache": 0.0,
+      "optimizer": 0.0,
+      "weights": 7.0
+     },
+     "confidence": "medium",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "inference",
+     "min_total_gb": 8.85,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.85,
+        "gradients": 0.0,
+        "kv_cache": 0.0,
+        "optimizer": 0.0,
+        "weights": 7.0
+       },
+       "min_gb": 8.85,
+       "parallelism": "single GPU",
+       "range_gb": [
+        8.85,
+        8.85
+       ],
+       "recommended_gb": 10.62,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.68,
+        "gradients": 0.0,
+        "kv_cache": 0.0,
+        "optimizer": 0.0,
+        "weights": 3.5
+       },
+       "min_gb": 5.17,
+       "parallelism": "tensor parallel x2",
+       "range_gb": [
+        5.17,
+        5.17
+       ],
+       "recommended_gb": 6.21,
+       "zero_stage": null
+      },
+      "4": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.59,
+        "gradients": 0.0,
+        "kv_cache": 0.0,
+        "optimizer": 0.0,
+        "weights": 1.75
+       },
+       "min_gb": 3.34,
+       "parallelism": "tensor parallel x4",
+       "range_gb": [
+        3.34,
+        3.34
+       ],
+       "recommended_gb": 4.0,
+       "zero_stage": null
+      },
+      "8": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.54,
+        "gradients": 0.0,
+        "kv_cache": 0.0,
+        "optimizer": 0.0,
+        "weights": 0.88
+       },
+       "min_gb": 2.42,
+       "parallelism": "tensor parallel x8",
+       "range_gb": [
+        2.42,
+        2.42
+       ],
+       "recommended_gb": 2.9,
+       "zero_stage": null
+      }
+     },
+     "per_gpu_gb": 10.62,
+     "profile": {
+      "catalog_id": "stabilityai/stable-diffusion-xl-base-1.0",
+      "catalog_match": "exact",
+      "catalog_source": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0",
+      "concurrency": [
+       1,
+       1,
+       1
+      ],
+      "context": [
+       null,
+       null,
+       null
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": "diffusion",
+      "known": {
+       "name": "request",
+       "parameters_b": "catalog",
+       "precision": "assumed"
+      },
+      "method": "inference",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": null,
+       "hidden_size": null,
+       "max_context": null,
+       "name": "sdxl",
+       "num_attention_heads": null,
+       "num_kv_heads": null,
+       "num_layers": null,
+       "parameters_b": 3.5,
+       "vocab_size": null
+      },
+      "precision": "bf16",
+      "quantization": null,
+      "workload_class": "inference",
+      "zero_stage": null
+     },
+     "range_gb": null,
+     "recommended_gb": 10.62,
+     "single_gpu_total_gb": 8.85,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 0,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "inference workload",
+    "questions": [
+     {
+      "field": "precision",
+      "question": "Which precision or quantization (bf16, fp8, int8, 4-bit)?",
+      "why": "weights take 2 bytes per parameter in bf16, 1 in 8-bit, about 0.5 in 4-bit"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: runtime is only estimated for training and fine-tuning, and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "runtime is only estimated for training and fine-tuning",
+     "tokens": null
+    },
+    "workload_type": "inference"
+   },
+   "payload": {
+    "model": {
+     "name": "sdxl"
+    },
+    "workload_type": "inference"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (33.54 GB with 20% margin) fits the largest GPU on record (288 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'mixtral 8x7b' loosely matched (candidates: mistralai/Mixtral-8x7B-v0.1) to mistralai/Mixtral-8x7B-v0.1: parameters_b, active_parameters_b, num_layers, hidden_size, num_attention_heads, num_kv_heads, head_dim, vocab_size, max_context from its published config (https://huggingface.co/mistralai/Mixtral-8x7B-v0.1/blob/main/config.json)",
+      "context length not stated: 4096 tokens per sequence assumed (range 2048-8192)",
+      "concurrency not stated: 1 sequence at a time assumed (range 1-8)"
+     ],
+     "components_gb": {
+      "activations": 0.0,
+      "framework_overhead": 2.76,
+      "gradients": 0.0,
+      "kv_cache": 0.54,
+      "optimizer": 0.0,
+      "weights": 24.65
+     },
+     "confidence": "medium",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "inference",
+     "min_total_gb": 27.95,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 2.76,
+        "gradients": 0.0,
+        "kv_cache": 0.54,
+        "optimizer": 0.0,
+        "weights": 24.65
+       },
+       "min_gb": 27.95,
+       "parallelism": "single GPU",
+       "range_gb": [
+        27.66,
+        36.4
+       ],
+       "recommended_gb": 33.54,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 2.13,
+        "gradients": 0.0,
+        "kv_cache": 0.27,
+        "optimizer": 0.0,
+        "weights": 12.33
+       },
+       "min_gb": 14.72,
+       "parallelism": "tensor parallel x2",
+       "range_gb": [
+        14.58,
+        18.95
+       ],
+       "recommended_gb": 17.67,
+       "zero_stage": null
+      },
+      "4": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.81,
+        "gradients": 0.0,
+        "kv_cache": 0.13,
+        "optimizer": 0.0,
+        "weights": 6.16
+       },
+       "min_gb": 8.11,
+       "parallelism": "tensor parallel x4",
+       "range_gb": [
+        8.04,
+        10.23
+       ],
+       "recommended_gb": 9.73,
+       "zero_stage": null
+      },
+      "8": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.66,
+        "gradients": 0.0,
+        "kv_cache": 0.07,
+        "optimizer": 0.0,
+        "weights": 3.08
+       },
+       "min_gb": 4.81,
+       "parallelism": "tensor parallel x8",
+       "range_gb": [
+        4.77,
+        5.86
+       ],
+       "recommended_gb": 5.77,
+       "zero_stage": null
+      }
+     },
+     "per_gpu_gb": 33.54,
+     "profile": {
+      "catalog_id": "mistralai/Mixtral-8x7B-v0.1",
+      "catalog_match": "loose",
+      "catalog_source": "https://huggingface.co/mistralai/Mixtral-8x7B-v0.1/blob/main/config.json",
+      "concurrency": [
+       1,
+       1,
+       8
+      ],
+      "context": [
+       2048,
+       4096,
+       8192
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": "moe",
+      "known": {
+       "active_parameters_b": "catalog",
+       "head_dim": "catalog",
+       "hidden_size": "catalog",
+       "inference.concurrency": "assumed",
+       "inference.context_len": "assumed",
+       "max_context": "catalog",
+       "name": "request",
+       "num_attention_heads": "catalog",
+       "num_kv_heads": "catalog",
+       "num_layers": "catalog",
+       "parameters_b": "catalog",
+       "vocab_size": "catalog"
+      },
+      "method": "inference",
+      "model": {
+       "active_parameters_b": 12.9,
+       "architecture": null,
+       "head_dim": 128,
+       "hidden_size": 4096,
+       "max_context": 32768,
+       "name": "mixtral 8x7b",
+       "num_attention_heads": 32,
+       "num_kv_heads": 8,
+       "num_layers": 32,
+       "parameters_b": 46.7,
+       "vocab_size": 32000
+      },
+      "precision": "bf16",
+      "quantization": "awq",
+      "workload_class": "inference",
+      "zero_stage": null
+     },
+     "range_gb": [
+      27.66,
+      36.4
+     ],
+     "recommended_gb": 33.54,
+     "single_gpu_total_gb": 27.95,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 0,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "inference workload",
+    "questions": [
+     {
+      "field": "inference.concurrency",
+      "question": "How many requests at once?",
+      "why": "the KV cache grows linearly with concurrent sequences"
+     },
+     {
+      "field": "inference.context_len",
+      "question": "What context length (prompt + output tokens) per request?",
+      "why": "the KV cache grows linearly with context"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: runtime is only estimated for training and fine-tuning, and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "runtime is only estimated for training and fine-tuning",
+     "tokens": null
+    },
+    "workload_type": "inference"
+   },
+   "payload": {
+    "model": {
+     "name": "mixtral 8x7b"
+    },
+    "quantization": "awq",
+    "workload_type": "inference"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4) whose per-GPU need (95.09 GB with 20% margin) fits the largest GPU on record (288 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'Qwen/Qwen2.5-72B' matched to Qwen/Qwen2.5-72B: parameters_b, num_layers, hidden_size, num_attention_heads, num_kv_heads, head_dim, vocab_size, max_context from its published config (https://huggingface.co/Qwen/Qwen2.5-72B/blob/main/config.json)",
+      "context length not stated: 4096 tokens per sequence assumed (range 2048-8192)",
+      "concurrency not stated: 1 sequence at a time assumed (range 1-8)"
+     ],
+     "components_gb": {
+      "activations": 0.0,
+      "framework_overhead": 5.2,
+      "gradients": 0.0,
+      "kv_cache": 1.34,
+      "optimizer": 0.0,
+      "weights": 72.7
+     },
+     "confidence": "medium",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "inference",
+     "min_total_gb": 79.24,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 5.2,
+        "gradients": 0.0,
+        "kv_cache": 1.34,
+        "optimizer": 0.0,
+        "weights": 72.7
+       },
+       "min_gb": 79.24,
+       "parallelism": "single GPU",
+       "range_gb": [
+        78.54,
+        100.38
+       ],
+       "recommended_gb": 95.09,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 3.35,
+        "gradients": 0.0,
+        "kv_cache": 0.67,
+        "optimizer": 0.0,
+        "weights": 36.35
+       },
+       "min_gb": 40.37,
+       "parallelism": "tensor parallel x2",
+       "range_gb": [
+        40.02,
+        50.94
+       ],
+       "recommended_gb": 48.45,
+       "zero_stage": null
+      },
+      "4": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 2.43,
+        "gradients": 0.0,
+        "kv_cache": 0.34,
+        "optimizer": 0.0,
+        "weights": 18.18
+       },
+       "min_gb": 20.94,
+       "parallelism": "tensor parallel x4",
+       "range_gb": [
+        20.76,
+        26.22
+       ],
+       "recommended_gb": 25.12,
+       "zero_stage": null
+      }
+     },
+     "per_gpu_gb": 95.09,
+     "profile": {
+      "catalog_id": "Qwen/Qwen2.5-72B",
+      "catalog_match": "exact",
+      "catalog_source": "https://huggingface.co/Qwen/Qwen2.5-72B/blob/main/config.json",
+      "concurrency": [
+       1,
+       1,
+       8
+      ],
+      "context": [
+       2048,
+       4096,
+       8192
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": "decoder",
+      "known": {
+       "head_dim": "catalog",
+       "hidden_size": "catalog",
+       "inference.concurrency": "assumed",
+       "inference.context_len": "assumed",
+       "max_context": "catalog",
+       "name": "request",
+       "num_attention_heads": "catalog",
+       "num_kv_heads": "catalog",
+       "num_layers": "catalog",
+       "parameters_b": "catalog",
+       "vocab_size": "catalog"
+      },
+      "method": "inference",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": 128,
+       "hidden_size": 8192,
+       "max_context": 131072,
+       "name": "Qwen/Qwen2.5-72B",
+       "num_attention_heads": 64,
+       "num_kv_heads": 8,
+       "num_layers": 80,
+       "parameters_b": 72.7,
+       "vocab_size": 152064
+      },
+      "precision": "fp8",
+      "quantization": null,
+      "workload_class": "inference",
+      "zero_stage": null
+     },
+     "range_gb": [
+      78.54,
+      100.38
+     ],
+     "recommended_gb": 95.09,
+     "single_gpu_total_gb": 79.24,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 0,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "inference workload",
+    "questions": [
+     {
+      "field": "inference.concurrency",
+      "question": "How many requests at once?",
+      "why": "the KV cache grows linearly with concurrent sequences"
+     },
+     {
+      "field": "inference.context_len",
+      "question": "What context length (prompt + output tokens) per request?",
+      "why": "the KV cache grows linearly with context"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: runtime is only estimated for training and fine-tuning, and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "runtime is only estimated for training and fine-tuning",
+     "tokens": null
+    },
+    "workload_type": "inference"
+   },
+   "payload": {
+    "constraints": {
+     "max_gpus": 4,
+     "vendor": "AMD"
+    },
+    "model": {
+     "name": "Qwen/Qwen2.5-72B"
+    },
+    "precision": "fp8",
+    "workload_type": "inference"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": null,
+     "reason": "not estimated: parameter count unknown",
+     "suggested": null
+    },
+    "interconnect": {
+     "needed": null,
+     "reason": "not estimated: parameter count unknown"
+    },
+    "memory": {
+     "assumptions": [
+      "precision not stated: bf16 weights assumed (no quantization)"
+     ],
+     "components_gb": null,
+     "confidence": "none",
+     "kind": "estimated",
+     "margin_pct": 20,
+     "method": "unavailable",
+     "min_total_gb": null,
+     "per_gpu_by_count": {},
+     "per_gpu_gb": null,
+     "profile": {
+      "catalog_id": null,
+      "catalog_match": null,
+      "catalog_source": null,
+      "concurrency": [
+       1,
+       1,
+       1
+      ],
+      "context": [
+       null,
+       null,
+       null
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": null,
+      "known": {
+       "name": "request",
+       "precision": "assumed"
+      },
+      "method": "inference",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": null,
+       "hidden_size": null,
+       "max_context": null,
+       "name": "my-org/secret-model-13b",
+       "num_attention_heads": null,
+       "num_kv_heads": null,
+       "num_layers": null,
+       "parameters_b": null,
+       "vocab_size": null
+      },
+      "precision": "bf16",
+      "quantization": null,
+      "workload_class": "inference",
+      "zero_stage": null
+     },
+     "range_gb": null,
+     "recommended_gb": null,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "unavailable_reason": "parameter count unknown",
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "inference workload",
+    "questions": [
+     {
+      "field": "model.name",
+      "question": "Which model (Hugging Face id) or how many parameters?",
+      "why": "weights dominate GPU memory: without a parameter count no memory estimate is possible"
+     },
+     {
+      "field": "precision",
+      "question": "Which precision or quantization (bf16, fp8, int8, 4-bit)?",
+      "why": "weights take 2 bytes per parameter in bf16, 1 in 8-bit, about 0.5 in 4-bit"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: no memory estimate, and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "no memory estimate",
+     "tokens": null
+    },
+    "workload_type": "inference"
+   },
+   "payload": {
+    "model": {
+     "name": "my-org/secret-model-13b"
+    },
+    "workload_type": "inference"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (174.43 GB with 20% margin) fits the largest GPU on record (288 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'Qwen/Qwen2.5-7B' matched to Qwen/Qwen2.5-7B: parameters_b, num_layers, hidden_size, num_attention_heads, num_kv_heads, head_dim, vocab_size, max_context from its published config (https://huggingface.co/Qwen/Qwen2.5-7B/blob/main/config.json)",
+      "training method not stated: full training assumed (workload_type 'training')",
+      "precision not stated: bf16 mixed precision assumed",
+      "optimizer not stated: AdamW assumed (fp32 m and v states)",
+      "micro batch size not stated: 4 per GPU assumed (range 1-8)",
+      "gradient checkpointing not stated: on assumed (usual for billion-parameter fine-tuning recipes); turning it off multiplies stored activations roughly 17x",
+      "attention assumed FlashAttention / PyTorch SDPA (attention scores not stored); eager attention adds Korthikanti's 5*a*s/h term per layer",
+      "global batch size does not change per-GPU memory (gradient accumulation); micro batch does"
+     ],
+     "components_gb": {
+      "activations": 15.25,
+      "framework_overhead": 8.35,
+      "gradients": 15.22,
+      "kv_cache": 0.0,
+      "optimizer": 91.32,
+      "weights": 15.22
+     },
+     "confidence": "medium",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "training_full",
+     "min_total_gb": 145.36,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 15.25,
+        "framework_overhead": 8.35,
+        "gradients": 15.22,
+        "kv_cache": 0.0,
+        "optimizer": 91.32,
+        "weights": 15.22
+       },
+       "min_gb": 145.36,
+       "parallelism": "single GPU",
+       "range_gb": [
+        133.35,
+        161.37
+       ],
+       "recommended_gb": 174.43,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 15.25,
+        "framework_overhead": 5.31,
+        "gradients": 7.61,
+        "kv_cache": 0.0,
+        "optimizer": 45.66,
+        "weights": 7.61
+       },
+       "min_gb": 81.44,
+       "parallelism": "ZeRO-3 / FSDP data parallel x2",
+       "range_gb": [
+        69.43,
+        97.45
+       ],
+       "recommended_gb": 97.72,
+       "zero_stage": 3
+      },
+      "4": {
+       "components_gb": {
+        "activations": 15.25,
+        "framework_overhead": 3.78,
+        "gradients": 3.81,
+        "kv_cache": 0.0,
+        "optimizer": 22.83,
+        "weights": 3.81
+       },
+       "min_gb": 49.48,
+       "parallelism": "ZeRO-3 / FSDP data parallel x4",
+       "range_gb": [
+        37.47,
+        65.49
+       ],
+       "recommended_gb": 59.37,
+       "zero_stage": 3
+      },
+      "8": {
+       "components_gb": {
+        "activations": 15.25,
+        "framework_overhead": 3.02,
+        "gradients": 1.9,
+        "kv_cache": 0.0,
+        "optimizer": 11.41,
+        "weights": 1.9
+       },
+       "min_gb": 33.49,
+       "parallelism": "ZeRO-3 / FSDP data parallel x8",
+       "range_gb": [
+        21.48,
+        49.51
+       ],
+       "recommended_gb": 40.19,
+       "zero_stage": 3
+      }
+     },
+     "per_gpu_gb": 174.43,
+     "profile": {
+      "batch": [
+       1,
+       4,
+       8
+      ],
+      "catalog_id": "Qwen/Qwen2.5-7B",
+      "catalog_match": "exact",
+      "catalog_source": "https://huggingface.co/Qwen/Qwen2.5-7B/blob/main/config.json",
+      "ckpt": [
+       true,
+       true,
+       true
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": "decoder",
+      "known": {
+       "head_dim": "catalog",
+       "hidden_size": "catalog",
+       "max_context": "catalog",
+       "name": "request",
+       "num_attention_heads": "catalog",
+       "num_kv_heads": "catalog",
+       "num_layers": "catalog",
+       "parameters_b": "catalog",
+       "precision": "assumed",
+       "training.gradient_checkpointing": "assumed",
+       "training.method": "assumed",
+       "training.micro_batch_size": "assumed",
+       "vocab_size": "catalog"
+      },
+      "lora_rank": null,
+      "method": "training_full",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": 128,
+       "hidden_size": 3584,
+       "max_context": 131072,
+       "name": "Qwen/Qwen2.5-7B",
+       "num_attention_heads": 28,
+       "num_kv_heads": 4,
+       "num_layers": 28,
+       "parameters_b": 7.61,
+       "vocab_size": 152064
+      },
+      "optimizer": "adamw",
+      "precision": "bf16",
+      "quantization": null,
+      "seq": [
+       4096,
+       4096,
+       4096
+      ],
+      "workload_class": "training",
+      "zero_stage": null
+     },
+     "range_gb": [
+      133.35,
+      161.37
+     ],
+     "recommended_gb": 174.43,
+     "single_gpu_total_gb": 145.36,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 7610000000,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "training workload",
+    "questions": [
+     {
+      "field": "training.micro_batch_size",
+      "question": "What micro batch size per GPU?",
+      "why": "activation memory grows linearly with the micro batch"
+     },
+     {
+      "field": "training.gradient_checkpointing",
+      "question": "Is gradient checkpointing on?",
+      "why": "it cuts stored activations by roughly the per-layer factor (~17x) at ~30% more compute"
+     },
+     {
+      "field": "precision",
+      "question": "Which precision or quantization (bf16, fp8, int8, 4-bit)?",
+      "why": "weights take 2 bytes per parameter in bf16, 1 in 8-bit, about 0.5 in 4-bit"
+     }
+    ],
+    "runtime": {
+     "estimable": true,
+     "kind": "estimated",
+     "known": false,
+     "reason": "runtime depends on the GPU: each option has a theoretical runtime range (vendor peak throughput x stated utilization and multi-GPU scaling assumptions, not a benchmark)"
+    },
+    "work": {
+     "assumptions": [
+      "tokens from max_steps x global batch x sequence length: shorter, unpacked sequences mean fewer"
+     ],
+     "epochs": 1.0,
+     "flops": 1.595932672e+19,
+     "flops_per_token_factor": 8,
+     "formula": "8 x parameters x tokens (full training: forward 2N + backward 4N; + 2N for recomputing activations (gradient checkpointing))",
+     "kind": "estimated",
+     "sources": {
+      "checkpointing": "https://arxiv.org/abs/1604.06174",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "training_flops": "https://arxiv.org/abs/2001.08361"
+     },
+     "tokens": 262144000.0,
+     "tokens_basis": "1,000 steps x 64 sequences per step x 4,096 tokens (max_steps; every sequence assumed packed to the full length)"
+    },
+    "workload_type": "training"
+   },
+   "payload": {
+    "model": {
+     "name": "Qwen/Qwen2.5-7B"
+    },
+    "training": {
+     "global_batch_size": 64,
+     "max_steps": 1000,
+     "seq_len": 4096
+    },
+    "workload_type": "training"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (13.46 GB with 20% margin) fits the largest GPU on record (288 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'phi-3 small' loosely matched (candidates: microsoft/Phi-3-mini-4k-instruct, microsoft/Phi-3-medium-4k-instruct) to microsoft/Phi-3-mini-4k-instruct: parameters_b, num_layers, hidden_size, num_attention_heads, num_kv_heads, head_dim, vocab_size, max_context from its published config (https://huggingface.co/microsoft/Phi-3-mini-4k-instruct/blob/main/config.json)",
+      "precision not stated: bf16 weights assumed (no quantization)",
+      "context length not stated: 4096 tokens per sequence assumed (range 2048-4096)",
+      "concurrency not stated: 1 sequence at a time assumed (range 1-8)"
+     ],
+     "components_gb": {
+      "activations": 0.0,
+      "framework_overhead": 1.96,
+      "gradients": 0.0,
+      "kv_cache": 1.61,
+      "optimizer": 0.0,
+      "weights": 7.64
+     },
+     "confidence": "low",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "inference",
+     "min_total_gb": 11.21,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.96,
+        "gradients": 0.0,
+        "kv_cache": 1.61,
+        "optimizer": 0.0,
+        "weights": 7.64
+       },
+       "min_gb": 11.21,
+       "parallelism": "single GPU",
+       "range_gb": [
+        10.37,
+        23.05
+       ],
+       "recommended_gb": 13.46,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.73,
+        "gradients": 0.0,
+        "kv_cache": 0.81,
+        "optimizer": 0.0,
+        "weights": 3.82
+       },
+       "min_gb": 6.36,
+       "parallelism": "tensor parallel x2",
+       "range_gb": [
+        5.93,
+        12.28
+       ],
+       "recommended_gb": 7.63,
+       "zero_stage": null
+      },
+      "4": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.62,
+        "gradients": 0.0,
+        "kv_cache": 0.4,
+        "optimizer": 0.0,
+        "weights": 1.91
+       },
+       "min_gb": 3.93,
+       "parallelism": "tensor parallel x4",
+       "range_gb": [
+        3.72,
+        6.89
+       ],
+       "recommended_gb": 4.71,
+       "zero_stage": null
+      },
+      "8": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.56,
+        "gradients": 0.0,
+        "kv_cache": 0.2,
+        "optimizer": 0.0,
+        "weights": 0.95
+       },
+       "min_gb": 2.71,
+       "parallelism": "tensor parallel x8",
+       "range_gb": [
+        2.61,
+        4.19
+       ],
+       "recommended_gb": 3.26,
+       "zero_stage": null
+      }
+     },
+     "per_gpu_gb": 13.46,
+     "profile": {
+      "catalog_id": "microsoft/Phi-3-mini-4k-instruct",
+      "catalog_match": "loose",
+      "catalog_source": "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct/blob/main/config.json",
+      "concurrency": [
+       1,
+       1,
+       8
+      ],
+      "context": [
+       2048,
+       4096,
+       4096
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": "decoder",
+      "known": {
+       "head_dim": "catalog",
+       "hidden_size": "catalog",
+       "inference.concurrency": "assumed",
+       "inference.context_len": "assumed",
+       "max_context": "catalog",
+       "name": "request",
+       "num_attention_heads": "catalog",
+       "num_kv_heads": "catalog",
+       "num_layers": "catalog",
+       "parameters_b": "catalog",
+       "precision": "assumed",
+       "vocab_size": "catalog"
+      },
+      "method": "inference",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": 96,
+       "hidden_size": 3072,
+       "max_context": 4096,
+       "name": "phi-3 small",
+       "num_attention_heads": 32,
+       "num_kv_heads": 32,
+       "num_layers": 32,
+       "parameters_b": 3.82,
+       "vocab_size": 32064
+      },
+      "precision": "bf16",
+      "quantization": null,
+      "workload_class": "inference",
+      "zero_stage": null
+     },
+     "range_gb": [
+      10.37,
+      23.05
+     ],
+     "recommended_gb": 13.46,
+     "single_gpu_total_gb": 11.21,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 0,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "inference workload",
+    "questions": [
+     {
+      "field": "inference.concurrency",
+      "question": "How many requests at once?",
+      "why": "the KV cache grows linearly with concurrent sequences"
+     },
+     {
+      "field": "inference.context_len",
+      "question": "What context length (prompt + output tokens) per request?",
+      "why": "the KV cache grows linearly with context"
+     },
+     {
+      "field": "precision",
+      "question": "Which precision or quantization (bf16, fp8, int8, 4-bit)?",
+      "why": "weights take 2 bytes per parameter in bf16, 1 in 8-bit, about 0.5 in 4-bit"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: runtime is only estimated for training and fine-tuning, and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "runtime is only estimated for training and fine-tuning",
+     "tokens": null
+    },
+    "workload_type": "inference"
+   },
+   "payload": {
+    "model": {
+     "name": "phi-3 small"
+    },
+    "workload_type": "inference"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (25.95 GB with 20% margin) fits the largest GPU on record (288 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'gemma 2 27b' loosely matched (candidates: google/gemma-2-27b) to google/gemma-2-27b: parameters_b, num_layers, hidden_size, num_attention_heads, num_kv_heads, head_dim, vocab_size, max_context from its published config (https://huggingface.co/google/gemma-2-27b/blob/main/config.json)",
+      "context length not stated: 4096 tokens per sequence assumed (range 2048-8192)",
+      "concurrency not stated: 1 sequence at a time assumed (range 1-8)"
+     ],
+     "components_gb": {
+      "activations": 0.0,
+      "framework_overhead": 2.46,
+      "gradients": 0.0,
+      "kv_cache": 1.54,
+      "optimizer": 0.0,
+      "weights": 17.62
+     },
+     "confidence": "medium",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "inference",
+     "min_total_gb": 21.63,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 2.46,
+        "gradients": 0.0,
+        "kv_cache": 1.54,
+        "optimizer": 0.0,
+        "weights": 17.62
+       },
+       "min_gb": 21.63,
+       "parallelism": "single GPU",
+       "range_gb": [
+        20.82,
+        45.94
+       ],
+       "recommended_gb": 25.95,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.98,
+        "gradients": 0.0,
+        "kv_cache": 0.77,
+        "optimizer": 0.0,
+        "weights": 8.81
+       },
+       "min_gb": 11.56,
+       "parallelism": "tensor parallel x2",
+       "range_gb": [
+        11.16,
+        23.72
+       ],
+       "recommended_gb": 13.88,
+       "zero_stage": null
+      },
+      "4": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.74,
+        "gradients": 0.0,
+        "kv_cache": 0.39,
+        "optimizer": 0.0,
+        "weights": 4.41
+       },
+       "min_gb": 6.53,
+       "parallelism": "tensor parallel x4",
+       "range_gb": [
+        6.33,
+        12.61
+       ],
+       "recommended_gb": 7.84,
+       "zero_stage": null
+      },
+      "8": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.62,
+        "gradients": 0.0,
+        "kv_cache": 0.19,
+        "optimizer": 0.0,
+        "weights": 2.2
+       },
+       "min_gb": 4.02,
+       "parallelism": "tensor parallel x8",
+       "range_gb": [
+        3.91,
+        7.05
+       ],
+       "recommended_gb": 4.82,
+       "zero_stage": null
+      }
+     },
+     "per_gpu_gb": 25.95,
+     "profile": {
+      "catalog_id": "google/gemma-2-27b",
+      "catalog_match": "loose",
+      "catalog_source": "https://huggingface.co/google/gemma-2-27b/blob/main/config.json",
+      "concurrency": [
+       1,
+       1,
+       8
+      ],
+      "context": [
+       2048,
+       4096,
+       8192
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": "decoder",
+      "known": {
+       "head_dim": "catalog",
+       "hidden_size": "catalog",
+       "inference.concurrency": "assumed",
+       "inference.context_len": "assumed",
+       "max_context": "catalog",
+       "name": "request",
+       "num_attention_heads": "catalog",
+       "num_kv_heads": "catalog",
+       "num_layers": "catalog",
+       "parameters_b": "catalog",
+       "vocab_size": "catalog"
+      },
+      "method": "inference",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": 128,
+       "hidden_size": 4608,
+       "max_context": 8192,
+       "name": "gemma 2 27b",
+       "num_attention_heads": 32,
+       "num_kv_heads": 16,
+       "num_layers": 46,
+       "parameters_b": 27.2,
+       "vocab_size": 256000
+      },
+      "precision": "bf16",
+      "quantization": "int4",
+      "workload_class": "inference",
+      "zero_stage": null
+     },
+     "range_gb": [
+      20.82,
+      45.94
+     ],
+     "recommended_gb": 25.95,
+     "single_gpu_total_gb": 21.63,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 0,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "inference workload",
+    "questions": [
+     {
+      "field": "inference.concurrency",
+      "question": "How many requests at once?",
+      "why": "the KV cache grows linearly with concurrent sequences"
+     },
+     {
+      "field": "inference.context_len",
+      "question": "What context length (prompt + output tokens) per request?",
+      "why": "the KV cache grows linearly with context"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: runtime is only estimated for training and fine-tuning, and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "runtime is only estimated for training and fine-tuning",
+     "tokens": null
+    },
+    "workload_type": "inference"
+   },
+   "payload": {
+    "hardware_hints": {
+     "gpu_count": 2
+    },
+    "model": {
+     "name": "gemma 2 27b"
+    },
+    "quantization": "int4",
+    "workload_type": "inference"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (13.01 GB with 20% margin) fits the largest GPU on record (288 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'bert-base-uncased' matched to google-bert/bert-base-uncased: parameters_b, num_layers, hidden_size, num_attention_heads, num_kv_heads, head_dim, vocab_size, max_context from its published config (https://huggingface.co/google-bert/bert-base-uncased/blob/main/config.json)",
+      "fine-tuning method not stated: full fine-tuning assumed (the most memory; LoRA needs far less)",
+      "precision not stated: bf16 mixed precision assumed",
+      "optimizer not stated: AdamW assumed (fp32 m and v states)",
+      "sequence length not stated: 512 tokens assumed (range 512-512)",
+      "gradient checkpointing not stated: off assumed (small model); turning it on cuts activations",
+      "attention assumed FlashAttention / PyTorch SDPA (attention scores not stored); eager attention adds Korthikanti's 5*a*s/h term per layer"
+     ],
+     "components_gb": {
+      "activations": 7.13,
+      "framework_overhead": 1.94,
+      "gradients": 0.22,
+      "kv_cache": 0.0,
+      "optimizer": 1.32,
+      "weights": 0.22
+     },
+     "confidence": "medium",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "training_full",
+     "min_total_gb": 10.84,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 7.13,
+        "framework_overhead": 1.94,
+        "gradients": 0.22,
+        "kv_cache": 0.0,
+        "optimizer": 1.32,
+        "weights": 0.22
+       },
+       "min_gb": 10.84,
+       "parallelism": "single GPU",
+       "range_gb": [
+        10.84,
+        10.84
+       ],
+       "recommended_gb": 13.01,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 7.13,
+        "framework_overhead": 1.9,
+        "gradients": 0.11,
+        "kv_cache": 0.0,
+        "optimizer": 0.66,
+        "weights": 0.11
+       },
+       "min_gb": 9.91,
+       "parallelism": "ZeRO-3 / FSDP data parallel x2",
+       "range_gb": [
+        9.91,
+        9.91
+       ],
+       "recommended_gb": 11.9,
+       "zero_stage": 3
+      },
+      "4": {
+       "components_gb": {
+        "activations": 7.13,
+        "framework_overhead": 1.88,
+        "gradients": 0.06,
+        "kv_cache": 0.0,
+        "optimizer": 0.33,
+        "weights": 0.06
+       },
+       "min_gb": 9.45,
+       "parallelism": "ZeRO-3 / FSDP data parallel x4",
+       "range_gb": [
+        9.45,
+        9.45
+       ],
+       "recommended_gb": 11.34,
+       "zero_stage": 3
+      },
+      "8": {
+       "components_gb": {
+        "activations": 7.13,
+        "framework_overhead": 1.87,
+        "gradients": 0.03,
+        "kv_cache": 0.0,
+        "optimizer": 0.17,
+        "weights": 0.03
+       },
+       "min_gb": 9.22,
+       "parallelism": "ZeRO-3 / FSDP data parallel x8",
+       "range_gb": [
+        9.22,
+        9.22
+       ],
+       "recommended_gb": 11.07,
+       "zero_stage": 3
+      }
+     },
+     "per_gpu_gb": 13.01,
+     "profile": {
+      "batch": [
+       32,
+       32,
+       32
+      ],
+      "catalog_id": "google-bert/bert-base-uncased",
+      "catalog_match": "exact",
+      "catalog_source": "https://huggingface.co/google-bert/bert-base-uncased/blob/main/config.json",
+      "ckpt": [
+       false,
+       false,
+       false
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": "encoder",
+      "known": {
+       "head_dim": "catalog",
+       "hidden_size": "catalog",
+       "max_context": "catalog",
+       "name": "request",
+       "num_attention_heads": "catalog",
+       "num_kv_heads": "catalog",
+       "num_layers": "catalog",
+       "parameters_b": "catalog",
+       "precision": "assumed",
+       "training.gradient_checkpointing": "assumed",
+       "training.method": "assumed",
+       "training.seq_len": "assumed",
+       "vocab_size": "catalog"
+      },
+      "lora_rank": null,
+      "method": "training_full",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": 64,
+       "hidden_size": 768,
+       "max_context": 512,
+       "name": "bert-base-uncased",
+       "num_attention_heads": 12,
+       "num_kv_heads": 12,
+       "num_layers": 12,
+       "parameters_b": 0.11,
+       "vocab_size": 30522
+      },
+      "optimizer": "adamw",
+      "precision": "bf16",
+      "quantization": null,
+      "seq": [
+       512,
+       512,
+       512
+      ],
+      "workload_class": "training",
+      "zero_stage": null
+     },
+     "range_gb": null,
+     "recommended_gb": 13.01,
+     "single_gpu_total_gb": 10.84,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 110000000,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "fine-tuning workload",
+    "questions": [
+     {
+      "field": "training.method",
+      "question": "Full fine-tuning, LoRA or QLoRA?",
+      "why": "changes optimizer memory by ~10x"
+     },
+     {
+      "field": "training.seq_len",
+      "question": "What sequence length do you train with?",
+      "why": "activation memory grows linearly (quadratically without FlashAttention) with it"
+     },
+     {
+      "field": "training.gradient_checkpointing",
+      "question": "Is gradient checkpointing on?",
+      "why": "it cuts stored activations by roughly the per-layer factor (~17x) at ~30% more compute"
+     },
+     {
+      "field": "precision",
+      "question": "Which precision or quantization (bf16, fp8, int8, 4-bit)?",
+      "why": "weights take 2 bytes per parameter in bf16, 1 in 8-bit, about 0.5 in 4-bit"
+     },
+     {
+      "field": "training.dataset_tokens",
+      "question": "How many tokens will you train on (and for how many epochs)?",
+      "why": "lets OpenGrid estimate the runtime and the whole-job cost of each GPU option, including whether more GPUs finish it for less"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: the amount of training data is unknown (dataset tokens, samples and sequence length, or max_steps with global batch size and sequence length), and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "the amount of training data is unknown (dataset tokens, samples and sequence length, or max_steps with global batch size and sequence length)",
+     "tokens": null
+    },
+    "workload_type": "fine_tuning"
+   },
+   "payload": {
+    "model": {
+     "name": "bert-base-uncased"
+    },
+    "training": {
+     "micro_batch_size": 32
+    },
+    "workload_type": "fine_tuning"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (30.53 GB with 20% margin) fits the largest GPU on record (288 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "KV heads not stated: assumed equal to attention heads (no grouped-query attention; the KV cache is then an upper bound)",
+      "parameter count not stated: approximated as 12*layers*hidden^2 + vocab*hidden = 1.27B (Kaplan et al. 2020; ignores grouped-query attention and gated MLPs)",
+      "training method not stated: full training assumed (workload_type 'training')",
+      "precision not stated: bf16 mixed precision assumed",
+      "optimizer not stated: AdamW assumed (fp32 m and v states)",
+      "micro batch size not stated: 4 per GPU assumed (range 1-8)",
+      "sequence length not stated: 2048 tokens assumed (range 512-4096)",
+      "gradient checkpointing not stated: on assumed (usual for billion-parameter fine-tuning recipes); turning it off multiplies stored activations roughly 17x",
+      "attention assumed FlashAttention / PyTorch SDPA (attention scores not stored); eager attention adds Korthikanti's 5*a*s/h term per layer"
+     ],
+     "components_gb": {
+      "activations": 2.42,
+      "framework_overhead": 2.64,
+      "gradients": 2.55,
+      "kv_cache": 0.0,
+      "optimizer": 15.28,
+      "weights": 2.55
+     },
+     "confidence": "low",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "training_full",
+     "min_total_gb": 25.44,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 2.42,
+        "framework_overhead": 2.64,
+        "gradients": 2.55,
+        "kv_cache": 0.0,
+        "optimizer": 15.28,
+        "weights": 2.55
+       },
+       "min_gb": 25.44,
+       "parallelism": "single GPU",
+       "range_gb": [
+        23.05,
+        33.08
+       ],
+       "recommended_gb": 30.53,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 2.42,
+        "framework_overhead": 2.13,
+        "gradients": 1.27,
+        "kv_cache": 0.0,
+        "optimizer": 7.64,
+        "weights": 1.27
+       },
+       "min_gb": 14.74,
+       "parallelism": "ZeRO-3 / FSDP data parallel x2",
+       "range_gb": [
+        12.36,
+        22.38
+       ],
+       "recommended_gb": 17.69,
+       "zero_stage": 3
+      },
+      "4": {
+       "components_gb": {
+        "activations": 2.42,
+        "framework_overhead": 1.88,
+        "gradients": 0.64,
+        "kv_cache": 0.0,
+        "optimizer": 3.82,
+        "weights": 0.64
+       },
+       "min_gb": 9.39,
+       "parallelism": "ZeRO-3 / FSDP data parallel x4",
+       "range_gb": [
+        7.01,
+        17.03
+       ],
+       "recommended_gb": 11.27,
+       "zero_stage": 3
+      },
+      "8": {
+       "components_gb": {
+        "activations": 2.42,
+        "framework_overhead": 1.75,
+        "gradients": 0.32,
+        "kv_cache": 0.0,
+        "optimizer": 1.91,
+        "weights": 0.32
+       },
+       "min_gb": 6.72,
+       "parallelism": "ZeRO-3 / FSDP data parallel x8",
+       "range_gb": [
+        4.33,
+        14.36
+       ],
+       "recommended_gb": 8.06,
+       "zero_stage": 3
+      }
+     },
+     "per_gpu_gb": 30.53,
+     "profile": {
+      "batch": [
+       1,
+       4,
+       8
+      ],
+      "catalog_id": null,
+      "catalog_match": null,
+      "catalog_source": null,
+      "ckpt": [
+       true,
+       true,
+       true
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": "decoder",
+      "known": {
+       "architecture": "request",
+       "head_dim": "derived",
+       "hidden_size": "request",
+       "num_attention_heads": "request",
+       "num_kv_heads": "assumed",
+       "num_layers": "request",
+       "parameters_b": "derived",
+       "precision": "assumed",
+       "training.gradient_checkpointing": "assumed",
+       "training.method": "assumed",
+       "training.micro_batch_size": "assumed",
+       "training.seq_len": "assumed",
+       "vocab_size": "request"
+      },
+      "lora_rank": null,
+      "method": "training_full",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": "llama",
+       "head_dim": 128,
+       "hidden_size": 2048,
+       "max_context": null,
+       "name": null,
+       "num_attention_heads": 16,
+       "num_kv_heads": 16,
+       "num_layers": 24,
+       "parameters_b": 1.273495552,
+       "vocab_size": 32000
+      },
+      "optimizer": "adamw",
+      "precision": "bf16",
+      "quantization": null,
+      "seq": [
+       512,
+       2048,
+       4096
+      ],
+      "workload_class": "training",
+      "zero_stage": null
+     },
+     "range_gb": [
+      23.05,
+      33.08
+     ],
+     "recommended_gb": 30.53,
+     "single_gpu_total_gb": 25.44,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 1273495552,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "training workload",
+    "questions": [
+     {
+      "field": "training.micro_batch_size",
+      "question": "What micro batch size per GPU?",
+      "why": "activation memory grows linearly with the micro batch"
+     },
+     {
+      "field": "training.seq_len",
+      "question": "What sequence length do you train with?",
+      "why": "activation memory grows linearly (quadratically without FlashAttention) with it"
+     },
+     {
+      "field": "training.gradient_checkpointing",
+      "question": "Is gradient checkpointing on?",
+      "why": "it cuts stored activations by roughly the per-layer factor (~17x) at ~30% more compute"
+     },
+     {
+      "field": "precision",
+      "question": "Which precision or quantization (bf16, fp8, int8, 4-bit)?",
+      "why": "weights take 2 bytes per parameter in bf16, 1 in 8-bit, about 0.5 in 4-bit"
+     },
+     {
+      "field": "training.dataset_tokens",
+      "question": "How many tokens will you train on (and for how many epochs)?",
+      "why": "lets OpenGrid estimate the runtime and the whole-job cost of each GPU option, including whether more GPUs finish it for less"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: the amount of training data is unknown (dataset tokens, samples and sequence length, or max_steps with global batch size and sequence length), and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "the amount of training data is unknown (dataset tokens, samples and sequence length, or max_steps with global batch size and sequence length)",
+     "tokens": null
+    },
+    "workload_type": "training"
+   },
+   "payload": {
+    "model": {
+     "architecture": "llama",
+     "hidden_size": 2048,
+     "num_attention_heads": 16,
+     "num_layers": 24,
+     "vocab_size": 32000
+    },
+    "workload_type": "training"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (21.27 GB with 20% margin) fits the largest GPU on record (288 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'Qwen/Qwen2.5-7B' matched to Qwen/Qwen2.5-7B: parameters_b, num_layers, hidden_size, num_attention_heads, num_kv_heads, head_dim, vocab_size, max_context from its published config (https://huggingface.co/Qwen/Qwen2.5-7B/blob/main/config.json)",
+      "precision not stated: bf16 weights assumed (no quantization)",
+      "context length not stated: 4096 tokens per sequence assumed (range 2048-8192)",
+      "concurrency not stated: 1 sequence at a time assumed (range 1-8)"
+     ],
+     "components_gb": {
+      "activations": 0.0,
+      "framework_overhead": 2.27,
+      "gradients": 0.0,
+      "kv_cache": 0.23,
+      "optimizer": 0.0,
+      "weights": 15.22
+     },
+     "confidence": "medium",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "inference",
+     "min_total_gb": 17.73,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 2.27,
+        "gradients": 0.0,
+        "kv_cache": 0.23,
+        "optimizer": 0.0,
+        "weights": 15.22
+       },
+       "min_gb": 17.73,
+       "parallelism": "single GPU",
+       "range_gb": [
+        17.6,
+        21.43
+       ],
+       "recommended_gb": 21.27,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.89,
+        "gradients": 0.0,
+        "kv_cache": 0.12,
+        "optimizer": 0.0,
+        "weights": 7.61
+       },
+       "min_gb": 9.61,
+       "parallelism": "tensor parallel x2",
+       "range_gb": [
+        9.55,
+        11.46
+       ],
+       "recommended_gb": 11.54,
+       "zero_stage": null
+      },
+      "4": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.69,
+        "gradients": 0.0,
+        "kv_cache": 0.06,
+        "optimizer": 0.0,
+        "weights": 3.81
+       },
+       "min_gb": 5.56,
+       "parallelism": "tensor parallel x4",
+       "range_gb": [
+        5.53,
+        6.48
+       ],
+       "recommended_gb": 6.67,
+       "zero_stage": null
+      },
+      "8": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 1.6,
+        "gradients": 0.0,
+        "kv_cache": 0.03,
+        "optimizer": 0.0,
+        "weights": 1.9
+       },
+       "min_gb": 3.53,
+       "parallelism": "tensor parallel x8",
+       "range_gb": [
+        3.51,
+        3.99
+       ],
+       "recommended_gb": 4.23,
+       "zero_stage": null
+      }
+     },
+     "per_gpu_gb": 21.27,
+     "profile": {
+      "catalog_id": "Qwen/Qwen2.5-7B",
+      "catalog_match": "exact",
+      "catalog_source": "https://huggingface.co/Qwen/Qwen2.5-7B/blob/main/config.json",
+      "concurrency": [
+       1,
+       1,
+       8
+      ],
+      "context": [
+       2048,
+       4096,
+       8192
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": "decoder",
+      "known": {
+       "head_dim": "catalog",
+       "hidden_size": "catalog",
+       "inference.concurrency": "assumed",
+       "inference.context_len": "assumed",
+       "max_context": "catalog",
+       "name": "request",
+       "num_attention_heads": "catalog",
+       "num_kv_heads": "catalog",
+       "num_layers": "catalog",
+       "parameters_b": "catalog",
+       "precision": "assumed",
+       "vocab_size": "catalog"
+      },
+      "method": "inference",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": 128,
+       "hidden_size": 3584,
+       "max_context": 131072,
+       "name": "Qwen/Qwen2.5-7B",
+       "num_attention_heads": 28,
+       "num_kv_heads": 4,
+       "num_layers": 28,
+       "parameters_b": 7.61,
+       "vocab_size": 152064
+      },
+      "precision": "bf16",
+      "quantization": null,
+      "workload_class": "inference",
+      "zero_stage": null
+     },
+     "range_gb": [
+      17.6,
+      21.43
+     ],
+     "recommended_gb": 21.27,
+     "single_gpu_total_gb": 17.73,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 0,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "batch workload",
+    "questions": [
+     {
+      "field": "inference.concurrency",
+      "question": "How many requests at once?",
+      "why": "the KV cache grows linearly with concurrent sequences"
+     },
+     {
+      "field": "inference.context_len",
+      "question": "What context length (prompt + output tokens) per request?",
+      "why": "the KV cache grows linearly with context"
+     },
+     {
+      "field": "precision",
+      "question": "Which precision or quantization (bf16, fp8, int8, 4-bit)?",
+      "why": "weights take 2 bytes per parameter in bf16, 1 in 8-bit, about 0.5 in 4-bit"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: runtime is only estimated for training and fine-tuning, and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "runtime is only estimated for training and fine-tuning",
+     "tokens": null
+    },
+    "workload_type": "batch"
+   },
+   "payload": {
+    "inference": {
+     "output_tokens": 256
+    },
+    "model": {
+     "name": "Qwen/Qwen2.5-7B"
+    },
+    "workload_type": "batch"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 0,
+     "reason": "workload_type is 'no_gpu': nothing in this workload uses a GPU",
+     "suggested": 0
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "no GPU needed"
+    },
+    "memory": {
+     "assumptions": [],
+     "components_gb": null,
+     "confidence": "none",
+     "kind": "estimated",
+     "method": "unavailable",
+     "min_total_gb": null,
+     "per_gpu_by_count": {},
+     "per_gpu_gb": null,
+     "profile": {
+      "catalog_id": null,
+      "catalog_match": null,
+      "catalog_source": null,
+      "engine": null,
+      "kind": null,
+      "known": {},
+      "method": null,
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": null,
+       "hidden_size": null,
+       "max_context": null,
+       "name": null,
+       "num_attention_heads": null,
+       "num_kv_heads": null,
+       "num_layers": null,
+       "parameters_b": null,
+       "vocab_size": null
+      },
+      "precision": null,
+      "quantization": null,
+      "workload_class": "no_gpu"
+     },
+     "range_gb": null,
+     "recommended_gb": null,
+     "unavailable_reason": "no GPU needed"
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": false,
+    "needs_gpu_reason": "workload_type is 'no_gpu': nothing in this workload uses a GPU",
+    "questions": [],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: no memory estimate, and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "no memory estimate",
+     "tokens": null
+    },
+    "workload_type": "no_gpu"
+   },
+   "payload": {
+    "workload_type": "no_gpu"
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 1,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (40.38 GB with 20% margin) fits the largest GPU on record (288 GB usable)",
+     "suggested": 1
+    },
+    "interconnect": {
+     "needed": false,
+     "reason": "fits on one GPU: no GPU-to-GPU interconnect needed"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'google/gemma-2-9b' matched to google/gemma-2-9b: parameters_b, num_layers, hidden_size, num_attention_heads, num_kv_heads, head_dim, vocab_size, max_context from its published config (https://huggingface.co/google/gemma-2-9b/blob/main/config.json)",
+      "fine-tuning method not stated: LoRA assumed (peft in the project)",
+      "precision not stated: bf16 mixed precision assumed",
+      "optimizer not stated: AdamW assumed (fp32 m and v states)",
+      "LoRA rank not stated: r=16 assumed on the q, k, v, o attention projections",
+      "micro batch size not stated: 4 per GPU assumed (range 1-8)",
+      "sequence length not stated: 2048 tokens assumed (range 512-4096)",
+      "gradient checkpointing not stated: on assumed (usual for billion-parameter fine-tuning recipes); turning it off multiplies stored activations roughly 17x",
+      "attention assumed FlashAttention / PyTorch SDPA (attention scores not stored); eager attention adds Korthikanti's 5*a*s/h term per layer"
+     ],
+     "components_gb": {
+      "activations": 11.85,
+      "framework_overhead": 3.03,
+      "gradients": 0.07,
+      "kv_cache": 0.0,
+      "optimizer": 0.14,
+      "weights": 18.55
+     },
+     "confidence": "medium",
+     "for_gpu_count": 1,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "training_lora",
+     "min_total_gb": 33.65,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 11.85,
+        "framework_overhead": 3.03,
+        "gradients": 0.07,
+        "kv_cache": 0.0,
+        "optimizer": 0.14,
+        "weights": 18.55
+       },
+       "min_gb": 33.65,
+       "parallelism": "single GPU",
+       "range_gb": [
+        21.98,
+        70.99
+       ],
+       "recommended_gb": 40.38,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 11.85,
+        "framework_overhead": 2.56,
+        "gradients": 0.04,
+        "kv_cache": 0.0,
+        "optimizer": 0.07,
+        "weights": 9.28
+       },
+       "min_gb": 23.8,
+       "parallelism": "ZeRO-3 / FSDP data parallel x2",
+       "range_gb": [
+        12.13,
+        61.14
+       ],
+       "recommended_gb": 28.56,
+       "zero_stage": 3
+      },
+      "4": {
+       "components_gb": {
+        "activations": 11.85,
+        "framework_overhead": 2.33,
+        "gradients": 0.02,
+        "kv_cache": 0.0,
+        "optimizer": 0.04,
+        "weights": 4.64
+       },
+       "min_gb": 18.87,
+       "parallelism": "ZeRO-3 / FSDP data parallel x4",
+       "range_gb": [
+        7.2,
+        56.21
+       ],
+       "recommended_gb": 22.65,
+       "zero_stage": 3
+      },
+      "8": {
+       "components_gb": {
+        "activations": 11.85,
+        "framework_overhead": 2.21,
+        "gradients": 0.01,
+        "kv_cache": 0.0,
+        "optimizer": 0.02,
+        "weights": 2.32
+       },
+       "min_gb": 16.41,
+       "parallelism": "ZeRO-3 / FSDP data parallel x8",
+       "range_gb": [
+        4.74,
+        53.75
+       ],
+       "recommended_gb": 19.69,
+       "zero_stage": 3
+      }
+     },
+     "per_gpu_gb": 40.38,
+     "profile": {
+      "batch": [
+       1,
+       4,
+       8
+      ],
+      "catalog_id": "google/gemma-2-9b",
+      "catalog_match": "exact",
+      "catalog_source": "https://huggingface.co/google/gemma-2-9b/blob/main/config.json",
+      "ckpt": [
+       true,
+       true,
+       true
+      ],
+      "cpu_offload": false,
+      "engine": null,
+      "kind": "decoder",
+      "known": {
+       "head_dim": "catalog",
+       "hidden_size": "catalog",
+       "max_context": "catalog",
+       "name": "request",
+       "num_attention_heads": "catalog",
+       "num_kv_heads": "catalog",
+       "num_layers": "catalog",
+       "parameters_b": "catalog",
+       "precision": "assumed",
+       "training.gradient_checkpointing": "assumed",
+       "training.method": "assumed",
+       "training.micro_batch_size": "assumed",
+       "training.seq_len": "assumed",
+       "vocab_size": "catalog"
+      },
+      "lora_rank": 16,
+      "method": "training_lora",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": 256,
+       "hidden_size": 3584,
+       "max_context": 8192,
+       "name": "google/gemma-2-9b",
+       "num_attention_heads": 16,
+       "num_kv_heads": 8,
+       "num_layers": 42,
+       "parameters_b": 9.24,
+       "vocab_size": 256000
+      },
+      "optimizer": "adamw",
+      "precision": "bf16",
+      "quantization": null,
+      "seq": [
+       512,
+       2048,
+       4096
+      ],
+      "workload_class": "training",
+      "zero_stage": null
+     },
+     "range_gb": [
+      21.98,
+      70.99
+     ],
+     "recommended_gb": 40.38,
+     "single_gpu_total_gb": 33.65,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 17891328,
+     "usable_vram_fraction": 1.0
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "training workload (peft, transformers)",
+    "questions": [
+     {
+      "field": "training.method",
+      "question": "Full fine-tuning, LoRA or QLoRA?",
+      "why": "changes optimizer memory by ~10x"
+     },
+     {
+      "field": "training.micro_batch_size",
+      "question": "What micro batch size per GPU?",
+      "why": "activation memory grows linearly with the micro batch"
+     },
+     {
+      "field": "training.seq_len",
+      "question": "What sequence length do you train with?",
+      "why": "activation memory grows linearly (quadratically without FlashAttention) with it"
+     },
+     {
+      "field": "training.gradient_checkpointing",
+      "question": "Is gradient checkpointing on?",
+      "why": "it cuts stored activations by roughly the per-layer factor (~17x) at ~30% more compute"
+     },
+     {
+      "field": "precision",
+      "question": "Which precision or quantization (bf16, fp8, int8, 4-bit)?",
+      "why": "weights take 2 bytes per parameter in bf16, 1 in 8-bit, about 0.5 in 4-bit"
+     },
+     {
+      "field": "training.dataset_tokens",
+      "question": "How many tokens will you train on (and for how many epochs)?",
+      "why": "lets OpenGrid estimate the runtime and the whole-job cost of each GPU option, including whether more GPUs finish it for less"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: the amount of training data is unknown (dataset tokens, samples and sequence length, or max_steps with global batch size and sequence length), and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "the amount of training data is unknown (dataset tokens, samples and sequence length, or max_steps with global batch size and sequence length)",
+     "tokens": null
+    },
+    "workload_type": "training"
+   },
+   "payload": {
+    "frameworks": [
+     "transformers",
+     "peft"
+    ],
+    "model": {
+     "name": "google/gemma-2-9b"
+    }
+   }
+  },
+  {
+   "estimate": {
+    "gpu_count": {
+     "min": 2,
+     "reason": "smallest GPU count (of 1, 2, 4, 8) whose per-GPU need (258.28 GB with 20% margin) fits the largest GPU on record (259.2 GB usable); sharding: tensor parallel x2",
+     "suggested": 2
+    },
+    "interconnect": {
+     "needed": true,
+     "reason": "tensor parallelism across 2 GPUs exchanges activations every layer: NVLink / Infinity Fabric strongly preferred over PCIe"
+    },
+    "memory": {
+     "assumptions": [
+      "model 'meta-llama/Llama-3.1-405B' matched to meta-llama/Llama-3.1-405B: parameters_b, num_layers, hidden_size, num_attention_heads, num_kv_heads, head_dim, vocab_size, max_context from its published config (https://huggingface.co/meta-llama/Llama-3.1-405B/blob/main/config.json)",
+      "vLLM plans memory against 90% of VRAM (gpu_memory_utilization 0.9 default): fits are checked against 0.9 x VRAM",
+      "context length not stated: 4096 tokens per sequence assumed (range 2048-8192)",
+      "concurrency not stated: 1 sequence at a time assumed (range 1-8)"
+     ],
+     "components_gb": {
+      "activations": 0.0,
+      "framework_overhead": 11.68,
+      "gradients": 0.0,
+      "kv_cache": 1.06,
+      "optimizer": 0.0,
+      "weights": 202.5
+     },
+     "confidence": "medium",
+     "for_gpu_count": 2,
+     "kind": "estimated",
+     "lower_bound": false,
+     "margin_pct": 20,
+     "method": "inference",
+     "min_total_gb": 215.23,
+     "per_gpu_by_count": {
+      "1": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 21.86,
+        "gradients": 0.0,
+        "kv_cache": 2.11,
+        "optimizer": 0.0,
+        "weights": 405.0
+       },
+       "min_gb": 428.97,
+       "parallelism": "single GPU",
+       "range_gb": [
+        427.86,
+        462.26
+       ],
+       "recommended_gb": 514.76,
+       "zero_stage": null
+      },
+      "2": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 11.68,
+        "gradients": 0.0,
+        "kv_cache": 1.06,
+        "optimizer": 0.0,
+        "weights": 202.5
+       },
+       "min_gb": 215.23,
+       "parallelism": "tensor parallel x2",
+       "range_gb": [
+        214.68,
+        231.88
+       ],
+       "recommended_gb": 258.28,
+       "zero_stage": null
+      },
+      "4": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 6.59,
+        "gradients": 0.0,
+        "kv_cache": 0.53,
+        "optimizer": 0.0,
+        "weights": 101.25
+       },
+       "min_gb": 108.37,
+       "parallelism": "tensor parallel x4",
+       "range_gb": [
+        108.09,
+        116.69
+       ],
+       "recommended_gb": 130.04,
+       "zero_stage": null
+      },
+      "8": {
+       "components_gb": {
+        "activations": 0.0,
+        "framework_overhead": 4.04,
+        "gradients": 0.0,
+        "kv_cache": 0.26,
+        "optimizer": 0.0,
+        "weights": 50.62
+       },
+       "min_gb": 54.93,
+       "parallelism": "tensor parallel x8",
+       "range_gb": [
+        54.79,
+        59.1
+       ],
+       "recommended_gb": 65.92,
+       "zero_stage": null
+      }
+     },
+     "per_gpu_gb": 258.28,
+     "profile": {
+      "catalog_id": "meta-llama/Llama-3.1-405B",
+      "catalog_match": "exact",
+      "catalog_source": "https://huggingface.co/meta-llama/Llama-3.1-405B/blob/main/config.json",
+      "concurrency": [
+       1,
+       1,
+       8
+      ],
+      "context": [
+       2048,
+       4096,
+       8192
+      ],
+      "cpu_offload": false,
+      "engine": "vllm",
+      "kind": "decoder",
+      "known": {
+       "head_dim": "catalog",
+       "hidden_size": "catalog",
+       "inference.concurrency": "assumed",
+       "inference.context_len": "assumed",
+       "max_context": "catalog",
+       "name": "request",
+       "num_attention_heads": "catalog",
+       "num_kv_heads": "catalog",
+       "num_layers": "catalog",
+       "parameters_b": "catalog",
+       "vocab_size": "catalog"
+      },
+      "method": "inference",
+      "model": {
+       "active_parameters_b": null,
+       "architecture": null,
+       "head_dim": 128,
+       "hidden_size": 16384,
+       "max_context": 131072,
+       "name": "meta-llama/Llama-3.1-405B",
+       "num_attention_heads": 128,
+       "num_kv_heads": 8,
+       "num_layers": 126,
+       "parameters_b": 405.0,
+       "vocab_size": 128256
+      },
+      "precision": "fp8",
+      "quantization": null,
+      "workload_class": "inference",
+      "zero_stage": null
+     },
+     "range_gb": [
+      214.68,
+      231.88
+     ],
+     "recommended_gb": 258.28,
+     "single_gpu_total_gb": 428.97,
+     "sources": {
+      "activations": "https://arxiv.org/abs/2205.05198",
+      "adafactor": "https://arxiv.org/abs/1804.04235",
+      "adam_8bit": "https://arxiv.org/abs/2110.02861",
+      "flash_attention": "https://arxiv.org/abs/2205.14135",
+      "lora": "https://arxiv.org/abs/2106.09685",
+      "qlora": "https://arxiv.org/abs/2305.14314",
+      "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
+      "zero": "https://arxiv.org/abs/1910.02054"
+     },
+     "trainable_parameters": 0,
+     "usable_vram_fraction": 0.9
+    },
+    "methodology": "/methodology/recommendations",
+    "needs_gpu": true,
+    "needs_gpu_reason": "inference workload",
+    "questions": [
+     {
+      "field": "inference.concurrency",
+      "question": "How many requests at once?",
+      "why": "the KV cache grows linearly with concurrent sequences"
+     },
+     {
+      "field": "inference.context_len",
+      "question": "What context length (prompt + output tokens) per request?",
+      "why": "the KV cache grows linearly with context"
+     }
+    ],
+    "runtime": {
+     "estimable": false,
+     "known": false,
+     "reason": "runtime not estimated: runtime is only estimated for training and fine-tuning, and no measured benchmark exists for this workload"
+    },
+    "work": {
+     "flops": null,
+     "reason": "runtime is only estimated for training and fine-tuning",
+     "tokens": null
+    },
+    "workload_type": "inference"
+   },
+   "payload": {
+    "inference": {
+     "engine": "vllm",
+     "target_tokens_per_s": 100
+    },
+    "model": {
+     "name": "meta-llama/Llama-3.1-405B"
+    },
+    "precision": "fp8",
+    "workload_type": "inference"
+   }
+  }
+ ],
+ "generated_from": "c75316b intelligence/ (before audio / image / video support)"
+}

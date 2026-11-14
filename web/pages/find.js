@@ -42,6 +42,9 @@
       max_steps: I(1e8) }),
     inference: O({ concurrency: I(1e6), context_len: I(1e8), output_tokens: I(1e8), target_latency_ms: N(1e9), target_tokens_per_s: N(1e9),
       engine: E("vllm", "tgi", "transformers", "llama.cpp") }),
+    media: O({ modality: A(E("text", "image", "audio", "video", "multimodal"), 5), task: E("understanding", "captioning", "transcription", "speech_synthesis", "generation"),
+      images_per_request: I(256), image_resolution: S(11), audio_seconds: N(86400), total_audio_hours: N(1e7), video_seconds: N(86400), fps: N(240), video_resolution: S(11),
+      output_video_seconds: N(600), output_fps: N(240), output_resolution: S(11), diffusion_steps: I(1000), total_items: I(1e9) }),
     constraints: O({ budget_usd: N(1e9), max_price_per_gpu_hour: N(1e6), runtime_hours: N(1e6), deadline_hours: N(1e6), region: S(32), max_gpus: I(100000), allow_spot: B,
       vendor: E("NVIDIA", "AMD"), include_providers: A(S(60), 100), exclude_providers: A(S(60), 100) }),
     hardware_hints: O({ gpus_mentioned: A(S(80), 50), gpu_count: I(100000), cuda_min: S(16) }),
@@ -158,9 +161,32 @@
     { label: "Qwen2.5 14B", name: "Qwen/Qwen2.5-14B", parameters_b: 14.7, architecture: "qwen2" },
     { label: "Gemma 2 9B", name: "google/gemma-2-9b", parameters_b: 9.24, architecture: "gemma2" },
     { label: "Phi-3 mini 3.8B", name: "microsoft/Phi-3-mini-4k-instruct", parameters_b: 3.82, architecture: "phi3" },
+    // audio / image / video: sent by name only, the server's catalog fills the published architecture
+    { label: "Whisper large-v3", name: "openai/whisper-large-v3", parameters_b: null, architecture: null },
+    { label: "Whisper large-v3 turbo", name: "openai/whisper-large-v3-turbo", parameters_b: null, architecture: null },
+    { label: "Qwen2-VL 7B", name: "Qwen/Qwen2-VL-7B-Instruct", parameters_b: null, architecture: null },
+    { label: "LLaVA-1.5 7B", name: "llava-hf/llava-1.5-7b-hf", parameters_b: null, architecture: null },
+    { label: "Llama 3.2 11B Vision", name: "meta-llama/Llama-3.2-11B-Vision", parameters_b: null, architecture: null },
+    { label: "CogVideoX-5B", name: "THUDM/CogVideoX-5b", parameters_b: null, architecture: null },
+    { label: "Wan2.1 14B", name: "Wan-AI/Wan2.1-T2V-14B", parameters_b: null, architecture: null },
+    { label: "HunyuanVideo", name: "tencent/HunyuanVideo", parameters_b: null, architecture: null },
+    { label: "Parler-TTS mini", name: "parler-tts/parler-tts-mini-v1", parameters_b: null, architecture: null },
   ];
-  const FORM_KEYS = ["task", "model", "method", "prec", "quant", "ctx", "conc", "seq", "mbs", "tokens", "epochs", "budget", "region", "maxp"];
-  const blankState = () => ({ task: "", model: "", method: "", prec: "", quant: "", ctx: "", conc: "", seq: "", mbs: "", tokens: "", epochs: "", budget: "", region: "", maxp: "" });
+  // Inference input / output (optional; requirements.media). Shown fields per kind: [form key, label, placeholder]
+  const MEDIA_KINDS = [
+    ["", "Text only", null, null, []],
+    ["image", "Images + text", "image", "understanding", [["imgs", "Images per request", "e.g. 2"], ["ires", "Image size (WxH)", "e.g. 1024x768"], ["items", "Images in total (batch)", "e.g. 50000"]]],
+    ["asr", "Transcribe audio", "audio", "transcription", [["ahours", "Hours of audio in total", "e.g. 10000"], ["asec", "Seconds per file", "e.g. 600"]]],
+    ["tts", "Text to speech", "audio", "speech_synthesis", [["asec", "Seconds of speech per item", "e.g. 10"], ["items", "Items in total", "e.g. 2000"]]],
+    ["video", "Understand video", "video", "understanding", [["vsec", "Seconds per video", "e.g. 60"], ["items", "Videos in total (batch)", "e.g. 500"]]],
+    ["vgen", "Generate video", "video", "generation", [["ores", "Output size (WxH)", "e.g. 1280x720"], ["osec", "Seconds per video", "e.g. 5"], ["items", "Videos to generate", "e.g. 100"]]],
+  ];
+  const MEDIA_FIELDS = ["imgs", "ires", "items", "ahours", "asec", "vsec", "ores", "osec"];
+  const RES_RE = /^\d{2,5}[xX]\d{2,5}$/;
+  const FORM_KEYS = ["task", "model", "method", "prec", "quant", "ctx", "conc", "seq", "mbs", "tokens", "epochs", "budget", "region", "maxp", "mod"].concat(MEDIA_FIELDS);
+  const blankState = () => ({ task: "", model: "", method: "", prec: "", quant: "", ctx: "", conc: "", seq: "", mbs: "", tokens: "", epochs: "", budget: "", region: "", maxp: "",
+    mod: "", imgs: "", ires: "", items: "", ahours: "", asec: "", vsec: "", ores: "", osec: "" });
+  const mediaKind = mod => MEDIA_KINDS.find(k => k[0] === mod) || MEDIA_KINDS[0];
   // "200M" / "1.5B" / "50k" / "2,000,000" / "3e8" -> tokens; null when it is not a positive count (never guessed)
   function tokensFromText(text) {
     const t = String(text == null ? "" : text).trim().toLowerCase().replace(/,/g, "").replace(/\s*tokens?$/, "");
@@ -178,7 +204,7 @@
     const t = String(text == null ? "" : text).trim().slice(0, 200);
     if (!t) return null;
     const m = MODELS.find(x => normKey(x.label) === normKey(t) || normKey(x.name) === normKey(t));
-    if (m) return { name: m.name, parameters_b: m.parameters_b, architecture: m.architecture };
+    if (m) return m.parameters_b == null ? { name: m.name, parameters_b: null, architecture: null } : { name: m.name, parameters_b: m.parameters_b, architecture: m.architecture };
     const p = /^~?\s*(\d+(?:\.\d+)?)\s*(b|bn|billion|m|million)?\s*(params|parameters)?$/i.exec(t);
     if (p) {
       const n = +p[1], unit = (p[2] || "b").toLowerCase();
@@ -210,6 +236,13 @@
     pos("epochs", "Epochs", { max: 100000 });
     if (st.tokens && tokensFromText(st.tokens) == null) e.tokens = "Training data: a token count like 200M, 1.5B or 50000";
     pos("maxp", "Max price", { max: 1000 });
+    pos("imgs", "Images per request", { int: true, max: 256 });
+    pos("items", "Items in total", { int: true, max: 1000000000 });
+    pos("ahours", "Hours of audio", { max: 10000000 });
+    pos("asec", "Seconds", { max: 86400 });
+    pos("vsec", "Seconds per video", { max: 86400 });
+    pos("osec", "Seconds per video", { max: 600 });
+    for (const k of ["ires", "ores"]) if (st[k] && !RES_RE.test(String(st[k]).trim())) e[k] = "Size as WIDTHxHEIGHT, e.g. 1280x720";
     if (st.model && String(st.model).length > 200) e.model = "Model name is too long";
     return e;
   }
@@ -230,6 +263,15 @@
       };
     }
     if (wt === "inference") req.inference = { context_len: int(st.ctx) > 0 ? int(st.ctx) : null, concurrency: int(st.conc) > 0 ? int(st.conc) : null };
+    const mk = mediaKind(st.mod);
+    if (wt === "inference" && mk[2]) {
+      const shown = new Set(mk[4].map(f => f[0]));
+      const pv = (k, f) => (shown.has(k) && f(st[k]) > 0 ? f(st[k]) : null);
+      const res = k => (shown.has(k) && RES_RE.test(String(st[k] || "").trim()) ? String(st[k]).trim().toLowerCase() : null);
+      req.media = { modality: [mk[2]], task: mk[3], images_per_request: pv("imgs", int), image_resolution: res("ires"), total_items: pv("items", int),
+        total_audio_hours: pv("ahours", num), audio_seconds: pv("asec", num), video_seconds: pv("vsec", num), output_resolution: res("ores"),
+        output_video_seconds: pv("osec", num) };
+    }
     req.constraints = { budget_usd: num(st.budget) > 0 ? num(st.budget) : null, max_price_per_gpu_hour: num(st.maxp) > 0 ? num(st.maxp) : null,
       region: REGIONS.some(r => r[0] && r[0] === st.region) ? st.region : null };
     return prune(applyAnswers(req, answers)) || { source: "form" };
@@ -244,7 +286,9 @@
     st.prec = PRECISIONS.includes(q.prec) ? q.prec : "";
     st.quant = QUANTS.some(x => x[0] === q.quant) ? q.quant : "";
     st.region = REGIONS.some(r => r[0] && r[0] === q.region) ? q.region : "";
-    for (const k of ["ctx", "conc", "seq", "mbs", "epochs", "budget", "maxp"]) st[k] = num(q[k]) != null ? str(k, 20) : "";
+    for (const k of ["ctx", "conc", "seq", "mbs", "epochs", "budget", "maxp", "imgs", "items", "ahours", "asec", "vsec", "osec"]) st[k] = num(q[k]) != null ? str(k, 20) : "";
+    st.mod = MEDIA_KINDS.some(k => k[0] && k[0] === q.mod) ? q.mod : "";
+    for (const k of ["ires", "ores"]) st[k] = RES_RE.test(str(k, 11)) ? str(k, 11) : "";
     st.tokens = tokensFromText(str("tokens", 24)) != null ? str("tokens", 24) : "";
     return st;
   }
@@ -253,7 +297,9 @@
     const out = {};
     for (const k of FORM_KEYS) out[k] = st && st[k] !== "" && st[k] != null ? String(st[k]) : null;
     if (out.task !== "finetune") out.method = null;
-    if (out.task !== "infer") { out.ctx = null; out.conc = null; }
+    if (out.task !== "infer") { out.ctx = null; out.conc = null; out.mod = null; }
+    const shown = new Set(out.mod ? mediaKind(out.mod)[4].map(f => f[0]) : []);
+    for (const k of MEDIA_FIELDS) if (!shown.has(k)) out[k] = null;
     if (out.task !== "train" && out.task !== "finetune") { out.seq = null; out.mbs = null; out.tokens = null; out.epochs = null; }
     return out;
   }
@@ -489,6 +535,9 @@
       runtime: mrt ? { text: "≈ " + hoursText(mrt.hours), range: rng(mrt.range_hours, hoursText), basis: mrt.basis || null, measured: true, n: m.n }
         : rt.known === true && finite(rt.hours) ? { text: "≈ " + hoursText(rt.hours), range: rng(rt.range_hours, hoursText), basis: rt.basis || null } : null,
       jobCost: jc && finite(jc.usd) ? { text: usd(jc.usd), range: rng(jc.range_usd, usd), usd: jc.usd, measured: !!jm } : null,
+      // audio / image / video: theoretical items per GPU-hour (performance.media), never a benchmark
+      throughput: p.media && p.media.throughput && finite(p.media.throughput.value)
+        ? { text: `≈ ${fmtRate(p.media.throughput.value)} ${p.media.throughput.unit}`, range: rng(p.media.throughput.range, fmtRate), basis: p.media.throughput.basis || null } : null,
       confidence: conf && conf.level ? { level: String(conf.level), reason: arr(conf.reasons)[0] ? String(arr(conf.reasons)[0]) : null } : null,
     };
   }
@@ -556,7 +605,7 @@
     return null;
   }
 
-  OG.find = { SCHEMA, TASKS, METHODS, MODELS, PICKS, TIERS, FORM_KEYS, MAX_PASTE, DEMO_HREF, ANALYZER_KEYS,
+  OG.find = { SCHEMA, TASKS, METHODS, MODELS, MEDIA_KINDS, PICKS, TIERS, FORM_KEYS, MAX_PASTE, DEMO_HREF, ANALYZER_KEYS,
     checkRequirements, validatePaste, prune, modelFromText, formErrors, requirementsFromForm, stateFromQuery, queryFromState,
     applyAnswers, answersFromQuery, answersToQuery, controlFor, leafSpec,
     pickCards, readiness, availability, memoryFit, fmtGb, runtimeInfo, componentRows, tiersOf, noGpu, costLines, gpuHref, routeHref,
@@ -604,9 +653,10 @@
         h("ul", {}, r.reasons.map(x => h("li", {}, x.reason || x.code, x.code ? h("span", { class: "mono dimmer" }, " " + x.code) : null)))) : null);
   }
   // Performance across the option's GPUs: totals, the link, the scaling assumption, runtime and the whole job.
+  function fmtRate(v) { return v >= 100 ? Math.round(v).toLocaleString("en-US") : v >= 1 ? String(+v.toFixed(1)) : String(+v.toPrecision(2)); }
   function perfBlock(o) {
     const pi = perfInfo(o);
-    if (!pi.basis && !pi.multi && !pi.runtime) return null;
+    if (!pi.basis && !pi.multi && !pi.runtime && !pi.throughput) return null;
     return h("div", { class: "cx-perf" },
       h("div", { class: "cx-perf-h" }, h("span", { class: "fd-k" }, "Performance"), OG.kindBadge("estimated"),
         pi.basis ? h("span", { class: "dim", title: "What the comparison is based on" }, pi.basis) : null),
@@ -617,7 +667,9 @@
       pi.relative && pi.relative.value !== 1 ? h("div", { class: "cx-perf-r" }, h("span", {}, pi.relative.text), pi.relative.range ? h("span", { class: "dim" }, `(${pi.relative.range}, spec sheet)`) : null) : null,
       pi.runtime ? h("div", { class: "cx-perf-r" },
         h("span", { title: pi.runtime.basis || "" }, h("span", { class: "dim" }, "Est. runtime "), h("b", {}, pi.runtime.text), pi.runtime.range ? h("span", { class: "dim" }, ` (${pi.runtime.range})`) : null),
-        pi.jobCost ? h("span", {}, h("span", { class: "dim" }, "Est. whole job "), h("b", { class: "mono" }, pi.jobCost.text), pi.jobCost.range ? h("span", { class: "dim" }, ` (${pi.jobCost.range})`) : null) : null) : null);
+        pi.jobCost ? h("span", {}, h("span", { class: "dim" }, "Est. whole job "), h("b", { class: "mono" }, pi.jobCost.text), pi.jobCost.range ? h("span", { class: "dim" }, ` (${pi.jobCost.range})`) : null) : null) : null,
+      pi.throughput ? h("div", { class: "cx-perf-r" }, h("span", { title: pi.throughput.basis || "" }, h("span", { class: "dim" }, "Est. throughput "), h("b", {}, pi.throughput.text),
+        pi.throughput.range ? h("span", { class: "dim" }, ` (${pi.throughput.range})`) : null)) : null);
   }
   // "Preview a route" (free; needs an OpenGrid account). Signed out it carries a lock, not a sign-in prompt.
   function routeLink(o, signedIn, cls, label) {
@@ -710,6 +762,7 @@
           h("div", { class: "fd-comp-bar", role: "img", "aria-label": rows.map(r => `${r.label} ${fmtGb(r.gb)}`).join(", ") },
             rows.map((r, i) => h("i", { style: { width: (r.share * 100).toFixed(2) + "%", background: COLORS[i % COLORS.length] }, title: `${r.label}: ${fmtGb(r.gb)}` }))),
           h("ul", { class: "fd-comp-l" }, rows.map((r, i) => h("li", {}, h("i", { class: "sw", style: { background: COLORS[i % COLORS.length] } }), h("span", {}, r.label), h("b", { class: "mono" }, fmtGb(r.gb)))))) : null),
+      e && e.media && e.media.headline ? h("p", { class: "fd-hint fd-media-h" }, String(e.media.headline)) : null,
       assumptions.length ? h("div", { class: "fd-assume" }, h("span", { class: "fd-k" }, "Assumptions"),
         h("ul", {}, assumptions.slice(0, 4).map(a => h("li", {}, String(a)))),
         assumptions.length > 4 ? h("details", {}, h("summary", {}, `${assumptions.length - 4} more`), h("ul", {}, assumptions.slice(4).map(a => h("li", {}, String(a))))) : null) : null);
@@ -1040,6 +1093,18 @@
         const precSel = h("select", { class: "field", "aria-label": "Precision", onchange: ev => upd("prec", ev.target.value) }, h("option", { value: "" }, "Not sure"), PRECISIONS.map(p => h("option", { value: p, selected: st.prec === p ? true : null }, p)));
         const quantSel = h("select", { class: "field", "aria-label": "Quantization", onchange: ev => upd("quant", ev.target.value) }, h("option", { value: "" }, "Not sure"), QUANTS.map(([v, l]) => h("option", { value: v, selected: st.quant === v ? true : null }, l)));
         const advOpenF = !!(st.prec || st.quant || st.seq || st.mbs);
+        // images / audio / video (optional): the fields for the chosen kind only
+        const textIn = (k, label, ph) => h("label", { class: "fd-f" }, h("span", { class: "fd-l" }, label),
+          h("input", { class: "field", type: "text", value: st[k], placeholder: ph, spellcheck: "false", maxlength: 11, oninput: ev => upd(k, ev.target.value.trim()) }), err(k));
+        function mediaBlock() {
+          const mk = mediaKind(st.mod);
+          const sel = h("select", { class: "field", "aria-label": "Input and output", onchange: ev => { st.mod = ev.target.value; drawInput(); syncUrl(); } },
+            MEDIA_KINDS.map(([v, l]) => h("option", { value: v, selected: st.mod === v ? true : null }, l)));
+          const fields = mk[4].map(([k, label, ph]) => (k === "ires" || k === "ores") ? textIn(k, label, ph) : numIn(k, label, { step: "any", placeholder: ph }));
+          return h("div", { class: "fd-media" }, h("label", { class: "fd-f" }, h("span", { class: "fd-l" }, "Input / output"), sel),
+            fields.length ? h("div", { class: "fd-row2" }, fields) : null,
+            mk[2] ? h("p", { class: "fd-hint" }, "Images, audio and video add tokens, windows or frames to the memory estimate; totals give a runtime and whole-job cost range.") : null);
+        }
         const form = h("form", { class: "fd-form cx-steps", novalidate: true, onsubmit: ev => { ev.preventDefault(); run(); } },
           step("1", "What are you trying to do?", null, taskCards),
           step("2", "What model or project?", "A model name, a Hugging Face id or just its size. Or analyze your project with the CLI.",
@@ -1055,7 +1120,8 @@
                   h("input", { class: "field", type: "text", value: st.tokens, placeholder: "e.g. 200M or 1.5B", inputmode: "text", spellcheck: "false", maxlength: 24, oninput: ev => upd("tokens", ev.target.value.trim()) }), err("tokens")),
                 numIn("epochs", "Epochs", { step: "any", placeholder: "e.g. 3" }))) : null,
             wt === "inference" ? h("div", {}, h("p", { class: "fd-hint" }, "Longer context and more parallel requests need more GPU memory."),
-              h("div", { class: "fd-row2" }, numIn("ctx", "Context length (tokens)", { step: 1, placeholder: "e.g. 8192", inputmode: "numeric" }), numIn("conc", "Concurrent requests", { step: 1, placeholder: "e.g. 8", inputmode: "numeric" }))) : null,
+              h("div", { class: "fd-row2" }, numIn("ctx", "Context length (tokens)", { step: 1, placeholder: "e.g. 8192", inputmode: "numeric" }), numIn("conc", "Concurrent requests", { step: 1, placeholder: "e.g. 8", inputmode: "numeric" })),
+              mediaBlock()) : null,
             h("details", { class: "fd-adv", open: advOpenF ? true : null }, h("summary", {}, "Advanced: precision, quantization", wt === "training" || wt === "fine_tuning" ? ", batch" : ""),
               h("div", { class: "fd-row2" }, h("label", { class: "fd-f" }, h("span", { class: "fd-l" }, "Precision"), precSel), h("label", { class: "fd-f" }, h("span", { class: "fd-l" }, "Quantization"), quantSel)),
               wt === "training" || wt === "fine_tuning" ? h("div", { class: "fd-row2" }, numIn("seq", "Sequence length", { step: 1, placeholder: "e.g. 2048", inputmode: "numeric" }), numIn("mbs", "Micro batch size", { step: 1, placeholder: "e.g. 4", inputmode: "numeric" })) : null,

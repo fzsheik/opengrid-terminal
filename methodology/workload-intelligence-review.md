@@ -270,3 +270,28 @@ Watch especially:
 4. Compare the measured runtime with the next real run's wall-clock (initializing -> training_completed). Record the
    error in the job notes; this is the first calibration point for the theoretical model.
 5. Never seed `performance_observations` by hand in production. Test rows must stay in scratch databases.
+
+## Addendum (2026-11): audio, image and video workloads
+
+The same engine now sizes speech recognition (Whisper, wav2vec2), text-to-speech (Parler-TTS, Kokoro),
+vision-language models (LLaVA, Qwen2-VL incl. video input, Llama 3.2 Vision, PaliGemma) and video generation
+(CogVideoX, Wan2.1, HunyuanVideo) through an optional `media` object. The formulas, sources and limits are in
+[recommendations](/methodology/recommendations#audio-image-and-video-workloads). Requests without `media` are
+unchanged: `tests/test_media_workloads.py` compares 24 such payloads byte for byte with the earlier engine.
+
+Validation checklist:
+
+1. **Whisper transcription:** `POST /v1/recommend/estimate` with `{"workload_type":"batch","model":{"name":
+   "openai/whisper-large-v3"},"media":{"total_audio_hours":10000}}`.
+   - `media.inputs.total_windows` is 1,200,000.
+   - The decoder caches are in `kv_cache`.
+   - `runtime.estimable` is true.
+2. **Video generation:** the same call for `tencent/HunyuanVideo` with `"media":{"task":"generation"}`.
+   - `memory.confidence` is `low`.
+   - About 75 GB with margin, which keeps only 80 GB-class GPUs.
+3. **Recommendation:** `POST /v1/recommend` with the first body.
+   - Every option shows `performance.media.throughput` (audio hours per GPU-hour, a range) and a theoretical
+     runtime and job cost.
+   - A 2-GPU option is `replicas`, and a note points to batch fan-out.
+4. **Measured first:** once real measurements of a media workload exist, the measured runtime replaces the
+   theoretical one for that GPU, exactly as for training.

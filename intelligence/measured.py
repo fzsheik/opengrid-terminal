@@ -354,6 +354,10 @@ def request_work(req, profile: dict) -> dict | None:
     name = (req.model.name if req.model is not None else None) or ""
     tmpl = T.get_template(name) if name else None
     samples = None
+    mr = getattr(req, "media", None)
+    if profile.get("method") == "inference" and mr is not None and mr.total_items:
+        return {"samples": float(mr.total_items), "basis": f"{mr.total_items:,} items (media.total_items)",
+                "assumptions": []}
     if tr is not None and tr.dataset_samples:
         samples = float(tr.dataset_samples)
         basis = f"{samples:,.0f} samples"

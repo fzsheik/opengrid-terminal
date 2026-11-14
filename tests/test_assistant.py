@@ -97,6 +97,7 @@ class WorkloadRequirements(_M):
     quantization: str | None = None
     training: _Training = _Training()
     inference: _Inference = _Inference()
+    media: dict | None = None
     constraints: _Constraints = _Constraints()
     hardware_hints: _Hints = _Hints()
     evidence: list[dict] = []

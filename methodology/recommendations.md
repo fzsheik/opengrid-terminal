@@ -30,7 +30,7 @@ Inference activations are short-lived and small next to the weights and KV cache
 
 ## Model catalog
 
-`intelligence/models_catalog.py` holds the published configs of well-known open models: Llama 2/3/3.1/3.2, Mistral 7B, Mixtral 8x7B, Qwen2.5 0.5B-72B, Gemma 2, Phi-3, GPT-2, BERT, ResNet-50, ViT-B/16 and SDXL. Each entry links its source (the config.json, model card or paper). A request value always wins over the catalog, and every value filled from the catalog is listed in `assumptions`. A loose name ("7B llama") matches on family, size and version. Several matches are listed and lower the confidence. A value that could not be confirmed is left empty.
+`intelligence/models_catalog.py` holds the published configs of well-known open models: Llama 2/3/3.1/3.2, Mistral 7B, Mixtral 8x7B, Qwen2.5 0.5B-72B, Gemma 2, Phi-3, GPT-2, BERT, ResNet-50, ViT-B/16 and SDXL, plus the audio, image + text and video models of [the section below](#audio-image-and-video-workloads). Each entry links its source (the config.json, model card or paper). A request value always wins over the catalog, and every value filled from the catalog is listed in `assumptions`. A loose name ("7B llama") matches on family, size and version. Several matches are listed and lower the confidence. A value that could not be confirmed is left empty.
 
 ## GPU count and interconnect
 
@@ -150,6 +150,65 @@ Every option has `decision.confidence` (high / medium / low): the weakest of the
 
 The full review, its limits and the validation checklist: [workload intelligence review](/methodology/workload-intelligence-review).
 
+## Audio, image and video workloads
+
+Speech recognition, text-to-speech, vision-language models (images, video) and video generation size differently from a text LLM: an image adds hundreds or thousands of tokens to every request, Whisper keeps a cache over 1,500 encoder positions per 30-second window, and a video diffusion model holds a latent video of up to ~120,000 tokens in attention. `intelligence/media.py` adds these terms; everything else (sharding, margin, market, ranking, disclosure) is the pipeline above. Every figure is **estimated**, with its formula in the response (`estimate.media.formulas`) and its inputs (`estimate.media.inputs`).
+
+**Request.** An optional `media` object (all fields optional, bounded, `extra="forbid"`): `modality` (`text`, `image`, `audio`, `video`, `multimodal`, one value or a list), `task` (`understanding`, `captioning`, `transcription`, `speech_synthesis`, `generation`), `images_per_request` (1-256), `image_resolution` (`WIDTHxHEIGHT`), `audio_seconds` (per item), `total_audio_hours` (the batch), `video_seconds`, `fps` and `video_resolution` (input video), `output_video_seconds`, `output_fps`, `output_resolution` and `diffusion_steps` (generation), `total_items` (images, clips, files or videos in a batch). A request without `media`, or with an empty one, is estimated exactly as before (a test compares 24 such payloads byte for byte with the engine before this feature). The CLI mirror (`cli/src/opengrid_cli/workload.py`) and the /find schema carry the same fields.
+
+**Models** (each value from the linked config.json, model card or paper; a value derived from published dimensions or file sizes is labelled `derived`):
+
+| Family | Entries | Facts used | Source |
+|---|---|---|---|
+| Whisper | tiny, base, small, medium, large-v3, large-v3-turbo | encoder / decoder layers, d_model, mel bins, 1,500 encoder positions, 448 decoder tokens; 39M-1,550M parameters, turbo 809M with a 4-layer decoder | [paper](https://arxiv.org/abs/2212.04356) Table 1, config.json, the turbo model card |
+| wav2vec2 | base-960h, large-960h-lv60-self | 320-sample conv stride = 50 frames/s at 16 kHz; 95M / 317M | [paper](https://arxiv.org/abs/2006.11477), config.json |
+| Parler-TTS, Kokoro | mini-v1 (0.9B), large-v1 (2.2B); Kokoro-82M | decoder dims, DAC codec at 86 frames/s with 9 codebooks; Kokoro is not autoregressive | model cards, config.json, codec config |
+| LLaVA | 1.5 7B/13B, 1.6 Vicuna 7B/13B, 1.6 Mistral 7B | CLIP ViT-L/14-336: 576 tokens per image; 1.6 AnyRes grid pinpoints | [LLaVA-1.5](https://arxiv.org/abs/2310.03744), [LLaVA-NeXT](https://llava-vl.github.io/blog/2024-01-30-llava-next/), config.json |
+| Qwen2-VL | 2B, 7B, 72B | 675M ViT, one token per 28 x 28 pixels within 3,136-12,845,056 pixels; video at 2 frames/s, 2 frames per token grid, per-frame 128-768 x 784 pixels, 24,576-token video budget | [paper](https://arxiv.org/abs/2409.12191), config.json, preprocessor config, qwen-vl-utils 0.0.8 |
+| Llama 3.2 Vision | 11B, 90B | 8 / 20 cross-attention layers; up to 4 tiles of 560 x 560, 1,601 vision tokens per tile | config.json (public mirror), Hugging Face totals |
+| PaliGemma | 3B at 224 / 448 / 896 | 256 / 1,024 / 4,096 image tokens; Gemma-2B dims | [paper](https://arxiv.org/abs/2407.07726) |
+| CogVideoX | 2B, 5B | transformer, T5-XXL (4.76B) and VAE parameters; 720x480, 49 frames at 8 fps, 50 steps, classifier-free guidance; the publisher's memory and time | config.json files, model card |
+| Wan2.1 T2V | 1.3B, 14B | DiT dims and FFN, umT5-XXL, 81 frames at 16 fps, 480p / 720p; the publisher's memory and time table | config.json, [GitHub](https://github.com/Wan-Video/Wan2.1) |
+| HunyuanVideo | 13B | 20 dual + 40 single-stream blocks, hidden 3,072, guidance distilled; 1280x720 x 129 frames: 60 GB published peak | [GitHub](https://github.com/Tencent/HunyuanVideo) |
+
+**Memory** (added to the components of [Memory estimate](#memory-estimate)):
+
+- **Image + text (VLM):** tokens per image by the model's documented rule (fixed 576 for LLaVA-1.5; AnyRes: 576 x (1 + tiles of the best-fitting grid), an upper bound because unpadding removes padded rows; Qwen2-VL: the image resized to multiples of 28 within its pixel limits, one token per 28 x 28 pixels; PaliGemma: fixed by checkpoint). The KV cache uses context = text tokens + images x tokens per image (+ video tokens). Llama 3.2 Vision instead keeps `2 x cross-attention layers x KV heads x head dim x vision tokens x concurrency x 2 B` and its text cache only in the self-attention layers. One vision-encoder layer over one image is added as transient activations. With quantized weights the vision tower stays 16-bit.
+- **Video understanding (Qwen2-VL):** frames = seconds x fps (2 by default), an even count within 4-768; each frame resized within 128-768 x 784 pixels; tokens = frames / 2 x tokens per frame grid, capped at the 24,576-token video budget.
+- **Speech recognition (Whisper):** windows = ceil(audio seconds / 30). Per window decoded together, a cross-attention cache `2 x decoder layers x d_model x 1500 x 2 B` and a self-attention cache over up to 448 tokens; one encoder layer's activations over 1,500 positions. Greedy decoding (beam search multiplies the decoder caches by the beam count). Fine-tuning: the activation formula over the encoder (1,500 positions) and the decoder (448 tokens + fp32 logits).
+- **Speech encoders (wav2vec2):** frames = seconds x 50; the activation formula over those frames.
+- **Text-to-speech:** Parler-TTS: KV over `seconds x 86 + 8` codec steps plus a 64-token prompt; Kokoro: weights only.
+- **Video generation:** weights = transformer (at the run's precision) + text encoder (16-bit; the low end assumes it is offloaded after encoding the prompt) + VAE. Latent tokens = latent frames x (H / 16) x (W / 16), latent frames = (frames - 1) / 4 + 1, frames = seconds x fps + 1 aligned to 4k + 1. Transient activations per block = batch x tokens x (6 x hidden + 2 x FFN) x 2 B, with the low end at (3 x hidden + FFN) and the high end at twice the central figure, and batch 2 when classifier-free guidance batches its passes. The VAE decode adds 8 frames x H x W x top VAE channels x 2 B x 3, with 1/8 of that for a tiled decode at the low end and twice it at the high end. **These two terms are roughly modelled**, so video generation is always `confidence: low`. Several GPUs are assumed to run sequence parallel (xDiT / Ulysses): weights replicated, activations split. Some repositories shard weights too (FSDP); that is not assumed. Cross-checks against the publishers' own peaks: CogVideoX-2b about 19.8 GB before margin vs 18 GB (SAT, FP16); Wan2.1-14B 720p 57.8 GB vs 69.1 GB; HunyuanVideo 720p x 129 frames 62.7 GB vs 60 GB.
+
+**Throughput and runtime (theoretical, per option).** Per item (a 30-second window, a clip, an utterance, a request, a video), the GPU time is the compute at an assumed model-FLOPs utilization plus, for autoregressive decoders, `steps x max(bytes read per step / (bandwidth x 60%), step FLOPs / (peak x utilization)) / batch`:
+
+- **Whisper:** encoder `2 x encoder parameters x 1500 + 4 x layers x 1500^2 x d_model` plus decoder `2 x decoder parameters x 100 tokens` per window. The token count ranges 50-150, and the encoder parameters are `12 x layers x d_model^2`. The total is divided by an end-to-end **pipeline efficiency of 10% (range 4-30%)**: decode loops are latency-bound and audio decoding runs on the CPU. This is an OpenGrid planning assumption, not calibrated against a measurement.
+- **Parler-TTS:** one decoder step per codec frame, with the same pipeline efficiency. Kokoro: not estimated (no published compute per second of audio).
+- **VLM:** vision encoder `2 x parameters x patches` + LLM prefill `2 x parameters x (media + 64 prompt tokens)` + memory-bound decode of 128 output tokens (range 32-512).
+- **Video generation:** `steps x passes x (2 x transformer parameters x tokens + 4 x blocks x tokens^2 x hidden [+ cross-attention])` per video at **45% utilization (range 25-70%)**. The range is chosen to contain the utilization implied by every publisher-reported time on record: CogVideoX-2b and -5b on A100 and H100, and Wan2.1-14B 720p on A100 and H100, which imply 30% to 66%. A test checks that each of those six times falls inside the range. They are publisher figures, never OpenGrid measurements.
+
+Throughput is shown per option in `performance.media.throughput` (audio hours, requests or videos per GPU-hour, with a range). With the amount of work (`total_audio_hours`, or `total_items`; a video job defaults to 1 video and says so), each option gets a runtime and a whole-job cost range, which feed the same picks, deadlines and explanations as training. **Measured first:** a consented measurement of the same workload signature from a real OpenGrid job (`samples_per_second`, with `total_items` as samples) replaces the theoretical runtime for that GPU and is labelled.
+
+**Several GPUs.** Transcription windows, captions and videos are independent, so a multi-GPU option of a model that fits one GPU runs one replica per GPU (`performance.parallelism.strategy: "replicas"`). The assumed scaling is 98% of linear (range 90-100%) for shard imbalance, with no GPU-to-GPU link needed. `multi_gpu.independent_items` says so and points to batch fan-out ([batches](/methodology/batches)), which runs allowlisted templates only today. Tensor parallelism is used only when one copy does not fit.
+
+**Explanations and questions.** The recommended option's `why` names what the media inputs cost (e.g. "image/video input adds 1,152 tokens per request ...", "video generation at 1280x720, 129 frames ... only GPUs with at least 80 GB hold it on one GPU"), and a `Media:` note repeats it. Questions ask for images per request, image resolution, video length, output resolution and length, and total audio hours or items, but only when they are unknown and change the answer.
+
+**Detection.** The local analyzer reads Python scripts whose names suggest media workloads (transcribe, caption, generate, asr, tts, speech, video, vision, whisper, diffusion), using the same file allowlist and redaction as for other scripts. It recognises these sources:
+
+- **Model classes and pipelines:** transformers model classes (`WhisperForConditionalGeneration`, `LlavaForConditionalGeneration`, `Qwen2VLForConditionalGeneration`, `MllamaForConditionalGeneration`, `PaliGemmaForConditionalGeneration` and others), `pipeline("automatic-speech-recognition" | "image-to-text" | "text-to-speech" ...)`, and diffusers video pipelines (`CogVideoXPipeline`, `WanPipeline`, `HunyuanVideoPipeline`, `LTXPipeline` and others).
+- **Whisper loaders:** `faster_whisper.WhisperModel("large-v3")`, `whisper.load_model` and `whisperx.load_model`, with the size mapped to the Hugging Face id.
+- **Other sources:** Kokoro's `KPipeline`, vLLM `limit_mm_per_prompt` / `--limit-mm-per-prompt`, `config.json` `model_type` and the model name.
+
+It fills `media.modality`, `media.task` and (from vLLM) `images_per_request`. A project without any of these keeps its exact previous output (no `media` key). The assistant recognises plain-language asks ("transcribe 10k hours of audio", "caption images with LLaVA", "generate 5-second videos", "summarize 60-second videos") and, when no model is named, offers catalog models for the modality instead of guessing one.
+
+**Limits.**
+
+- **Whisper and Parler-TTS runtimes** rest on an uncalibrated pipeline efficiency, so treat them as order-of-magnitude.
+- **AnyRes and Llama 3.2 Vision tile counts** follow the documented rules approximately: AnyRes counts are an upper bound, and a 4000x1000 image counts 4 tiles.
+- **Video understanding** is modelled for Qwen2-VL only. An image-only VLM given video says so and counts no video tokens.
+- **Video generation:** activation and VAE-decode memory are rough. Text-encoder and VAE time are not in the runtime. Training memory for video and TTS models is a lower bound.
+- **HunyuanVideo's transformer** is counted at the "over 13 billion" lower bound.
+
 ## What "executable" means
 
 `execution.executable` is true only when both of these hold:
@@ -172,5 +231,6 @@ Questions are asked only for inputs that are unknown and change the answer:
 - concurrency
 - context length
 - precision
+- for audio, image and video workloads: images per request, image resolution, video length, output resolution and length, total audio hours or items (see [Audio, image and video workloads](#audio-image-and-video-workloads))
 
 Each question says why it matters. A workload is declared GPU-free (`needs_gpu: false`) only on evidence: `workload_type: "no_gpu"`, or a list of frameworks with no ML framework among them and no model. Such a recommendation says so plainly and returns no options.

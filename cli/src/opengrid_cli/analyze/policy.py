@@ -93,9 +93,11 @@ BINARY_EXT = {"so", "dylib", "dll", "exe", "o", "a", "lib", "pyc", "pyo", "pyd",
 # Allowlist
 
 PY_KEYWORDS = ("train", "finetune", "fine_tune", "fine-tune", "infer", "serve", "server", "predict", "main",
-               "app", "model", "config", "sft", "lora", "launch", "wsgi", "asgi", "manage")
+               "app", "model", "config", "sft", "lora", "launch", "wsgi", "asgi", "manage",
+               # audio / image / video workloads (transcription, captioning, speech, video generation)
+               "transcri", "asr", "caption", "generat", "tts", "speech", "video", "vision", "whisper", "diffus")
 SH_KEYWORDS = ("train", "finetune", "fine_tune", "infer", "serve", "server", "launch", "run", "start", "sft",
-               "lora", "predict", "deploy", "entrypoint")
+               "lora", "predict", "deploy", "entrypoint", "transcri", "caption", "generat")
 CONFIG_DIRS = {"config", "configs", "conf", "recipes", "cfg"}
 CONFIG_NAME_KEYWORDS = ("train", "finetune", "fine_tune", "sft", "lora", "qlora", "axolotl", "serve", "infer",
                         "vllm", "deepspeed", "fsdp", "dpo", "torchtune", "llama_factory", "llamafactory")

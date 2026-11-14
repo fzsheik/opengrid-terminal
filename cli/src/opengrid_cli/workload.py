@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 WorkloadType = Literal["training", "fine_tuning", "inference", "batch", "no_gpu"]
 Precision = Literal["fp32", "bf16", "fp16", "fp8", "int8", "int4"]
@@ -52,6 +52,7 @@ class Training(_M):
     epochs: float | None = Field(None, gt=0, le=100_000)
     dataset_tokens: float | None = Field(None, ge=0)
     dataset_samples: int | None = Field(None, ge=0)
+    max_steps: int | None = Field(None, ge=1, le=100_000_000, description="optimizer steps (HF Trainer max_steps)")
 
 
 class Inference(_M):
@@ -67,6 +68,7 @@ class Constraints(_M):
     budget_usd: float | None = Field(None, gt=0, le=10_000_000, description="total budget in USD")
     max_price_per_gpu_hour: float | None = Field(None, gt=0, le=1000)
     runtime_hours: float | None = Field(None, gt=0, le=100_000)
+    deadline_hours: float | None = Field(None, gt=0, le=100_000, description="finish within this many hours")
     region: str | None = Field(None, max_length=32, description="region group, e.g. us, eu")
     max_gpus: int | None = Field(None, ge=1, le=4096)
     allow_spot: bool | None = None
@@ -88,6 +90,37 @@ class Evidence(_M):
     confidence: Confidence | None = None
 
 
+Modality = Literal["text", "image", "audio", "video", "multimodal"]
+MediaTask = Literal["understanding", "captioning", "transcription", "speech_synthesis", "generation"]
+_RES = r"^\d{2,5}[xX]\d{2,5}$"
+
+
+class Media(_M):
+    """Audio, image and video inputs / outputs (server: intelligence.requirements.Media). All optional."""
+    modality: list[Modality] = Field(default_factory=list, max_length=5,
+                                     description="text, image, audio, video or multimodal (one value or a list)")
+    task: MediaTask | None = None
+    images_per_request: int | None = Field(None, ge=1, le=256)
+    image_resolution: str | None = Field(None, pattern=_RES, description="WIDTHxHEIGHT, e.g. 1024x768")
+    audio_seconds: float | None = Field(None, gt=0, le=86_400, description="seconds of audio per item")
+    total_audio_hours: float | None = Field(None, gt=0, le=10_000_000, description="hours of audio in the batch")
+    video_seconds: float | None = Field(None, gt=0, le=86_400, description="input video length per request")
+    fps: float | None = Field(None, gt=0, le=240, description="frames sampled per second of input video")
+    video_resolution: str | None = Field(None, pattern=_RES)
+    output_video_seconds: float | None = Field(None, gt=0, le=600, description="generated video length")
+    output_fps: float | None = Field(None, gt=0, le=240)
+    output_resolution: str | None = Field(None, pattern=_RES)
+    diffusion_steps: int | None = Field(None, ge=1, le=1_000)
+    total_items: int | None = Field(None, ge=1, le=1_000_000_000, description="images / clips / videos in a batch")
+
+    @field_validator("modality", mode="before")
+    @classmethod
+    def _modality(cls, v):
+        if v is None:
+            return []
+        return [v] if isinstance(v, str) else v
+
+
 class WorkloadRequirements(_M):
     """What a workload needs. Only this object ever leaves the machine (never file contents)."""
     workload_type: WorkloadType | None = None
@@ -97,6 +130,7 @@ class WorkloadRequirements(_M):
     quantization: Quantization | None = None
     training: Training | None = None
     inference: Inference | None = None
+    media: Media | None = None
     constraints: Constraints | None = None
     hardware_hints: HardwareHints | None = None
     evidence: list[Evidence] = Field(default_factory=list, max_length=200)

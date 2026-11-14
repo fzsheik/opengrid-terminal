@@ -39,6 +39,7 @@ off the GPU. Inference across N GPUs is tensor parallel: weights and KV cache sp
 from __future__ import annotations
 
 import hardware
+from intelligence.requirements import media_given
 
 GB = 1e9
 FIXED_OVERHEAD_GB = 1.5
@@ -62,8 +63,18 @@ SOURCES = {
     "vllm": "https://docs.vllm.ai/en/latest/configuration/engine_args.html",
 }
 
-LLM_KINDS = ("decoder", "moe")
-TRANSFORMER_KINDS = ("decoder", "moe", "encoder", "vit")
+LLM_KINDS = ("decoder", "moe", "vlm")             # vlm: the decoder LLM of a vision-language model
+TRANSFORMER_KINDS = ("decoder", "moe", "encoder", "vit", "vlm")
+# audio / image + text / video kinds whose memory terms come from intelligence/media.py
+MEDIA_KINDS = ("vlm", "asr", "audio_encoder", "tts", "video_diffusion")
+_MEDIA_OWN = ("asr", "audio_encoder", "tts", "video_diffusion")   # activations computed by media.adjust
+_ACT_ASSUMPTION_KINDS = TRANSFORMER_KINDS + ("asr", "audio_encoder")
+_MEDIA_ARCH = {"whisper": "asr", "wav2vec2": "audio_encoder", "hubert": "audio_encoder", "llava": "vlm",
+               "llava_next": "vlm", "llava_onevision": "vlm", "qwen2_vl": "vlm", "qwen2_5_vl": "vlm", "mllama": "vlm",
+               "paligemma": "vlm", "idefics2": "vlm", "idefics3": "vlm", "cogvideox": "video_diffusion",
+               "wan": "video_diffusion", "hunyuan_video": "video_diffusion", "ltx_video": "video_diffusion",
+               "parler_tts": "tts"}
+AUDIO_INFERENCE_FRAMEWORKS = {"faster-whisper", "whisperx", "openai-whisper", "parler-tts", "kokoro"}
 
 
 # --------------------------------------------------------------------------
@@ -165,7 +176,8 @@ ML_FRAMEWORKS = {"pytorch", "torch", "torchvision", "transformers", "peft", "trl
                  "jax", "flax", "deepspeed", "accelerate", "diffusers", "bitsandbytes", "xformers", "flash-attn",
                  "flash_attn", "lightning", "pytorch-lightning", "sglang", "llama.cpp", "llama-cpp-python", "onnxruntime-gpu",
                  "tensorrt", "tensorrt-llm", "cupy", "rapids", "cudf", "mxnet", "paddlepaddle", "unsloth", "axolotl",
-                 "sentence-transformers", "timm", "mlx", "triton", "megatron", "nemo", "auto-gptq", "autoawq", "optimum"}
+                 "sentence-transformers", "timm", "mlx", "triton", "megatron", "nemo", "auto-gptq", "autoawq", "optimum",
+                 "torchaudio", "ctranslate2"} | AUDIO_INFERENCE_FRAMEWORKS
 
 
 def workload_class(req) -> str | None:
@@ -181,8 +193,10 @@ def workload_class(req) -> str | None:
         return "training"
     if req.inference is not None and any(v is not None for v in req.inference.model_dump().values()):
         return "inference"
+    if media_given(req):
+        return "inference"      # transcription, captioning, speech synthesis, video generation: serving or batch
     fw = set(req.frameworks or ())
-    if fw & {"vllm", "tgi", "sglang", "llama.cpp", "llama-cpp-python", "tensorrt-llm"}:
+    if fw & ({"vllm", "tgi", "sglang", "llama.cpp", "llama-cpp-python", "tensorrt-llm"} | AUDIO_INFERENCE_FRAMEWORKS):
         return "inference"
     if fw & {"peft", "trl", "deepspeed", "unsloth", "axolotl"}:
         return "training"
@@ -219,6 +233,8 @@ def profile(req) -> dict:
                      f"({entry['source']})")
     kind = entry["kind"] if entry else None
     arch = (model["architecture"] or "").lower()
+    if kind is None and arch in _MEDIA_ARCH:
+        kind = _MEDIA_ARCH[arch]
     if kind is None and arch:
         if arch in ("bert", "roberta", "deberta", "deberta-v2", "electra", "distilbert"):
             kind = "encoder"
@@ -330,7 +346,7 @@ def profile(req) -> dict:
         else:
             out["seq"] = (s, s, s)
         ck = _d(tr, "gradient_checkpointing")
-        if ck is None and kind in TRANSFORMER_KINDS:
+        if ck is None and kind in _ACT_ASSUMPTION_KINDS:
             c = big
             out["ckpt"] = (c, c, c)
             A.append(f"gradient checkpointing not stated: {'on' if c else 'off'} assumed "
@@ -339,7 +355,7 @@ def profile(req) -> dict:
             known["training.gradient_checkpointing"] = "assumed"
         else:
             out["ckpt"] = (bool(ck),) * 3
-        if kind in TRANSFORMER_KINDS:
+        if kind in _ACT_ASSUMPTION_KINDS:
             out["flash"] = (True, True, True)
             A.append("attention assumed FlashAttention / PyTorch SDPA (attention scores not stored); eager attention "
                      "adds Korthikanti's 5*a*s/h term per layer")
@@ -377,6 +393,12 @@ def profile(req) -> dict:
     else:
         out["method"] = None
         out["precision"], out["quantization"] = precision, quant
+    if kind in MEDIA_KINDS or media_given(req):
+        from intelligence import media
+
+        md = media.resolve(req, out)
+        if md is not None:
+            out["media"] = md
     return out
 
 
@@ -436,6 +458,8 @@ def components(p: dict, scenario: int = 1) -> dict:
         elif kind == "cnn" and p["catalog"] and p["catalog"].get("activation_elements_per_sample"):
             key = "activation_elements_per_sample_high" if scenario == 2 else "activation_elements_per_sample"
             out["activations"] = p["catalog"][key] * b * act_bytes
+        elif kind in _MEDIA_OWN:
+            out["activations"] = 0.0          # media.adjust below fills it (or marks it unknown)
         else:
             out["activations"] = None
             notes.append("activation memory not estimated: no per-layer formula for this model without its "
@@ -452,6 +476,10 @@ def components(p: dict, scenario: int = 1) -> dict:
                 out["kv_cache"] = None
                 notes.append("KV cache not estimated (layers / KV heads / head dim / context unknown): the total is "
                              "a lower bound")
+    if p.get("media"):
+        from intelligence import media
+
+        media.adjust(p, scenario, out, notes)
     return {"bytes": out, "notes": notes}
 
 
@@ -460,7 +488,13 @@ def per_gpu(p: dict, comp: dict, n: int) -> dict:
     c = dict(comp)
     zero, parallel = None, "single GPU"
     if n > 1:
-        if p["method"] == "inference":
+        if p["method"] == "inference" and (p.get("media") or {}).get("kind") == "video_diffusion":
+            # xDiT / Ulysses sequence parallel: every GPU keeps the full weights, the token sequence (activations)
+            # is split; weight sharding (FSDP) exists in some repos but is not assumed (conservative)
+            parallel = f"sequence parallel x{n} (weights replicated)"
+            if c["activations"]:
+                c["activations"] = c["activations"] / n
+        elif p["method"] == "inference":
             parallel = f"tensor parallel x{n}"
             c["weights"] = c["weights"] / n
             if c["kv_cache"]:
@@ -554,12 +588,13 @@ def estimate_memory(req, *, vendor: str | None = None) -> dict:
     else:
         ic = {"needed": None, "reason": gc["reason"]}
 
-    unknown_component = any(v is None for v in scen[1]["bytes"].values())
+    md = p.get("media") or {}
+    unknown_component = any(v is None for v in scen[1]["bytes"].values()) or bool(md.get("lower_bound"))
     uncertain = any(k for k, src in p["known"].items() if src == "assumed")
     if unknown_component or (p["catalog_match"] == "loose" and len(p["catalog_candidates"]) > 1) \
-            or p["known"].get("parameters_b") == "derived":
+            or p["known"].get("parameters_b") == "derived" or md.get("confidence_cap") == "low":
         conf = "low"
-    elif uncertain:
+    elif uncertain or md.get("confidence_cap") == "medium":
         conf = "medium"
     else:
         conf = "high"
@@ -572,7 +607,8 @@ def estimate_memory(req, *, vendor: str | None = None) -> dict:
             "per_gpu_by_count": by_count, "trainable_parameters": p.get("_trainable") if p["method"] in (
                 "training_lora", "training_qlora") else (round(m["parameters_b"] * 1e9) if p["method"] == "training_full"
                                                          else 0),
-            "profile": _public_profile(p), "gpu_count": gc, "interconnect": ic}
+            "profile": _public_profile(p), "gpu_count": gc, "interconnect": ic,
+            **({"_p": p} if p.get("media") else {})}
 
 
 def _public_profile(p: dict) -> dict:
@@ -583,5 +619,9 @@ def _public_profile(p: dict) -> dict:
     out["catalog_id"] = p["catalog"]["id"] if p.get("catalog") else None
     out["catalog_source"] = p["catalog"]["source"] if p.get("catalog") else None
     out["known"] = dict(p["known"])
+    if p.get("media"):
+        from intelligence import media
+
+        out["media"] = media.summary(p)
     return out
 

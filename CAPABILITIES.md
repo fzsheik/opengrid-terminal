@@ -59,8 +59,8 @@ important) what it deliberately does not claim.
 | Discord channels | **4** (ops, deployments, market, news) with OpenGrid-branded embeds |
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination. Built on top, tested against fake provider APIs only: **batches** (a sweep or shard list as one batch: placement across clouds, one budget, one approval), **resume** from a verified checkpoint, opt-in **OOM escalation** and **move** to another GPU; automatic relaunch / OOM escalation and move are off by default (`JOB_AUTO_RELAUNCH_ENABLED`, `JOB_MOVE_ENABLED`) |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
-| Workload intelligence | GPU memory estimator, project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (hosted at `/mcp` with an API key: 15 tools, 2 prompts; local via uvx: 16 tools, 3 prompts), grounded assistant, RL post-training cost estimator |
-| Automated tests | **135** Python test files + **14** JavaScript test files, all 149 run in parallel by `tests/run_all.py` (and by CI on every push), + **4** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
+| Workload intelligence | GPU memory estimator (text LLMs, plus audio, image + text and video workloads: Whisper, wav2vec2, Parler-TTS, LLaVA, Qwen2-VL, Llama 3.2 Vision, PaliGemma, CogVideoX, Wan2.1, HunyuanVideo), project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (hosted at `/mcp` with an API key: 15 tools, 2 prompts; local via uvx: 16 tools, 3 prompts), grounded assistant, RL post-training cost estimator |
+| Automated tests | **136** Python test files + **14** JavaScript test files, all 150 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
 
 ---
 
@@ -812,6 +812,33 @@ One engine serves every interface (contracts: docs/OPENGRID2_CONTRACTS.md; metho
   (+ measured provider time to capacity when known), `deadline_hours`, `shortest_estimated_runtime`; per-option
   confidence with its weakest evidence and factor-by-factor deltas vs the recommended option; `multi_gpu` advice
   (when not to go multi-GPU). Review: methodology/workload-intelligence-review.md.
+- **Audio, image + text and video workloads** (`intelligence/media.py`; method: methodology/recommendations.md
+  "Audio, image and video workloads"):
+  - **Request.** An optional `media` object (modality, task, images per request and resolution, audio seconds and
+    total hours, video length / fps / resolution, generation output size / length / steps, total items), mirrored
+    in the CLI contract and the /find schema. Requests without it are unchanged (24 golden payloads byte-identical).
+  - **Catalog.** 29 sourced entries (Whisper tiny to large-v3-turbo, wav2vec2, Parler-TTS, Kokoro, LLaVA 1.5 / 1.6,
+    Qwen2-VL 2B / 7B / 72B, Llama 3.2 Vision 11B / 90B, PaliGemma 224 / 448 / 896, CogVideoX 2B / 5B, Wan2.1 1.3B /
+    14B, HunyuanVideo).
+  - **Memory, by modality:**
+    - VLM: KV cache sized with image (and Qwen2-VL video) tokens by each model's documented rule; Llama 3.2 Vision
+      uses a cross-attention cache.
+    - Whisper: decoder caches per 30 s window. wav2vec2: activations per frame. Parler-TTS: KV per codec frame.
+    - Video generation: weights + latent-token activations + VAE decode, always low confidence.
+  - **Runtime.** A theoretical throughput and runtime / whole-job cost range per option (audio hours, requests or
+    videos per GPU-hour). Video-diffusion utilization is set to contain every publisher-reported generation time on
+    record; the audio pipeline efficiency is an uncalibrated assumption. Measured observations still take
+    precedence.
+  - **Multi-GPU.** Independent items run as replicas, and the notes point to batch fan-out.
+  - **Explanations** say what the media inputs cost, e.g. that only GPUs with at least 80 GB hold a 720p
+    HunyuanVideo run on one GPU.
+  - **Detection.** The local analyzer detects these models and frameworks (faster-whisper / openai-whisper /
+    whisperx, transformers VLM and ASR classes and pipeline tasks, diffusers video pipelines, vLLM
+    `--limit-mm-per-prompt`, config.json `model_type`). The assistant parses plain-language asks ("transcribe 10k
+    hours of audio", "caption images with LLaVA", "generate 5-second videos"). /find has optional input / output
+    fields shown per chosen kind.
+  - **Limits.** Video understanding is modelled for Qwen2-VL only; the training memory of video and TTS models is
+    a lower bound.
 - **Local analyzer** (`cli/src/opengrid_cli/analyze`): allowlisted files only, `.gitignore`, symlink and size
   limits, never reads secrets/weights/datasets, never executes code, redacts secret-looking values, flags
   prompt-injection text; only the structured requirements ever leave the machine. Dry-run mode.
@@ -1020,7 +1047,7 @@ description is in docs/UI_GUIDE.md.
 | Home | "Compare GPU prices. Find the right compute. Run supported workloads.", a "What works today" list (including what does not work yet), three actions tagged free / simulation / needs an account, the live price board, indices, how it works |
 | Market | Overview · Indices · Index detail · GPUs · GPU detail · GPU family · Providers · Provider detail · Compare · Explorer · Heatmaps · Capacity · Reserved prices · True cost (full-cost estimator) · RL cost (RL post-training estimator) · Provider uptime · Provider probes |
 | Signals | Opportunities · Events · News (feed + timeline) |
-| Find Compute | four guided steps (what you are doing, model or project, what matters incl. **training data** and epochs, recommendation); one recommended option with price, memory per GPU, availability, estimated runtime and whole-job cost, and whether OpenGrid can run it; up to three alternatives; the three or four answers kept apart (lowest advertised price, best fit, execution-ready, lowest cost for the whole job); per-option performance across its GPUs; everything else under Advanced details |
+| Find Compute | four guided steps (what you are doing, model or project, what matters incl. **training data** and epochs, or for inference optional image / audio / video inputs, recommendation); one recommended option with price, memory per GPU, availability, estimated runtime and whole-job cost, and whether OpenGrid can run it; up to three alternatives; the three or four answers kept apart (lowest advertised price, best fit, execution-ready, lowest cost for the whole job); per-option performance across its GPUs; everything else under Advanced details |
 | Workspace | My Jobs (Needs attention / Active / Completed, simulation vs real tags, a plain-English box) · New job (example job as a free simulation, a real-GPU card with readiness, run your own model) · Job page (at a glance, next step, timeline; Resume… / Move… with the quote first, a move suggestion banner) · Batches (list) · Batch page (shards, placement, budget, approval, best result) · Route (a simple ticket; technical panel folded) · Deployments · Deployment detail · Reserve (price-lock requests) · Request detail · Watchlists |
 | Developers | three paths (AI assistant over MCP, CLI, REST) with what each needs; two first successes without a key; per-client MCP setup (Claude Code, Cursor, VS Code, Codex, Claude Desktop / claude.ai), each marked tested or not; access requests via GitHub issues · API docs (curated public reference with Try it; the full schema for the operator) · API keys (one access state when signed out; presets) · Onboarding (design partners) |
 | Reference | Methodology · Assistant |

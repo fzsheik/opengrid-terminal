@@ -6,8 +6,8 @@ import ast
 import re
 from typing import Any, Callable
 
-from .facts import (P_CODE, P_DEFAULT, PACKAGES, Collector, apply_key, as_int, looks_like_model_id,
-                    map_dtype, map_optimizer)
+from .facts import (IMPORT_ONLY, MEDIA_CLASSES, P_CODE, P_DEFAULT, PACKAGES, PIPELINE_TASKS, Collector,
+                    apply_key, as_int, looks_like_model_id, map_dtype, map_optimizer, whisper_model_id)
 from . import modelsize
 
 TRAINING_ARG_CLASSES = {"TrainingArguments", "Seq2SeqTrainingArguments", "SFTConfig", "DPOConfig", "ORPOConfig",
@@ -21,6 +21,16 @@ MODEL_LOAD_KW = ("pretrained_model_name_or_path", "model_name", "model_id", "mod
 _EVAL_NAME = re.compile(r"(?i)test|val|eval|valid")
 
 ResolveResult = tuple[Any, str, int, str]  # value, confidence, prio, note
+
+
+def multimodal_limit(c: Collector, key: Any, n: Any, src: str) -> None:
+    """vLLM limit_mm_per_prompt {"image": 4, "video": 1, "audio": 1}: the modalities served and images per prompt."""
+    if key not in ("image", "video", "audio") or not isinstance(n, int) or n < 1:
+        return
+    task = "understanding" if key != "audio" else "transcription"
+    c.signal("media", f"{key}:{task}", src)
+    if key == "image":
+        c.fact("media.images_per_request", min(n, 256), src, "medium")
 
 
 def _dotted(node: ast.AST) -> str:
@@ -123,7 +133,7 @@ class PyAnalyzer:
             return
         top = mod.split(".")[0]
         self.imports.add(top)
-        info = PACKAGES.get(top)
+        info = PACKAGES.get(top) or IMPORT_ONLY.get(top)
         src = self.loc(lineno)
         if info:
             cat, name = info
@@ -149,7 +159,7 @@ class PyAnalyzer:
                             self.local_imports.append((node.level, a.name))
                 elif node.module:
                     self._import(node.module, node.lineno)
-                    if node.module.split(".")[0] not in PACKAGES:
+                    if node.module.split(".")[0] not in PACKAGES and node.module.split(".")[0] not in IMPORT_ONLY:
                         for a in node.names:
                             self.local_imports.append((0, f"{node.module}.{a.name}"))
 
@@ -320,6 +330,8 @@ class PyAnalyzer:
         cond = self._conditional(node)
         kw = {k.arg: k.value for k in node.keywords if k.arg}
 
+        if short == "from_pretrained" and owner in MEDIA_CLASSES:
+            self._media(MEDIA_CLASSES[owner], owner, src, inference=owner.endswith("Pipeline"))
         if short == "from_pretrained":
             if owner.startswith("Peft") or owner.startswith("AutoPeft"):
                 self.c.signal("peft_adapter_load", owner, src)
@@ -338,12 +350,38 @@ class PyAnalyzer:
             return
         if short == "pipeline" and (d == "pipeline" or "transformers" in d):
             self.c.signal("inference_call", "transformers.pipeline", src)
+            task = self.resolve(node.args[0] if node.args else kw.get("task"))[0]
+            if isinstance(task, str) and task in PIPELINE_TASKS:
+                self._media(PIPELINE_TASKS[task], f"pipeline('{task}')", src, inference=True)
             arg = kw.get("model") or (node.args[1] if len(node.args) > 1 else None)
             self._model_name(arg, node.lineno)
+            return
+        if short in ("WhisperModel", "load_model") and (
+                (short == "WhisperModel" and "faster_whisper" in self.imports)
+                or d in ("whisper.load_model", "whisperx.load_model")):
+            size = self.resolve(node.args[0] if node.args else kw.get("model_size_or_path") or kw.get("name")
+                                or kw.get("whisper_arch"))[0]
+            hf = whisper_model_id(size) or (size if looks_like_model_id(size) else None)
+            if hf:
+                self.c.fact("model.name", hf, src, "high")
+            self._media(("audio", "transcription"), d or short, src, inference=True)
+            return
+        if short == "transcribe" and self.imports & {"whisper", "faster_whisper", "whisperx"}:
+            self._media(("audio", "transcription"), f"{owner}.transcribe()", src, inference=True)
+            return
+        if short == "KPipeline" and "kokoro" in self.imports:
+            self.c.fact("model.name", "hexgrad/Kokoro-82M", src, "medium")
+            self._media(("audio", "speech_synthesis"), "kokoro.KPipeline", src, inference=True)
             return
         if short in ("LLM", "AsyncLLMEngine", "EngineArgs", "AsyncEngineArgs") and ("vllm" in self.imports or
                                                                                   d.startswith("vllm")):
             self.c.signal("inference_engine", "vllm", src)
+            mm = kw.get("limit_mm_per_prompt")
+            if isinstance(mm, ast.Dict):
+                for k_, v_ in zip(mm.keys, mm.values):
+                    key = self.resolve(k_)[0]
+                    n_ = as_int(self.resolve(v_)[0])
+                    self.multimodal_limit(key, n_, src)
             if short == "LLM":
                 self.c.signal("offline_inference", "vllm.LLM", src)
             self._model_name(kw.get("model") or (node.args[0] if node.args else None), node.lineno)
@@ -477,6 +515,15 @@ class PyAnalyzer:
             o = map_optimizer(val) if isinstance(val, str) else None
             if o:
                 self.c.fact("training.optimizer", o, src, "medium")
+
+    def _media(self, mt: tuple[str, str], what: str, src: str, *, inference: bool) -> None:
+        """An audio / image / video model, pipeline or call: requirements.media (modality, task)."""
+        self.c.signal("media", f"{mt[0]}:{mt[1]}", src)
+        if inference:
+            self.c.signal("media_inference", what, src)
+
+    def multimodal_limit(self, key, n, src: str) -> None:
+        multimodal_limit(self.c, key, n, src)
 
     def _env_assign(self, node: ast.Assign) -> None:
         for t in node.targets:
