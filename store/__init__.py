@@ -21,3 +21,4 @@ from store import context  # noqa: F401  (0032_context_series + 0033_equities: m
 from store import shifts  # noqa: F401  (0029_news_history: major shifts + their related items)
 from store import power  # noqa: F401  (0035_power_markets: wholesale power series; never GPU data)
 from store import batches  # noqa: F401  (0036_batches: batch fan-out of ordinary jobs)
+from store import reports  # noqa: F401  (0039_monthly_reports: the internal monthly market report)

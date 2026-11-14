@@ -77,7 +77,7 @@ Width about 168px. Groups with secondary links have a small chevron toggle ("Sho
 - Heading **"Explore"** (tooltip "Free to use, no account needed")
   - "GPUs" (/gpus), sub-links "Compare", "Explorer", "Heatmaps", "Providers"
   - "Find Compute" (/find), sub-link "Ask the assistant" (/assistant)
-  - "Markets" (/markets), sub-links "Indices", "Opportunities", "Events", "News", "Watchlists" (lock: "Needs an OpenGrid account")
+  - "Markets" (/markets), sub-links "Indices", "Opportunities", "Events", "News", "Watchlists" (lock: "Needs an OpenGrid account"), "Monthly report" (lock: internal)
   - "Developers" (/developers), sub-links "API docs" (/api), "API keys" (/keys, lock), "Onboarding" (/onboarding, lock)
 - Heading **"Your workspace"** with a lock icon (tooltip "Needs an OpenGrid account (invite only for now)")
   - "My Jobs" (/jobs, lock), sub-links "Deployments", "Reserve", "Route" (all locked)
@@ -1133,6 +1133,15 @@ Empty states: "No common GPU to chart." and "These providers have no GPU in comm
 - "Evidence" and "all restatements" open raw JSON API responses in a new tab. That is fine for auditors, but jarring for a general visitor.
 - The board packs 15 columns per family table, and the "*" convention (last published level) is explained only in the footnote.
 - Errors on the detail page have no "Try again" button.
+
+### /reports and /reports/{month} (internal monthly market report)
+
+**URL:** /reports (the newest stored month) or /reports/YYYY-MM. Nav label "Monthly report" under Markets, locked. Not indexed, not in the sitemap. Reads /v1/reports/monthly and /v1/reports/monthly/{month} (data:read: the operator, the viewer login or a key); signed out it shows only the "Invite only" access note and a link to the free GPU prices.
+
+1. Header "Monthly market report", subtitle saying it is internal and names providers next to their prices; a month picker (archive months marked), "Regenerate" for an admin, "Methodology".
+2. **Public-safe summary**: the 4-8 headline bullets and the methodology line, with a **"Copy public summary"** button (rounded numbers, no provider names), then when it was generated, its version and basis.
+3. A stat strip (GPU Compute Index, clouds counted, basis, notable events).
+4. Tables: "How the clouds moved" (per featured GPU: index change, clouds, up / flat / down, median, middle half, full range, dispersion, pattern, cheapest at end, vs median; CSV), "Biggest movers", "Within one cloud", "By generation", "Supply", "Notable events", then "Coverage and caveats". Missing values show n/a with the reason.
 
 ### /ops (operator data-quality console)
 

@@ -331,6 +331,8 @@ def _values(name: str, route_path: str) -> list[tuple[str, tuple[str, ...]]]:
         return [(W.get("family", "h100"), ())]
     if name == "series":  # a public series, and an internal (equity) one that must stay a 404
         return [("eia.retail_price.ind.VA", ()), ("alpaca.nvda.close.split", ())]
+    if name == "month":  # /reports/{month}: the page shell only (the report itself is private)
+        return [("2026-10", ())]
     if name == "fixing_id":
         return [(f, ()) for f in W.get("fixing_ids") or ["1"]]
     if name == "at":

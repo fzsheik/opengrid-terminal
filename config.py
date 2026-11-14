@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     # Archived price history sources (backfill/; methodology/archived-history.md).
     # Daily raw copy of dstack's public gpuhunt catalogues (their S3 versions expire after ~90 days): catalog_snapshots.
     gpuhunt_snapshot_enabled: bool = True
+    # Internal monthly market report (reports/monthly.py): the daily `monthly_report` job generates the previous
+    # month once (from the 1st, 06:00 UTC) and posts it to the market channel. Off: the job skips its work.
+    monthly_report_enabled: bool = True
     # SkyPilot catalogue git history -> archived points. OFF until SkyPilot confirm a licence for the catalogue repo
     # (it has none today; backfill/datasets/skypilot.py). Do not switch on before that answer is on file.
     skypilot_catalog_enabled: bool = False

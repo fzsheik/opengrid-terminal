@@ -18,7 +18,7 @@ important) what it deliberately does not claim.
 1. [At a glance](#1-at-a-glance)
 2. [Architecture](#2-architecture)
 3. [Market data layer](#3-market-data-layer) (incl. capacity, live feeds, public and internal data tiers)
-4. [Market intelligence](#4-market-intelligence) (incl. 4.2a settlement-grade fixings, reserved prices, full cost, RL cost)
+4. [Market intelligence](#4-market-intelligence) (incl. 4.2a settlement-grade fixings, reserved prices, full cost, RL cost, the internal monthly market report)
 5. [News & external signals](#5-news--external-signals)
    - [Market context, equities and power markets (beside GPU prices, never mixed)](#5a-market-context-equities-and-power-markets-beside-gpu-prices-never-mixed)
 6. [Execution layer: routing & provisioning](#6-execution-layer-routing--provisioning)
@@ -51,10 +51,10 @@ Counts recomputed from the code on 2026-11-13.
 | Canonical GPU models | **100**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL); each has a hardware spec row (100 in `hardware.py`) |
 | OpenGrid indices defined | **269**: 100 per-GPU, 100 spot, 40 regional, 25 provider-class, 4 composites (H100 / H200 / A100 class and the overall GPU Compute Index) |
 | News & signal sources | **81** registered, **66** enabled (41 RSS, 4 Atom, 3 US Federal Register, 16 SEC EDGAR, 2 GDELT queries); the 15 disabled ones are listed with the reason. About 68k items stored in production (67,932 on 2026-11-14), history backfill included |
-| API operations | **249** in the OpenAPI schema: 227 under `/v1` (74 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 9 admin-only reads (7 power, 2 equities), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 45 page routes |
-| Web pages | **45** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar. RL cost (`/rl-cost`) sits under GPUs; Batches (`/batches`, `/batch/{id}`) under My Jobs |
-| Database tables | **109** in a freshly migrated database (108 application tables plus `alembic_version`; Postgres, migrated by Alembic: 40 migrations, head `0038_measured_performance`) |
-| Background jobs | **33** registered when every optional source is configured (**30** with the defaults: no EIA / SEC / Alpaca keys, `POWER_ENABLED` off), beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets…; table 15.2) |
+| API operations | **252** in the OpenAPI schema: 230 under `/v1` (74 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 9 admin-only reads (7 power, 2 equities), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 47 page routes |
+| Web pages | **47** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar. RL cost (`/rl-cost`) sits under GPUs; Batches (`/batches`, `/batch/{id}`) under My Jobs; the internal Monthly report (`/reports`, `/reports/{month}`) under Markets, locked |
+| Database tables | **110** in a freshly migrated database (109 application tables plus `alembic_version`; Postgres, migrated by Alembic: 41 migrations, head `0039_monthly_reports`) |
+| Background jobs | **34** registered when every optional source is configured (**31** with the defaults: no EIA / SEC / Alpaca keys, `POWER_ENABLED` off), beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets, the monthly market report…; table 15.2) |
 | Capacity (stock) feeds | **32** providers report in-stock state or counts from their own APIs (section 3.6) |
 | Power markets (internal) | EIA-930 grid data, EIA natural gas, CAISO, NYISO, SPP and ERCOT wholesale prices in their own `power_*` tables (about 490 MB in production on 2026-11-14); admin-only reads, never in a GPU statistic (section 5a) |
 | Provisioning adapters | **9 providers** (Lambda, RunPod, Hyperstack, DigitalOcean, Crusoe/Denvr/Latitude via Shadeform, Vast, Verda) |
@@ -62,7 +62,7 @@ Counts recomputed from the code on 2026-11-13.
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination. Built on top, tested against fake provider APIs only: **batches** (a sweep or shard list as one batch: placement across clouds, one budget, one approval), **resume** from a verified checkpoint, opt-in **OOM escalation** and **move** to another GPU; automatic relaunch / OOM escalation and move are off by default (`JOB_AUTO_RELAUNCH_ENABLED`, `JOB_MOVE_ENABLED`) |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
 | Workload intelligence | GPU memory estimator (text LLMs; recommendations also size audio, image + text and video workloads, section 6c), measured performance from completed real jobs (none yet), project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (hosted at `/mcp` with an API key: 15 tools, 2 prompts; local via uvx: 16 tools, 3 prompts), grounded assistant, RL post-training cost estimator |
-| Automated tests | **137** Python test files + **14** JavaScript test files, all 151 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
+| Automated tests | **138** Python test files + **14** JavaScript test files, all 152 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
 
 ---
 
@@ -477,6 +477,42 @@ event loop; the listings / components read and each job's result are cached for 
 `opengrid_rl_estimate`. **Does not:** measure tokens/s, spot reclaim rates or CPU sandbox prices (no dataset yet);
 price inter-region transfer inside one provider (assumed $0 in one cluster), rollout-side storage, engineering
 overhead, enterprise discounts, or compression / partial weight updates; convert a tokens-per-hour target into GPUs.
+
+### 4.10 Monthly market report (internal; `reports/monthly.py`, methodology/monthly-report.md)
+Answers, once a month and from stored data only: **over a calendar month (UTC), did the GPU clouds move their prices
+proportionally?** One price per cloud per GPU (its lowest on-demand list price; marketplaces and decentralized
+networks left out of the cloud counts), compared at the start and the end of the month: from `market_hourly`
+(median of the first / last 24 priced hours within the month's first / last 72 hours) for live months, from
+`archived_prices` (the price in force at the month's start against the last document dated inside it) for clouds
+OpenGrid had not recorded live yet; never mixed inside one cloud's move. Sections:
+- **Headline**: the GPU Compute Index and each featured GPU's index (H100 SXM, H200, B200, B300, A100 80GB, L40S,
+  MI300X, RTX 4090, RTX 5090) at the month's start and end, % change (null with the reason when not published or
+  rebased).
+- **How the clouds moved**, per featured GPU: clouds tracked, up / flat / down (±1%, a parameter), median move,
+  middle half, full range, dispersion (median absolute deviation, IQR and movers' spread in percentage points), a
+  pattern (`no_moves`, `proportional` = every cloud within 2 pp of the median, `few_movers`, `broad_uneven`), the
+  biggest movers (provider, start → end, %), the cheapest cloud at month end and how far below the median it is.
+  Statistics need 3 clouds; below that they are null with the reason.
+- **Within one cloud**: for every cloud that repriced 2+ GPUs, `uniform` (same direction, within 2 pp),
+  `same_direction` or `mixed`, with the overall shares.
+- **Generations** (hardware generation, consumer parts apart), **supply** (sold-out / back-in-stock transitions
+  from the capacity feeds; providers that started / stopped listing a featured GPU), **notable events**,
+  **coverage and caveats** (basis live / archive / mixed / none, clouds counted, thresholds, data kinds).
+- **Public-safe summary**: 4-8 sentences with rounded numbers only (index points whole, per-GPU index to 10 cents,
+  whole percentages, counts such as "5 of 16 clouds raised H100 prices"), no provider name, never one cloud's price,
+  plus a one-line methodology note; tested for both.
+
+Stored once per month in `monthly_reports` (migration `0039_monthly_reports`; regeneration overwrites only when
+forced, `generated_at` kept). The `monthly_report` job (daily) generates the previous month once from the 1st,
+06:00 UTC, and posts one compact embed (provider names allowed) to `#opengrid-market` when configured. Internal:
+`GET /v1/reports/monthly`, `GET /v1/reports/monthly/{YYYY-MM}` need `data:read` (operator, viewer login or a key;
+`reports` is in `PRIVATE_V1`, so never anonymous even with `PUBLIC_PAGES`, and not a Data API area, so the Data
+API host answers 404); `POST …/regenerate` is admin-only. Page `/reports` (`/reports/{month}`): not indexed, not in
+the sitemap, locked in the nav, with a "Copy public summary" button. CLI: `python -m reports.monthly generate --month
+2026-10 [--force]`, `backfill --from 2024-01 [--to …]`, `show --month …`. Limits: list prices, not transactions;
+only the month's two ends are compared (round trips inside the month do not show); archive months cover only the
+clouds with a document at the start and inside the month and have no index levels.
+
 
 ---
 
@@ -981,7 +1017,7 @@ routing score or capacity, and neither is blended into another number:
 |---|---|---|
 | `#opengrid-ops` | `OPS_ALERT_WEBHOOK_URL` | **Urgent, money at risk**: orphans, termination failures, past-deadline deployments, unknown states > 10 min, provider API down with active deployments, overspend > 20%, active resources without billing, unowned provider resources, kill switches; **data feeds gone silent** (below) |
 | `#opengrid-deployments` | `DEPLOYMENTS_WEBHOOK_URL` | Route awaiting approval, approved, launching, running, terminating, terminated, failures |
-| `#opengrid-market` | `MARKET_WEBHOOK_URL` | Notable and major market events |
+| `#opengrid-market` | `MARKET_WEBHOOK_URL` | Notable and major market events; once a month the monthly report's compact embed (section 4.10) |
 | `#opengrid-news` | `NEWS_WEBHOOK_URL` | Stories with relevance ≥ 50, one post per story |
 
 - Rich **Discord embeds** in OpenGrid green (`#91C61D`) with the OpenGrid logo, structured fields,
@@ -1046,7 +1082,7 @@ description is in docs/UI_GUIDE.md.
 
 **Navigation and access**
 - **Home**, then **Explore** (free, no account): **GPUs** (Compare, Explorer, Heatmaps, Providers, Capacity, Reserved prices, True cost, RL cost, Provider uptime, Provider probes), **Find
-  Compute** (Ask the assistant), **Markets** (Indices, Opportunities, Events, News, Watchlists), **Developers**
+  Compute** (Ask the assistant), **Markets** (Indices, Opportunities, Events, News, Watchlists, Monthly report), **Developers**
   (API docs, API keys, Onboarding). Then **Your workspace** (needs an account): **My Jobs** (Batches, Deployments,
   Reserve, Route). Methodology at the bottom. **Operator** tools (Execution, Checklist, Partners, Value, Ops)
   appear only for the operator / an admin key.
@@ -1077,7 +1113,7 @@ description is in docs/UI_GUIDE.md.
 |---|---|
 | Home | "Compare GPU prices. Find the right compute. Run supported workloads.", a "What works today" list (including what does not work yet), three actions tagged free / simulation / needs an account, the live price board, indices, how it works |
 | Market | Overview · Indices · Index detail · GPUs · GPU detail · GPU family · Providers · Provider detail · Compare · Explorer · Heatmaps · Capacity · Reserved prices · True cost (full-cost estimator) · RL cost (RL post-training estimator) · Provider uptime · Provider probes |
-| Signals | Opportunities · Events · News (feed + timeline) |
+| Signals | Opportunities · Events · News (feed + timeline) · Monthly report (internal, locked: how the clouds moved per featured GPU, biggest movers, within-cloud repricing, generations, supply, events, coverage; "Copy public summary") |
 | Find Compute | four guided steps (what you are doing, model or project, what matters incl. **training data** and epochs, or for inference optional image / audio / video inputs, recommendation); one recommended option with price, memory per GPU, availability, estimated runtime and whole-job cost, and whether OpenGrid can run it; up to three alternatives; the three or four answers kept apart (lowest advertised price, best fit, execution-ready, lowest cost for the whole job); per-option performance across its GPUs; everything else under Advanced details |
 | Workspace | My Jobs (Needs attention / Active / Completed, simulation vs real tags, a plain-English box) · New job (example job as a free simulation, a real-GPU card with readiness, run your own model) · Job page (at a glance, next step, timeline; Resume… / Move… with the quote first, a move suggestion banner) · Batches (list) · Batch page (shards, placement, budget, approval, best result) · Route (a simple ticket; technical panel folded) · Deployments · Deployment detail · Reserve (price-lock requests) · Request detail · Watchlists |
 | Developers | three paths (AI assistant over MCP, CLI, REST) with what each needs; two first successes without a key; per-client MCP setup (Claude Code, Cursor, VS Code, Codex, Claude Desktop / claude.ai), each marked tested or not; access requests via GitHub issues · API docs (curated public reference with Try it; the full schema for the operator) · API keys (one access state when signed out; presets) · Onboarding (design partners) |
@@ -1160,10 +1196,11 @@ the app:
 | Reservations | `/v1/reservations/reference`, `/v1/reservations/requests`, `/v1/reservations`, `/v1/reservations/{id}`, `…/accept`, `…/withdraw` |
 | Accounts & billing | `/v1/me`, `/v1/keys` (+ `DELETE /v1/keys/{id}`), `/v1/scopes`, `/v1/usage`, `/v1/credentials` (+ `DELETE /v1/credentials/{id}`), `/v1/billing/usage`, `/v1/billing/invoices`, `/v1/billing/policy` |
 | Watchlists | `/v1/watchlists`, `/v1/watchlists/{id}`, `…/items`, `…/items/{item_id}`, `/v1/alerts`, `/v1/alerts/{id}`, `…/test`, `/v1/alerts/firings` |
+| Reports (internal; `data:read`, never anonymous, not on the Data API host) | `/v1/reports/monthly`, `/v1/reports/monthly/{month}`; admin: `POST /v1/reports/monthly/{month}/regenerate` (section 4.10) |
 | Analytics | `/v1/economics`, `/v1/onboarding`, `/v1/partners/me`, `POST /v1/events/track` (anonymous product analytics) |
 | Admin & ops (74 in the schema, 9 more outside it) | execution control, kill switches, validation, reconciliation, orphans, resources, channels, ops, metrics, traces, checklist, partners, funnel, accounts, credits, draft invoices, fee policies, exposures, feedback, quality and quarantine, product analytics / PostHog, usage, internal-data registry, reservation offers, fixing restatements, methodology change notices; outside the schema: `/v1/ops/power/*` (7) and `/v1/ops/context/equities` (2) |
 
-Counts (from `main.app.openapi()` on a freshly migrated database): 249 operations, 227 under `/v1`, 74 of them under
+Counts (from `main.app.openapi()` on a freshly migrated database): 252 operations, 230 under `/v1`, 74 of them under
 `/v1/ops` or `/v1/admin`, 15 under `/internal`, and 7 operator/debug routes at the root (`/health`, `/fetch`,
 `/normalize`, `/raw`, `/raw/summary`, `/raw/payload`, `/unmapped`). The public customer docs at
 **docs.tryopengrid.com** (`docs-site/`) publish one page per customer endpoint (69), generated by
@@ -1180,7 +1217,7 @@ Railway, one service + Postgres (+ two probe-agent services), built from `pyproj
 (start command, healthcheck, replicas, domains) live in Railway infrastructure-as-code, `.railway/railway.ts` (it replaced `railway.toml`, which Railway stops reading on
 2026-12-01; preview
 `railway config plan`, apply `railway config apply`; variables stay unmanaged), with **exactly one worker** (the poller lives in the web process). Migrations run
-automatically at startup (one head, `0038_measured_performance`). A push to GitHub does not trigger a Railway build on its
+automatically at startup (one head, `0039_monthly_reports`). A push to GitHub does not trigger a Railway build on its
 own: deploy with `railway up --service opengrid-terminal --detach`. The app **refuses to start in production**
 without `APP_PASSWORD` and `API_KEY_PEPPER`. `RAILPACK_DEPLOY_APT_PACKAGES=git` puts `git` in the image (the dataset
 backfill needs it). Long one-off backfills (`python -m backfill …`, `python -m news.history run`,
@@ -1189,11 +1226,11 @@ deploy, because a deploy restarts the container and stops them; each resumes whe
 deploy separately (`cd docs-site && vercel deploy --prod`).
 
 ### 15.2 Background jobs
-33 jobs are registered when every optional source is configured (`jobs.JOBS`; the provider poll loops run beside
-them); 30 with the defaults (`context_series`, `context_equities` and `power_forward` need keys or `POWER_ENABLED`).
+34 jobs are registered when every optional source is configured (`jobs.JOBS`; the provider poll loops run beside
+them); 31 with the defaults (`context_series`, `context_equities` and `power_forward` need keys or `POWER_ENABLED`).
 `OPENGRID_NO_JOBS` registers them but starts none; with `POLLER_ENABLED` off, the jobs marked "poller" are not
-registered. `news` and `gpuhunt_snapshot` are always registered and skip their work when `NEWS_ENABLED` /
-`GPUHUNT_SNAPSHOT_ENABLED` is off.
+registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registered and skip their work when
+`NEWS_ENABLED` / `GPUHUNT_SNAPSHOT_ENABLED` / `MONTHLY_REPORT_ENABLED` is off.
 
 | Job | Every | Purpose |
 |---|---|---|
@@ -1219,6 +1256,7 @@ registered. `news` and `gpuhunt_snapshot` are always registered and skip their w
 | `db_latency` | 1 min | database latency metric |
 | `api_usage_flush`, `api_usage_retention` | 10 s / daily | API usage logging |
 | `gpuhunt_snapshot` | daily | raw copy of dstack's expiring gpuhunt catalogues (`GPUHUNT_SNAPSHOT_ENABLED`) |
+| `monthly_report` | daily | the internal monthly market report: generates the PREVIOUS month once (from the 1st, 06:00 UTC), then posts one embed to `#opengrid-market` (`MONTHLY_REPORT_ENABLED`, default on; section 4.10) |
 | `uptime`, `provider_incidents` | 1 h / 10 min | UptimeProject uptime and latency; providers' status-page incidents (registered only with `UPTIME_ENABLED`, default on) |
 | `probe_local`, `probe_rollup` | 30 s / 5 min | OpenGrid's own probes from this process (registered only with `PROBES_LOCAL_ENABLED`, default on); hourly rollups |
 | `fx_rates` | 1 h | ECB reference rates (poller) |
@@ -1229,7 +1267,7 @@ registered. `news` and `gpuhunt_snapshot` are always registered and skip their w
 | `power_forward` | 12 h | power markets: forward read with overlap, then the cross-analysis (poller; only with `POWER_ENABLED=true`, on in production) |
 
 ### 15.3 Key configuration
-`config.py` defines 171 settings; the ones an operator sets:
+`config.py` defines 172 settings; the ones an operator sets:
 
 | Variable | Purpose |
 |---|---|
@@ -1247,6 +1285,7 @@ registered. `news` and `gpuhunt_snapshot` are always registered and skip their w
 | `POLLER_ENABLED`, `LIUM_STREAM_ENABLED`, `NEWS_ENABLED`, `SEC_USER_AGENT` | background polling, the Lium stream, news feeds; the SEC fair-access User-Agent (news EDGAR sources and market context) |
 | `UPTIME_ENABLED`, `PROBES_LOCAL_ENABLED`, `PROBES_LOCATION`, `PROBES_RAW_RETENTION_DAYS` | external uptime; OpenGrid's own probes (raw kept 30 days by default) |
 | `GPUHUNT_SNAPSHOT_ENABLED`, `SKYPILOT_CATALOG_ENABLED`, `SKYPILOT_CATALOG_LICENCE` | archived-history sources (SkyPilot off until its licence is confirmed) |
+| `MONTHLY_REPORT_ENABLED` | the `monthly_report` job (default on; off: it skips its work) |
 | `EIA_API_KEY` | EIA API v2: market-context state electricity prices, and the EIA-930 and natural-gas power sources |
 | `ALPACA_DATA_KEY_ID`, `ALPACA_DATA_SECRET_KEY`, `EQUITY_TICKERS` | internal equities (market data only); ticker override |
 | `POWER_ENABLED`, `POWER_SOURCES`, `POWER_PUE` | power markets: the `power_forward` job (default off; on in production); sources (empty: each module's default); facility overhead (1.3) |
@@ -1277,9 +1316,9 @@ registered. `news` and `gpuhunt_snapshot` are always registered and skip their w
 
 ## 16. Testing
 
-137 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
+138 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
 Postgres database, no real provider calls), plus 5 CLI/MCP test files in `cli/tests/`. `tests/run_all.py` runs all
-150 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
+152 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
 (`.github/workflows/tests.yml`) runs it on every push and pull request against a throwaway Postgres 16 whose zone is
 deliberately not UTC. Beyond the per-module tests:
 - unit and integration tests for every analytics module, API and page;
@@ -1310,6 +1349,11 @@ deliberately not UTC. Beyond the per-module tests:
   client: tool list, the sandbox demo, scopes through the caller's key, every 401/403 path, the key never
   echoed, and a thread-starvation proof (48 concurrent calls on a 6-thread pool finish; without the gate's
   admission limit they starve);
+- **monthly market report** (`test_monthly_report.py`): hand-computed month statistics (up / flat / down, median,
+  middle half, dispersion, proportionality and within-cloud classes) on live and archive months, missing data,
+  the job generating the previous month once after the 1st, the Discord embed (no network), access control
+  (anonymous, `PUBLIC_PAGES`, the Data API host, the viewer), a public summary with no provider name and only
+  rounded numbers, migration 0039 up / down;
 - **settlement fixings**: finality, TWAP, hash-chain tamper detection, the immutability trigger,
   restatements, evidence retention;
 - **reservations**: state machine, supply-basis enforcement, tenant isolation, nothing launched or billed;
@@ -1420,12 +1464,12 @@ a real GPU provider yet. The next step is one supervised **Lambda validation run
 ## 19. Methodology documents
 
 Every number OpenGrid publishes traces to a document in `methodology/` (also served at
-`/methodology` in the terminal and listed at `GET /v1/methodology`). The 49 documents:
+`/methodology` in the terminal and listed at `GET /v1/methodology`). The 50 documents:
 
 - **Market data:** `data-kinds` · `data-quality` · `data-trust` · `data-visibility` · `freshness` · `capacity` ·
   `live-feeds` · `families` · `hardware` · `fx` · `gcp-regions`
 - **Market intelligence:** `indices` · `settlement` · `historical-context` · `archived-history` · `dispersion` ·
-  `provider-value` · `events` · `shifts` · `opportunities` · `reserved-prices` · `full-cost` · `rl-cost`
+  `provider-value` · `events` · `shifts` · `opportunities` · `reserved-prices` · `full-cost` · `rl-cost` · `monthly-report`
 - **News and context:** `news` · `news-history` · `market-context` · `power-markets`
 - **Reliability:** `uptime` · `probes` · `reliability`
 - **Execution:** `routing` · `best-execution` · `execution-safety` · `reconciliation` · `provider-capabilities` · `adapter-contract-audit` ·

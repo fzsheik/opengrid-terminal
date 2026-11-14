@@ -78,6 +78,10 @@ PAGES: list[tuple[str, str, str, bool]] = [
     ("/admin/partners", "Design partners", "Design partners, their deployments and feedback.", False),
     ("/admin/value", "Value", "Economic value, routing quality, reliability and funnel.", False),
     ("/watchlists", "Watchlists", "Your watchlists and alerts.", False),
+    # Internal: the report names providers next to their prices. The shell is generic; the data (/v1/reports) is
+    # private (PRIVATE_V1) and never on the Data API host. Not indexable, so never in the sitemap.
+    ("/reports", "Monthly market report", "Internal monthly report: how GPU clouds moved their prices over a month.", False),
+    ("/reports/{month}", "Monthly market report", "Internal monthly report: how GPU clouds moved their prices over a month.", False),
     ("/keys", "API keys", "Your OpenGrid API keys.", False),
     ("/assistant", "Assistant", "Ask about live GPU prices, which GPU fits a workload, comparisons and price moves. "
                                 "Answers use OpenGrid's live market data; estimates are labelled.", True),
@@ -111,7 +115,9 @@ PUBLIC_V1 = ("gpus", "markets", "listings", "indices", "events", "news", "provid
 PUBLIC_POST = ("/v1/recommend/estimate", "/v1/recommend", "/v1/assistant", "/v1/costs/estimate", "/v1/costs/rl-estimate")
 # Never public, whatever else matches: money, private data, operator functions.
 PRIVATE_V1 = ("route", "deployments", "keys", "admin", "ops", "me", "usage", "billing", "watchlists", "alerts", "credentials", "jobs", "batches", "quotes",
-              "reservations")
+              "reservations",
+              # the internal monthly market report (provider names next to prices): signed-in readers only
+              "reports")
 # /internal areas readable without the site password when PUBLIC_PAGES is on (UI-only views that were public at
 # /v1). Not "live" (operator-only, as before).
 PUBLIC_INTERNAL = ("overview", "tape", "opportunities", "heatmaps", "compare", "uptime", "trust", "polling")

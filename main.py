@@ -418,6 +418,9 @@ app.include_router(assistant_api.router)
 from api import power as power_api  # noqa: E402  (power markets; registers power_forward when POWER_ENABLED)
 
 app.include_router(power_api.router)
+from api import reports as reports_api  # noqa: E402  (internal monthly market report; registers monthly_report)
+
+app.include_router(reports_api.router)
 
 # The hosted MCP endpoint (/mcp; Bearer API key only). Before the page router; never fails startup (503 instead).
 mcp_gate = mcp_remote.install(app)

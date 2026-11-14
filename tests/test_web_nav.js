@@ -36,6 +36,7 @@ eq(K("/admin/execution"), "admin-execution", "admin pages map to admin-<x>");
 eq(K("/admin/value"), "admin-value", "admin value");
 eq(K("/markets?x=1"), "markets", "a query string is ignored");
 eq(K("/watchlists"), "watchlists", "other first segments map to themselves");
+eq(K("/reports/2026-10"), "reports", "one monthly report highlights Monthly report");
 
 // ---------- the static nav ----------
 const keys = [...navHtml.matchAll(/data-nav="([^"]+)"/g)].map(m => m[1]);
@@ -56,12 +57,12 @@ const hrefs = s => [...s.matchAll(/href="([^"]+)"/g)].map(m => m[1]);
 eq(hrefs(group("gpus")), ["/gpus", "/compare", "/explorer", "/heatmaps", "/providers", "/capacity", "/reserved", "/cost", "/rl-cost", "/uptime", "/probes"], "GPUs group: Compare, Explorer, Heatmaps, Providers, Capacity, Reserved prices, True cost, RL cost, Provider uptime, Provider probes");
 eq(hrefs(group("jobs")), ["/jobs", "/batches", "/deployments", "/reserve", "/route"], "My Jobs group: Batches, Deployments, Reserve, Route (Watchlists moved to Markets)");
 eq(hrefs(group("find")), ["/find", "/assistant"], "Find Compute group: the assistant is reachable here (no extra top-level item)");
-eq(hrefs(group("markets")), ["/markets", "/indices", "/opportunities", "/events", "/news", "/watchlists"], "Markets group: Indices, Opportunities, Events, News, Watchlists (market alerts)");
+eq(hrefs(group("markets")), ["/markets", "/indices", "/opportunities", "/events", "/news", "/watchlists", "/reports"], "Markets group: Indices, Opportunities, Events, News, Watchlists (market alerts), Monthly report (internal)");
 eq(hrefs(group("developers")), ["/developers", "/api", "/keys", "/onboarding"], "Developers group: API docs, API keys, Onboarding");
 ok(/<div class="nav-util">\s*<a href="\/methodology"[^>]*>Methodology<\/a>\s*<\/div>/.test(navHtml), "utility links: Methodology only (Ops is an operator tool)");
 ok(/class="nav-sec nav-admin"[^>]*hidden/.test(navHtml) && ["/admin/execution", "/admin/checklist", "/admin/partners", "/admin/value", "/ops"].every(h => hrefs(group("admin")).includes(h)), "operator group (Admin + Ops): hidden until /v1/me says admin");
 // access: every link to a page whose data needs an account carries data-access (a lock), and no public page does
-const ACCOUNT_PAGES = ["/jobs", "/deployments", "/reserve", "/route", "/watchlists", "/keys", "/onboarding"];
+const ACCOUNT_PAGES = ["/jobs", "/deployments", "/reserve", "/route", "/watchlists", "/reports", "/keys", "/onboarding"];
 const linkTag = href => (navHtml.match(new RegExp(`<a href="${href.replace(/\//g, "\\/")}"[^>]*>`)) || [""])[0];
 for (const href of ACCOUNT_PAGES) ok(/data-access="account"/.test(linkTag(href)), `${href}: nav link marked as needing an account`);
 for (const href of ["/", "/gpus", "/compare", "/explorer", "/heatmaps", "/providers", "/find", "/assistant", "/markets", "/indices", "/opportunities", "/events", "/news", "/developers", "/api", "/methodology"])
