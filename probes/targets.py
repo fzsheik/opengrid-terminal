@@ -48,7 +48,7 @@ TARGETS: tuple[Target, ...] = (
     Target("oracle:iaas-eu-frankfurt-1", "oracle", "OCI Core API eu-frankfurt-1", "https://iaas.eu-frankfurt-1.oraclecloud.com/20160918/shapes", accept=(401,), region="eu-frankfurt-1"),
     Target("ibm:iam", "ibm", "IBM Cloud IAM", "https://iam.cloud.ibm.com/identity/.well-known/openid-configuration"),
     Target("ibm:catalog", "ibm", "Global Catalog", "https://globalcatalog.cloud.ibm.com/api/v1?_limit=1"),
-    Target("lambda:api", "lambda", "Cloud API", "https://cloud.lambdalabs.com/api/v1/instance-types", accept=(401,)),
+    Target("lambda:api", "lambda", "Cloud API", "https://cloud.lambda.com/api/v1/instance-types", accept=(401,)),
     Target("runpod:graphql", "runpod", "GraphQL API", "https://api.runpod.io/graphql", accept=(400,)),
     Target("runpod:rest", "runpod", "REST API", "https://rest.runpod.io/v1/pods", accept=(401,)),
     Target("vast:console-api", "vast", "Console API", "https://console.vast.ai/api/v0/users/current/", accept=(401, 403)),

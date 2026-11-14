@@ -1364,9 +1364,8 @@ a real GPU provider yet. The next step is one supervised **Lambda validation run
   yet). Audio, image + text and video sizing is an internal accuracy improvement of recommendations: video
   generation memory is always low confidence, video understanding is modelled for Qwen2-VL only, the training
   memory of video and TTS models is a lower bound, and the audio pipeline efficiency is uncalibrated.
-- **Providers**: Alibaba Cloud is built but dormant until an AccessKey is set. The market-data poller and probe
-  target for Lambda still use the deprecated `cloud.lambdalabs.com` host (the adapter uses `cloud.lambda.com`), and
-  RunPod's market-data poller still reads its GraphQL API, which RunPod retires in early 2027.
+- **Providers**: Alibaba Cloud is built but dormant until an AccessKey is set. RunPod's market-data poller still reads
+  its GraphQL API, which RunPod retires in early 2027.
 - Not implemented (deliberately): real payment processing, email alerts, AWS/Nebius/Massed
   Compute provisioning (need IAM/partner access), workload-performance benchmarks (measured performance comes from
   completed real jobs only).

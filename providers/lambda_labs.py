@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-BASE_URL = "https://cloud.lambdalabs.com/api/v1"
+BASE_URL = "https://cloud.lambda.com/api/v1"  # production host; cloud.lambdalabs.com is deprecated
 
 # Lambda's region names carry the country in their prefix.
 COUNTRY_BY_REGION_PREFIX = {

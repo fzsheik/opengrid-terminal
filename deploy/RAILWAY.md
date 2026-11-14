@@ -19,7 +19,8 @@ No Docker image: Railway builds from `pyproject.toml` + `uv.lock` and starts it 
 
 - Open the URL: the browser asks for the password (user `opengrid`).
 - `<url>/health` answers without a password (that is what Railway checks).
-- App service > Logs: `polling started:` should list **16** providers. Fewer means a key is missing from Variables.
+- App service > Logs: `polling started:` lists every provider being polled (60 in production on 2026-11-13; keyed providers drop out
+  when their key is missing from Variables, and Alibaba Cloud stays dormant until its AccessKey is set).
 - Then **stop the local server** so two copies are not both recording.
 
 ## Things to know

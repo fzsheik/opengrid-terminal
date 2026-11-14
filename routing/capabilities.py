@@ -117,7 +117,7 @@ _REG: dict[str, dict] = {
         api=3, resource="vm", docs="https://vm-docs.massedcompute.com/api/v1", docs_checked="docs (search 2026-10)",
         credential=COMMERCIAL, settings=[],
         notes="A VM API (Bearer token) and a partner Inventory API exist; tokens are issued on request "
-              "(techadmin@massedcompute.com). OpenGrid reads only the public price page; no adapter."),
+              "(techadmin@massedcompute.com). OpenGrid reads the keyed inventory API (public price page as fallback); no adapter."),
     "voltagepark": dict(
         api=3, resource="vm / bare metal", docs="https://docs.voltagepark.com/on-demand/api",
         docs_checked="docs (search 2026-10)", credential=BYO, settings=[],

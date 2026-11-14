@@ -34,7 +34,7 @@ Docs: <https://cloud.lambda.com/api/v1/openapi.json> (v1.10.0; byte-identical at
 **Watch during the live launch**
 - `GET /instances` is summarised as "List running instances", and the spec does not say whether terminated or preempted instances are listed. After terminate, termination is confirmed by `GET /instances/{id}` and by absence from the list. Note whether the terminated instance still appears in the list.
 - The rate limit is 1 request/s, and launch is limited to 1 per 12 s. Do not click Approve twice.
-- Out of scope but noted: the market-data poller (`providers/lambda_labs.py`) and probe target still use `cloud.lambdalabs.com` ("Tertiary ... deprecated").
+- The market-data poller (`providers/lambda_labs.py`) and probe target moved to `cloud.lambda.com` on 2026-11-13 too.
 
 **Account setup:** an API key; an account in good standing (no `account-inactive`, a valid billing address, a payment method). Default firewall: "Lambda allows only incoming ICMP traffic or TCP traffic on port 22 (SSH)", so SSH works with no rule change. The per-deployment SSH key is registered by the adapter.
 
