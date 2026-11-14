@@ -1,0 +1,10 @@
+{
+ "_about": "Real answer of an unauthenticated GET https://api.runpod.io/v2/catalog/gpus?include=AVAILABILITY&product=POD&count=1&cloud=SECURE, 2026-11-13 (no key sent).",
+ "status": 401,
+ "content_type": "application/problem+json",
+ "body": {
+  "detail": "missing bearer token",
+  "status": 401,
+  "title": "Unauthorized"
+ }
+}

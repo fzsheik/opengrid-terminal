@@ -67,7 +67,15 @@ guide), and GraphQL "will be retired in early 2027". Every call the adapter make
 - A 400 on create carries only a human-readable `detail`. Record its text if it happens: it is the only signal for capacity.
 - Not documented: whether pod ids created through v1 work on v2. None exist, but check that no older v1 pod is on the account.
 - Not documented: how fast the billing records for a short pod appear. `reported_cost` reports "no records yet" until they do.
-- Out of scope: the market-data poller still reads GraphQL stock/prices, which retires in early 2027.
+- Market-data poller (providers/runpod.py, moved 2026-11-13): pods now come from the same
+  `GET /v2/catalog/gpus?include=AVAILABILITY&product=POD&count=N&cloud=SECURE|COMMUNITY` (8 GETs, one stored
+  endpoint per URL) when `RUNPOD_API_KEY` is set; listing = availability LOW/MEDIUM/HIGH and `price[cloud]` > 0,
+  pod total = `price[cloud]` × N, vcpu/ram = `minVcpuCount`/`minRam`. On the live GraphQL answer of 2026-11-13
+  this rule reproduces every listing (72 of 72 cells: lowestPrice/N = per-GPU list price, a price only with a stock
+  word; `minDisk` null everywhere). The catalog needs a key (`catalog:read`; unauthenticated = 401), so **still on
+  GraphQL until early 2027**: serverless pool flex/active prices (`gpuPools`; REST has one unlabelled
+  `price.serverless` per GPU, no active price, no pool list), and pods when no key is set or any REST call fails
+  that round (normalize reads the newest complete round of one source, never a mix).
 
 **Account setup:** an API key with pod read/write and billing read scopes (403 otherwise); at least one hour of credit (402 otherwise); a container image that runs sshd from `PUBLIC_KEY` (RunPod official images do).
 

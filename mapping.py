@@ -208,8 +208,12 @@ RUNPOD = ProviderMapping(
     provider="runpod",
     display_name="RunPod",
     endpoints={
-        "POST /graphql  { gpuTypes { ... } }": "catalogue: per-GPU price per cloud, VRAM, manufacturer",
-        "POST /graphql  lowestPrice(gpuCount, secureCloud)": "price, stock status and pod minimums per cloud per size",
+        "GET /v2/catalog/gpus?include=AVAILABILITY&product=POD&count=N&cloud=SECURE|COMMUNITY":
+            "with RUNPOD_API_KEY (catalog:read): per-GPU price per cloud, availability and pod minimums per cloud per "
+            "size; one stored endpoint per URL (8)",
+        "POST /graphql  { gpuTypes { ... } }": "fallback (no key, or REST failed that round): catalogue",
+        "POST /graphql  lowestPrice(gpuCount, secureCloud)": "fallback: price, stock status and pod minimums per cloud "
+                                                             "per size",
         "POST /graphql  { gpuPools { ... } }": "serverless GPU pools: flex and active price per GPU-hour (no key "
                                                 "needed; stored as graphql#gpuPools)",
     },
@@ -219,28 +223,32 @@ RUNPOD = ProviderMapping(
         FieldMap("listing_id", DERIVED, "{id}:{cloud}:{gpuCount}", "one listing per cloud per pod size"),
         FieldMap("raw_gpu_name", RAW, "gpuTypes[].id", "the id, not displayName: it carries VRAM and variant"),
         FieldMap("canonical_gpu_name", LOOKUP, "canonical.py", "None when unmapped; never guessed"),
-        FieldMap("gpu_count", DERIVED, "the gpuCount asked of lowestPrice", "1, 2, 4 or 8"),
+        FieldMap("gpu_count", DERIVED, "the count asked of the catalog (REST) / lowestPrice (GraphQL)", "1, 2, 4 or 8"),
         FieldMap("region", ABSENT, "-", "datacenter is knowable but costs ~50x the requests: see quirks"),
         FieldMap("country", ABSENT, "-", "follows from region being absent"),
-        FieldMap("price_per_gpu_hour", DERIVED, "lowestPrice.uninterruptablePrice / gpuCount"),
-        FieldMap("price_per_instance_hour", RAW, "lowestPrice(cloud, count).uninterruptablePrice", "pod total, cloud- and size-specific"),
+        FieldMap("price_per_gpu_hour", DERIVED, "REST price[cloud]; GraphQL lowestPrice.uninterruptablePrice / gpuCount"),
+        FieldMap("price_per_instance_hour", DERIVED, "REST price[cloud] x count; GraphQL lowestPrice(cloud, count)"
+                 ".uninterruptablePrice", "pod total; identical in all 72 priced cells live 2026-11-13"),
         FieldMap("currency", CONSTANT, '"USD"', "not stated by the API; assumed"),
         FieldMap("market_type", CONSTANT, '"on_demand"', "spot fields duplicate on-demand exactly: see quirks"),
         FieldMap("provider_tier", DERIVED, '"secure" | "community"', "RunPod's two clouds: datacenter vs peer-hosted"),
         FieldMap("interruptible", DERIVED, "= (tier == community)", "community hosts are peer machines"),
-        FieldMap("available", DERIVED, 'stockStatus not in (null, "None")'),
-        FieldMap("capacity", ABSENT, "-", "stockStatus is a High/Medium/Low bucket, never a number"),
+        FieldMap("available", DERIVED, 'availability / stockStatus not in (null, NONE)'),
+        FieldMap("capacity", ABSENT, "-", "the stock word is a High/Medium/Low bucket, never a number"),
         FieldMap("capacity_unit", ABSENT, "-", "nothing to put a unit on"),
-        FieldMap("vcpu", RAW, "lowestPrice.minVcpu", "pod minimum for that cloud and size"),
-        FieldMap("ram_gb", RAW, "lowestPrice.minMemory", "pod minimum, in GB"),
-        FieldMap("storage_gb", RAW, "lowestPrice.minDisk", "almost always null"),
+        FieldMap("vcpu", RAW, "REST minVcpuCount; GraphQL lowestPrice.minVcpu", "pod minimum for that cloud and size"),
+        FieldMap("ram_gb", RAW, "REST minRam; GraphQL lowestPrice.minMemory", "pod minimum, in GB"),
+        FieldMap("storage_gb", RAW, "GraphQL lowestPrice.minDisk; no REST field", "null in all 384 cells (2026-11-13)"),
         FieldMap("observed_at", RAW, "raw_snapshots.fetched_at", "provider fetch time, not normalize time"),
         *_usd_only(),
     ],
     quirks=[
-        "GraphQL only. The REST API at rest.runpod.io/v1 has no GPU pricing "
-        "endpoint, and introspection is disabled, so every field was validated "
-        "by querying it against the live endpoint.",
+        "SOURCES (2026-11-13): GraphQL retires in early 2027, so pods come from REST v2's catalog "
+        "(api.runpod.io/v2/catalog/gpus, needs a key with catalog:read; 401 without) when RUNPOD_API_KEY is set; "
+        "GraphQL (no key needed) when it is not, or in a round where a REST call fails. Serverless pool prices stay "
+        "on GraphQL gpuPools: REST has one unlabelled price.serverless per GPU and no active price. REST v1 "
+        "(rest.runpod.io/v1) never had pricing. GraphQL introspection is disabled, so its fields were validated "
+        "against the live endpoint.",
         "SERVERLESS (gpuPools, since 2026-11-13): listings serverless:{pool}:flex|active, gpu_count 1, price = "
         "flexHourlyCost | activeHourlyCost per GPU-hour, provider_tier serverless_flex | serverless_active. "
         "Flex is the scale-to-zero price printed on runpod.io/pricing; active is the always-on worker list price. "

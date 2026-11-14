@@ -48,7 +48,8 @@ _ALL = [
                  "GPU spot per zone and the pay-as-you-go price it is stated against; needs an AccessKey"),
     ProviderMeta("lambda", "Lambda", "neocloud", "authenticated_api", "cloud.lambda.com", "https://lambda.ai"),
     ProviderMeta("runpod", "RunPod", "neocloud", "authenticated_api", "api.runpod.io", "https://www.runpod.io",
-                 "secure cloud and community cloud are listed separately"),
+                 "secure cloud and community cloud are listed separately; pods from REST v2 /v2/catalog/gpus with a "
+                 "key, else from the keyless GraphQL API (retired early 2027), which also carries serverless pool prices"),
     ProviderMeta("vast", "Vast.ai", "marketplace", "public_api", "console.vast.ai", "https://vast.ai",
                  "host-set prices; the median row stands for Vast, the cheapest row is excluded from market math"),
     ProviderMeta("salad", "Salad", "decentralized", "authenticated_api", "api.salad.com", "https://salad.com",

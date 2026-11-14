@@ -94,8 +94,9 @@ def build_fetchers() -> list[Provider]:
     if settings.lambda_api_key:
         fetchers.append(LambdaProvider(settings.lambda_api_key))
 
-    if settings.runpod_api_key:
-        fetchers.append(RunPodProvider(settings.runpod_api_key))
+    # Pods from REST v2's catalog with a key (it needs one); without a key, or when REST fails, from GraphQL (no key,
+    # retired early 2027). Serverless pool prices are GraphQL only (providers/runpod.py).
+    fetchers.append(RunPodProvider(api_key=settings.runpod_api_key))
 
     if settings.digitalocean_api_key:
         fetchers.append(DigitalOceanProvider(settings.digitalocean_api_key))

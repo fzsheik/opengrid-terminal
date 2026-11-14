@@ -146,7 +146,7 @@ Exoscale 1 h. Lium is also read live from its public WebSocket (section 3.7).
 | Oracle Cloud | hyperscaler | public pricing file (global list prices) |
 | IBM Cloud | general cloud | public API (Global Catalog; on-demand and spot) |
 | Lambda | neocloud | authenticated API |
-| RunPod | neocloud | authenticated API (pods); serverless pools' flex and active prices from the same GraphQL (listed, never in market statistics) |
+| RunPod | neocloud | authenticated API: pods from REST v2 `GET /v2/catalog/gpus` (8 GETs, cloud × size 1/2/4/8; `RUNPOD_API_KEY` with `catalog:read`); without a key, or in a round where REST fails, pods from the keyless GraphQL API; serverless pools' flex and active prices from GraphQL `gpuPools` (listed, never in market statistics) |
 | Hyperstack | neocloud | authenticated API |
 | Thunder Compute | neocloud | authenticated API (account key, as its terms require; live stock) |
 | Jarvislabs | neocloud | authenticated API (`misc/server_meta`, `JARVIS_API_KEY`: regions, on-demand and spot prices, reserved terms, free GPUs; replaced the page scraper 2026-10-30) |
@@ -1364,8 +1364,10 @@ a real GPU provider yet. The next step is one supervised **Lambda validation run
   yet). Audio, image + text and video sizing is an internal accuracy improvement of recommendations: video
   generation memory is always low confidence, video understanding is modelled for Qwen2-VL only, the training
   memory of video and TTS models is a lower bound, and the audio pipeline efficiency is uncalibrated.
-- **Providers**: Alibaba Cloud is built but dormant until an AccessKey is set. RunPod's market-data poller still reads
-  its GraphQL API, which RunPod retires in early 2027.
+- **Providers**: Alibaba Cloud is built but dormant until an AccessKey is set. RunPod's market-data poller reads pods
+  from REST v2 when `RUNPOD_API_KEY` is set (REST needs a key), but still reads RunPod's GraphQL API, which RunPod
+  retires in early 2027, for (a) serverless pool flex/active prices, which REST v2 does not publish, and (b) pods when
+  no key is set or a REST call fails that round. When GraphQL goes, (a) stops and (b) needs the key.
 - Not implemented (deliberately): real payment processing, email alerts, AWS/Nebius/Massed
   Compute provisioning (need IAM/partner access), workload-performance benchmarks (measured performance comes from
   completed real jobs only).

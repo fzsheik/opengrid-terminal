@@ -50,7 +50,7 @@ TARGETS: tuple[Target, ...] = (
     Target("ibm:catalog", "ibm", "Global Catalog", "https://globalcatalog.cloud.ibm.com/api/v1?_limit=1"),
     Target("lambda:api", "lambda", "Cloud API", "https://cloud.lambda.com/api/v1/instance-types", accept=(401,)),
     Target("runpod:graphql", "runpod", "GraphQL API", "https://api.runpod.io/graphql", accept=(400,)),
-    Target("runpod:rest", "runpod", "REST API", "https://rest.runpod.io/v1/pods", accept=(401,)),
+    Target("runpod:rest", "runpod", "REST API v2", "https://api.runpod.io/v2/catalog/gpus", accept=(401,)),
     Target("vast:console-api", "vast", "Console API", "https://console.vast.ai/api/v0/users/current/", accept=(401, 403)),
     Target("salad:api-host", "salad", "API host", "https://api.salad.com/", kind="host", accept=(404,), note="the host's root has no route; 404 proves the web tier answers"),
     Target("hyperstack:api", "hyperstack", "InfraHub API", "https://infrahub-api.nexgencloud.com/v1/pricebook", accept=(401,)),
