@@ -32,6 +32,11 @@ listing count or regions (as in [dispersion](/methodology/dispersion)). Only the
 | **live** (`market_hourly`) | median of the cloud's hourly lowest price over its first 24 priced hours inside the month's first 72 hours | median over its last 24 priced hours inside the month's last 72 hours |
 | **archive** (`archived_prices`) | the price in force at the month's start: the last archived document before it, if at most 45 days old (an AWS price-list version counts while it is still valid) | the last archived document dated inside the month |
 
+**The first live month.** When OpenGrid's live recording began inside a month with at least 14 days left (it began
+2026-10-04), the month is compared from the first live hour instead of the 1st: the start anchor and the index start
+are read in the 72 hours after it. The report says so (`period.partial`, `period.compared_from`, a caveat, and a line
+in the public summary). With less than 14 days left the month is compared as usual.
+
 The archive basis is used only for a cloud and GPU that OpenGrid had not recorded live by the month's end; a cloud's
 move is never part live, part archived. A cloud priced at only one end of the month (it joined, left, sold out, or
 its feed failed) is **left out** and counted in the GPU's reasons; it is never filled in. The median over several

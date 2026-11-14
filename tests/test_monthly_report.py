@@ -258,6 +258,24 @@ def test_live_month_hand_computed():
     assert monthly.generate("2026-10", now=NOW + timedelta(days=40)) == rep, "no clock inside the report"
 
 
+def test_partial_first_live_month():
+    """Live recording began inside the month (production: 2026-10-04): compare from the first live hour, said so."""
+    setup()
+    real = monthly._live_start
+    monthly._live_start = lambda s: datetime(2026, 10, 4, 5, 30, tzinfo=UTC)
+    try:
+        rep = monthly.generate("2026-10", now=NOW)
+    finally:
+        monthly._live_start = real
+    per = rep["period"]
+    assert per["partial"] is True and per["compared_from"] == "2026-10-04T05:00:00+00:00", per
+    assert any("began on 2026-10-04" in c for c in rep["coverage"]["caveats"])
+    last = monthly.public_summary_lines(rep)[-1]
+    assert last.startswith("October 2026 is compared from October 4"), last
+    full = monthly.generate("2026-10", now=NOW)
+    assert full["period"]["partial"] is False and full["period"]["compared_from"] == full["period"]["start"]
+
+
 def test_threshold_is_configurable():
     setup()
     rep = monthly.generate("2026-10", now=NOW, threshold=0.05)
@@ -541,6 +559,7 @@ def test_migration_0039():
 
 
 TESTS = [test_cloud_stats_hand_computed, test_provider_classes, test_months, test_live_month_hand_computed,
+         test_partial_first_live_month,
          test_threshold_is_configurable, test_archive_month, test_missing_data_stays_missing, test_public_summary_safe,
          test_store_once_and_force, test_job_idempotent_previous_month_after_the_first, test_discord_embed,
          test_access_control, test_page_registered, test_migration_0039]

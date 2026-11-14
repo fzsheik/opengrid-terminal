@@ -69,6 +69,7 @@ UNIFORM_BAND_PP = 2.0        # within one cloud: every repriced GPU within 2 per
 PROPORTIONAL_BAND_PP = 2.0   # across clouds: every cloud within 2 pp of the median move -> "proportional"
 MIN_CLOUDS = 3               # median, middle half, range, dispersion and pattern need >= 3 clouds
 ANCHOR_HOURS = 72            # live anchors are read in the month's first / last 72 hours
+PARTIAL_MIN = timedelta(days=14)  # live recording starting mid-month: compare from it only if >= 14 days remain
 ANCHOR_SAMPLES = 24          # ... as the median of at most 24 priced hours
 HOLD_DAYS = 45               # an archived price holds until the next document, at most this long (archived.py)
 ARCHIVE_LOOKBACK_DAYS = 400  # how far back archived documents are read to find the price in force at the start
@@ -415,7 +416,12 @@ def _generate(s, month: str, m0: datetime, m1: datetime, threshold: float) -> di
     from api.common import gpu_slug
 
     live_start = _live_start(s)
-    live, partial = _live_pairs(s, m0, m1)
+    # live recording began inside this month (October 2026): compare from the first live hour, said so, instead of
+    # falling back to the thin archive for a month that is mostly live
+    start = m0
+    if live_start is not None and m0 < live_start < m1 and m1 - live_start >= PARTIAL_MIN:
+        start = live_start.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    live, partial = _live_pairs(s, start, m1)
     live_before = {(r.gpu, r.provider) for r in s.execute(_LIVE_BEFORE, {"seg": SEGMENT, "m1": m1})}
     archive, archive_ends = _archive_pairs(s, m0, m1, live_before)
     all_pairs = {**archive, **live}   # disjoint by construction (archive only where nothing live before m1)
@@ -437,7 +443,7 @@ def _generate(s, month: str, m0: datetime, m1: datetime, threshold: float) -> di
             end_prices[g].setdefault(p, v)
 
     ids = [COMPUTE_INDEX] + [gpu_slug(g) for g in FEATURED]
-    idx = _index_window(s, ids, m0, m1)
+    idx = _index_window(s, ids, start, m1)
     events = _events(s, m0, m1)
     cap = _capacity(s, list(FEATURED), m0, m1)
 
@@ -544,6 +550,9 @@ def _generate(s, month: str, m0: datetime, m1: datetime, threshold: float) -> di
     if n_arch:
         caveats.append("Archived prices exist only on the days a capture or price-list version exists; a cloud without "
                        "a document at the month's start and inside the month is not counted.")
+    if start > m0:
+        caveats.append(f"OpenGrid's live recording began on {start.date().isoformat()}: this month is compared from that "
+                       "day to the month's end, not from the 1st.")
     if live_start is None or live_start >= m1:
         caveats.append("OpenGrid indices start with live recording" + (f" ({live_start.date().isoformat()})" if live_start else "")
                        + "; index levels are missing for this month.")
@@ -562,7 +571,8 @@ def _generate(s, month: str, m0: datetime, m1: datetime, threshold: float) -> di
 
     report = {
         "month": month, "label": month_label(month), "version": VERSION, "segment": SEGMENT,
-        "period": {"start": m0.isoformat(), "end": m1.isoformat()},
+        "period": {"start": m0.isoformat(), "end": m1.isoformat(), "compared_from": start.isoformat(),
+                   "partial": start > m0},
         "headline": {"compute_index": idx[COMPUTE_INDEX],
                      "featured": [{"gpu": f["gpu"], "short": f["short"], **{k: f["index"][k] for k in ("start", "end", "change", "reason")}}
                                   for f in featured]},
@@ -649,6 +659,12 @@ def public_summary_lines(report: dict) -> list[str]:
         lines.append(f"OpenGrid compared {cov['pairs']} cloud prices across {cov['providers_counted']} clouds "
                      f"at the start and end of {label} ({src})." if cov["pairs"] else
                      f"Stored data for {label} is not enough for a price comparison.")
+    per = report.get("period") or {}
+    if per.get("partial"):
+        day = datetime.fromisoformat(per["compared_from"])
+        note = (f"{label} is compared from {day.strftime('%B')} {day.day}, when OpenGrid's live price recording began, "
+                "to the end of the month.")
+        return lines[:7] + [note]
     return lines[:8]
 
 
