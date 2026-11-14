@@ -147,8 +147,9 @@ def gpu_history_archived(gpu: str, segment: Segment = "on_demand", _: Principal 
     name = _one_gpu(gpu)
     return envelope(low_high(_gpu_archived(name, segment)), kind=ARCHIVED, methodology="archived-history",
                     price_concept=OBSERVED_MARKET_PRICE,
-                    note="recovered from Internet Archive captures and AWS's price-list archive by OpenGrid's own "
-                         "parsers; sampled only on capture days; never used in percentiles, indices or routing")
+                    note="recovered from Internet Archive captures, AWS's price-list archive and (spot) AWS's own spot "
+                         "price history by OpenGrid's own parsers; sampled only on capture days; never used in "
+                         "percentiles, indices or routing")
 
 
 @ttl_cache(300, maxsize=256)

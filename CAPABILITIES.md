@@ -384,6 +384,12 @@ its `basis`, `licence`, `attribution` and visibility tier (migration `0031_backf
   1y / 3y rows are stored at their effective hourly price, never as on-demand, and are not served yet.
 - **Azure "effective since" anchors**: one point per GPU size, region and market at the current price's
   `effectiveStartDate`.
+- **AWS's own EC2 spot price history** (`python -m backfill aws-spot [--days 90] [--dry-run]`, read-only key;
+  AWS keeps 90 days): per spot region (15) and whole UTC day, the live poller's DescribeSpotPriceHistory reader over
+  that day. Archived (market `spot`, basis `provider_api_history`, public like the live AWS spot rows): one point per
+  GPU type, AZ and day, the price AWS states was in force at 00:00 UTC, with live listing ids; each day's full
+  change log is kept raw in `catalog_snapshots`. Days from a region's first live spot row on are not read (no
+  double count with the live change log). A 2026-11-14 dry run: 111,301 points from 2026-08-17, 15 regions, 10 GPUs.
 - **Open datasets with licences**: Full Stack Deep Learning's cloud-gpus.csv history (MIT, from 2022-08) and Huang
   (2026) Vast monthly transacted medians (CC BY 4.0, stored as their own market `transacted`). A dataset point that
   repeats a primary source becomes corroboration on the primary row, never a second point.

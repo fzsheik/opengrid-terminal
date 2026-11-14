@@ -2,7 +2,7 @@
 
 OpenGrid's own price history starts when it began polling each provider. To show what GPUs cost before
 that, OpenGrid reads prices out of public archives: the Internet Archive's captures of provider price pages
-and public price APIs, and AWS's own archive of monthly EC2 price lists. These prices carry the data kind
+and public price APIs, AWS's own archive of monthly EC2 price lists, and AWS's 90-day EC2 spot price history. These prices carry the data kind
 **archived** and are kept apart from everything OpenGrid observes live.
 
 Code: `backfill/` (sources, parsers, loader), `analytics/archived.py`. Table: `archived_prices`.
@@ -14,7 +14,7 @@ API: `GET /v1/markets/{gpu}/history/daily` (one daily series, archived then obse
 | | Observed | Archived |
 |---|---|---|
 | Read by | OpenGrid's poller, live | OpenGrid's parsers, from an archived copy |
-| Sampled | every poll (minutes) | only on days the archive captured the page (days to weeks apart; monthly for AWS) |
+| Sampled | every poll (minutes) | only on days the archive captured the page (days to weeks apart; monthly for AWS's price list; daily at 00:00 UTC for AWS spot history) |
 | Used in percentiles, indices, events, routing, alerts | yes | **never** |
 | Shown | every price chart and statistic | the 1Y / ALL price chart before recording began (drawn lighter, labelled), its "Sources" table, the two endpoints above |
 
@@ -55,6 +55,30 @@ can miss short price moves entirely. Stock is never inferred from an archived pa
    poller's rules (`GPU_SIZES`, Windows and Low Priority meters dropped, whole-VM price / GPU count). Every
    point links to its meter's own query (`$filter=meterId eq '...'`) and its note says when OpenGrid read it.
    A later run that finds a new price stores a new point with the new start date; the old one stays.
+
+3a. **AWS EC2 spot price history** (`source = aws_spot_history`, `basis = provider_api_history`, market `spot`;
+   `python -m backfill aws-spot [--days 90] [--dry-run]`). AWS's DescribeSpotPriceHistory keeps 90 days; OpenGrid
+   began reading it live on 2026-11-01 (six regions; 15 from 2026-11-10). The backfill reads, per spot region and
+   whole UTC day, the same query the live poller makes (`AwsProvider.spot_history`: every GPU type, Linux/UNIX,
+   all pages) for the window [00:00, 24:00). AWS answers with the price in force at 00:00 (stamped with the time AWS
+   set it) plus every change that day.
+   - **Raw first.** Each day's GPU rows are stored verbatim, with the request, in `catalog_snapshots` (source
+     `aws_spot_history`, name = region, version = the day): every change with AWS's exact time survives AWS's
+     retention. A re-run reads stored days from there instead of calling AWS.
+   - **Archived points.** One row per GPU type, AZ and day: the price in force at 00:00 UTC, read by the live spot
+     normalizer (`spot_listings`), so listing ids (`<type>:<az>:spot`), GPU counts and per-GPU prices are the live
+     ones. `observed_at` is 00:00 of the day, `valid_to` stays empty (the price can change within hours; the next
+     day's point replaces it), `source_url` is the day's query, `source_sha256` the stored raw body's. The note
+     names AWS's time for the price and the day's later changes (count, low, high). A daily sample, not every
+     change: AWS reprices a GPU listing about every six hours.
+   - **Archived, not observed.** OpenGrid did not see these prices when they applied; it read AWS's account of them
+     afterwards. Visibility is that of the live AWS spot rows (public).
+   - **Never double counted.** A region whose spot prices OpenGrid already records is read only for days that begin
+     before its first live row (`listing_observations`), so the archive ends where the live change log starts.
+     Rows are unique per (source, source_url, provider, listing_id); a re-run adds nothing.
+   - The 2026-11-14 dry run read 15 regions x 89 days with no failure: 111,301 points from 2026-08-17 (L4 31,563,
+     T4 27,775, A10G 25,326, L40S 15,510, H100 4,098, A100 40GB 2,734, H200 2,045, B200 846, A100 80GB 793,
+     B300 611).
 
 4. **Open datasets with a licence** (`backfill/datasets/`; `python -m backfill datasets`). Each point records its
    licence and attribution (`licence`, `attribution` columns) and the exact revision it came from.
@@ -122,7 +146,8 @@ highest across providers:
 
 - Before `archived_until` (the first UTC day OpenGrid recorded the GPU live) a provider's value is its archived
   price, **held from one capture until its next**, at most 45 days (an AWS price-list version: until its period
-  end). This is the same "a posted price holds until it changes" rule the observed step lines use, applied to
+  end). When a provider has several documents on its latest capture day (AWS spot history: one per
+  region), its value is the lowest of them, as an observed day is the provider's lowest price. This is the same "a posted price holds until it changes" rule the observed step lines use, applied to
   sparser samples. After 45 days without a capture the provider has no value (a gap), not a stale one.
 - From `archived_until` on, a provider's value is its lowest observed price that day; archived data is not used.
 - `kind[i]` is `archived` or `observed` per day, and every archived value names the capture it was held from.
@@ -153,6 +178,8 @@ python -m backfill survey                      # captures per source; nothing do
 python -m backfill import --report report.json # download (polite, cached), parse, store
 python -m backfill import --no-download        # re-parse only what is cached (seconds)
 python -m backfill import --since 2016-01 --provider azure --no-aws   # one provider, everything archived since 2016
+python -m backfill aws-spot --dry-run          # AWS spot history (last 90 days): fetch and report, store nothing
+python -m backfill aws-spot                    # store it (needs AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY)
 ```
 
 Downloads are one request at a time, at least 4.5 s apart, with back-off on 429/5xx, and are cached on

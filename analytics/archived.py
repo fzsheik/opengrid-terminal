@@ -86,7 +86,8 @@ def extended(gpu: str, segment: str = "on_demand", days: int | None = 365) -> di
 
     Before `archived_until` (the first UTC day OpenGrid recorded this GPU live) a provider's value is its archived
     price, held from one capture until its next (at most HOLD_DAYS; an AWS price-list version until its period
-    end): the same "a posted price holds until it changes" rule the observed step lines use. From that day on
+    end; several documents on one day, e.g. AWS spot history's regions: their lowest): the same "a posted price
+    holds until it changes" rule the observed step lines use. From that day on
     it is the provider's lowest observed price that day (market_hourly), and archived data is not used.
     `kind` per day says which; `captures` lets a reader find the document behind any archived value.
     """
@@ -122,14 +123,17 @@ def extended(gpu: str, segment: str = "on_demand", days: int | None = 365) -> di
                 continue
             while k + 1 < len(pcaps) and _day(pcaps[k + 1].observed_at) <= d:
                 k += 1
-            v = None
-            if k >= 0:
-                c = pcaps[k]
+            # Every document of the provider's latest capture day counts (AWS spot history: one per region), and
+            # the provider's value is the lowest of them, as an observed day is the provider's lowest price.
+            v, best, j = None, None, k
+            while j >= 0 and _day(pcaps[j].observed_at) == _day(pcaps[k].observed_at):
+                c = pcaps[j]
                 limit = _day(c.valid_to) - timedelta(days=1) if c.valid_to else _day(c.observed_at) + timedelta(days=HOLD_DAYS)
-                if d <= limit:
-                    v = float(c.price)
+                if d <= limit and (v is None or float(c.price) < v):
+                    v, best = float(c.price), j
+                j -= 1
             values.append(v)
-            held.append(k if v is not None else None)
+            held.append(best)
         if any(v is not None for v in values):
             providers.append({"provider": p, "values": values, "capture": held,
                               "captures": [{"t": c.observed_at.isoformat(), "source": c.source, "url": c.source_url}
