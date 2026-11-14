@@ -1365,7 +1365,8 @@ a real GPU provider yet. The next step is one supervised **Lambda validation run
   generation memory is always low confidence, video understanding is modelled for Qwen2-VL only, the training
   memory of video and TTS models is a lower bound, and the audio pipeline efficiency is uncalibrated.
 - **Providers**: Alibaba Cloud is built but dormant until an AccessKey is set. RunPod's market-data poller reads pods
-  from REST v2 when `RUNPOD_API_KEY` is set (REST needs a key), but still reads RunPod's GraphQL API, which RunPod
+  from REST v2 when `RUNPOD_API_KEY` is set (REST needs a key; confirmed in production on 2026-11-14: the
+  production key has `catalog:read`, 9 responses, 0 failed), but still reads RunPod's GraphQL API, which RunPod
   retires in early 2027, for (a) serverless pool flex/active prices, which REST v2 does not publish, and (b) pods when
   no key is set or a REST call fails that round. When GraphQL goes, (a) stops and (b) needs the key.
 - Not implemented (deliberately): real payment processing, email alerts, AWS/Nebius/Massed
