@@ -1117,8 +1117,9 @@ playground that calls the Data API host directly. Full interactive reference: `/
 ## 15. Operations: deployment, jobs, configuration
 
 ### 15.1 Deployment
-Railway, one service + Postgres, built from `pyproject.toml` / `uv.lock`, started by
-`railway.toml` with **exactly one worker** (the poller lives in the web process). Migrations run
+Railway, one service + Postgres (+ two probe-agent services), built from `pyproject.toml` / `uv.lock`. Service settings
+(start command, healthcheck, replicas, domains) live in Railway infrastructure-as-code, `.railway/railway.ts` (preview
+`railway config plan`, apply `railway config apply`; variables stay unmanaged), with **exactly one worker** (the poller lives in the web process). Migrations run
 automatically at startup (one head, `0038_measured_performance`). A push to GitHub does not trigger a Railway build on its
 own: deploy with `railway up --service opengrid-terminal --detach`. The app **refuses to start in production**
 without `APP_PASSWORD` and `API_KEY_PEPPER`. `RAILPACK_DEPLOY_APT_PACKAGES=git` puts `git` in the image (the dataset

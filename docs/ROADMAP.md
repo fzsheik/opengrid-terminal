@@ -60,8 +60,6 @@ and one deployment.
   - Add a pre-deploy check that fails when local `HEAD` is not on `origin/main`.
   - The app crash-loops if the database is ahead of the code (`init_db` cannot find the revision). Make that a clear
     error that does not restart-loop.
-  - Railway deprecates `railway.toml` config-as-code on 2026-12-01 (existing files work until then). Migrate to its
-    infrastructure-as-code format before that date.
 - **Data safety.** Backups are a manual `deploy/restore.sh` seed, not a schedule. Add scheduled database backups.
 
 ## 3. Codebase cleanup ("clean and spiffy")

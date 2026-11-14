@@ -1,6 +1,6 @@
 """A small in-process TTL cache for expensive reads.
 
-The app runs as exactly one process (see railway.toml), so an in-process cache
+The app runs as exactly one process (see .railway/railway.ts: one replica, --workers 1), so an in-process cache
 is coherent. Keys are the function's arguments; values expire after `ttl`.
 
     @ttl_cache(60)

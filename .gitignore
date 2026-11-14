@@ -8,3 +8,7 @@ deploy/railway.env
 deploy/prod.dump
 deploy/local-backup.dump
 node_modules/
+
+# Railway IaC SDK, if installed locally for `railway config plan`
+.railway/node_modules/
+.railway/package*.json
