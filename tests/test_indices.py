@@ -90,7 +90,7 @@ def test_composite():
     row, st = step_composite(d, None, {"x": pub(2.0), "y": pub(10.0)}, H(0))
     assert row["level"] == 100.0 and row["published"]
     row, st = step_composite(d, st, {"x": pub(2.2), "y": pub(10.0)}, H(1))
-    assert abs(row["level"] - 105.0) < 1e-9, "equal weights: (1.10 + 1.00) / 2"
+    assert abs(row["level"] - 100 * 1.1 ** 0.5) < 1e-9, "equal weights: geometric mean of 1.10 and 1.00"
     # y unpublished: one published component is not a composite -> unpublished, chain kept
     row, st2 = step_composite(d, st, {"x": pub(2.42), "y": {"published": False, "level": None, "segment_no": 1}}, H(2))
     assert not row["published"] and st2 is st
@@ -98,16 +98,42 @@ def test_composite():
     row, st = step_composite(d3, None, {"x": pub(1.0), "y": pub(1.0), "z": pub(1.0)}, H(0))
     # z unpublished: 67% of weight, linked on x and y (re-weighted over the linkable components)
     row, st = step_composite(d3, st, {"x": pub(1.3), "y": pub(1.0)}, H(1))
-    assert abs(row["level"] - 115.0) < 1e-9 and row["link_constituents"] == 2
+    lvl = 100 * 1.3 ** 0.5
+    assert abs(row["level"] - lvl) < 1e-9 and row["link_constituents"] == 2
     # z comes back at a different level: not in the previous hour, so re-entering is not a move
     row, st = step_composite(d3, st, {"x": pub(1.3), "y": pub(1.0), "z": pub(7.0)}, H(2))
-    assert abs(row["level"] - 115.0) < 1e-9, "z re-entering is not a move"
+    assert abs(row["level"] - lvl) < 1e-9, "z re-entering is not a move"
     # a child rebased (segment changed): not linkable that hour
     row, st = step_composite(d3, st, {"x": pub(1.3), "y": pub(1.0), "z": pub(99.0, seg=2)}, H(3))
-    assert abs(row["level"] - 115.0) < 1e-9
+    assert abs(row["level"] - lvl) < 1e-9
     row, _ = step_composite(d3, None, {"x": pub(1.0)}, H(0))
     assert not row["published"] and "33%" in row["reason"]
     assert step_composite(d3, None, {}, H(0)) == (None, None)
+
+
+def test_composite_does_not_drift_on_a_bouncing_child():
+    """October 2026: the H100 child bounced hour to hour (Vast's cheapest offer) and the 1.0 composite, an
+    arithmetic mean of relatives chained hourly, climbed +21% while its children rose ~4%. A child that
+    bounces and comes back must leave the composite where it started; a real move must still come through."""
+    d = IndexDef("c", "C", "composite", unit="points", components=(("x", 0.2), ("y", 0.2), ("z", 0.2),
+                                                                      ("u", 0.2), ("v", 0.2)))
+    pub = lambda lvl: {"published": True, "level": lvl, "segment_no": 1}  # noqa: E731
+    flat = {"y": pub(4.8), "z": pub(7.1), "u": pub(1.8), "v": pub(1.3)}
+    row, st = step_composite(d, None, {"x": pub(3.4), **flat}, H(0))
+    for h in range(1, 1001):  # x swings 3.4 -> 4.6 -> 3.4 ... (a +35% / -26% bounce every hour)
+        row, st = step_composite(d, st, {"x": pub(4.6 if h % 2 else 3.4), **flat}, H(h))
+    assert abs(row["level"] - 100.0) < 1e-6, f"bounced back to the start, composite must be 100, got {row['level']}"
+    # the same path under the old arithmetic rule drifts far up (the bug this guards against)
+    lvl = 100.0
+    for h in range(1, 1001):
+        x0, x1 = (3.4, 4.6) if h % 2 else (4.6, 3.4)
+        lvl *= (x1 / x0 + 4) / 5
+    assert lvl > 200, lvl
+    # a real move still shows: every child +10% -> composite +10%; one child +10% -> about +1.9%
+    row, st2 = step_composite(d, st, {k: pub(v["level"] * 1.1) for k, v in {"x": pub(3.4), **flat}.items()}, H(1001))
+    assert abs(row["level"] - 110.0) < 1e-9
+    row, _ = step_composite(d, st, {"x": pub(3.4 * 1.1), **flat}, H(1001))
+    assert abs(row["level"] - 100 * 1.1 ** 0.2) < 1e-9
 
 
 def _fake_regions():
@@ -347,5 +373,6 @@ def test_endpoints():
 
 if __name__ == "__main__":
     for t in (test_robust_stat, test_screen, test_min_coverage, test_chain_linking_late_joiner, test_composite,
+              test_composite_does_not_drift_on_a_bouncing_child,
               test_pipeline, test_short_history, test_endpoints):
         t(); print(t.__name__, "ok")

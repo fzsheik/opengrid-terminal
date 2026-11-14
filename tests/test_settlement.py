@@ -88,7 +88,21 @@ def test_frozen_math_matches_index_math():
                                            "children": {k: list(v) for k, v in state["children"].items()}}
         res = S.recompute_composite({"params": S._comp_params(), "components": comps, "link": link})
         assert S._close(res["value"], row["level"]), (i, res, row)
+        assert res["method"] == row["method"] == "chained_weighted_geometric"
         state = new
+
+
+def test_fixings_taken_under_1_0_still_recompute():
+    """A composite fixing taken under index methodology 1.0 has no params.aggregation: it must still
+    recompute to its arithmetic value, so the immutable ledger verifies after the 1.1 change."""
+    comps = [{"index_id": c, "weight": 0.5, "status": "included", "level": lvl, "segment_no": 1}
+             for c, lvl in (("x", 2.2), ("y", 10.0))]
+    link = {"hour": "x", "level": 100.0, "segment_no": 1, "children": {"x": [2.0, 1], "y": [10.0, 1]}}
+    old = {k: v for k, v in S._comp_params().items() if k != "aggregation"}
+    res = S.recompute_composite({"params": old, "components": comps, "link": link})
+    assert S._close(res["value"], 105.0) and res["method"] == "chained_weighted_relatives", res
+    res = S.recompute_composite({"params": S._comp_params(), "components": comps, "link": link})
+    assert S._close(res["value"], 100 * 1.1 ** 0.5) and res["method"] == "chained_weighted_geometric", res
 
 
 def test_stat_weights_and_concentration():
@@ -583,7 +597,7 @@ def test_methodology_change_never_rewrites_fixings():
     before = {r.fixing_id: (r.row_hash, r.value, r.methodology_version)
               for r in _q("SELECT fixing_id, row_hash, value, methodology_version FROM index_fixings")}
     old = indices.METHODOLOGY_VERSION
-    indices.METHODOLOGY_VERSION = "1.1"
+    indices.METHODOLOGY_VERSION = "1.9"
     try:
         out = indices.refresh()
         assert out["full"], "a version change rebuilds index_levels"
@@ -593,7 +607,7 @@ def test_methodology_change_never_rewrites_fixings():
         after = {x.fixing_id: (x.row_hash, x.value, x.methodology_version)
                  for x in _q("SELECT fixing_id, row_hash, value, methodology_version FROM index_fixings")}
         assert all(after[k] == v for k, v in before.items()), "past fixings untouched"
-        new = _q("SELECT * FROM index_fixings WHERE fixing_type = 'hourly' AND methodology_version LIKE '1.1%'")
+        new = _q("SELECT * FROM index_fixings WHERE fixing_type = 'hourly' AND methodology_version LIKE '1.9%'")
         assert new and all(x.status == "not_published" and x.value is None for x in new)
         # data sufficiency is checked first (thin B200); every other index is held by governance
         assert all("no recorded change notice" in x.reason for x in new if x.index_id != "b200-180gb-sxm"), \
@@ -602,20 +616,20 @@ def test_methodology_change_never_rewrites_fixings():
         hdr = {"X-OpenGrid-Request": "1"}
         now = datetime.now(UTC)
         r = c.post("/v1/admin/methodology/notices", headers=hdr,
-                   json={"scope": "indices", "version": "1.1", "effective_from": now.isoformat(), "notice_days": 7,
+                   json={"scope": "indices", "version": "1.9", "effective_from": now.isoformat(), "notice_days": 7,
                          "summary": "Trim 25% instead of 20%"})
         assert r.status_code == 422, "effective_from must respect the notice period"
         r = c.post("/v1/admin/methodology/notices", headers=hdr,
-                   json={"scope": "indices", "version": "1.1", "effective_from": (now + timedelta(days=7)).isoformat(),
+                   json={"scope": "indices", "version": "1.9", "effective_from": (now + timedelta(days=7)).isoformat(),
                          "notice_days": 7, "summary": "Trim 25% instead of 20%"})
         assert r.status_code == 201, r.text
         r = c.post("/v1/admin/methodology/notices", headers=hdr,
-                   json={"scope": "indices", "version": "1.1", "effective_from": (now + timedelta(days=8)).isoformat(),
+                   json={"scope": "indices", "version": "1.9", "effective_from": (now + timedelta(days=8)).isoformat(),
                          "notice_days": 7, "summary": "duplicate notice"})
         assert r.status_code == 409
         with W["Session"]() as s:
-            assert "effective only from" in S._governance_gap(s, "1.1+regions", now + timedelta(days=1))
-            assert S._governance_gap(s, "1.1+regions", now + timedelta(days=7, hours=1)) is None
+            assert "effective only from" in S._governance_gap(s, "1.9+regions", now + timedelta(days=1))
+            assert S._governance_gap(s, "1.9+regions", now + timedelta(days=7, hours=1)) is None
             assert "no recorded change notice" in S._governance_gap(s, "2.0", now)
         assert S.verify_chain()["ok"]
     finally:
@@ -647,7 +661,7 @@ def test_retention_keeps_evidence():
 
 if __name__ == "__main__":
     pure = (test_frozen_math_matches_index_math, test_stat_weights_and_concentration, test_hourly_flags,
-            test_daily_twap_and_waterfall, test_hashing_and_windows)
+            test_daily_twap_and_waterfall, test_hashing_and_windows, test_fixings_taken_under_1_0_still_recompute)
     db = (test_fixing_only_after_finality, test_hourly_equals_published_index, test_daily_twap_from_db,
           test_chain_and_trigger, test_verify_detects_tampering, test_restatement, test_api_shapes_and_scopes,
           test_more_hours_never_change_old_fixings, test_methodology_change_never_rewrites_fixings,

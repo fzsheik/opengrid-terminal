@@ -139,7 +139,10 @@ recomputed value must equal the published index level; if it does not, the fixin
 `not_published` with a severe `recompute_mismatch` flag and an ops alert, never a silent value.
 
 **Hourly, `gpu-compute`.** The published composite level: each component's level and chain
-segment, weights, link state; recomputed as chained weighted relatives (indices §5). Each
+segment, weights, link state; recomputed as chained weighted relatives (indices §5): the geometric
+mean under index methodology 1.1 (`params.aggregation = "geometric"`), the arithmetic mean for
+fixings taken under 1.0, whose inputs carry no `aggregation`, so they still recompute to the
+values they were fixed at. Each
 included component records its own hourly fixing id and whether it matches.
 
 **Daily: TWAP.** The arithmetic mean of the day's 24 hourly fixings (00:00 … 23:00 UTC),

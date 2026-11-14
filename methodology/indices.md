@@ -1,6 +1,6 @@
 # OpenGrid market indices: methodology
 
-Methodology version **1.0**. Code: `analytics/indices.py` (registry, math, storage). Stored in the
+Methodology version **1.1** (2026-11-14; see §9 for what changed from 1.0). Code: `analytics/indices.py` (registry, math, storage). Stored in the
 `index_levels` table, one row per index per hour. API: `/v1/indices`, `/v1/indices/{id}`,
 `/v1/indices/{id}/history`.
 
@@ -125,8 +125,13 @@ Composites combine child indices, never raw prices, and are published in **point
 never as a price, because a composite is not the price of any single SKU.
 
 ```
-level_t = level_p × Σ w_i (child_i,t / child_i,p) / Σ w_i      over linkable children
+level_t = level_p × exp( Σ w_i ln(child_i,t / child_i,p) / Σ w_i )      over linkable children
 ```
+
+The step is the **weighted geometric mean** of the children's relatives. The arithmetic mean
+looks simpler but cannot be chained hourly: a child that moves ×1.1 and then back ÷1.1 averages
+to more than 1 on the round trip, so every bounce ratchets the composite up. The geometric mean
+is time-reversible: a child that returns to its level leaves the composite where it was.
 
 - A child is linkable for the step if it is published at both `p` and `t` in the same chain
   segment (a child that rebased between them is skipped for that step).
@@ -192,6 +197,12 @@ All are computed from stored `index_levels` rows; "now" is the newest hour in th
 
 ## 8. Known limits
 
+- A per-GPU index is only as calm as its constituents' votes. A marketplace's lowest offer can
+  swing hour to hour as single listings appear and disappear (in October 2026 Vast's lowest H100
+  offer moved between about $1.79 and $6.90 within a day), which shows as noise in that GPU's
+  index. The noise no longer accumulates in the composites (§5, version 1.1), but it is visible
+  in the per-GPU level.
+
 - History is only as long as OpenGrid's recording. Early on, most windows report
   "history does not cover the window". This is by design.
 - A listing that disappears and later returns is treated as live across the gap by the rollup
@@ -201,3 +212,15 @@ All are computed from stored `index_levels` rows; "now" is the newest hour in th
 - Indices describe advertised list prices, not what buyers paid. They are a different quantity from survey-based
   neocloud indices and transaction-based indices; see methodology/settlement.md §2.1 for how the
   levels differ and why.
+
+## 9. Version history
+
+- **1.1** (2026-11-14): composites chain the weighted **geometric** mean of child relatives
+  (§5). Version 1.0 chained the arithmetic mean, which drifts upward whenever a child oscillates.
+  It showed in October 2026: with the H100 index moving almost every hour, the 1.0 GPU Compute
+  Index rose about 21% while its five children rose between -1% and +13% (the geometric and the
+  fixed-base composites both about +4%). Per-GPU, spot, regional and provider-class indices are
+  computed exactly as in 1.0. A version change rebuilds `index_levels`, so stored composite
+  history now follows 1.1 from the start. Settlement fixings already taken are never rewritten:
+  those taken under 1.0 keep their values and recompute with the 1.0 rule (methodology/settlement.md).
+- **1.0**: first version.

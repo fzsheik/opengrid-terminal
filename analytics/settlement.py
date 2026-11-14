@@ -199,13 +199,19 @@ def recompute_gpu(inputs: dict) -> dict:
 
 
 def recompute_composite(inputs: dict) -> dict:
-    """An hourly composite fixing: chained weighted relatives of the components' levels."""
+    """An hourly composite fixing: chained weighted relatives of the components' levels.
+
+    params.aggregation "geometric" (index methodology 1.1+) chains the weighted geometric mean; inputs
+    without it (fixings taken under 1.0) chain the arithmetic mean, so every past fixing still recomputes
+    to the value it was fixed at."""
     p = inputs["params"]
+    geometric = p.get("aggregation") == "geometric"
     comps = inputs["components"]
     total = sum(c["weight"] for c in comps) or 1.0
     avail = {c["index_id"]: (c["level"], c["segment_no"]) for c in comps if c["status"] == "included"}
     share = sum(c["weight"] for c in comps if c["index_id"] in avail) / total
-    out = {"value": None, "raw": None, "method": "chained_weighted_relatives", "segment_no": None,
+    out = {"value": None, "raw": None,
+           "method": "chained_weighted_geometric" if geometric else "chained_weighted_relatives", "segment_no": None,
            "included": sorted(avail), "link_constituents": None, "reason": None, "share": share}
     if share < p["min_weight"] or len(avail) < p["min_components"]:
         out["reason"] = (f"insufficient coverage: {len(avail)} component(s) / {share:.0%} of component weight "
@@ -221,8 +227,12 @@ def recompute_composite(inputs: dict) -> dict:
     if not linked:
         out.update(value=100.0, segment_no=link["segment_no"] + 1)
         return out
-    rel = (sum(c["weight"] * avail[c["index_id"]][0] / ch[c["index_id"]][0] for c in linked)
-           / sum(c["weight"] for c in linked))
+    if geometric:
+        rel = indices.geometric_relative([(c["weight"], avail[c["index_id"]][0] / ch[c["index_id"]][0])
+                                          for c in linked])
+    else:
+        rel = (sum(c["weight"] * avail[c["index_id"]][0] / ch[c["index_id"]][0] for c in linked)
+               / sum(c["weight"] for c in linked))
     out.update(value=link["level"] * rel, segment_no=link["segment_no"], link_constituents=len(linked))
     return out
 
@@ -495,7 +505,7 @@ def _gpu_params():
 
 def _comp_params():
     return {"min_weight": indices.MIN_COMPOSITE_WEIGHT, "min_components": indices.MIN_COMPOSITE_COMPONENTS,
-            "settlement_min_components": SETTLEMENT_MIN_COMPONENTS}
+            "settlement_min_components": SETTLEMENT_MIN_COMPONENTS, "aggregation": "geometric"}
 
 
 _ROW = text("""SELECT index_id, hour, published, level, raw_level, constituents, link_constituents, method,

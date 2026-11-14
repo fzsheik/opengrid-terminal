@@ -326,7 +326,8 @@ region. Everything historical reads from it, so 90-day statistics don't replay r
 ### 4.2 OpenGrid indices (269 defined)
 - **Per-GPU indices** (e.g. *OpenGrid H100 80GB SXM5 Index*) in $/GPU-hour.
 - **Family composites** (H100 / H200 / A100 class) and the **OpenGrid GPU Compute Index**, in
-  base-100 points with fixed, documented weights.
+  base-100 points with fixed, documented weights, chained as the weighted geometric mean of the children's
+  hourly moves (index methodology 1.1, 2026-11-14; the 1.0 arithmetic chaining drifted upward on a noisy child).
 - **Regional**, **spot** (interruptible, labelled) and **provider-class** (neocloud, hyperscaler,
   marketplace…) indices. The 269 are 100 per-GPU, 100 spot, 40 regional, 25 provider-class and 4 composites
   (`analytics/indices.REGISTRY`); a defined index is published only when it meets the rules below.

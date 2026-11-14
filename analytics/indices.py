@@ -49,7 +49,7 @@ from store.analytics import IndexLevel
 
 log = logging.getLogger(__name__)
 
-METHODOLOGY_VERSION = "1.0"
+METHODOLOGY_VERSION = "1.1"  # 1.1: composites chain the weighted GEOMETRIC mean of child relatives
 METHODOLOGY = "indices"
 
 MIN_PROVIDERS = 3            # constituents needed to publish a per-GPU index hour
@@ -261,8 +261,23 @@ def step_base(state: dict | None, votes: dict, down: set, hour: datetime) -> tup
     return row, {"hour": hour, "level": level, "prices": dict(included), "segment_no": seg}
 
 
+COMPOSITE_METHOD = "chained_weighted_geometric"
+
+
+def geometric_relative(pairs) -> float:
+    """exp(sum w * ln r / sum w) over (weight, relative) pairs: the weighted geometric mean."""
+    tw = sum(w for w, _ in pairs)
+    return math.exp(sum(w * math.log(r) for w, r in pairs) / tw)
+
+
 def step_composite(defn: IndexDef, state: dict | None, children: dict[str, dict], hour: datetime):
-    """One hour of a base-100 composite: the weighted mean of child relatives, chained.
+    """One hour of a base-100 composite: the weighted geometric mean of child relatives, chained.
+
+    Geometric, not arithmetic (methodology 1.0 used the arithmetic mean): chained hourly, an arithmetic
+    mean of relatives drifts upward whenever a child oscillates (x1.1 then /1.1 averages to more than 1),
+    and a noisy child (the H100 index, through Vast's hour-to-hour cheapest offer) turned that into a
+    +21% composite in October 2026 against +4% in its children. The geometric mean is time-reversible:
+    a child that returns to its level leaves the composite where it was.
 
     Returns (row or None when no child has data, new state).
     """
@@ -285,7 +300,7 @@ def step_composite(defn: IndexDef, state: dict | None, children: dict[str, dict]
         return None, state
     share = sum(w for c, w in defn.components if c in avail) / total
     row = {"published": False, "level": None, "raw_level": None, "constituents": len(avail),
-           "link_constituents": None, "method": "chained_weighted_relatives",
+           "link_constituents": None, "method": COMPOSITE_METHOD,
            "segment_no": state and state["segment_no"], "reason": None, "detail": detail}
     if share < MIN_COMPOSITE_WEIGHT or len(avail) < MIN_COMPOSITE_COMPONENTS:
         row["reason"] = (f"insufficient coverage: {len(avail)} component(s) / {share:.0%} of component weight "
@@ -300,7 +315,7 @@ def step_composite(defn: IndexDef, state: dict | None, children: dict[str, dict]
             level, seg = 100.0, state["segment_no"] + 1
             reason = f"rebased to 100: no component linkable to {_fmt(state['hour'])}"
         else:
-            rel = sum(w * avail[c][0] / state["children"][c][0] for c, w in link) / sum(w for _, w in link)
+            rel = geometric_relative([(w, avail[c][0] / state["children"][c][0]) for c, w in link])
             level, seg, reason = state["level"] * rel, state["segment_no"], None
             row["link_constituents"] = len(link)
             linked = {c for c, _ in link}
