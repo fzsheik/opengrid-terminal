@@ -50,13 +50,13 @@ Counts recomputed from the code on 2026-11-13.
 | GPU clouds monitored | **60** polled, 59 published, out of **61** registered (`providers.PROVIDERS`; Alibaba Cloud is built but dormant until an AccessKey is set, section 3.1) (Fireworks AI is the only wholly internal provider: used for routing, never republished; two more sources of public providers are internal, DeepInfra's container-API prices and AWS's Spot Advisor bands, section 3.8) (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb, Civo, Atlantic.Net, E2E Networks, Modal, Replicate, Baseten, Beam, Arkane Cloud, VESSL AI, Mithril, DeepInfra, SimplePod, Nosana, Thunder Compute, Clore.ai, Paperspace, Akash Network, Hydra Host, CUDO Compute, GPU.ai, Exoscale, Hugging Face Inference Endpoints, Gcore, Fireworks AI, IONOS Cloud, Hetzner, Yotta Shakti Cloud, Sakura Internet) |
 | Canonical GPU models | **100**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL); each has a hardware spec row (100 in `hardware.py`) |
 | OpenGrid indices defined | **269**: 100 per-GPU, 100 spot, 40 regional, 25 provider-class, 4 composites (H100 / H200 / A100 class and the overall GPU Compute Index) |
-| News & signal sources | **81** registered, **66** enabled (41 RSS, 4 Atom, 3 US Federal Register, 16 SEC EDGAR, 2 GDELT queries); the 15 disabled ones are listed with the reason. About 55k items stored in production, history backfill included |
+| News & signal sources | **81** registered, **66** enabled (41 RSS, 4 Atom, 3 US Federal Register, 16 SEC EDGAR, 2 GDELT queries); the 15 disabled ones are listed with the reason. About 68k items stored in production (67,932 on 2026-11-14), history backfill included |
 | API operations | **249** in the OpenAPI schema: 227 under `/v1` (74 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 9 admin-only reads (7 power, 2 equities), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 45 page routes |
 | Web pages | **45** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar. RL cost (`/rl-cost`) sits under GPUs; Batches (`/batches`, `/batch/{id}`) under My Jobs |
 | Database tables | **109** in a freshly migrated database (108 application tables plus `alembic_version`; Postgres, migrated by Alembic: 40 migrations, head `0038_measured_performance`) |
 | Background jobs | **33** registered when every optional source is configured (**30** with the defaults: no EIA / SEC / Alpaca keys, `POWER_ENABLED` off), beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets…; table 15.2) |
 | Capacity (stock) feeds | **32** providers report in-stock state or counts from their own APIs (section 3.6) |
-| Power markets (internal) | EIA-930 grid data, EIA natural gas, CAISO, NYISO, SPP and ERCOT wholesale prices in their own `power_*` tables (about 511 MB in production); admin-only reads, never in a GPU statistic (section 5a) |
+| Power markets (internal) | EIA-930 grid data, EIA natural gas, CAISO, NYISO, SPP and ERCOT wholesale prices in their own `power_*` tables (about 490 MB in production on 2026-11-14); admin-only reads, never in a GPU statistic (section 5a) |
 | Provisioning adapters | **9 providers** (Lambda, RunPod, Hyperstack, DigitalOcean, Crusoe/Denvr/Latitude via Shadeform, Vast, Verda) |
 | Discord channels | **4** (ops, deployments, market, news) with OpenGrid-branded embeds |
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination. Built on top, tested against fake provider APIs only: **batches** (a sweep or shard list as one batch: placement across clouds, one budget, one approval), **resume** from a verified checkpoint, opt-in **OOM escalation** and **move** to another GPU; automatic relaunch / OOM escalation and move are off by default (`JOB_AUTO_RELAUNCH_ENABLED`, `JOB_MOVE_ENABLED`) |
@@ -489,7 +489,7 @@ overhead, enterprise discounts, or compression / partial weight updates; convert
   Vultr, Scaleway, NVIDIA, AMD, the **US Federal Register** (BIS export controls, FERC data-center
   rules), DatacenterDynamics, The Register, HPCwire, Tom's Hardware, SemiAnalysis, The
   Information, and more. The 15 sources that couldn't be verified are listed as disabled with the reason.
-- **About 55k items** are stored in production, the history backfill included; the earliest is from 2008-02.
+- **About 68k items** are stored in production (67,932 on 2026-11-14), the history backfill included; the earliest is from 2008-02.
 - **Raw first** (re-classifiable), conditional GET (ETag / Last-Modified), per-source health.
 - **Deduplication**: canonical URLs, plus story clustering across sources (one story, N sources).
 - **Classification** (deterministic, re-runnable): providers (with aliases), GPUs ("H100" → the
@@ -557,7 +557,7 @@ US wholesale electricity, grid data and natural gas, hub and zone level (never n
   market day with the day's values as a compact `real[]` (24 hourly or 288 five-minute slots, DST days 23/25 or
   276/300) plus the day's mean, min and max; `power_fetches`, raw first: every request (failures and "no data"
   answers too) with its URL, status, byte count and SHA-256, and the bytes only where they are small. A value the
-  source did not give is NULL, never 0 and never carried over. About **511 MB** in production.
+  source did not give is NULL, never 0 and never carried over. About **490 MB** in production (2026-11-14).
 - **Sources** (`power/sources/`; each module's terms verdict is read by `power/registry.py`):
 
   | Source | What | Tier | In production |
@@ -1331,9 +1331,17 @@ exceed the 10-minute timeout on a busy machine.
 
 - **Market intelligence**: live in production; window statistics (7d/30d/90d) fill in as history
   accumulates.
-- **Public pages** are on in production (`PUBLIC_PAGES=true`): the market pages, Find Compute, Developers and the
-  assistant are open to visitors; jobs, keys, billing and every money path still need a login or an API key.
-  The hosted MCP endpoint (`/mcp`) is live and accepts only an API key.
+- **Public pages** are OFF in production (`PUBLIC_PAGES=false`, checked 2026-11-14, a deliberate choice: the market
+  data is the product): every page and `/robots.txt` / `/sitemap.xml` need the site login, so nothing on
+  `terminal.tryopengrid.com` is indexed by search engines; the Data API host needs an API key. The marketing site
+  `tryopengrid.com` (separate repo) is public.
+- **Execution in production** (checked 2026-11-14): the env ceiling `ROUTING_LIVE_PROVISIONING=true` is set, but the
+  database mode has never been changed (no `execution_controls` mode row, empty `execution_control_log`), so the
+  effective mode is the default PREVIEW_ONLY; no provider has execution flags (all adapters `simulated`) and no
+  deployment exists. The env ceiling therefore no longer blocks launches: an admin changing the mode to SUPERVISED,
+  plus the remaining first-live-route checklist items (`routing/checklist.py`), is what stands before the first
+  supervised validation launch. `JOB_AUTO_RELAUNCH_ENABLED` and `JOB_MOVE_ENABLED` are unset (off).
+- **Hosted MCP**: the endpoint (`/mcp`) is live and accepts only an API key.
 - **Accounts**: no self-serve sign-up, customer login or payments yet. Keys are created by the operator (`/keys`,
   `/admin/partners`, or `POST /v1/admin/accounts/{id}/keys`); the public docs tell customers to ask
   hello@tryopengrid.com. Credits are admin-issued. No Python SDK and no stored daily export files yet (exports are
