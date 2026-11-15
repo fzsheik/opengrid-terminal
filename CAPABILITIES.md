@@ -379,7 +379,9 @@ started recording, read by OpenGrid's own parsers from official and archived sou
 its `basis`, `licence`, `attribution` and visibility tier (migration `0031_backfill_sources`):
 - **Internet Archive captures** of provider price pages, one parser per page design (`python -m backfill import`):
   e.g. Azure's Linux VM page 2017-2024, Lambda 2020-2025, CoreWeave 2021-2024, RunPod 2022-2024, Verda/DataCrunch
-  2020-2025, Paperspace 2017-2026, Exoscale from 2021, Hugging Face Inference Endpoints from 2022 (`resold:<vendor>`).
+  2020-2025, Paperspace 2017-2026, Exoscale from 2021, Hugging Face Inference Endpoints from 2022 (`resold:<vendor>`),
+  Replicate from 2022-07, DeepInfra from 2024-04 (public page prices only), Mithril/Foundry spot from 2025-01,
+  Hyperbolic "starting from" rates from 2025-03, IONOS from 2026-01.
 - **AWS's own EC2 price-list archive**: all 123 monthly versions from 2015-12 (`python -m backfill aws`); reserved
   1y / 3y rows are stored at their effective hourly price, never as on-demand, and are not served yet.
 - **Azure "effective since" anchors**: one point per GPU size, region and market at the current price's
