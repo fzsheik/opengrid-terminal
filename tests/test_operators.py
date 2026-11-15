@@ -140,6 +140,8 @@ def test_machines_from_stored_payloads():
     assert (by["3"]["gpus"], by["3"]["ram_gb"], by["3"]["price_per_gpu_hour"], by["3"]["free"]) == (8, None, None, False), \
         "a census-only machine: no RAM, no price, rented"
     assert by["2"]["country"] == "SK" and ops.vast_machines([[vo(5, 1, geo="Somewhere")]])[0]["country"] is None
+    # Payloads are oldest first: a newer round's price replaces an older one's, even when it is higher.
+    assert ops.vast_machines([[vo(9, 1, dph=2.0)], [vo(9, 1, dph=4.0)]])[0]["price_per_gpu_hour"] == 1.0
 
 
 def test_operators_and_concentration_by_hand():
@@ -229,17 +231,20 @@ def test_database_read_and_admin_endpoints():
                                fetched_at=at, status_code=200, ok=True, request=request, payload=payload)
         fetch_mod.save([r.model_copy(update={"fetched_at": now - timedelta(minutes=3)}) for r in lium_poll()])
         fetch_mod.save([
-            vast_raw([vo(500, 70, dph=9.0)], {"gpu_name": vast_gpu}, now - timedelta(minutes=20)),   # an older round
+            vast_raw([vo(500, 70, dph=9.0), dict(twin, dph_total=5.0 * gpus)], {"gpu_name": vast_gpu},
+                     now - timedelta(minutes=20)),                                                  # an older round
             vast_raw([twin, vo(502, 77, gpu="RTX 3090")], {"gpu_name": vast_gpu}, now - timedelta(minutes=4)),
             vast_raw([{"machine_id": 503, "host_id": 78, "num_gpus": 8, "gpu_frac": 1, "geolocation": "Texas, US",
                        "cpu_name": "AMD EPYC 7763 64-Core Processor", "cpu_cores": 128, "rentable": False}],
                      {"census": True, "gpu_name": "H100 SXM", "rentable": False}, now - timedelta(hours=5)),
-            vast_raw([vo(599, 79)], {"gpu_name": "RTX 4090"}, now - timedelta(hours=3)),             # too old to read
+            vast_raw([vo(599, 79)], {"gpu_name": "RTX 4090"}, now - timedelta(hours=4)),             # too old to read
         ])
         model = ops.load(now)
         assert len(model["machines"]["lium"]) == len(body)
         ids = {m["machine_id"] for m in model["machines"]["vast"]}
-        assert ids == {"501", "502", "503"}, f"the newest price round per GPU, plus the census inside 26 h: {ids}"
+        assert ids == {"500", "501", "502", "503"}, f"every price round of 3 hours, plus the census inside 26 h: {ids}"
+        twin_row = next(m for m in model["machines"]["vast"] if m["machine_id"] == "501")
+        assert twin_row["price_per_gpu_hour"] == 1.0, "a machine seen in two rounds keeps the newest round's price"
         assert model["as_of"]["vast"] == now - timedelta(minutes=4) and model["as_of"]["vast_census"] == now - timedelta(hours=5)
         r = ops.overlap(model["machines"]["lium"], model["machines"]["vast"])
         assert r["strong_matches"] >= 1 and r["matches"][0]["b"]["machine_id"] == "501"

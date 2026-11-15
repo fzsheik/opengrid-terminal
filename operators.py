@@ -31,8 +31,10 @@ from decimal import Decimal
 MARKETPLACES = ("lium", "vast")
 RAM_TOLERANCE = 0.03
 KIB_PER_GIB = 1024 * 1024
-# Vast: the price search is read every 5 minutes; the keyed census every 1 to 12 hours.
-VAST_LISTING_WINDOW = timedelta(minutes=30)
+# Vast: the price search is read every 5 minutes and shows only the 64 cheapest offers per GPU model, a set that
+# changes from round to round, so every round of the last three hours is read (a machine keeps its newest price).
+# The keyed census runs every 1 to 12 hours.
+VAST_LISTING_WINDOW = timedelta(hours=3)
 VAST_CENSUS_WINDOW = timedelta(hours=26)
 
 _GPU_NOISE = re.compile(r"\b(?:NVIDIA|GEFORCE|TESLA)\b|\s+")
@@ -91,11 +93,13 @@ def _vast_country(o: dict) -> str | None:
 
 
 def vast_machines(listing_payloads, census=()) -> list[dict]:
-    """One row per Vast machine. `listing_payloads`: stored price-search payloads (lists of offers).
+    """One row per Vast machine. `listing_payloads`: stored price-search payloads (lists of offers), OLDEST FIRST:
+    a machine seen in several keeps the newest one's price (within one payload, the cheapest of its offers).
     `census`: (gpu_name, rentable, payload) of stored census halves. A machine seen in both keeps the price search's
     row (it has RAM and a price); the census adds the machines the price search's 64 cheapest offers leave out."""
     by_id: dict = {}
-    for payload in listing_payloads:
+    seen_in: dict = {}
+    for index, payload in enumerate(listing_payloads):
         for o in payload if isinstance(payload, list) else []:
             if not isinstance(o, dict) or o.get("machine_id") is None:
                 continue
@@ -108,11 +112,14 @@ def vast_machines(listing_payloads, census=()) -> list[dict]:
             row = _machine("vast", o["machine_id"], o.get("host_id"), o.get("gpu_name"), total, o.get("cpu_name"),
                            o.get("cpu_cores"), ram, _vast_country(o), per_gpu, True)
             old = by_id.get(row["machine_id"])
-            # The same machine in several offers: the largest GPU count, the cheapest price per GPU.
+            # The same machine in several offers: the largest GPU count; the cheapest price per GPU within one
+            # payload, and a newer payload's price replaces an older one's.
             if old is not None:
                 row["gpus"] = max(x for x in (old["gpus"], row["gpus"], 0) if x is not None) or None
-                prices = [x for x in (old["price_per_gpu_hour"], row["price_per_gpu_hour"]) if x is not None]
-                row["price_per_gpu_hour"] = min(prices) if prices else None
+                if seen_in[row["machine_id"]] == index or row["price_per_gpu_hour"] is None:
+                    prices = [x for x in (old["price_per_gpu_hour"], row["price_per_gpu_hour"]) if x is not None]
+                    row["price_per_gpu_hour"] = min(prices) if prices else None
+            seen_in[row["machine_id"]] = index
             by_id[row["machine_id"]] = row
     for gpu_name, rentable, payload in census:
         for o in payload if isinstance(payload, list) else []:
@@ -252,14 +259,39 @@ def _newest_per_request(session, provider: str, endpoint: str, since: datetime, 
     return picked
 
 
+def _listing_rounds(session, provider: str, endpoint: str, since: datetime):
+    """(fetched_at, payload) of every ok price-search snapshot since `since`, oldest first; each distinct body once."""
+    from sqlalchemy import select
+
+    from tables import RawSnapshot
+
+    rows = session.execute(
+        select(RawSnapshot.id, RawSnapshot.request, RawSnapshot.fetched_at, RawSnapshot.sha256)
+        .where(RawSnapshot.provider == provider, RawSnapshot.endpoint == endpoint, RawSnapshot.ok.is_(True),
+               RawSnapshot.fetched_at >= since)
+        .order_by(RawSnapshot.fetched_at.desc(), RawSnapshot.id.desc())).all()
+    keep, hashes = [], set()
+    for id_, request, at, sha in rows:  # newest first: an unchanged body is read once, at its newest time
+        if isinstance(request, dict) and request.get("census"):
+            continue
+        if sha is not None and sha in hashes:
+            continue
+        hashes.add(sha)
+        keep.append((id_, at))
+    bodies = _payloads(session, [i for i, _ in keep])
+    return [(at, bodies.get(i)) for i, at in reversed(keep)]
+
+
 def _payloads(session, ids: list[int]) -> dict:
     from sqlalchemy import select
 
     from tables import RawSnapshot
 
-    if not ids:
-        return {}
-    return {r.id: r.payload for r in session.execute(select(RawSnapshot).where(RawSnapshot.id.in_(ids))).scalars()}
+    out = {}
+    for i in range(0, len(ids), 500):
+        chunk = ids[i:i + 500]
+        out.update({r.id: r.payload for r in session.execute(select(RawSnapshot).where(RawSnapshot.id.in_(chunk))).scalars()})
+    return out
 
 
 def load(now: datetime | None = None) -> dict:
@@ -274,18 +306,19 @@ def load(now: datetime | None = None) -> dict:
         ex = [r for ep, rows in raw.items() if ep == lium.ENDPOINT for r in rows]
         lium_at = ex[0].fetched_at if ex else None
         lm = lium_machines(ex[0].payload) if ex else []
-        listing = _newest_per_request(s, "vast", vast.ENDPOINT, now - VAST_LISTING_WINDOW, census=False)
+        rounds = _listing_rounds(s, "vast", vast.ENDPOINT, now - VAST_LISTING_WINDOW)
         census = _newest_per_request(s, "vast", vast.ENDPOINT, now - VAST_CENSUS_WINDOW, census=True)
-        bodies = _payloads(s, [v[0] for v in listing.values()] + [v[0] for v in census.values()])
-    vm = vast_machines([bodies.get(i) for i, _, _ in listing.values()],
+        bodies = _payloads(s, [v[0] for v in census.values()])
+    vm = vast_machines([payload for _, payload in rounds],
                        [(req.get("gpu_name"), req.get("rentable"), bodies.get(i)) for i, req, _ in census.values()])
     return {
         "machines": {"lium": lm, "vast": vm},
         "as_of": {"lium": lium_at,
-                  "vast": max((at for _, _, at in listing.values()), default=None),
+                  "vast": max((at for at, _ in rounds), default=None),
                   "vast_census": max((at for _, _, at in census.values()), default=None)},
         "coverage": {
             "lium": "machines with a free GPU (the whole-fleet feed carries no operator key or CPU model)",
-            "vast": "the 64 cheapest offers per GPU model, plus every machine of the keyed census when it has run "
-                    "in the last 26 hours (census rows have no RAM or price, so they match on the build tier only)"},
+            "vast": "machines seen among the 64 cheapest offers per GPU model in the last 3 hours, plus every machine "
+                    "of the keyed census when it has run in the last 26 hours (census rows have no RAM or price, "
+                    "so they match on the build tier only)"},
     }

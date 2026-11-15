@@ -21,7 +21,7 @@ Code: `operators.py`, admin read `api/operators.py` (`/v1/ops/operators`, `/v1/o
 | Marketplace | Field | Where | Covers |
 |---|---|---|---|
 | Lium | `provider_key`, `miner_hotkey` | the stored copy of `/api/executors` | machines with a free GPU |
-| Vast.ai | `host_id` | price-search offers (already kept), and now the keyed census with `cpu_name`, `cpu_cores` | the 64 cheapest offers per GPU model; the whole fleet when the census runs |
+| Vast.ai | `host_id` | price-search offers (already kept), and now the keyed census with `cpu_name`, `cpu_cores` | machines seen among the 64 cheapest offers per GPU model in the last 3 hours; the whole fleet when the census runs |
 
 Not kept, on purpose: IP addresses, hostnames, coordinates, GPU serials and Clore's owner ids. Lium's per-provider
 endpoints (`/provider-stats/{hotkey}`, billing history) are still not read.
