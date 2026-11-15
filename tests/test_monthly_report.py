@@ -547,7 +547,7 @@ def test_migration_0039():
         with eng.connect() as c:
             assert {r[0] for r in c.execute(text(q))} == {"month", "generated_at", "regenerated_at", "version",
                                                           "report", "public_summary", "posted_at"}
-        assert dbmod.head_revision() == "0039_monthly_reports"
+        assert dbmod.head_revision() >= "0039_monthly_reports"   # a later migration may follow
         command.downgrade(cfg, "0038_measured_performance")
         with eng.connect() as c:
             assert c.execute(text("SELECT to_regclass('public.monthly_reports')")).scalar() is None

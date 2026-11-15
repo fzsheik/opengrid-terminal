@@ -99,6 +99,12 @@ class Settings(BaseSettings):
     # Poll providers in the background. Off for read-only dev servers against a shared DB.
     poller_enabled: bool = True
     lium_stream_enabled: bool = True             # Lium executor WebSocket (live/lium_stream.py); needs poller_enabled
+    # Lium market-data feeds beyond prices (lium_data/; methodology/lium-data.md), all stored INTERNAL.
+    # lium_feeds_enabled: the keyless feeds (launch stats, requests, utilisation, idle pay, reference prices) every
+    # 15 min; needs poller_enabled. lium_partner_api_key: the X-API-Key of a Lium account Lium has flagged as a
+    # data partner (trades, hourly GPU usage, daily VWAP); unset: the lium_partner job is not registered.
+    lium_feeds_enabled: bool = True
+    lium_partner_api_key: str | None = None
     # Market context (context/; methodology/market-context.md). Each source is off until configured.
     eia_api_key: str | None = None               # free: https://www.eia.gov/opendata/register.php
     sec_user_agent: str | None = None            # SEC fair access: "Company Name contact@company-domain" (required)

@@ -237,6 +237,23 @@ INTERNAL_SOURCES: tuple[InternalSource, ...] = (
         "forbid copying or distributing any part of the Service. Its on-demand deployment prices may be read at a "
         "human request rate (hourly) and used, never republished, so the whole provider is internal.",
         "routing, recommendations and job placement (internal listings from fireworks.ai/pricing)"),
+    # Lium market-data feeds (lium_data/; methodology/lium-data.md). Lium's listings and capacity stay public.
+    *(InternalSource(
+        "lium", path, ("signals",),
+        "Lium's data-partner feed of completed rentals and its aggregates: readable only with a data-partner key, "
+        "and the redistribution terms are not agreed yet (Lium's Terms of Service, 23 Oct 2026, grant only a "
+        "limited licence to use the Service). Internal until a partner agreement allows republishing.",
+        "admin reads only (/v1/ops/lium/*); no route, index or statistic reads it yet")
+      for path in ("/data-partners/trades.csv", "/data-partners/dumps/{day}.csv", "/data-partners/hourly-gpu.csv",
+                   "/data-partners/daily-aggregate.csv", "/data-partners/dumps/{day}.daily-aggregate.csv")),
+    *(InternalSource(
+        "lium", path, ("signals",),
+        "A keyless Lium feed that Lium does not name among the feeds partners may list (docs.lium.io/developers/"
+        "partners names only pricing.json and the public nodes feed) and that its Terms of Service do not license "
+        "for redistribution. Read and kept, not republished, until Lium says otherwise.",
+        "admin reads only (/v1/ops/lium/*); not yet used by routing or provider reliability")
+      for path in ("/public/v1/launch-stats", "/public/v1/requests", "/executors/stats", "/machines/spot-idle-rates",
+                   "/machines/capacity", "/v1/shared-config", "/api/public/v1/stats")),
 )
 
 

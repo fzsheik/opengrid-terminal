@@ -1,0 +1,4 @@
+day,gpu_model,provider_country,deals,gpu_hours,vwap_price_per_gpu_hour,min_price_per_gpu_hour,max_price_per_gpu_hour
+2026-11-13,NVIDIA H100 80GB HBM3,US,2,34,2.111765,2.10,2.30
+2026-11-13,NVIDIA H200,FI,1,20,3.40,3.40,3.40
+2026-11-13,NVIDIA GeForce RTX 4090,DE,1,1.5,0.45,0.45,0.45

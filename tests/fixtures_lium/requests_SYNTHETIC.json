@@ -1,0 +1,1 @@
+{"generated_at":"2026-11-15T00:30:00Z","requests":[{"class":"B300","requests":3,"gpus_asked":24,"oldest_at":"2026-11-12T08:00:00Z"},{"class":"H200","requests":1,"gpus_asked":0,"oldest_at":"2026-11-14T19:30:00Z"}],"classes":["B300","H200","H100"]}

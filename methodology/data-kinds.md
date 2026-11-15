@@ -7,7 +7,7 @@ OpenGrid labels every number by how it was obtained, and never mixes kinds in on
 | **observed** | Read directly from a provider (API, public price page, or aggregator) and normalized. |
 | **derived** | Computed from observed data by a stated rule, e.g. `available = capacity > 0`, or a list price converted to USD at the ECB reference rate (see below). |
 | **estimated** | A model or assumption fills a gap. Always labelled; never silent. |
-| **transaction** | What an OpenGrid execution actually quoted or paid. |
+| **transaction** | What was actually quoted or paid: by an OpenGrid execution, or by renters on a venue that reports its completed rentals (Lium's data-partner trades, and the paid-price figures Lium publishes from them). A venue's figures carry a basis: `trade_record` (one rental as reported), `published_aggregate` (the venue's own aggregate) or `derived_from_trades` (OpenGrid's aggregate of stored trade records). Venue transactions are internal for now; see [Lium market data](/methodology/lium-data). |
 | **measured** | Timed on a completed real OpenGrid job (never a sandbox or simulated run): a workload's throughput on a GPU, from the runner's per-epoch timings. Shown with its sample size; used only with the owner's consent. See [recommendations](/methodology/recommendations#measured-performance). |
 | **archived** | Read by OpenGrid's parsers from a public archive (an Internet Archive capture of a provider's price page, or a past version of AWS's price list), not observed live. Sampled only on capture days; never used in indices, percentiles or routing. See [archived history](/methodology/archived-history). |
 

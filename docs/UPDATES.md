@@ -5,6 +5,35 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-14 — Lium market data beyond prices: partner trades (dormant until flagged), keyless feeds, published throughput (all internal)
+
+### What shipped
+- **`lium_data/`** (migration `0040_lium_data`, seven `lium_*` tables, methodology/lium-data.md): every Lium feed
+  stored raw first and change-only (`lium_feed_snapshots`; a repeated answer, a 403 or a 404 only moves
+  `last_seen_at` / `seen_count`), every row INTERNAL (`provider_meta.INTERNAL_SOURCES`).
+- **Data-partner feeds** (job `lium_partner`, hourly, only with `LIUM_PARTNER_API_KEY`): `trades.csv` (kind
+  transaction, deduplicated on a stable row key, incremental from the newest stored end day), the nightly dumps,
+  `hourly-gpu.csv`, `daily-aggregate.csv`. A 403 is stored once, warned once and re-checked every 6 h. History:
+  `python -m lium_data backfill --since YYYY-MM-DD`.
+- **Keyless feeds** (job `lium_public`, 15 min, `LIUM_FEEDS_ENABLED`): launch success / time to SSH, renter requests
+  (404 while Lium has it off, stored quietly), executor rented/total, spot idle pay, idle-pay capacity, shared-config
+  reference prices; values change-only in `lium_feed_values`.
+- **Published throughput**: the stats snapshots providers/lium.py already stored are parsed into daily GMV,
+  GPU-hours, rentals, utilisation (revisions counted) and per-model 30-day median paid price.
+- **Admin reads** `/v1/ops/lium/*` (status, trade VWAP per GPU per day, the VWAP check against Lium's own,
+  hourly, daily aggregate, throughput, current feeds and history).
+
+### Not shipped
+- No public surface: Lium's terms do not license redistributing these feeds and the partner terms are not agreed.
+- The partner feeds have never answered 200 for OpenGrid: the account is not flagged yet; their parser is built from
+  the documented fields and synthetic fixtures (Lium does not document the header spelling).
+
+### Next
+- Ask Lium to flag the account as a data partner and to state redistribution terms for the partner and keyless
+  feeds; then set the key, run the backfill, and check the parser against the first real file.
+
+---
+
 ## 2026-11-13 — Read-only viewer login (no admin pages) and PostHog analytics (admin numbers on /admin/value)
 
 ### What shipped
