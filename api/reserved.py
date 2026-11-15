@@ -3,6 +3,9 @@
     GET /v1/reserved          one row per (provider, GPU, GPUs per machine, region, term); filters gpu, provider, term
     GET /v1/reserved/summary  per GPU: the cheapest row in each term bucket; filter gpu
 
+    GET /v1/ops/reserved/internal  ADMIN ONLY: the same rows for wholly internal providers (Bitdeer), whose terms
+                                   forbid republishing. Never part of the two public reads above.
+
 Computed on read from stored raw snapshots (reserved.py); nothing is polled or written for it. Public like
 /v1/capacity (api/pages.py PUBLIC_V1, same data:read scope for keys). Methodology: /methodology/reserved-prices.
 """
@@ -59,3 +62,23 @@ def summary(gpu: str | None = Query(None, description="GPU slug or canonical nam
     data, notes, newest = _model()
     out = [g for g in reserved.summary(data) if not want or g["gpu"] == want]
     return envelope(page=(limit, cursor), data=out, kind=OBSERVED, methodology=METHOD, count=len(out), **_meta(notes, newest))
+
+
+@ttl_cache(60)
+def _internal_model():
+    return reserved.load(internal=True)
+
+
+@router.get("/v1/ops/reserved/internal", tags=["ops"], include_in_schema=False,
+            summary="Ops: committed prices of internal-only providers (never republish)")
+def internal_rows(provider: str | None = None, term: str | None = None, who: Principal = Depends(require_scope("admin"))):
+    if provider and provider not in reserved.INTERNAL_PROVIDERS:
+        raise HTTPException(404, f"no internal reserved prices for {provider!r}; one of {list(reserved.INTERNAL_PROVIDERS)}")
+    if term and term not in reserved.BUCKET_KEYS:
+        raise HTTPException(422, f"unknown term {term!r}; one of {list(reserved.BUCKET_KEYS)}")
+    data, notes, newest = _internal_model()
+    out = [r for r in data if (not provider or r["provider"] == provider) and (not term or r["term_bucket"] == term)]
+    return envelope(out, kind=OBSERVED, methodology=METHOD, visibility="internal", count=len(out),
+                    note="INTERNAL data (provider_meta.INTERNAL_SOURCES): never republish",
+                    providers=list(reserved.INTERNAL_PROVIDERS), sources=reserved.INTERNAL_SOURCES, notes=notes,
+                    source_as_of=newest.isoformat() if newest else None)

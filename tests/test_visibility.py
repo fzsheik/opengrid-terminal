@@ -76,7 +76,9 @@ _HIDDEN_ENTRY = provider_meta.InternalSource(HIDDEN, provider_meta.ALL_SOURCES, 
 def test_registry():
     from providers import PROVIDERS, aws, deepinfra
 
-    wholly_internal = {"fireworks"}   # terms clause (e): no copying or distributing any part of the Service
+    # fireworks: terms clause (e), no copying or distributing any part of the Service.
+    # bitdeer: terms 5.8, no use of the website's data without written authorization.
+    wholly_internal = {"fireworks", "bitdeer"}
     for name in PROVIDERS:   # every other existing source defaults to public
         if name in wholly_internal:
             continue

@@ -115,8 +115,10 @@ def test_lium_keeps_network_interconnect_and_announced_price():
     assert all(set(p) == {"device", "rate", "link_layer", "state", "phys_state"} for p in ports), "no GUIDs / GIDs"
     assert kept["gpu_memory_mib"] == e["specs"]["gpu"]["details"][0]["capacity"]
     text = json.dumps(raw.payload)
-    for secret in ("5FAKEvalidatorHOTKEY", "5FAKEminerHOTKEY", "verified_ports", "md5_checksums", "boot_id"):
+    for secret in ("5FAKEvalidatorHOTKEY", "verified_ports", "md5_checksums", "boot_id"):
         assert secret not in text, secret
+    # The operator's own key is kept since 2026-11-15 (internal; operators.py reads it, no listing does).
+    assert kept["miner_hotkey"] == "5FAKEminerHOTKEY" and "provider_key" in kept
 
 
 def test_lium_listing_unchanged():

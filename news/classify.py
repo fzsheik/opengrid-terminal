@@ -146,6 +146,8 @@ def family_id(value: str) -> str | None:
 # --------------------------------------------------------------------------- providers
 
 # (id, display name, [(pattern, case_sensitive, needs_context)], provider_class when not in provider_meta)
+# provider_class here may also be "datacenter" (a landlord that leases powered space and rents no GPUs): a news-only
+# class, not in provider_meta, outside _CONTEXT_CLASSES and never a neocloud_expansion.
 _P = [
     ("aws", "AWS", [(r"\bAWS\b", True, False), (r"Amazon Web Services", False, False), (r"\bAmazon EC2\b|\bEC2\b", True, False)], None),
     ("gcp", "Google Cloud", [(r"\bGoogle Cloud\b", False, False), (r"\bGCP\b", True, False), (r"Google Compute Engine", False, False)], "hyperscaler"),
@@ -182,6 +184,25 @@ _P = [
     ("iren", "IREN", [(r"\bIREN\b", True, False), (r"Iris Energy", False, False)], "neocloud"),
     ("applieddigital", "Applied Digital", [(r"Applied Digital", False, False)], "neocloud"),
     ("paperspace", "Paperspace", [(r"\bPaperspace\b", False, False)], "neocloud"),
+    # Bitcoin miners moving into AI compute (docs/MINER_PROVIDERS.md). Most of their news is about mining, so the
+    # company name counts only in an item with compute context; the AI brand counts on its own.
+    # Renting GPUs themselves: neocloud. (Bitdeer's class comes from provider_meta.)
+    ("bitdeer", "Bitdeer", [(r"\bBitdeer AI\b", False, False), (r"\bBitdeer\b", False, True)], None),
+    ("hut8", "Hut 8", [(r"\bHighrise AI\b", False, False), (r"\bHut ?8\b", False, True)], "neocloud"),
+    ("hive", "HIVE Digital", [(r"\bBUZZ HPC\b", False, False), (r"\bHIVE (?:Digital|Blockchain)\b", False, True)], "neocloud"),
+    ("bitdigital", "Bit Digital", [(r"\bWhiteFiber\b", False, False), (r"\bBit Digital\b", True, True)], "neocloud"),
+    # Landlords: powered shells and colocation leased to GPU clouds (CoreWeave, Fluidstack, AWS). They rent no GPUs,
+    # so the class is "datacenter": capacity news, never a neocloud expansion and never compute context by itself.
+    # "Galaxy" and "Riot" alone are other things: the full name, or Helios with Galaxy in the same line.
+    ("corescientific", "Core Scientific", [(r"\bCore Scientific\b", False, True)], "datacenter"),
+    ("galaxy", "Galaxy Digital", [(r"\bGalaxy Digital\b", False, True),
+                                  (r"\bHelios\b(?=[^\n]{0,120}\bGalaxy\b)|\bGalaxy\b(?=[^\n]{0,120}\bHelios\b)", True, True)],
+     "datacenter"),
+    ("cipher", "Cipher Mining", [(r"\bCipher Mining\b", False, True)], "datacenter"),
+    ("terawulf", "TeraWulf", [(r"\bTeraWulf\b", False, True)], "datacenter"),
+    ("cleanspark", "CleanSpark", [(r"\bCleanSpark\b", False, True)], "datacenter"),
+    ("riot", "Riot Platforms", [(r"\bRiot (?:Platforms|Blockchain)\b", False, True)], "datacenter"),
+    ("mara", "MARA Holdings", [(r"\bMARA Holdings\b|\bMarathon Digital\b", False, True)], "datacenter"),
 ]
 PROVIDERS = {pid: name for pid, name, _a, _c in _P}
 _PROVIDER_CLASS = {pid: (cls or provider_meta.meta(pid).provider_class) for pid, _n, _a, cls in _P}

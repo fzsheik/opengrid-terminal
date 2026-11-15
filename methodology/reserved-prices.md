@@ -24,6 +24,8 @@ A price counts as reserved when the provider publishes it for a stated commitmen
 | Together AI | The GPU Clusters reserved columns of together.ai/pricing, per GPU-hour | 3-30, 31-90, 91-180, 181+ days |
 | Verda | The commitment ladder `/v1/long-term/periods/instances`: a discount % per term | 1, 3, 6 months; 1, 2 years |
 
+Bitdeer AI's 1-year and 3-year committed prices are read the same way (per instance-hour for each card count, divided by the cards), but Bitdeer is an internal source ([data visibility](/methodology/data-visibility)): its rows are never in the two public endpoints below, only in an admin read.
+
 These are **not** reserved prices:
 
 - Spot or preemptible prices. They are cheaper because the machine can be taken back, not because you commit to a term.

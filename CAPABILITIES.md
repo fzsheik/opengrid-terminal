@@ -1,7 +1,7 @@
 # OpenGrid Terminal: Capabilities & Features
 
 **OpenGrid Terminal is a market-intelligence and execution terminal for GPU compute.**
-It watches 61 GPU clouds (60 published), turns their prices into one trustworthy market, explains what is moving
+It watches 62 GPU clouds (60 published), turns their prices into one trustworthy market, explains what is moving
 and why, and routes a workload to the best provider through one OpenGrid API key, with every
 decision audited and every dollar reconciled.
 
@@ -47,11 +47,11 @@ Counts recomputed from the code on 2026-11-13.
 
 | | |
 |---|---|
-| GPU clouds monitored | **61** polled, 60 published, out of **61** registered (`providers.PROVIDERS`; Alibaba Cloud has been polled since 2026-11-15, when its read-only AccessKey was set, section 3.1) (Fireworks AI is the only wholly internal provider: used for routing, never republished; two more sources of public providers are internal, DeepInfra's container-API prices and AWS's Spot Advisor bands, section 3.8) (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb, Civo, Atlantic.Net, E2E Networks, Modal, Replicate, Baseten, Beam, Arkane Cloud, VESSL AI, Mithril, DeepInfra, SimplePod, Nosana, Thunder Compute, Clore.ai, Paperspace, Akash Network, Hydra Host, CUDO Compute, GPU.ai, Exoscale, Hugging Face Inference Endpoints, Gcore, Fireworks AI, IONOS Cloud, Hetzner, Yotta Shakti Cloud, Sakura Internet) |
+| GPU clouds monitored | **62** polled, 60 published, out of **62** registered (`providers.PROVIDERS`; Alibaba Cloud has been polled since 2026-11-15, when its read-only AccessKey was set, section 3.1) (Fireworks AI and Bitdeer AI are the two wholly internal providers: used for routing, never republished; two more sources of public providers are internal, DeepInfra's container-API prices and AWS's Spot Advisor bands, section 3.8) (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb, Civo, Atlantic.Net, E2E Networks, Modal, Replicate, Baseten, Beam, Arkane Cloud, VESSL AI, Mithril, DeepInfra, SimplePod, Nosana, Thunder Compute, Clore.ai, Paperspace, Akash Network, Hydra Host, CUDO Compute, GPU.ai, Exoscale, Hugging Face Inference Endpoints, Gcore, Fireworks AI, IONOS Cloud, Hetzner, Yotta Shakti Cloud, Sakura Internet) |
 | Canonical GPU models | **100**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL); each has a hardware spec row (100 in `hardware.py`) |
 | OpenGrid indices defined | **269**: 100 per-GPU, 100 spot, 40 regional, 25 provider-class, 4 composites (H100 / H200 / A100 class and the overall GPU Compute Index) |
 | News & signal sources | **81** registered, **66** enabled (41 RSS, 4 Atom, 3 US Federal Register, 16 SEC EDGAR, 2 GDELT queries); the 15 disabled ones are listed with the reason. About 87k items stored in production (86,523 on 2026-11-15), history backfill included |
-| API operations | **262** in the OpenAPI schema: 240 under `/v1` (84 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 9 admin-only reads (7 power, 2 equities), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 47 page routes |
+| API operations | **262** in the OpenAPI schema: 240 under `/v1` (84 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 12 admin-only reads (7 power, 2 equities, 2 marketplace operators, 1 internal reserved prices), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 47 page routes |
 | Web pages | **47** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar. RL cost (`/rl-cost`) sits under GPUs; Batches (`/batches`, `/batch/{id}`) under My Jobs; the internal Monthly report (`/reports`, `/reports/{month}`) under Markets, locked |
 | Database tables | **119** in a freshly migrated database (118 application tables plus `alembic_version`; Postgres, migrated by Alembic: 43 migrations, head `0041_lium_grafana`) |
 | Background jobs | **37** registered when every optional source is configured (**33** with the defaults: no EIA / SEC / Alpaca keys, `POWER_ENABLED` off), beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets, the monthly market report…; table 15.2) |
@@ -62,7 +62,7 @@ Counts recomputed from the code on 2026-11-13.
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination. Built on top, tested against fake provider APIs only: **batches** (a sweep or shard list as one batch: placement across clouds, one budget, one approval), **resume** from a verified checkpoint, opt-in **OOM escalation** and **move** to another GPU; automatic relaunch / OOM escalation and move are off by default (`JOB_AUTO_RELAUNCH_ENABLED`, `JOB_MOVE_ENABLED`) |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
 | Workload intelligence | GPU memory estimator (text LLMs; recommendations also size audio, image + text and video workloads, section 6c), measured performance from completed real jobs (none yet), project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (hosted at `/mcp` with an API key: 15 tools, 2 prompts; local via uvx: 16 tools, 3 prompts), grounded assistant, RL post-training cost estimator |
-| Automated tests | **145** Python test files + **14** JavaScript test files, all 159 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
+| Automated tests | **147** Python test files + **14** JavaScript test files, all 161 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
 
 ---
 
@@ -185,6 +185,7 @@ Exoscale 1 h. Lium is also read live from its public WebSocket (section 3.7).
 | Hugging Face Inference Endpoints | general cloud (reseller) | public API (managed endpoints on AWS/GCP/Azure; listings are `resold:<cloud>` and kept out of market statistics) |
 | Gcore | general cloud | public page (GPU Cloud bare metal and Virtual GPU; EUR list prices converted to USD at the ECB reference rate; "Contact sales" servers not read; public on the site and API but kept out of the AI assistant and MCP answers: its robots.txt sets `Content-Signal: ai-input=no`) |
 | Fireworks AI | general cloud | public page (on-demand dedicated deployments, USD per GPU-hour; **internal only**: its terms forbid republishing) |
+| Bitdeer AI | neocloud | public API (a Bitcoin miner's own GPU cloud: the keyless feed behind its pricing page, H100 to GB300 per card count, on demand; 1 and 3-year committed prices read separately; **internal only**: its terms bar using the website's data without written authorization) |
 | IONOS Cloud | general cloud | public page (IONOS CLOUD Inc.'s USD price list on docs.ionos.com, Markdown; Cloud GPU VM templates, H200 PCIe) |
 | Hetzner | general cloud | public page (dedicated GEX GPU servers at the printed hourly rate; EUR converted to USD at the ECB reference rate; one-time setup fee not added) |
 | Yotta Shakti Cloud | neocloud | public page (on-demand GPU VMs, H100 SXM and L40S; INR converted at the ECB cross rate; GST treatment not stated) |
@@ -300,6 +301,7 @@ internal sources, each with its reason, is `provider_meta.INTERNAL_SOURCES`:
 | Provider | Internal source | Why |
 |---|---|---|
 | Fireworks AI | the whole provider (listings, capacity, signals) | its terms forbid copying or distributing any part of the Service |
+| Bitdeer AI | the whole provider (on-demand listings, and its 1 / 3-year committed prices through the admin read `/v1/ops/reserved/internal`) | its terms (5.8) bar using the website's information or data without written authorization, and (5.10 f) republishing any part of the Services |
 | DeepInfra | container-API hourly prices (listings ending `:api`) | not the public price-page prices; its terms treat non-public pricing as confidential. Its public listings stay the price-page ones |
 | AWS | Spot Instance Advisor interruption bands and savings | AWS's site terms restrict republishing data from aws.amazon.com |
 | Lium | data-partner feeds (trades, hourly GPU usage, daily VWAP, nightly dumps) and the keyless market feeds other than prices (launch stats, requests, executor stats, spot idle rates, idle-pay capacity, shared-config reference prices, the public stats feed) | partner terms not agreed; Lium names only `pricing.json` and the nodes feed as listable (the same holds for its public Grafana dashboards: rental starts, hourly spend and fleet), and its terms grant only a limited licence. Lium's listings and capacity stay public |
@@ -314,6 +316,22 @@ calls every public route enumerated from the app; it fails on any internal name,
 have their own registries with the same rule (section 5a). Separately, Gcore's rows stay public but are kept out of
 the assistant's grounding and every MCP answer (`provider_meta.AI_INPUT_EXCLUDED`: its robots.txt sets
 `ai-input=no`).
+
+### 3.8a Marketplace operators (`operators.py`, `api/operators.py`, methodology/internal/operators.md)
+Since 2026-11-15 the stored raw copies keep who runs each machine: Lium's `provider_key` and `miner_hotkey`
+(machines with a free GPU) and Vast's `host_id` (price-search offers, and now the whole-fleet census together with
+`cpu_name` and `cpu_cores`). IP addresses, hostnames and coordinates stay out. **INTERNAL**: the keys live in raw
+copies only, no listing field, capacity field or listing id carries them, and nothing in normalize, analytics,
+indices or routing imports the module (`tests/test_operators.py`). Computed on read, nothing written:
+- `GET /v1/ops/operators` (admin): per marketplace, one row per operator (machines, GPUs, models, countries, price
+  range) and the concentration of supply (largest operator's share of GPUs, top five, HHI).
+- `GET /v1/ops/operators/overlap` (admin): Lium machines whose hardware fingerprint matches a Vast machine, in two
+  tiers (**strong**: GPU model, GPU count, CPU model, country, RAM within 3%; **build**: GPU model, CPU model,
+  country), the price each side asks, and the operator pairs behind the matches. A match is a candidate, not proof;
+  every answer says how many fingerprints are unique within each marketplace.
+Limits: only two marketplaces; Lium's fully rented machines carry no key; Vast census rows match on the build tier
+only; one moment is compared, so a machine moving between marketplaces over time is not detected yet. History
+starts 2026-11-15 (older snapshots have no keys).
 
 ### 3.9 Lium market data beyond prices (`lium_data/`, `api/lium.py`, methodology/lium-data.md)
 Raw first, change-only, every row INTERNAL (section 3.8), in its own tables (migrations `0040_lium_data`,
@@ -338,7 +356,8 @@ newest answer, a 403 or a 404 included, only moves `last_seen_at` / `seen_count`
   (`/executors/stats`), spot idle pay per GPU-hour and idle-pay capacity buckets (`/machines/spot-idle-rates`,
   `/machines/capacity`: what Lium pays providers, a supply floor, not a renter price), reference prices
   (`/v1/shared-config` `machine_prices` and p90; only the price keys are kept). Kind **observed** (reported by Lium).
-  Per-provider endpoints (`/provider-stats/{hotkey}`, billing history) are deliberately not read.
+  Per-provider endpoints (`/provider-stats/{hotkey}`, billing history) are deliberately not read (the provider
+  key itself is kept in the stored executors since 2026-11-15, internal: section 3.8a).
 - **Published throughput**: the public stats feed providers/lium.py already stores raw is parsed into daily GMV,
   GPU-hours, rentals and utilisation (a closed day Lium changes later counts as a revision) and per-model 30-day
   median PAID price, utilisation, cheapest ask (kind transaction, basis `published_aggregate`).
@@ -1386,9 +1405,9 @@ registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registere
 
 ## 16. Testing
 
-145 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
+147 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
 Postgres database, no real provider calls), plus 5 CLI/MCP test files in `cli/tests/`. `tests/run_all.py` runs all
-159 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
+161 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
 (`.github/workflows/tests.yml`) runs it on every push and pull request against a throwaway Postgres 16 whose zone is
 deliberately not UTC. Beyond the per-module tests:
 - unit and integration tests for every analytics module, API and page;

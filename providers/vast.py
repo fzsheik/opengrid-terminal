@@ -68,7 +68,11 @@ CENSUS_CAP = 512
 CENSUS_DAILY_ROW_BUDGET = 16_000
 CENSUS_MIN_GAP = timedelta(hours=1)
 CENSUS_MAX_GAP = timedelta(hours=12)
-CENSUS_FIELDS = ("machine_id", "num_gpus", "gpu_frac", "gpu_ids", "geolocation", "rentable")
+# host_id, cpu_name and cpu_cores (since 2026-11-15) say who runs each machine of the WHOLE fleet and what it is built
+# on; the price search below carries them only for the cheapest offers. INTERNAL: read only by operators.py
+# (methodology/internal/operators.md), never by a listing or a capacity row. The host's IP address and hostname stay out.
+CENSUS_FIELDS = ("machine_id", "num_gpus", "gpu_frac", "gpu_ids", "geolocation", "rentable", "host_id", "cpu_name",
+                 "cpu_cores")
 
 
 def _census_query(gpu_name: str, rentable: bool) -> dict:

@@ -6,8 +6,14 @@ stored payload keeps only the fields we read, plus (raw-first, read by no listin
 field yet) the executor's network and interconnect: measured upload / download
 Mbps, NVLink / P2P summary, InfiniBand / RoCE ports (rate, link layer, state) and
 fabric flags, and any announced price change (pending_price_per_hour,
-price_change_effective_date). Host identity (hotkeys, GUIDs, GIDs, port lists) and
+price_change_effective_date). Machine identity (GUIDs, GIDs, port lists, coordinates) and
 the N x N link matrix are dropped.
+
+Operator identity (since 2026-11-15, INTERNAL, methodology/internal/operators.md): the executor's `provider_key` and
+`miner_hotkey` are kept in the stored raw copy only. They say which machines one operator runs, which is what
+operators.py needs to measure supply concentration and to match operators across marketplaces. They are never a
+listing field, a capacity field or part of a listing id, so no public read can carry them; Lium's per-provider
+endpoints (/provider-stats/{hotkey}, billing history) are still not read.
 
 Capacity: each executor reports `gpu_count` and `available_gpu_count`. Summed per
 (machine type, city) they are true counts, the only provider here that gives them.
@@ -64,8 +70,12 @@ def machine_name(gpu_model: str) -> str:
 KIB_PER_GIB = 1024 * 1024
 
 
+# Who runs the machine (INTERNAL; read only by operators.py, never by normalize or normalize_capacity).
+OPERATOR_FIELDS = ("provider_key", "miner_hotkey")
+
+
 def _keep(executor: dict) -> dict:
-    """The fields normalize() reads, verbatim."""
+    """The fields normalize() reads, verbatim, plus the operator's key (OPERATOR_FIELDS, internal)."""
     specs = executor.get("specs") or {}
     loc = executor.get("location") or {}
     return {
@@ -82,6 +92,7 @@ def _keep(executor: dict) -> dict:
         "cpu_count": (specs.get("cpu") or {}).get("count"),
         "ram_total": (specs.get("ram") or {}).get("total"),
         "disk_total": (specs.get("hard_disk") or {}).get("total"),
+        **{k: executor.get(k) for k in OPERATOR_FIELDS},
         **_extras(executor, specs),
     }
 

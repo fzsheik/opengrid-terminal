@@ -26,6 +26,11 @@ Sources (methodology/reserved-prices.md):
     together    GPU Clusters reserved rates per GPU-hour for 3-30 / 31-90 / 91-180 / 181+ day commitments
     verda       a discount ladder (1 month 2% ... 2 years 25%), applied to each current on-demand listing: derived
 
+Internal sources (INTERNAL_READERS): a provider whose terms forbid republishing (provider_meta.INTERNAL_SOURCES) is
+read by the same pure machinery but never by the public model: load() builds READERS only, load(internal=True)
+builds INTERNAL_READERS only, for the admin read /v1/ops/reserved/internal.
+    bitdeer     1-year and 3-year committed prices per instance-hour for each card count:  price / cards
+
 Only USD prices are used. Anything in another currency is skipped and named in the notes (no FX in OpenGrid yet).
 """
 
@@ -73,6 +78,16 @@ SOURCES: dict[str, dict[str, str]] = {
 }
 PROVIDERS = tuple(sorted(SOURCES))
 
+# Wholly internal providers (provider_meta.provider_internal): same shape, never in the public model.
+INTERNAL_SOURCES: dict[str, dict[str, str]] = {
+    "bitdeer": {"source": "Bitdeer AI www.bitdeer.ai/api/gpu-pricing, year1 / year3 per card count (INTERNAL)",
+                "method": "committed price of the instance per hour / cards; compared with the on-demand price of "
+                          "the same card count in the same feed"},
+}
+INTERNAL_PROVIDERS = tuple(sorted(INTERNAL_SOURCES))
+_ALL_SOURCES = {**SOURCES, **INTERNAL_SOURCES}
+assert not set(SOURCES) & set(INTERNAL_SOURCES)
+
 _Q6 = Decimal("0.000001")
 
 
@@ -103,7 +118,7 @@ def _row(provider: str, *, gpu: str | None, raw_gpu_name: str, gpu_count: int, r
         "price_per_gpu_hour": price_per_gpu_hour, "term_price": term_price, "term_hours": term_hours,
         "currency": "USD", "derived": derived, "kind": "derived" if derived else "observed",
         "discount_pct": discount_pct, "scope": scope, "observed_at": observed_at,
-        "source": SOURCES[provider]["source"], "method": SOURCES[provider]["method"],
+        "source": _ALL_SOURCES[provider]["source"], "method": _ALL_SOURCES[provider]["method"],
         # filled by attach_on_demand
         "_listing_hint": listing_hint, "_same_source": same_source_on_demand,
     }
@@ -242,9 +257,26 @@ def _verda(by_endpoint: dict, listings: list[dict], notes: list[str]) -> list[di
     return out
 
 
+def _bitdeer(by_endpoint: dict, listings: list[dict], notes: list[str]) -> list[dict]:
+    from providers import bitdeer
+
+    try:
+        prices = bitdeer.reserved_prices(by_endpoint)
+    except ValueError as exc:  # a reshaped feed: nothing, never a guess
+        notes.append(str(exc))
+        return []
+    at = _newest(by_endpoint, [bitdeer.ENDPOINT])
+    return [_row("bitdeer", gpu=p.canonical_gpu_name, raw_gpu_name=p.raw_gpu_name, gpu_count=p.gpu_count, region=None,
+                 sku=p.sku, term_label=p.term, term_months=Decimal(p.months), price_per_gpu_hour=p.price_per_gpu_hour,
+                 observed_at=at, listing_hint=p.listing_id, same_source_on_demand=p.on_demand_per_gpu_hour)
+            for p in prices]
+
+
 READERS = {"aws": _aws, "azure": _azure, "gcp": _gcp, "jarvislabs": _jarvislabs, "latitude": _latitude, "together": _together,
            "verda": _verda}
 assert set(READERS) == set(SOURCES)
+INTERNAL_READERS = {"bitdeer": _bitdeer}
+assert set(INTERNAL_READERS) == set(INTERNAL_SOURCES)
 
 
 # --------------------------------------------------------------------------- on-demand match and saving (pure)
@@ -301,12 +333,12 @@ def attach_on_demand(rows: list[dict], listings: list[dict]) -> list[dict]:
 # --------------------------------------------------------------------------- the whole model (pure)
 
 def build(raw: dict[str, dict], listings: list[dict], now: datetime | None = None,
-          intervals: dict[str, int] | None = None) -> tuple[list[dict], list[str]]:
+          intervals: dict[str, int] | None = None, readers: dict | None = None) -> tuple[list[dict], list[str]]:
     """raw: provider -> its newest raw snapshots by endpoint (normalize._latest_raw). listings: current on-demand
     listings as dicts (compute_listings columns). Returns (rows, notes), rows JSON-ready and sorted."""
     now = now or datetime.now(timezone.utc)
     rows, notes = [], []
-    for provider, reader in READERS.items():
+    for provider, reader in (READERS if readers is None else readers).items():
         by_endpoint = raw.get(provider) or {}
         try:
             got = reader(by_endpoint, listings, notes)
@@ -370,13 +402,16 @@ _LISTINGS_SQL = """
     SELECT provider, listing_id, sku, raw_gpu_name, canonical_gpu_name, gpu_count, region, price_per_gpu_hour,
            currency, market_type, interruptible, provider_tier, observed_at
     FROM compute_listings
-    WHERE provider = ANY(:providers) AND market_type = 'on_demand' AND visibility = 'public'
+    WHERE provider = ANY(:providers) AND market_type = 'on_demand' AND visibility = :visibility
 """
 
 
-def load(now: datetime | None = None) -> tuple[list[dict], list[str], datetime | None]:
+def load(now: datetime | None = None, internal: bool = False) -> tuple[list[dict], list[str], datetime | None]:
     """Read the newest raw snapshots and the current on-demand listings of the reserved providers; build the model.
-    Read-only: one SELECT per provider plus one for listings. Returns (rows, notes, newest source time)."""
+    Read-only: one SELECT per provider plus one for listings. Returns (rows, notes, newest source time).
+
+    internal=False (every public read): READERS and public listings only. internal=True (admin read): the wholly
+    internal providers (INTERNAL_READERS) and their internal listings only. The two never mix."""
     from sqlalchemy import text
 
     import market
@@ -384,12 +419,15 @@ def load(now: datetime | None = None) -> tuple[list[dict], list[str], datetime |
     from providers import PROVIDERS as REGISTRY
 
     now = now or datetime.now(timezone.utc)
+    readers = INTERNAL_READERS if internal else READERS
     with normalize.SessionLocal() as s:
-        raw = {p: normalize._latest_raw(s, p) for p in READERS}
-        listings = [dict(r._mapping) for r in s.execute(text(_LISTINGS_SQL), {"providers": list(READERS)})]
+        raw = {p: normalize._latest_raw(s, p) for p in readers}
+        listings = [dict(r._mapping) for r in s.execute(
+            text(_LISTINGS_SQL), {"providers": list(readers), "visibility": "internal" if internal else "public"})]
     # Only current listings: one not seen within its provider's staleness window is gone, not a comparison.
     listings = [lst for lst in listings if now - lst["observed_at"] <= market.stale_after(lst["provider"])]
-    intervals = {p: REGISTRY[p].polling.interval_seconds for p in READERS if p in REGISTRY}
-    rows, notes = build(raw, listings, now, intervals)
+    intervals = {p: REGISTRY[p].polling.interval_seconds for p in readers if p in REGISTRY}
+    # The public call keeps its four arguments: the public readers are build()'s default, not a choice made here.
+    rows, notes = build(raw, listings, now, intervals, readers) if internal else build(raw, listings, now, intervals)
     newest = max((r["observed_at"] for r in rows if r["observed_at"]), default=None)
     return rows, notes, newest

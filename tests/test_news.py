@@ -167,6 +167,32 @@ def test_classify_providers_regions_topics():
     hint = _c("How to fine-tune models", provider_hint="runpod")["entities"]["providers"]
     assert hint[0]["id"] == "runpod" and hint[0]["via"] == "source"
 
+    # Bitcoin miners turned GPU clouds or landlords (docs/MINER_PROVIDERS.md). Real headlines, 2025-2026.
+    pc = lambda t: {x["id"]: x["provider_class"] for x in _c(t)["entities"]["providers"]}  # noqa: E731
+    assert pc("Hut 8 launches Highrise AI, a GPU cloud subsidiary") == {"hut8": "neocloud"}
+    assert pc("HIVE's BUZZ HPC Signs $350 Million AI Cloud Services Agreement") == {"hive": "neocloud"}
+    assert pc("Bit Digital's WhiteFiber prices IPO as it expands GPU clusters") == {"bitdigital": "neocloud"}
+    assert pc("Bitdeer AI Cloud adds NVIDIA GB300 NVL72 bare metal") == {"bitdeer": "neocloud"}
+    assert pc("Core Scientific to host 500 MW for CoreWeave at its Texas data centers") == \
+        {"coreweave": "neocloud", "corescientific": "datacenter"}
+    assert pc("Galaxy Digital expands CoreWeave lease at Helios data center campus") == \
+        {"coreweave": "neocloud", "galaxy": "datacenter"}
+    assert pc("Helios campus: Galaxy secures financing for AI data center buildout")["galaxy"] == "datacenter"
+    assert pc("Cipher Mining signs AI hosting lease with Fluidstack for its data center") == \
+        {"fluidstack": "neocloud", "cipher": "datacenter"}
+    assert pc("TeraWulf signs 10-year HPC hosting agreements backed by Google") == {"terawulf": "datacenter"}
+    assert pc("Riot Platforms evaluates AI data center use for Corsicana site") == {"riot": "datacenter"}
+    # Mining-only news is not compute news, and bare common words never match.
+    for t in ("Bitdeer mines 526 bitcoin in October", "Hut 8 reports record hashrate", "Riot Platforms buys more miners",
+              "Core Scientific posts quarterly bitcoin production", "Samsung Galaxy S26 ships with a new GPU",
+              "Riot Games opens a data center for esports", "Helios solar probe data center archive",
+              "Marathon runners and GPU clusters"):
+        assert pc(t) == {}, (t, pc(t))
+    # A landlord alone is capacity news but never a neocloud expansion.
+    r = _c("TeraWulf adds 200 MW data center capacity for HPC hosting")
+    assert "datacenter" in r["topics"] and "neocloud_expansion" not in r["topics"], r["topics"]
+    assert "neocloud_expansion" in _c("Hut 8's Highrise AI adds a GPU data center in Texas")["topics"]
+
     r = _c("CoreWeave adds 50MW data center in Texas, expands to Norway")
     assert {g["group"] for g in r["entities"]["regions"]} == {"US", "Europe"}
     assert {"capacity", "datacenter", "region_launch", "neocloud_expansion"} <= set(r["topics"]), r["topics"]

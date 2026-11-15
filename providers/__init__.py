@@ -18,6 +18,7 @@ from providers.atlanticnet import AtlanticNetProvider
 from providers.aws import AwsProvider
 from providers.azure import AzureProvider
 from providers.baseten import BasetenProvider
+from providers.bitdeer import BitdeerProvider
 from providers.beam import BeamProvider
 from providers.civo import CivoProvider
 from providers.clore import CloreProvider
@@ -135,6 +136,7 @@ PROVIDERS: dict[str, type[Provider]] = {
         HuggingFaceProvider,
         GcoreProvider,
         FireworksProvider,
+        BitdeerProvider,
         IonosProvider,
         HetznerProvider,
         YottaProvider,
@@ -202,6 +204,7 @@ __all__ = [
     "HuggingFaceProvider",
     "GcoreProvider",
     "FireworksProvider",
+    "BitdeerProvider",
     "IonosProvider",
     "HetznerProvider",
     "YottaProvider",

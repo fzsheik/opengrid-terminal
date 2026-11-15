@@ -596,6 +596,15 @@ _add("NVIDIA B300 288GB SXM", "B300 288 GB GPU")
 _add("NVIDIA GB300 288GB", "GB300 288 GB GPU")
 _add(None, "H100 80 GB GPU")
 
+# Bitdeer AI (providers/bitdeer.py): the feed's model + spec. B200, B300, GB200 and GB300 exist only as SXM boards /
+# superchips, and a bare H200 is the SXM part. "NVIDIA H100 80GB VRAM" stays unmapped (SXM or PCIe not stated).
+_add("NVIDIA H200 141GB SXM5", "NVIDIA H200 141GB VRAM")
+_add("NVIDIA B200 180GB SXM", "NVIDIA B200 180GB VRAM")
+_add("NVIDIA B300 288GB SXM", "NVIDIA B300 288GB VRAM")
+_add("NVIDIA GB200 186GB", "NVIDIA GB200 192GB VRAM")
+_add("NVIDIA GB300 288GB", "NVIDIA GB300 288GB VRAM")
+_add(None, "NVIDIA H100 80GB VRAM")
+
 # IONOS Cloud (providers/ionos.py): GPU Model's vendor + GPU Type. NVIDIA's only PCIe H200 is the H200 NVL card
 # (see the Oracle note above); IONOS's docs describe PCIe passthrough of it.
 _add("NVIDIA H200 143GB NVL", "NVIDIA H200 PCIe")

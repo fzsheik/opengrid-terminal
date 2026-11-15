@@ -1696,6 +1696,40 @@ GCORE = ProviderMapping(
 )
 
 
+BITDEER = ProviderMapping(
+    provider="bitdeer",
+    display_name="Bitdeer AI (a Bitcoin miner's GPU cloud; INTERNAL: terms bar using website data without permission)",
+    endpoints={"GET www.bitdeer.ai/api/gpu-pricing": "the keyless feed behind the pricing page; one row per GPU model "
+                                                     "with a price per card count, on demand and 1 / 3-year committed"},
+    fields=_fields(
+        "bitdeer",
+        sku=(DERIVED, '"{model}:{cards}x:{machineType}"', 'e.g. "NVIDIA H100:1x:vm"'),
+        listing_id=(DERIVED, "model slug + cards + machineType", 'e.g. "nvidia-h100:1x:vm"'),
+        raw_gpu_name=(DERIVED, "model + spec", 'e.g. "NVIDIA B200 180GB VRAM"'),
+        gpu_count=(RAW, "details[].cards", "1 to 8 on VMs; 4 to 72 on GB200 / GB300 bare metal"),
+        region=(ABSENT, "-", "the feed names no region"),
+        country=(ABSENT, "-"),
+        price_per_gpu_hour=(DERIVED, "= details[].price / cards"),
+        price_per_instance_hour=(RAW, "details[].price", "the whole instance of that card count, USD per hour"),
+        currency=(CONSTANT, '"USD"', "the page prints $"),
+        provider_tier=(DERIVED, 'machineType: "vm", or "baremetal" for "bm"'),
+        available=(ABSENT, "-", "no stock signal in the feed"),
+        capacity=(ABSENT, "-"),
+        capacity_unit=(ABSENT, "-"),
+        vcpu=(ABSENT, "-"),
+        ram_gb=(ABSENT, "-"),
+        storage_gb=(ABSENT, "-"),
+    ),
+    quirks=[
+        "INTERNAL ONLY: its Terms of Service (5.8) bar using the website's information or data without written "
+        "authorization; registered in provider_meta.INTERNAL_SOURCES.",
+        "year1 / year3 are committed prices per instance-hour and not linear in the card count (B300 x2 is 16.74, "
+        "not 2 x 7.65). They are never listings: providers.bitdeer.reserved_prices feeds reserved.py's internal rows.",
+        "GB200 / GB300 rows start at 4 cards (one NVL72 node) and go to 72 (a rack).",
+        '"NVIDIA H100 80GB VRAM" stays unmapped (SXM or PCIe not stated). The CPU row ("General Compute") is dropped.',
+    ],
+)
+
 FIREWORKS = ProviderMapping(
     provider="fireworks",
     display_name="Fireworks AI (on-demand deployments; INTERNAL: terms forbid republishing)",
@@ -2279,6 +2313,7 @@ PROVIDER_MAPPINGS: dict[str, ProviderMapping] = {
         HUGGINGFACE,
         GCORE,
         FIREWORKS,
+        BITDEER,
         IONOS,
         HETZNER,
         YOTTA,

@@ -5,6 +5,48 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-15 — Bitdeer AI (internal), Bitcoin miners in the news classifier, and marketplace operators (internal)
+
+### What shipped
+- **Bitdeer AI price provider** (`providers/bitdeer.py`; docs/MINER_PROVIDERS.md items A and B): the keyless feed
+  behind its pricing page, read hourly. One on-demand listing per GPU model and card count (H100, H200, B200, B300
+  VMs of 1 to 8 cards; GB200 and GB300 bare metal of 4 to 72): 40 listings. A reshaped feed fails the poll.
+- **Bitdeer is internal only.** Its Terms of Service (bitdeer.ai/en/terms, read 2026-11-15) bar using the website's
+  information or data without written authorization (5.8) and republishing any part of the Services (5.10 f). They
+  are silent on automated access and robots.txt allows the feed. So it is registered in
+  `provider_meta.INTERNAL_SOURCES` (every source): used for routing and recommendations, never on a public page,
+  index, fixing, statistic or export.
+- **Bitdeer committed prices** (1 and 3 years, read per row: they are not linear in the card count) go through
+  `reserved.py`'s new internal readers and the admin read `GET /v1/ops/reserved/internal`. The public
+  `/v1/reserved` model builds public readers only and cannot contain them.
+- **News classifier** (item D): Bitdeer, Hut 8 (Highrise AI), HIVE Digital (BUZZ HPC) and Bit Digital (WhiteFiber)
+  as neoclouds; Core Scientific, Galaxy Digital (Helios only with Galaxy in the same line), Cipher Mining, TeraWulf,
+  CleanSpark, Riot Platforms and MARA Holdings as a new news-only class `datacenter` (landlords that rent no GPUs).
+  A miner's company name counts only in an item with compute context, so mining-only news stays out.
+- **Marketplace operators** (`operators.py`, admin reads `/v1/ops/operators` and `/v1/ops/operators/overlap`;
+  methodology/internal/operators.md): the stored raw copies now keep Lium's `provider_key` and `miner_hotkey` and,
+  in Vast's census, `host_id`, `cpu_name` and `cpu_cores`. From them: operators per marketplace with supply
+  concentration (top share, top five, HHI), and Lium machines whose hardware fingerprint matches a Vast machine,
+  with the price each side asks. Internal: no listing or capacity row carries a key.
+
+### Not shipped
+- **Bitdeer routing** (item C): needs a Bitdeer account and API key from the founders.
+- **Bitdeer region and stock**: the feed has neither, so listings are region-less with unknown availability.
+- **IPs, hostnames, coordinates and Clore owner ids** are still not kept, on purpose.
+- **Lium's per-provider endpoints** (`/provider-stats/{hotkey}`, `/machines`) are still not read.
+- **Operator history tables**: matches are computed on read from the newest stored copies; nothing is written.
+
+### Left
+- Ask Bitdeer for written permission to show its prices; until then it stays internal.
+- Operator keys exist only from 2026-11-15 on; older snapshots cannot be backfilled.
+- Matches are a candidate list, not proof: about 40% of machines share their fingerprint within one marketplace.
+
+### Next
+- Detect a machine leaving one marketplace and appearing on another (needs a few weeks of stored keys).
+- Re-check IREN, Hut 8, HIVE and WhiteFiber each quarter for public prices (item E).
+
+---
+
 ## 2026-11-15 — Lium paid prices from its public Grafana: rental starts per tier, hourly spend and fleet (internal)
 
 ### What shipped

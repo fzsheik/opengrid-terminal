@@ -157,6 +157,9 @@ _ALL = [
     ProviderMeta("fireworks", "Fireworks AI", "general_cloud", "public_page", "fireworks.ai", "https://fireworks.ai",
                  "on-demand (dedicated) inference deployments, USD per GPU-hour; INTERNAL: its terms forbid "
                  "republishing the Service's content"),
+    ProviderMeta("bitdeer", "Bitdeer AI", "neocloud", "public_api", "www.bitdeer.ai", "https://www.bitdeer.ai",
+                 "Bitcoin miner's GPU cloud: on-demand H100 to GB300 per card count, USD per hour; INTERNAL: its "
+                 "terms bar using the website's data without written authorization"),
     ProviderMeta("ionos", "IONOS Cloud", "general_cloud", "public_page", "docs.ionos.com", "https://cloud.ionos.com",
                  "Cloud GPU VM (H200 PCIe, 1/2/4/8 GPUs) from IONOS CLOUD Inc.'s published USD price list; "
                  "Frankfurt and Worcester"),
@@ -237,6 +240,15 @@ INTERNAL_SOURCES: tuple[InternalSource, ...] = (
         "forbid copying or distributing any part of the Service. Its on-demand deployment prices may be read at a "
         "human request rate (hourly) and used, never republished, so the whole provider is internal.",
         "routing, recommendations and job placement (internal listings from fireworks.ai/pricing)"),
+    InternalSource(
+        "bitdeer", ALL_SOURCES, ("listings", "capacity", "signals"),
+        "Bitdeer AI's Terms of Service (bitdeer.ai/en/terms, read 2026-11-15) say the User shall not 'use the "
+        "information/data on the Website without prior written authorization from Bitdeer' (5.8) and shall not "
+        "'copy, reproduce, distribute, republish' any part of the Services (5.10 f). They are silent on automated "
+        "access and robots.txt allows the feed, so its prices (on-demand and 1 / 3-year committed) are read hourly "
+        "and used, never republished, until Bitdeer gives written permission.",
+        "routing, recommendations and job placement (internal listings from bitdeer.ai/api/gpu-pricing); committed "
+        "prices are an admin read only (/v1/ops/reserved/internal)"),
     # Lium market-data feeds (lium_data/; methodology/lium-data.md). Lium's listings and capacity stay public.
     *(InternalSource(
         "lium", path, ("signals",),
