@@ -261,6 +261,16 @@ def test_phyntec_former_shadeform_name_evergreen():
     assert not _src("crusoe", shadeform.URL).parse(body, AT)[0][0].listing_id.startswith("RTX")
 
 
+def test_koyeb_nov_2024_cards_print_their_vram():
+    ls, used = _src("koyeb", "www.koyeb.com/pricing").parse(_page("koyeb_pricing_2024-11_vram-cards.html").encode(), AT)
+    assert used == "backfill.parsers.koyeb.koyeb_vram_cards"
+    by = {l.listing_id: l for l in ls}
+    assert len(ls) == 6 and by["gpu-nvidia-rtx-a6000"].price_per_gpu_hour == D("0.73") and by["gpu-nvidia-rtx-a6000"].vcpu == 10
+    assert by["gpu-nvidia-l40s"].raw_gpu_name == "gpu-nvidia-l40s 48GB" and by["gpu-nvidia-l40s"].canonical_gpu_name == "NVIDIA L40S 48GB"
+    assert all(int(l.raw_gpu_name.split(" ")[1][:-2]) == koyeb.LIVE_VRAM[l.listing_id[11:]] for l in ls), "printed = live VRAM"
+    _raises(koyeb.koyeb_vram_cards, "<p>H100 $3.30 /hr</p>", AT, contains="no '<GPU> VRAM")
+
+
 def test_koyeb_catalogue_capture_agrees_with_the_page_mapping():
     body = (FIX / "koyeb_catalog-instances_2025-03_api.json").read_bytes()
     ls, used = _src("koyeb", "app.koyeb.com/v1/catalog/instances?limit=100").parse(body, AT)
@@ -295,7 +305,7 @@ def test_simplepod_vm_market_whole_book_only():
     _raises(docker.parse, b'{"hydra:member": []}', AT, contains="not a list")
 
 
-TESTS = (test_simplepod_vm_market_whole_book_only, test_koyeb_catalogue_capture_agrees_with_the_page_mapping, test_e2e_us_price_list_plan_rows, test_phyntec_former_shadeform_name_evergreen, test_vessl_gpu_tables_both_2026_layouts, test_vessl_refuses_garbage,
+TESTS = (test_koyeb_nov_2024_cards_print_their_vram, test_simplepod_vm_market_whole_book_only, test_koyeb_catalogue_capture_agrees_with_the_page_mapping, test_e2e_us_price_list_plan_rows, test_phyntec_former_shadeform_name_evergreen, test_vessl_gpu_tables_both_2026_layouts, test_vessl_refuses_garbage,
          test_arkane_three_older_designs, test_arkane_refuses_garbage, test_e2e_feed_capture_through_the_live_normalizer, test_e2e_page_tables_match_the_feed_ids,
          test_e2e_inr_pages_and_garbage_are_refused, test_atlantic_2025_table_through_the_live_normalizer,
          test_atlantic_refuses_what_it_cannot_read, test_yotta_hourly_tab_converted_like_live,

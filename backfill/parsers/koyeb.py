@@ -14,7 +14,14 @@ unmapped. Cards the live catalogue marks RESTRICTED (sales-gated, e.g. 8x H100) 
 printed their price, so the archived row is kept under the same id.
 
 Until 2026-11 SOURCES was empty (production had no archived Koyeb row for that reason alone): names without VRAM
-could not be mapped. 31 captures (Nov 2025 - Oct 2026); e.g. "H100" $3.30/hr in Nov 2025 vs $2.50/hr in Oct 2026.
+could not be mapped. koyeb_cards reads every capture from Dec 2024 to Oct 2026; e.g. "H100" $3.30/hr until late 2025
+vs $2.50/hr in Oct 2026.
+
+Nov 2024 (koyeb_vram_cards): one line per GPU, "RTX-A6000 VRAM 48 GB ( 10 vCPUs / 100 GB RAM ) $0.73 /hr", one GPU
+each; the page states the VRAM itself, which is used (it agrees with LIVE_VRAM). Earlier captures print no GPU price.
+
+koyeb_catalog: the one capture of the live endpoint itself (Mar 2025), read by the live normalizer; it states the same
+per-type VRAM and the same prices as the page that month.
 """
 from __future__ import annotations
 
@@ -73,6 +80,29 @@ def koyeb_cards(page: str, at: datetime) -> list[ComputeListing]:
     return out
 
 
+_VRAM_CARD = re.compile(r"(?P<name>[A-Z][A-Za-z0-9-]*) VRAM (?P<vram>\d+) GB \( (?P<vcpu>\d+) vCPUs / (?P<ram>\d+) GB RAM \)"
+                        r" \$(?P<p>\d+(?:\.\d+)?) /hr")
+
+
+def koyeb_vram_cards(page: str, at: datetime) -> list[ComputeListing]:
+    t = text(re.sub(r"<(script|style)\b.*?</\1>", " ", page, flags=re.S))
+    out = []
+    for m in _VRAM_CARD.finditer(t):
+        gpu, vram, price = slug(m["name"]), int(m["vram"]), dec(m["p"])
+        if price is None or price <= 0:
+            continue
+        raw = f"gpu-nvidia-{gpu} {vram}GB"
+        out.append(ComputeListing(
+            provider="koyeb", sku=f"gpu-nvidia-{gpu}", listing_id=f"gpu-nvidia-{gpu}", raw_gpu_name=raw,
+            canonical_gpu_name=canonical.canonical_gpu_name(raw), gpu_count=1, region=None, country=None,
+            price_per_gpu_hour=price, price_per_instance_hour=price, currency="USD", market_type="on_demand",
+            provider_tier="serverless", interruptible=False, available=None, capacity=None, capacity_unit=None,
+            vcpu=int(m["vcpu"]), ram_gb=float(m["ram"]), storage_gb=None, observed_at=at))
+    if not out:
+        raise ValueError("koyeb(archive): no '<GPU> VRAM <N> GB ( .. ) $x /hr' line")
+    return out
+
+
 def koyeb_catalog(body: bytes, at: datetime) -> list[ComputeListing]:
     """A capture of the live poller's own endpoint (app.koyeb.com/v1/catalog/instances?limit=100; one, Mar 2025), read
     exactly as live: the GPU instances kept as fetch() keeps them, then KoyebProvider.normalize."""
@@ -85,6 +115,6 @@ def koyeb_catalog(body: bytes, at: datetime) -> list[ComputeListing]:
                                                                     ok=True)]})
 
 
-SOURCES = [own_page("koyeb", "www.koyeb.com/pricing", koyeb_cards),
+SOURCES = [own_page("koyeb", "www.koyeb.com/pricing", koyeb_cards, koyeb_vram_cards),
            Source("koyeb", "app.koyeb.com/v1/catalog/instances?limit=100",
                   (("backfill.parsers.koyeb.koyeb_catalog (KoyebProvider.normalize, live parser)", koyeb_catalog),))]
