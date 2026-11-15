@@ -1,0 +1,249 @@
+{
+ "_source": "https://web.archive.org/web/20250315051535/https://app.koyeb.com/v1/catalog/instances?limit=100 (trimmed: 5 of the GPU types and 1 CPU type; count/limit kept consistent with the trimmed list)",
+ "instances": [
+  {
+   "id": "free",
+   "description": "a special instance that does not bill",
+   "vcpu": 1,
+   "memory": "512MB",
+   "disk": "2000MB",
+   "price_per_second": "0.0",
+   "price_hourly": "0.0",
+   "price_monthly": "0.0",
+   "regions": [
+    "fra",
+    "was"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [],
+   "vcpu_shares": 0.1,
+   "display_name": "Free",
+   "aliases": [],
+   "type": "eco",
+   "gpu": null,
+   "service_types": [
+    "web"
+   ],
+   "volumes_enabled": false
+  },
+  {
+   "id": "4-gpu-tenstorrent-n300s",
+   "description": "4x Tenstorrent Wormhole\u2122 n300s",
+   "vcpu": 16,
+   "memory": "256GB",
+   "disk": "320GB",
+   "price_per_second": "0.0",
+   "price_hourly": "0.0",
+   "price_monthly": "0.0",
+   "regions": [
+    "rdu",
+    "was",
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale"
+   ],
+   "vcpu_shares": 16,
+   "display_name": "4x N300s",
+   "aliases": [
+    "4-n300s",
+    "4-tenstorrent-n300s",
+    "4-gpu-tenstorrent-n300s"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 1,
+    "brand": "tenstorrent",
+    "memory": "96GB",
+    "name": "4-gpu-tenstorrent-n300s"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true
+  },
+  {
+   "id": "gpu-nvidia-l40s",
+   "description": "Nvidia L40S",
+   "vcpu": 15,
+   "memory": "64GB",
+   "disk": "160GB",
+   "price_per_second": "0.000430",
+   "price_hourly": "1.55",
+   "price_monthly": "1153.00",
+   "regions": [
+    "par",
+    "eu"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale"
+   ],
+   "vcpu_shares": 15,
+   "display_name": "L40S",
+   "aliases": [
+    "l40s",
+    "nvidia-l40s",
+    "gpu-nvidia-l40s"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 1,
+    "brand": "nvidia",
+    "memory": "48GB",
+    "name": "gpu-nvidia-l40s"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true
+  },
+  {
+   "id": "gpu-nvidia-a100-sxm",
+   "description": "Nvidia A100 SXM",
+   "vcpu": 15,
+   "memory": "180GB",
+   "disk": "320GB",
+   "price_per_second": "0.000597",
+   "price_hourly": "2.15",
+   "price_monthly": "1599.60",
+   "regions": [
+    "dsm",
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale"
+   ],
+   "vcpu_shares": 15,
+   "display_name": "A100 SXM",
+   "aliases": [
+    "a100-sxm",
+    "nvidia-a100-sxm",
+    "gpu-nvidia-a100-sxm"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 1,
+    "brand": "nvidia",
+    "memory": "80GB",
+    "name": "gpu-nvidia-a100-sxm"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true
+  },
+  {
+   "id": "gpu-nvidia-h100",
+   "description": "Nvidia H100",
+   "vcpu": 15,
+   "memory": "180GB",
+   "disk": "320GB",
+   "price_per_second": "0.000916",
+   "price_hourly": "3.30",
+   "price_monthly": "2454.00",
+   "regions": [
+    "dal",
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale"
+   ],
+   "vcpu_shares": 15,
+   "display_name": "H100",
+   "aliases": [
+    "h100",
+    "nvidia-h100",
+    "gpu-nvidia-h100"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 1,
+    "brand": "nvidia",
+    "memory": "80GB",
+    "name": "gpu-nvidia-h100"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true
+  },
+  {
+   "id": "2-gpu-nvidia-h100",
+   "description": "2x Nvidia H100",
+   "vcpu": 30,
+   "memory": "360GB",
+   "disk": "640GB",
+   "price_per_second": "0.001832",
+   "price_hourly": "6.60",
+   "price_monthly": "4910.40",
+   "regions": [
+    "dal",
+    "na"
+   ],
+   "status": "AVAILABLE",
+   "require_plan": [
+    "starter",
+    "startup",
+    "business",
+    "enterprise",
+    "internal",
+    "pro",
+    "scale"
+   ],
+   "vcpu_shares": 30,
+   "display_name": "2x H100",
+   "aliases": [
+    "2-h100",
+    "2-nvidia-h100",
+    "2-gpu-nvidia-h100"
+   ],
+   "type": "gpu",
+   "gpu": {
+    "count": 2,
+    "brand": "nvidia",
+    "memory": "160GB",
+    "name": "gpu-nvidia-h100"
+   },
+   "service_types": [
+    "web",
+    "worker"
+   ],
+   "volumes_enabled": true
+  }
+ ],
+ "count": 6,
+ "limit": 100,
+ "offset": 0
+}

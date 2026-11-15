@@ -135,6 +135,12 @@ can miss short price moves entirely. Stock is never inferred from an archived pa
   so the series join once it lands. Resellers keep their live tier (`resold:<vendor>`).
 - A row first stored unmapped (`gpu = null`) takes its canonical GPU on a later re-import once canonical.py knows
   the name; a mapped row is never changed.
+- **Currencies as live.** A page priced in another currency is read only where the live poller converts it: Yotta's
+  INR at the ECB cross rate in force at the capture (`fx.usd_rate`, fail closed: a capture with no ECB pair in the
+  database gives no row). E2E's INR-only pages (2019 - Jun 2025) give none: live reads only E2E's USD list.
+- **Former names.** Shadeform listed Phyntec's machines under cloud `evergreen` (its former name) in every archived
+  capture; they are read as Phyntec's. Koyeb's page prints no VRAM; each card takes its instance type's live id and
+  the live catalogue's per-type VRAM, so it joins the live series.
 - The same sanity bound applies as for live data: a price per GPU-hour must be positive and at most $200.
 - Imports are idempotent: `(source, source_url, provider, listing_id)` is unique (one archived document, e.g. a
   Shadeform catalogue, can list several providers).

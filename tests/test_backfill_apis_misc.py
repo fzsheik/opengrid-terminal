@@ -160,14 +160,16 @@ def test_hyperstack_cards():
     _raises(hyperstack.hyperstack_cards, "<div></div>", AT, contains="no on-demand")
 
 
-def test_koyeb_cards_unmapped_and_unregistered():
+def test_koyeb_cards_take_the_live_ids_and_names():
     ls = koyeb.koyeb_cards((FIX / "koyeb_2025-11.html").read_text(), AT)
-    by = {l.sku: l for l in ls}
-    assert len(ls) == 16 and by["H100"].price_per_gpu_hour == D("3.30") and by["4x H100"].gpu_count == 4
-    assert by["8x A100 SXM"].price_per_instance_hour == D("17.2") and by["8x A100 SXM"].vcpu == 120
-    # the page prints no VRAM; bare names would map to the wrong variant ("A100 SXM" -> 40GB), so none is mapped
-    assert all(l.canonical_gpu_name is None for l in ls)
-    assert not koyeb.SOURCES and koyeb.PAGE_SOURCE.provider == "koyeb"
+    by = {l.listing_id: l for l in ls}
+    assert len(ls) == 16 and by["gpu-nvidia-h100"].price_per_gpu_hour == D("3.30") and by["4-gpu-nvidia-h100"].gpu_count == 4
+    assert by["8-gpu-nvidia-a100-sxm"].price_per_instance_hour == D("17.2") and by["8-gpu-nvidia-a100-sxm"].vcpu == 120
+    # the page prints no VRAM: the live catalogue's per-type VRAM gives the live raw name, so the variant is right
+    assert by["gpu-nvidia-a100-sxm"].raw_gpu_name == "gpu-nvidia-a100-sxm 80GB"
+    assert by["gpu-nvidia-a100-sxm"].canonical_gpu_name == "NVIDIA A100 80GB SXM4"
+    assert by["gpu-nvidia-h100"].canonical_gpu_name is None, "live leaves 'gpu-nvidia-h100 80GB' unmapped too"
+    assert koyeb.SOURCES[0].url == "www.koyeb.com/pricing"
 
 
 def test_verda_instance_tables():
@@ -242,7 +244,7 @@ def test_vultr_cloud_gpu_only_whole_gpus():
 def test_registered():
     provs = {s.provider for s in sources()}
     assert {"denvr", "crusoe", "lium", "azure", "linode", "latitude", "ovhcloud", "hyperstack", "verda", "voltagepark", "digitalocean", "salad", "vultr"} <= provs
-    assert not any(s.url in ("www.latitude.sh/pricing", "www.koyeb.com/pricing") for s in sources()), "kept, not registered"
+    assert not any(s.url == "www.latitude.sh/pricing" for s in sources()), "kept, not registered"
 
 
 if __name__ == "__main__":
@@ -251,7 +253,7 @@ if __name__ == "__main__":
               test_azure_first_page_through_the_live_normalizer, test_linode_types_through_the_live_normalizer,
               test_shadeform_catalogue_one_source_per_cloud,
               test_ovhcloud_price_tables, test_hyperstack_cards,
-              test_koyeb_cards_unmapped_and_unregistered, test_verda_instance_tables,
+              test_koyeb_cards_take_the_live_ids_and_names, test_verda_instance_tables,
               test_voltagepark_cards, test_digitalocean_cards_skip_reserved,
               test_salad_designs, test_vultr_cloud_gpu_only_whole_gpus, test_registered):
         t()
