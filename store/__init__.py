@@ -23,3 +23,4 @@ from store import power  # noqa: F401  (0035_power_markets: wholesale power seri
 from store import batches  # noqa: F401  (0036_batches: batch fan-out of ordinary jobs)
 from store import reports  # noqa: F401  (0039_monthly_reports: the internal monthly market report)
 from store import lium  # noqa: F401  (0040_lium_data: Lium partner trades, public feeds, published throughput)
+from store import operators  # noqa: F401  (0042_operator_daily: marketplace operators per day, internal)
