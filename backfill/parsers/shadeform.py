@@ -23,13 +23,19 @@ from providers.shadeform import ENDPOINT, ShadeformCloud
 URL = "api.shadeform.ai/v1/instances/types"
 
 
+# Clouds whose instance types Shadeform listed under an earlier name: Phyntec (formerly Evergreen Compute) was
+# "evergreen" in every archived capture (Nov 2025 - Jan 2026): the same RTX4090x8 / RTX5090x8 machines in Casper, WY.
+FORMER_NAMES = {"phyntec": ("evergreen",)}
+
+
 def _parser(cls: type[ShadeformCloud]):
     def parse(body: bytes, at: datetime):
         d = json.loads(body)
         types = d.get("instance_types") if isinstance(d, dict) else None
         if not isinstance(types, list):
             raise ValueError("shadeform(archive): response has no instance_types list")
-        payload = {"instance_types": [t for t in types if t.get("cloud") == cls.cloud]}
+        names = (cls.cloud, *FORMER_NAMES.get(cls.cloud, ()))
+        payload = {"instance_types": [dict(t, cloud=cls.cloud) for t in types if t.get("cloud") in names]}
         return cls.normalize({ENDPOINT: [SimpleNamespace(endpoint=ENDPOINT, payload=payload, fetched_at=at, ok=True)]})
     return parse
 
