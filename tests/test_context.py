@@ -139,7 +139,7 @@ def test_geo():
 def test_never_imported_by_statistics():
     pat = re.compile(r"^\s*(import context\b|from context\b)", re.M)
     users = sorted(str(p.relative_to(ROOT)) for p in ROOT.rglob("*.py")
-                   if ".venv" not in p.parts and "tests" not in p.parts and p.parts[len(ROOT.parts)] != "context"
+                   if not p.parts[len(ROOT.parts)].startswith(".") and "tests" not in p.parts and p.parts[len(ROOT.parts)] != "context"
                    and pat.search(p.read_text(encoding="utf-8", errors="ignore")))
     # power/geo.py reads context/geo.py's documented region -> state tables (data, not context series).
     assert users == ["api/context.py", "power/geo.py"], users

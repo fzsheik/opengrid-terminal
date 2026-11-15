@@ -17,6 +17,11 @@ A fingerprint is not an identity. Two tiers, both stated with every match:
 `fingerprint_unique` says how many machines of each marketplace have a strong fingerprint no other machine there
 shares; a match on a common build is weak evidence, and the read says so rather than hiding it.
 
+The daily series (store/operators.py): snapshot_day() writes one row per marketplace and day, and one for the
+Lium x Vast matches, as the market stood at 12:00 UTC; `python -m operators backfill --since YYYY-MM-DD` rebuilds
+past days from the stored raw copies. Each row says what that day's stored data covered, because days read from
+different coverage are not comparable.
+
 Everything here is INTERNAL (methodology/internal/operators.md): operator keys identify a business or a person, and neither
 marketplace licenses them for republishing. Nothing is written; no listing, index, statistic or public read imports
 this module (tests/test_operators.py checks). Admin read: /v1/ops/operators (api/operators.py).
@@ -38,6 +43,8 @@ KIB_PER_GIB = 1024 * 1024
 # The keyed census runs every 1 to 12 hours.
 VAST_LISTING_WINDOW = timedelta(hours=3)
 VAST_CENSUS_WINDOW = timedelta(hours=26)
+# Lium's rentable list is read every 15 minutes; an as-of read ignores a copy older than this.
+LIUM_MAX_AGE = timedelta(hours=6)
 
 _GPU_NOISE = re.compile(r"\b(?:NVIDIA|GEFORCE|TESLA)\b|\s+")
 _CPU_NOISE = re.compile(r"\((?:R|TM)\)")
@@ -261,17 +268,18 @@ def overlap(a: list[dict], b: list[dict]) -> dict:
 
 # --------------------------------------------------------------------------- database read (no writes)
 
-def _newest_per_request(session, provider: str, endpoint: str, since: datetime, census: bool):
-    """ids of the newest ok snapshot per distinct request, without loading any payload."""
+def _newest_per_request(session, provider: str, endpoint: str, since: datetime, census: bool, until: datetime | None = None):
+    """ids of the newest ok snapshot per distinct request in [since, until], without loading any payload."""
     from sqlalchemy import select
 
     from tables import RawSnapshot
 
-    rows = session.execute(
-        select(RawSnapshot.id, RawSnapshot.request, RawSnapshot.fetched_at)
-        .where(RawSnapshot.provider == provider, RawSnapshot.endpoint == endpoint, RawSnapshot.ok.is_(True),
-               RawSnapshot.fetched_at >= since)
-        .order_by(RawSnapshot.fetched_at.desc(), RawSnapshot.id.desc())).all()
+    where = [RawSnapshot.provider == provider, RawSnapshot.endpoint == endpoint, RawSnapshot.ok.is_(True),
+             RawSnapshot.fetched_at >= since]
+    if until is not None:
+        where.append(RawSnapshot.fetched_at <= until)
+    rows = session.execute(select(RawSnapshot.id, RawSnapshot.request, RawSnapshot.fetched_at).where(*where)
+                           .order_by(RawSnapshot.fetched_at.desc(), RawSnapshot.id.desc())).all()
     picked: dict = {}
     for id_, request, at in rows:
         req = request if isinstance(request, dict) else {}
@@ -282,27 +290,30 @@ def _newest_per_request(session, provider: str, endpoint: str, since: datetime, 
     return picked
 
 
-def _listing_rounds(session, provider: str, endpoint: str, since: datetime):
-    """(fetched_at, payload) of every ok price-search snapshot since `since`, oldest first; each distinct body once."""
+def _listing_rounds(session, provider: str, endpoint: str, since: datetime, until: datetime | None = None):
+    """(fetched_at, payload, request) of every ok price-search snapshot in [since, until], oldest first; each
+    distinct body once."""
     from sqlalchemy import select
 
     from tables import RawSnapshot
 
-    rows = session.execute(
-        select(RawSnapshot.id, RawSnapshot.request, RawSnapshot.fetched_at, RawSnapshot.sha256)
-        .where(RawSnapshot.provider == provider, RawSnapshot.endpoint == endpoint, RawSnapshot.ok.is_(True),
-               RawSnapshot.fetched_at >= since)
-        .order_by(RawSnapshot.fetched_at.desc(), RawSnapshot.id.desc())).all()
+    where = [RawSnapshot.provider == provider, RawSnapshot.endpoint == endpoint, RawSnapshot.ok.is_(True),
+             RawSnapshot.fetched_at >= since]
+    if until is not None:
+        where.append(RawSnapshot.fetched_at <= until)
+    rows = session.execute(select(RawSnapshot.id, RawSnapshot.request, RawSnapshot.fetched_at, RawSnapshot.sha256)
+                           .where(*where).order_by(RawSnapshot.fetched_at.desc(), RawSnapshot.id.desc())).all()
     keep, hashes = [], set()
     for id_, request, at, sha in rows:  # newest first: an unchanged body is read once, at its newest time
-        if isinstance(request, dict) and request.get("census"):
+        req = request if isinstance(request, dict) else {}
+        if req.get("census"):
             continue
         if sha is not None and sha in hashes:
             continue
         hashes.add(sha)
-        keep.append((id_, at))
-    bodies = _payloads(session, [i for i, _ in keep])
-    return [(at, bodies.get(i)) for i, at in reversed(keep)]
+        keep.append((id_, at, req))
+    bodies = _payloads(session, [i for i, _, _ in keep])
+    return [(at, bodies.get(i), req) for i, at, req in reversed(keep)]
 
 
 def _payloads(session, ids: list[int]) -> dict:
@@ -317,32 +328,53 @@ def _payloads(session, ids: list[int]) -> dict:
     return out
 
 
+# What a day's stored data covered (operator_daily.coverage). Days with different coverage are not comparable:
+# a marketplace read from the 64 cheapest offers per model looks smaller and more concentrated than it is.
+COVERAGE_VAST_CAPPED = "cheapest_64_per_model"            # before 2026-11-15
+COVERAGE_VAST_BOOK = "whole_book"
+COVERAGE_VAST_FLEET = "whole_book_and_census"             # the keyed census carries host ids: the whole fleet
+COVERAGE_LIUM_FREE = "machines_with_a_free_gpu"
+COVERAGE_LIUM_FLEET = "whole_fleet"                       # with the per-provider machine lists
+COVERAGE_NO_KEYS = "no_operator_keys"                     # stored copies of that day carry no operator key
+
+
 def load(now: datetime | None = None) -> dict:
-    """Read the newest stored Lium executors and Vast price-search / census payloads; return machines per
-    marketplace and when each was read. Read-only."""
+    """Read the stored Lium executors, Lium per-provider machine lists and Vast price-search / census payloads as
+    they stood at `now` (default: the present); return machines per marketplace, when each was read and what the
+    data covered. Read-only. A past `now` rebuilds that moment from the stored raw copies."""
     import normalize
+    from lium_data import reads as lium_reads
     from providers import lium, vast
 
+    present = now is None
     now = now or datetime.now(timezone.utc)
     with normalize.SessionLocal() as s:
-        raw = normalize._latest_raw(s, "lium")
+        raw = normalize._latest_raw(s, "lium", None if present else now)
         ex = [r for ep, rows in raw.items() if ep == lium.ENDPOINT for r in rows]
         lium_at = ex[0].fetched_at if ex else None
+        if lium_at is not None and now - lium_at > LIUM_MAX_AGE:
+            ex, lium_at = [], None     # a copy that old says nothing about this moment
         lm = lium_machines(ex[0].payload) if ex else []
         listed = len(lm)
-        rounds = _listing_rounds(s, "vast", vast.ENDPOINT, now - VAST_LISTING_WINDOW)
-        census = _newest_per_request(s, "vast", vast.ENDPOINT, now - VAST_CENSUS_WINDOW, census=True)
+        rounds = _listing_rounds(s, "vast", vast.ENDPOINT, now - VAST_LISTING_WINDOW, now)
+        census = _newest_per_request(s, "vast", vast.ENDPOINT, now - VAST_CENSUS_WINDOW, census=True, until=now)
         bodies = _payloads(s, [v[0] for v in census.values()])
-    from lium_data import reads as lium_reads
-
-    lm = merge_lium(lm, [m for hk, body in lium_reads.provider_machines() for m in lium_provider_machines(hk, body)])
-    vm = vast_machines([payload for _, payload in rounds],
-                       [(req.get("gpu_name"), req.get("rentable"), bodies.get(i)) for i, req, _ in census.values()])
+    lm = merge_lium(lm, [m for hk, body in lium_reads.provider_machines(as_of=None if present else now)
+                         for m in lium_provider_machines(hk, body)])
+    census_rows = [(req.get("gpu_name"), req.get("rentable"), bodies.get(i)) for i, req, _ in census.values()]
+    vm = vast_machines([payload for _, payload, _ in rounds], census_rows)
+    whole_book = any(req.get("book") == "full" for _, _, req in rounds)
+    census_hosts = any(isinstance(o, dict) and o.get("host_id") is not None
+                       for _, _, body in census_rows for o in (body if isinstance(body, list) else [])[:1])
+    vast_cov = (COVERAGE_VAST_FLEET if whole_book and census_hosts else COVERAGE_VAST_BOOK if whole_book
+                else COVERAGE_VAST_CAPPED)
+    lium_cov = COVERAGE_LIUM_FLEET if len(lm) > listed else COVERAGE_LIUM_FREE
     return {
         "machines": {"lium": lm, "vast": vm},
         "as_of": {"lium": lium_at,
-                  "vast": max((at for at, _ in rounds), default=None),
+                  "vast": max((at for at, _, _ in rounds), default=None),
                   "vast_census": max((at for _, _, at in census.values()), default=None)},
+        "coverage_key": {"lium": lium_cov, "vast": vast_cov},
         "coverage": {
             "lium": f"{listed} machines with a free GPU, plus {len(lm) - listed} more (fully rented ones) from the "
                     "per-provider machine lists read in the last 6 hours",
@@ -350,3 +382,161 @@ def load(now: datetime | None = None) -> dict:
                     "of the keyed census when it has run in the last 26 hours (census rows have no RAM or price, "
                     "so they match on the build tier only)"},
     }
+
+
+# --------------------------------------------------------------------------- the daily series
+
+DAY_HOUR_UTC = 12   # a day's row is the market as it stood at 12:00 UTC that day
+
+
+def day_moment(day) -> datetime:
+    return datetime(day.year, day.month, day.day, DAY_HOUR_UTC, tzinfo=timezone.utc)
+
+
+def snapshot_day(day, now: datetime | None = None) -> dict:
+    """Build `day`'s rows from the stored raw copies as they stood at 12:00 UTC that day and write them
+    (operator_daily, operator_overlap_daily), replacing the day's rows. A marketplace with no stored data at that
+    moment gets no row; a day whose moment has not come yet is skipped. Idempotent."""
+    import statistics
+
+    import normalize
+    from sqlalchemy import delete
+
+    from store.operators import OperatorDaily, OperatorOverlapDaily
+
+    now = now or datetime.now(timezone.utc)
+    moment = day_moment(day)
+    if moment > now:
+        return {"day": str(day), "skipped": "the day's 12:00 UTC has not come yet"}
+    model = load(moment)
+    rows, summaries = [], {}
+    for name in MARKETPLACES:
+        machines = model["machines"][name]
+        if not machines:
+            continue
+        s = operators(machines)
+        summaries[name] = s
+        as_of = max((t for k, t in model["as_of"].items() if k.startswith(name) and t is not None), default=moment)
+        coverage = model["coverage_key"][name] if s["identified_machines"] else COVERAGE_NO_KEYS
+        rows.append(OperatorDaily(
+            marketplace=name, day=day, as_of=as_of, machines=s["machines"],
+            identified_machines=s["identified_machines"], operators=s["operators"], gpus=s["gpus"],
+            top1_gpu_share=s["top1_gpu_share"], top5_gpu_share=s["top5_gpu_share"], hhi=s["hhi"], coverage=coverage,
+            computed_at=now))
+    overlap_row = None
+    a, b = model["machines"]["lium"], model["machines"]["vast"]
+    if a and b:
+        ov = overlap(a, b)
+        gaps = [m["price_gap_pct"] for m in ov["matches"] if m["tier"] == "strong" and m["price_gap_pct"] is not None]
+        comp_a = ov["fingerprint_unique"]["a"]["comparable_machines"]
+        comp_b = ov["fingerprint_unique"]["b"]["comparable_machines"]
+        overlap_row = OperatorOverlapDaily(
+            day=day, marketplace_a="lium", marketplace_b="vast", comparable_a=comp_a, comparable_b=comp_b,
+            strong_matches=ov["strong_matches"], build_matches=ov["build_matches"],
+            machines_a_matched=ov["machines_a_matched"], machines_b_matched=ov["machines_b_matched"],
+            operator_pairs=len(ov["operator_pairs"]),
+            median_strong_gap_pct=None if not gaps else round(statistics.median(gaps), 2),
+            # Without a CPU model on one side nothing can match: say so rather than store a zero that reads as "none".
+            note=None if comp_a and comp_b else "one side's stored copies carry no CPU model or RAM: not comparable",
+            computed_at=now)
+    with normalize.SessionLocal.begin() as s:
+        s.execute(delete(OperatorDaily).where(OperatorDaily.day == day))
+        s.execute(delete(OperatorOverlapDaily).where(OperatorOverlapDaily.day == day))
+        s.add_all(rows)
+        if overlap_row is not None:
+            s.add(overlap_row)
+    return {"day": str(day), "marketplaces": {n: {"machines": x["machines"], "operators": x["operators"]}
+                                              for n, x in summaries.items()},
+            "overlap": None if overlap_row is None else {"strong": overlap_row.strong_matches,
+                                                         "build": overlap_row.build_matches}}
+
+
+def run_daily(now: datetime | None = None) -> dict:
+    """The `operators_daily` job (hourly): write today's row once 12:00 UTC has passed, and yesterday's if a
+    restart skipped it. A day already written is left alone."""
+    import normalize
+    from sqlalchemy import select
+
+    from store.operators import OperatorDaily
+
+    now = now or datetime.now(timezone.utc)
+    today = now.date()
+    done = []
+    for day in (today - timedelta(days=1), today):
+        if day_moment(day) > now:
+            continue
+        with normalize.SessionLocal() as s:
+            have = s.execute(select(OperatorDaily.day).where(OperatorDaily.day == day).limit(1)).first()
+        if have is None:
+            done.append(snapshot_day(day, now))
+    return {"written": done}
+
+
+def backfill(since, until=None, now: datetime | None = None) -> list[dict]:
+    """Rebuild every day from `since` to `until` (default: today), oldest first, from the stored raw copies."""
+    now = now or datetime.now(timezone.utc)
+    until = until or now.date()
+    out, day = [], since
+    while day <= until:
+        out.append(snapshot_day(day, now))
+        day += timedelta(days=1)
+    return out
+
+
+def history(days: int = 90) -> dict:
+    """The stored daily series, newest first."""
+    import normalize
+    from sqlalchemy import select
+
+    from store.operators import OperatorDaily, OperatorOverlapDaily
+
+    since = datetime.now(timezone.utc).date() - timedelta(days=days)
+    with normalize.SessionLocal() as s:
+        daily = s.execute(select(OperatorDaily).where(OperatorDaily.day >= since)
+                          .order_by(OperatorDaily.day.desc(), OperatorDaily.marketplace)).scalars().all()
+        over = s.execute(select(OperatorOverlapDaily).where(OperatorOverlapDaily.day >= since)
+                         .order_by(OperatorOverlapDaily.day.desc())).scalars().all()
+    dcols = ("day", "marketplace", "machines", "identified_machines", "operators", "gpus", "top1_gpu_share",
+             "top5_gpu_share", "hhi", "coverage", "as_of")
+    ocols = ("day", "marketplace_a", "marketplace_b", "comparable_a", "comparable_b", "strong_matches",
+             "build_matches", "machines_a_matched", "machines_b_matched", "operator_pairs", "median_strong_gap_pct",
+             "note")
+    return {"daily": [{c: getattr(r, c) for c in dcols} for r in daily],
+            "overlap": [{c: getattr(r, c) for c in ocols} for r in over]}
+
+
+_registered = False
+
+
+def register() -> list[str]:
+    """Register the hourly `operators_daily` job (api/operators.py calls this on import). Needs the poller."""
+    global _registered
+    from config import settings
+    from jobs import job
+
+    if _registered or not settings.poller_enabled:
+        return []
+    _registered = True
+    job("operators_daily", every_seconds=3600, initial_delay_seconds=300)(run_daily)
+    return ["operators_daily"]
+
+
+def main(argv=None) -> int:
+    """python -m operators backfill --since YYYY-MM-DD [--until YYYY-MM-DD]"""
+    import argparse
+    import json
+    from datetime import date
+
+    ap = argparse.ArgumentParser(prog="operators")
+    sub_ = ap.add_subparsers(dest="cmd", required=True)
+    b = sub_.add_parser("backfill", help="rebuild the daily operator series from the stored raw copies")
+    b.add_argument("--since", required=True, type=date.fromisoformat)
+    b.add_argument("--until", type=date.fromisoformat)
+    args = ap.parse_args(argv)
+    for r in backfill(args.since, args.until):
+        print(json.dumps(r, default=str), flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

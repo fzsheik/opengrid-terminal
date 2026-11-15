@@ -5,7 +5,10 @@ keys never reach a public page, the public API, an index or a statistic (methodo
     GET /v1/ops/operators/overlap    Lium against Vast: machines with the same hardware fingerprint, the tier of
                                      each match, the price each side asks, and the operator pairs behind them
 
-Computed on read from the stored raw copies; nothing is polled or written for it.
+    GET /v1/ops/operators/history    the stored daily series: concentration per marketplace and the matches per day
+
+The two reads above are computed on read from the stored raw copies. The daily series is written by the hourly
+`operators_daily` job (operators.run_daily) and rebuilt for past days by `python -m operators backfill`.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -21,6 +24,9 @@ DOC = "methodology/internal/operators.md (in the repository; never served as a p
 NOTE = "INTERNAL data: operator keys are never republished"
 CAVEAT = ("A fingerprint match is a candidate, not proof: 'strong' = same GPU model, GPU count, CPU model, country "
           "and RAM within 3%; 'build' = same GPU model, CPU model and country. See fingerprint_unique.")
+
+
+operators.register()  # operators_daily
 
 
 @ttl_cache(300)
@@ -61,3 +67,12 @@ def operators_overlap(tier: str | None = Query(None, pattern="^(strong|build)$")
     return envelope(out, kind=OBSERVED, visibility="internal", note=NOTE, caveat=CAVEAT, doc=DOC, a="lium", b="vast",
                     machines={k: len(v) for k, v in model["machines"].items()}, count=len(matches),
                     source_as_of=_as_of(model), coverage=model["coverage"])
+
+
+@router.get("/v1/ops/operators/history", tags=["ops"], include_in_schema=False,
+            summary="Ops: operators and hardware matches per day (internal)")
+def operators_history(days: int = Query(90, ge=1, le=1095), who: Principal = Depends(admin)):
+    out = operators.history(days)
+    return envelope(out, kind=OBSERVED, visibility="internal", note=NOTE, doc=DOC, caveat=CAVEAT, window_days=days,
+                    coverage_values="a row's `coverage` says what that day's stored data covered; days with "
+                                    "different coverage are not comparable (operators.COVERAGE_*)")

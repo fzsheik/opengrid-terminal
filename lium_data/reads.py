@@ -119,17 +119,21 @@ def raw_params_key(hotkey: str) -> str:
     return raw.params_key({"hotkey": hotkey})
 
 
-def provider_machines(hours: int = 6) -> list[tuple[str, list[dict]]]:
-    """(hotkey, stored machine list) of every provider whose machine list was read in the last `hours`: the newest
-    answer per provider. For operators.py, which adds fully rented machines to its Lium fleet from them."""
+def provider_machines(hours: int = 6, as_of: datetime | None = None) -> list[tuple[str, list[dict]]]:
+    """(hotkey, stored machine list) of every provider whose machine list was read in the `hours` before `as_of`
+    (default: now): the newest answer per provider that was already stored at that moment. For operators.py, which
+    adds fully rented machines to its Lium fleet from them."""
     import json
 
-    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    as_of = as_of or datetime.now(timezone.utc)
+    since = as_of - timedelta(hours=hours)
     with _session()() as s:
+        # A stored answer stands from fetched_at to last_seen_at (change-only): it speaks for `as_of` when it was
+        # first read by then and still being seen within the window before it.
         rows = s.execute(select(LiumFeedSnapshot).where(
             LiumFeedSnapshot.feed == "provider_executors", LiumFeedSnapshot.ok.is_(True),
-            LiumFeedSnapshot.last_seen_at >= since)
-            .order_by(desc(LiumFeedSnapshot.last_seen_at), desc(LiumFeedSnapshot.id))).scalars().all()
+            LiumFeedSnapshot.fetched_at <= as_of, LiumFeedSnapshot.last_seen_at >= since)
+            .order_by(desc(LiumFeedSnapshot.fetched_at), desc(LiumFeedSnapshot.id))).scalars().all()
     out, seen = [], set()
     for r in rows:
         hk = (r.params or {}).get("hotkey")

@@ -51,10 +51,10 @@ Counts recomputed from the code on 2026-11-13; providers, API operations, jobs a
 | Canonical GPU models | **100**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL); each has a hardware spec row (100 in `hardware.py`) |
 | OpenGrid indices defined | **269**: 100 per-GPU, 100 spot, 40 regional, 25 provider-class, 4 composites (H100 / H200 / A100 class and the overall GPU Compute Index) |
 | News & signal sources | **81** registered, **66** enabled (41 RSS, 4 Atom, 3 US Federal Register, 16 SEC EDGAR, 2 GDELT queries); the 15 disabled ones are listed with the reason. About 87k items stored in production (86,523 on 2026-11-15), history backfill included |
-| API operations | **263** in the OpenAPI schema: 241 under `/v1` (85 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 12 admin-only reads (7 power, 2 equities, 2 marketplace operators, 1 internal reserved prices), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 47 page routes |
+| API operations | **263** in the OpenAPI schema: 241 under `/v1` (85 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 13 admin-only reads (7 power, 2 equities, 3 marketplace operators, 1 internal reserved prices), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 47 page routes |
 | Web pages | **47** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar. RL cost (`/rl-cost`) sits under GPUs; Batches (`/batches`, `/batch/{id}`) under My Jobs; the internal Monthly report (`/reports`, `/reports/{month}`) under Markets, locked |
 | Database tables | **121** in a freshly migrated database (120 application tables plus `alembic_version`; Postgres, migrated by Alembic: 44 migrations, head `0042_operator_daily`) |
-| Background jobs | **39** registered when every optional source is configured (**35** with the defaults: no EIA / SEC / Alpaca keys, `POWER_ENABLED` off), beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets, the monthly market report…; table 15.2) |
+| Background jobs | **40** registered when every optional source is configured (**36** with the defaults: no EIA / SEC / Alpaca keys, `POWER_ENABLED` off), beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets, the monthly market report…; table 15.2) |
 | Capacity (stock) feeds | **32** providers report in-stock state or counts from their own APIs (section 3.6) |
 | Power markets (internal) | EIA-930 grid data, EIA natural gas, CAISO, NYISO, SPP, ERCOT and ISO-NE wholesale prices in their own `power_*` tables (about 504 MB in production on 2026-11-15); admin-only reads, never in a GPU statistic (section 5a) |
 | Provisioning adapters | **9 providers** (Lambda, RunPod, Hyperstack, DigitalOcean, Crusoe/Denvr/Latitude via Shadeform, Vast, Verda) |
@@ -329,6 +329,12 @@ indices or routing imports the module (`tests/test_operators.py`). Computed on r
   tiers (**strong**: GPU model, GPU count, CPU model, country, RAM within 3%; **build**: GPU model, CPU model,
   country), the price each side asks, and the operator pairs behind the matches. A match is a candidate, not proof;
   every answer says how many fingerprints are unique within each marketplace.
+- `GET /v1/ops/operators/history` (admin): the stored daily series (`operator_daily`, `operator_overlap_daily`;
+  migration `0042_operator_daily`): per marketplace and day the machines, operators, GPUs, top share, top-five share
+  and HHI as the market stood at 12:00 UTC, and the Lium x Vast matches of that day. Written by the hourly
+  `operators_daily` job; `python -m operators backfill --since YYYY-MM-DD` rebuilds past days from the stored raw
+  copies. Every row carries `coverage`, what that day's stored data covered: Vast days before 2026-11-15 are the 64
+  cheapest offers per model, Lium days before it carry no operator key, and neither is comparable with later days.
 Lium's fully rented machines come from the per-provider machine lists (section 3.9), filed under the miner hotkey.
 Limits: only two marketplaces; Vast census rows match on the build tier only; one moment is compared, so a machine moving between marketplaces over time is not detected yet. History
 starts 2026-11-15 (older snapshots have no keys).
@@ -1289,7 +1295,7 @@ the app:
 | Watchlists | `/v1/watchlists`, `/v1/watchlists/{id}`, `…/items`, `…/items/{item_id}`, `/v1/alerts`, `/v1/alerts/{id}`, `…/test`, `/v1/alerts/firings` |
 | Reports (internal; `data:read`, never anonymous, not on the Data API host) | `/v1/reports/monthly`, `/v1/reports/monthly/{month}`; admin: `POST /v1/reports/monthly/{month}/regenerate` (section 4.10) |
 | Analytics | `/v1/economics`, `/v1/onboarding`, `/v1/partners/me`, `POST /v1/events/track` (anonymous product analytics) |
-| Admin & ops (85 in the schema, 12 more outside it) | execution control, kill switches, validation, reconciliation, orphans, resources, channels, ops, metrics, traces, checklist, partners, funnel, accounts, credits, draft invoices, fee policies, exposures, feedback, quality and quarantine, product analytics / PostHog, usage, internal-data registry, reservation offers, fixing restatements, methodology change notices; in the schema, `/v1/ops/lium/*` (11); outside the schema: `/v1/ops/power/*` (7), `/v1/ops/context/equities` (2), `/v1/ops/operators` (2) and `/v1/ops/reserved/internal` (1) |
+| Admin & ops (85 in the schema, 13 more outside it) | execution control, kill switches, validation, reconciliation, orphans, resources, channels, ops, metrics, traces, checklist, partners, funnel, accounts, credits, draft invoices, fee policies, exposures, feedback, quality and quarantine, product analytics / PostHog, usage, internal-data registry, reservation offers, fixing restatements, methodology change notices; in the schema, `/v1/ops/lium/*` (11); outside the schema: `/v1/ops/power/*` (7), `/v1/ops/context/equities` (2), `/v1/ops/operators` (3) and `/v1/ops/reserved/internal` (1) |
 
 Counts (from `main.app.openapi()` on a freshly migrated database): 262 operations, 240 under `/v1`, 84 of them under
 `/v1/ops` or `/v1/admin`, 15 under `/internal`, and 7 operator/debug routes at the root (`/health`, `/fetch`,
@@ -1317,8 +1323,8 @@ deploy, because a deploy restarts the container and stops them; each resumes whe
 deploy separately (`cd docs-site && vercel deploy --prod`).
 
 ### 15.2 Background jobs
-39 jobs are registered when every optional source is configured (`jobs.JOBS`; the provider poll loops run beside
-them); 35 with the defaults (`context_series`, `context_equities`, `power_forward` and `lium_partner` need keys or
+40 jobs are registered when every optional source is configured (`jobs.JOBS`; the provider poll loops run beside
+them); 36 with the defaults (`context_series`, `context_equities`, `power_forward` and `lium_partner` need keys or
 `POWER_ENABLED`).
 `OPENGRID_NO_JOBS` registers them but starts none; with `POLLER_ENABLED` off, the jobs marked "poller" are not
 registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registered and skip their work when
@@ -1355,6 +1361,7 @@ registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registere
 | `fx_rates` | 1 h | ECB reference rates (poller) |
 | `cost_components` | daily | full-cost sources into `cost_snapshots` (poller) |
 | `lium_stream` | 1 min | supervisor of the Lium WebSocket consumer (poller, `LIUM_STREAM_ENABLED`) |
+| `operators_daily` | 1 h | writes the day's marketplace-operator rows once 12:00 UTC has passed (and yesterday's if missing), internal (poller; section 3.8a) |
 | `lium_providers` | 1 h | Lium per-provider statistics and machine lists with rental state and revenue per hour, internal (poller, `LIUM_FEEDS_ENABLED`; section 3.9) |
 | `lium_public` | 15 min | Lium's keyless market feeds (launch stats, requests, executor stats, idle pay, reference prices) + its published throughput, internal (poller, `LIUM_FEEDS_ENABLED`; section 3.9) |
 | `lium_grafana` | 1 h | Lium's public Grafana: rental starts with the price paid (per tier), hourly renter spend, GPUs listed and rented, internal (poller, `LIUM_FEEDS_ENABLED` and `LIUM_GRAFANA_ENABLED`; section 3.9) |

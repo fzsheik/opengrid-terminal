@@ -64,6 +64,29 @@ strong fingerprint with another machine of the same marketplace. Every answer th
 Operator pairs: when both machines of a match have an operator key, the pair (operator on Lium, operator on Vast)
 is counted. A pair with several strong matches is the useful signal: one business selling through both venues.
 
+## The daily series
+
+`operator_daily` holds one row per marketplace and day, and `operator_overlap_daily` one row per day for the Lium
+and Vast matches, each as the market stood at 12:00 UTC. The hourly `operators_daily` job writes a day once its
+12:00 has passed. `python -m operators backfill --since YYYY-MM-DD` rebuilds past days from the stored raw copies;
+a rebuilt day replaces its rows.
+
+Every row says what that day's stored data covered, because days with different coverage are not comparable:
+
+| `coverage` | Meaning |
+|---|---|
+| `cheapest_64_per_model` | Vast before 2026-11-15: only the 64 cheapest offers per GPU model were stored, so the marketplace looks smaller and more concentrated than it was |
+| `whole_book` | Vast: every offer of every model |
+| `whole_book_and_census` | Vast: every offer plus the keyed census with host ids, the whole fleet |
+| `machines_with_a_free_gpu` | Lium: the rentable list only |
+| `whole_fleet` | Lium: the rentable list plus the per-provider machine lists (fully rented machines) |
+| `no_operator_keys` | the day's stored copies carry no operator key (Lium before 2026-11-15): machines are counted, operators and shares are empty |
+
+What the backfill can and cannot recover: Vast's host id has been in every stored offer since 2026-10-12, so Vast's
+operators go back to that day at the old coverage. Vast's CPU model has been stored since about 2026-11-01, so
+matches between the two marketplaces cannot be computed before then (the row's note says so). Lium's operator keys
+exist only from 2026-11-15.
+
 ## Limits
 
 - **Lium:** machines with a free GPU carry the operator's own key (for a pool, finer than the miner hotkey). Fully

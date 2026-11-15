@@ -255,7 +255,7 @@ def test_freshness_and_failures():
 def test_never_imported_by_statistics():
     pat = re.compile(r"^\s*(import reserved\b|from reserved import)", re.M)
     users = sorted(str(p.relative_to(ROOT)) for p in ROOT.rglob("*.py")
-                   if ".venv" not in p.parts and "tests" not in p.parts and pat.search(p.read_text(encoding="utf-8", errors="ignore")))
+                   if not any(part.startswith(".") for part in p.relative_to(ROOT).parts) and "tests" not in p.parts and pat.search(p.read_text(encoding="utf-8", errors="ignore")))
     assert users == ["api/reserved.py"], f"only the read-only API imports the reserved model: {users}"
 
 

@@ -197,10 +197,10 @@ def test_overlap_tiers_and_price_gap_by_hand():
 def test_never_imported_by_public_code():
     pat = re.compile(r"^\s*(import operators\b|from operators import)", re.M)
     users = sorted(str(p.relative_to(ROOT)) for p in ROOT.rglob("*.py")
-                   if ".venv" not in p.parts and "tests" not in p.parts and pat.search(p.read_text(encoding="utf-8", errors="ignore")))
+                   if not any(part.startswith(".") for part in p.relative_to(ROOT).parts) and "tests" not in p.parts and pat.search(p.read_text(encoding="utf-8", errors="ignore")))
     assert users == ["api/operators.py"], f"only the admin API imports the operators model: {users}"
     src = (ROOT / "api" / "operators.py").read_text(encoding="utf-8")
-    assert src.count("Depends(admin)") == src.count("@router.get") == 2 and src.count("include_in_schema=False") == 2
+    assert src.count("Depends(admin)") == src.count("@router.get") == 3 and src.count("include_in_schema=False") == 3
     for name in ("normalize.py", "market.py", "capacity.py"):
         assert "provider_key" not in (ROOT / name).read_text(encoding="utf-8"), name
     assert not (ROOT / "methodology" / "operators.md").exists(), "the note is internal: never a served methodology page"
@@ -262,7 +262,7 @@ def test_database_read_and_admin_endpoints():
             settings.viewer_user, settings.viewer_password = "vc", "look-only"
             settings.public_pages = True
             op, viewer = _basic("opengrid", "pw"), _basic("vc", "look-only")
-            for p in ("/v1/ops/operators", "/v1/ops/operators/overlap"):
+            for p in ("/v1/ops/operators", "/v1/ops/operators/overlap", "/v1/ops/operators/history"):
                 assert client.get(p).status_code == 401, p
                 assert client.get(p, headers=viewer).status_code == 403, p
             got = client.get("/v1/ops/operators", headers=op)
@@ -291,11 +291,115 @@ def test_database_read_and_admin_endpoints():
         scratchdb.drop(DB)
 
 
+def test_daily_series_and_backfill():
+    """Two past days rebuilt from stored raw copies: one in the old shape (64 cheapest, no CPU, no Lium keys), one
+    in today's shape. Each row says what its day covered; a rebuild changes nothing; the job writes only missing days."""
+    from datetime import date
+
+    from sqlalchemy import func, select, text
+
+    from store.operators import OperatorDaily, OperatorOverlapDaily
+
+    db = DB + "_daily"
+    url = scratchdb.create(db)
+    try:
+        Session = fixtures.session(url)
+        fetch_mod.SessionLocal = Session
+        normalize.SessionLocal = Session
+        today = datetime.now(timezone.utc).date()
+        old_day, new_day = today - timedelta(days=3), today - timedelta(days=2)
+        body = fx("lium_executors_with_nodes.json")
+        kept = [lium._keep(e) for e in body]
+        first = kept[0]
+        vast_gpu = re.sub(r"^NVIDIA (GeForce )?", "", first["gpu_class"] or first["machine_name"])
+        ram_gb = first["ram_total"] / ops.KIB_PER_GIB
+
+        def raw(provider, endpoint, payload, at, request=None):
+            return RawResponse(provider=provider, endpoint=endpoint, fetched_at=at, status_code=200, ok=True,
+                               request=request, payload=payload)
+
+        # The old day: Lium without operator keys; Vast's 64 cheapest in the shape stored then (host id, no CPU).
+        m_old = ops.day_moment(old_day)
+        old_offers = [{k: v for k, v in vo(700 + i, 40 + i % 3, gpu=vast_gpu, dph=1.0 + i).items()
+                       if k not in ("cpu_name", "cpu_cores", "gpu_frac")} for i in range(4)]
+        fetch_mod.save([
+            raw("lium", lium.ENDPOINT, [{k: v for k, v in e.items() if k not in lium.OPERATOR_FIELDS} for e in kept],
+                m_old - timedelta(minutes=5)),
+            raw("vast", vast.ENDPOINT, old_offers, m_old - timedelta(minutes=4), {"gpu_name": vast_gpu}),
+        ])
+        # The new day: keys on Lium, Vast's whole book with a twin of a Lium machine, and a census with host ids.
+        m_new = ops.day_moment(new_day)
+        twin = vo(501, 77, gpu=vast_gpu, n=first["gpu_count"], cpu=first["cpu_model"], ram_gb=ram_gb,
+                  geo=f"Somewhere, {first['country_code']}", dph=1.0 * first["gpu_count"])
+        fetch_mod.save([
+            raw("lium", lium.ENDPOINT, kept, m_new - timedelta(minutes=5)),
+            raw("vast", vast.ENDPOINT, [twin, vo(502, 77, gpu="RTX 3090"), vo(503, 78, gpu="RTX 3090")],
+                m_new - timedelta(minutes=4), {"gpu_name": vast_gpu, "book": vast.FULL_BOOK}),
+            raw("vast", vast.ENDPOINT, [{"machine_id": 504, "host_id": 79, "num_gpus": 8, "gpu_frac": 1,
+                                         "geolocation": "Texas, US", "cpu_name": "AMD EPYC 7763 64-Core Processor",
+                                         "cpu_cores": 128, "rentable": False}],
+                m_new - timedelta(hours=5), {"census": True, "gpu_name": "H100 SXM", "rentable": False}),
+            # Stored after the day's 12:00: no part of that day's row.
+            raw("vast", vast.ENDPOINT, [vo(599, 99, gpu=vast_gpu)], m_new + timedelta(minutes=30), {"gpu_name": vast_gpu}),
+        ])
+        out = ops.backfill(old_day, new_day)
+        assert [r["day"] for r in out] == [str(old_day), str(new_day)]
+        with Session() as s:
+            rows = {(r.day, r.marketplace): r for r in s.execute(select(OperatorDaily)).scalars()}
+            over = {r.day: r for r in s.execute(select(OperatorOverlapDaily)).scalars()}
+            vis = set(s.execute(text("SELECT visibility FROM operator_daily UNION SELECT visibility FROM operator_overlap_daily")).scalars())
+        assert vis == {"internal"} and set(rows) == {(old_day, "lium"), (old_day, "vast"), (new_day, "lium"), (new_day, "vast")}
+        o_l, o_v, n_l, n_v = rows[(old_day, "lium")], rows[(old_day, "vast")], rows[(new_day, "lium")], rows[(new_day, "vast")]
+        # Old day: Lium has machines but no key, so no operator and no share, and the row says why.
+        assert (o_l.machines, o_l.identified_machines, o_l.operators, o_l.hhi, o_l.coverage) == \
+            (len(body), 0, 0, None, ops.COVERAGE_NO_KEYS)
+        assert (o_v.machines, o_v.operators, o_v.coverage) == (4, 3, ops.COVERAGE_VAST_CAPPED)
+        assert over[old_day].comparable_b == 0 and over[old_day].strong_matches == 0 and "not comparable" in over[old_day].note
+        # New day.
+        assert (n_l.identified_machines, n_l.operators, n_l.coverage) == \
+            (len(body), len({e["provider_key"] for e in body}), ops.COVERAGE_LIUM_FREE)
+        assert (n_v.machines, n_v.operators, n_v.coverage) == (4, 3, ops.COVERAGE_VAST_FLEET), "599 came after 12:00"
+        # Hosts 77 (the twin + a 4-GPU box), 78 (4 GPUs) and 79 (8 GPUs, census only): shares and HHI by hand.
+        per_host = sorted([first["gpu_count"] + 4, 4, 8], reverse=True)
+        total = sum(per_host)
+        assert n_v.gpus == total and float(n_v.top1_gpu_share) == round(per_host[0] / total, 4)
+        assert n_v.hhi == round(sum((g / total) ** 2 for g in per_host) * 10000)
+        assert n_v.as_of == m_new - timedelta(minutes=4)
+        ov = over[new_day]
+        assert ov.strong_matches >= 1 and ov.note is None and ov.comparable_a > 0 and ov.comparable_b >= 1
+        assert ov.operator_pairs >= 1 and ov.median_strong_gap_pct is not None
+
+        # A rebuild replaces the day's rows: same content, no extra rows.
+        before = {k: (r.machines, r.operators, r.gpus, r.hhi, r.coverage) for k, r in rows.items()}
+        ops.backfill(old_day, new_day)
+        with Session() as s:
+            again = {(r.day, r.marketplace): (r.machines, r.operators, r.gpus, r.hhi, r.coverage)
+                     for r in s.execute(select(OperatorDaily)).scalars()}
+            n_over = s.execute(select(func.count()).select_from(OperatorOverlapDaily)).scalar()
+        assert again == before and n_over == 2
+        # A day with nothing stored writes nothing; a day whose 12:00 has not come is skipped.
+        assert ops.snapshot_day(date(2020, 1, 1))["marketplaces"] == {}
+        assert "skipped" in ops.snapshot_day(today + timedelta(days=1))
+        # The job writes a missing day once its 12:00 has passed, and leaves a written day alone.
+        with Session.begin() as s:
+            s.execute(text("DELETE FROM operator_daily WHERE day = :d"), {"d": new_day})
+        wrote = ops.run_daily(ops.day_moment(new_day) + timedelta(hours=1))["written"]
+        assert [w["day"] for w in wrote] == [str(new_day)], "yesterday (old_day) was already written; only the missing day"
+        assert ops.run_daily(ops.day_moment(new_day) + timedelta(hours=2))["written"] == []
+        assert ops.run_daily(ops.day_moment(new_day) - timedelta(hours=2))["written"] == [], "before 12:00: not yet"
+
+        hist = ops.history(30)
+        assert [r["day"] for r in hist["daily"]][:2] == [new_day, new_day] and len(hist["overlap"]) == 2
+        assert ops.main(["backfill", "--since", str(new_day), "--until", str(new_day)]) == 0
+    finally:
+        scratchdb.drop(db)
+
+
 if __name__ == "__main__":
     for t in (test_lium_keeps_the_operator_key_and_nothing_public_carries_it, test_vast_census_keeps_host_and_cpu_not_ip,
               test_machines_from_stored_payloads, test_operators_and_concentration_by_hand,
               test_overlap_tiers_and_price_gap_by_hand, test_never_imported_by_public_code,
-              test_database_read_and_admin_endpoints):
+              test_database_read_and_admin_endpoints, test_daily_series_and_backfill):
         t()
         print(t.__name__, "ok")
     print("all passed")

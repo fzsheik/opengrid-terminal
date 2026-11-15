@@ -358,7 +358,7 @@ def test_vast_offer_components():
 def test_never_imported_by_statistics():
     pat = re.compile(r"^\s*(import cost\b|from cost\b)", re.M)
     users = sorted(str(p.relative_to(ROOT)) for p in ROOT.rglob("*.py")
-                   if ".venv" not in p.parts and "tests" not in p.parts and p.parts[len(ROOT.parts)] != "cost"
+                   if not p.parts[len(ROOT.parts)].startswith(".") and "tests" not in p.parts and p.parts[len(ROOT.parts)] != "cost"
                    and pat.search(p.read_text(encoding="utf-8", errors="ignore")))
     # intelligence/workload_fit.py reads only the documented node-fabric SPEC of a listing (estimate.listing_specs),
     # never a cost component or estimate: it must call nothing else from cost/.
