@@ -62,7 +62,7 @@ Counts recomputed from the code on 2026-11-13.
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination. Built on top, tested against fake provider APIs only: **batches** (a sweep or shard list as one batch: placement across clouds, one budget, one approval), **resume** from a verified checkpoint, opt-in **OOM escalation** and **move** to another GPU; automatic relaunch / OOM escalation and move are off by default (`JOB_AUTO_RELAUNCH_ENABLED`, `JOB_MOVE_ENABLED`) |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
 | Workload intelligence | GPU memory estimator (text LLMs; recommendations also size audio, image + text and video workloads, section 6c), measured performance from completed real jobs (none yet), project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (hosted at `/mcp` with an API key: 15 tools, 2 prompts; local via uvx: 16 tools, 3 prompts), grounded assistant, RL post-training cost estimator |
-| Automated tests | **139** Python test files + **14** JavaScript test files, all 153 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
+| Automated tests | **144** Python test files + **14** JavaScript test files, all 158 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
 
 ---
 
@@ -1364,7 +1364,7 @@ registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registere
 
 ## 16. Testing
 
-139 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
+144 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
 Postgres database, no real provider calls), plus 5 CLI/MCP test files in `cli/tests/`. `tests/run_all.py` runs all
 152 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
 (`.github/workflows/tests.yml`) runs it on every push and pull request against a throwaway Postgres 16 whose zone is
