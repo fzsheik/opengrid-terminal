@@ -418,6 +418,9 @@ app.include_router(assistant_api.router)
 from api import power as power_api  # noqa: E402  (power markets; registers power_forward when POWER_ENABLED)
 
 app.include_router(power_api.router)
+from api import lium as lium_api  # noqa: E402  (Lium market-data feeds, admin only; registers lium_public / lium_partner)
+
+app.include_router(lium_api.router)
 from api import reports as reports_api  # noqa: E402  (internal monthly market report; registers monthly_report)
 
 app.include_router(reports_api.router)

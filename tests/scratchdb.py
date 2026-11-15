@@ -54,7 +54,8 @@ _SECRET_FIELDS = ("alibaba_access_key_id", "alibaba_access_key_secret", "salad_a
                   "market_webhook_url", "news_webhook_url", "jarvis_api_key", "gcp_api_key",
                   "massedcompute_api_key", "crusoe_access_key_id", "crusoe_secret_key", "eia_api_key", "sec_user_agent",
                   "alpaca_data_key_id", "alpaca_data_secret_key", "ercot_api_subscription_key",
-                  "ercot_api_username", "ercot_api_password", "pjm_api_key", "isone_username", "isone_password")
+                  "ercot_api_username", "ercot_api_password", "pjm_api_key", "isone_username", "isone_password",
+                  "lium_partner_api_key")
 _LOOPBACK = ("127.0.0.1", "localhost", "::1", "[::1]")
 BLOCKED: list[str] = []
 

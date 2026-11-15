@@ -1,0 +1,1 @@
+{"success":false,"error":{"code":"not_found","message":"Not Found","hint":"Check the id; `lium ls` (nodes), `lium ps` (pods), `lium templates` list what exists now.","request_id":"ccc8afd8fd044380ab3840d6af52c3c0"},"message":"Not Found","status_code":404,"error_id":null,"request_id":"ccc8afd8fd044380ab3840d6af52c3c0","timestamp":"2026-11-15T00:18:53.691303","api_context":null}

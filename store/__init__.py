@@ -22,3 +22,4 @@ from store import shifts  # noqa: F401  (0029_news_history: major shifts + their
 from store import power  # noqa: F401  (0035_power_markets: wholesale power series; never GPU data)
 from store import batches  # noqa: F401  (0036_batches: batch fan-out of ordinary jobs)
 from store import reports  # noqa: F401  (0039_monthly_reports: the internal monthly market report)
+from store import lium  # noqa: F401  (0040_lium_data: Lium partner trades, public feeds, published throughput)
