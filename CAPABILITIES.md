@@ -379,7 +379,9 @@ started recording, read by OpenGrid's own parsers from official and archived sou
 its `basis`, `licence`, `attribution` and visibility tier (migration `0031_backfill_sources`):
 - **Internet Archive captures** of provider price pages, one parser per page design (`python -m backfill import`):
   e.g. Azure's Linux VM page 2017-2024, Lambda 2020-2025, CoreWeave 2021-2024, RunPod 2022-2024, Verda/DataCrunch
-  2020-2025, Paperspace 2017-2026, Exoscale from 2021, Hugging Face Inference Endpoints from 2022 (`resold:<vendor>`).
+  2020-2025, Paperspace 2017-2026, Exoscale from 2021, Hugging Face Inference Endpoints from 2022 (`resold:<vendor>`),
+  Scaleway from 2019, Gcore from 2023, Civo from 2024-02, Hetzner from 2024-12 (EUR pages at the ECB rate in force at
+  the capture; full ECB history via `python -m backfill.ecb_history`). IBM Cloud has no usable archive.
 - **AWS's own EC2 price-list archive**: all 123 monthly versions from 2015-12 (`python -m backfill aws`); reserved
   1y / 3y rows are stored at their effective hourly price, never as on-demand, and are not served yet.
 - **Azure "effective since" anchors**: one point per GPU size, region and market at the current price's

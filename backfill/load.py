@@ -26,6 +26,14 @@ from store.archive import ArchivedPrice
 MAX_PER_GPU_HOUR = Decimal(200)
 
 
+def _fx_note(l: ComputeListing) -> str | None:
+    """A converted listing's provenance (archived_prices has no FX columns): the page's own price and the rate."""
+    if not l.original_currency or l.original_currency == "USD":
+        return None
+    return (f"{l.original_currency} {l.original_price_per_instance_hour}/instance-hour as printed, converted at the "
+            f"{l.fx_source} {l.original_currency}->USD rate {l.fx_rate} of {l.fx_rate_date}")
+
+
 def _rows(listings: list[ComputeListing], *, source: str, source_url: str, sha256: str, parser: str,
           valid_to: datetime | None = None, basis: str | None = None, licence: str | None = None,
           attribution: str | None = None, note=None) -> tuple[list[dict], list[str]]:
@@ -45,7 +53,7 @@ def _rows(listings: list[ComputeListing], *, source: str, source_url: str, sha25
             "price_per_instance_hour": l.price_per_instance_hour, "currency": l.currency,
             "market_type": l.market_type, "interruptible": l.interruptible, "observed_at": l.observed_at,
             "valid_to": valid_to, "imported_at": now, "basis": basis, "licence": licence,
-            "attribution": attribution, "note": note(l) if callable(note) else note,
+            "attribution": attribution, "note": (note(l) if callable(note) else note) or _fx_note(l),
             # archives are public pages; a wholly internal provider's archived rows stay internal all the same
             "visibility": provider_meta.enforce(l.provider, l.visibility),
         })
