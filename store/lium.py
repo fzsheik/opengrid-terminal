@@ -18,6 +18,10 @@ Raw first, change-only, every row INTERNAL by default (provider_meta.INTERNAL_SO
                            parsed from the raw_snapshots rows providers/lium.py already stores)
     lium_model_stats_daily per UTC day of reading and GPU model: Lium's published 30-day median PAID price,
                            utilisation, cheapest ask and GPUs listed / rented
+    lium_grafana_rentals   one row per rental at its start, from Lium's public Grafana (lium_data/grafana.py;
+                           migration 0041): start time, GPU model, price per GPU-hour paid, tier (spot / secure)
+    lium_grafana_hourly    hourly series from the same Grafana, one row per UTC hour and GPU model: renter spend,
+                           GPUs listed, GPUs rented; a revised hour is updated in place
 """
 
 from datetime import date, datetime
@@ -172,4 +176,35 @@ class LiumModelStatsDaily(Base):
     gpus_rented: Mapped[int | None] = mapped_column(Integer)
     raw_snapshot_id: Mapped[int | None] = mapped_column(BigInteger)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))     # newest read of the day
+    visibility: Mapped[str] = _vis()
+
+
+class LiumGrafanaRental(Base):
+    __tablename__ = "lium_grafana_rentals"
+    __table_args__ = (Index("ix_lium_grafana_rentals_start", "start_at"),
+                      CheckConstraint(_VIS, name="ck_lium_grafana_rentals_visibility"))
+
+    # 128 bits of sha256(start to the nanosecond | GPU model | price | ordinal among identical points of one answer)
+    row_key: Mapped[str] = mapped_column(String(32), primary_key=True)
+    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    gpu_model: Mapped[str] = mapped_column(String(128))             # as Lium writes it
+    price_per_gpu_hour: Mapped[Decimal] = mapped_column(Numeric(14, 6))
+    tier: Mapped[str | None] = mapped_column(String(16))            # spot | secure; NULL: neither tier read named it
+    # the answer that first held it (its fetched_at is when OpenGrid first saw the rental)
+    snapshot_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("lium_feed_snapshots.id", ondelete="SET NULL"))
+    visibility: Mapped[str] = _vis()
+
+
+class LiumGrafanaHourly(Base):
+    __tablename__ = "lium_grafana_hourly"
+    __table_args__ = (CheckConstraint(_VIS, name="ck_lium_grafana_hourly_visibility"),)
+
+    hour_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    gpu_model: Mapped[str] = mapped_column(String(128), primary_key=True)
+    # NULL: the panel had no value for this hour and model. A zero spend is stored only on a row the fleet panels
+    # made (a model with no fleet and no spend has no row at all).
+    spend_usd_per_hour: Mapped[Decimal | None] = mapped_column(Numeric(16, 6))
+    gpus_listed: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))     # an hourly mean, so not whole
+    gpus_rented: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     visibility: Mapped[str] = _vis()

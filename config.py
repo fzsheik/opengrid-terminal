@@ -110,6 +110,9 @@ class Settings(BaseSettings):
     # 15 min; needs poller_enabled. lium_partner_api_key: the X-API-Key of a Lium account Lium has flagged as a
     # data partner (trades, hourly GPU usage, daily VWAP); unset: the lium_partner job is not registered.
     lium_feeds_enabled: bool = True
+    # Lium's public Grafana dashboards, hourly (lium_data/grafana.py): rental starts with the price paid, renter
+    # spend and the fleet per hour. Needs lium_feeds_enabled; off stops only this job.
+    lium_grafana_enabled: bool = True
     lium_partner_api_key: str | None = None
     # Market context (context/; methodology/market-context.md). Each source is off until configured.
     eia_api_key: str | None = None               # free: https://www.eia.gov/opendata/register.php

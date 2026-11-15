@@ -51,9 +51,9 @@ Counts recomputed from the code on 2026-11-13.
 | Canonical GPU models | **100**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL); each has a hardware spec row (100 in `hardware.py`) |
 | OpenGrid indices defined | **269**: 100 per-GPU, 100 spot, 40 regional, 25 provider-class, 4 composites (H100 / H200 / A100 class and the overall GPU Compute Index) |
 | News & signal sources | **81** registered, **66** enabled (41 RSS, 4 Atom, 3 US Federal Register, 16 SEC EDGAR, 2 GDELT queries); the 15 disabled ones are listed with the reason. About 87k items stored in production (86,523 on 2026-11-15), history backfill included |
-| API operations | **252** in the OpenAPI schema: 230 under `/v1` (74 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 9 admin-only reads (7 power, 2 equities), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 47 page routes |
+| API operations | **262** in the OpenAPI schema: 240 under `/v1` (84 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 9 admin-only reads (7 power, 2 equities), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 47 page routes |
 | Web pages | **47** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar. RL cost (`/rl-cost`) sits under GPUs; Batches (`/batches`, `/batch/{id}`) under My Jobs; the internal Monthly report (`/reports`, `/reports/{month}`) under Markets, locked |
-| Database tables | **117** in a freshly migrated database (116 application tables plus `alembic_version`; Postgres, migrated by Alembic: 42 migrations, head `0040_lium_data`) |
+| Database tables | **119** in a freshly migrated database (118 application tables plus `alembic_version`; Postgres, migrated by Alembic: 43 migrations, head `0041_lium_grafana`) |
 | Background jobs | **37** registered when every optional source is configured (**33** with the defaults: no EIA / SEC / Alpaca keys, `POWER_ENABLED` off), beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets, the monthly market report…; table 15.2) |
 | Capacity (stock) feeds | **32** providers report in-stock state or counts from their own APIs (section 3.6) |
 | Power markets (internal) | EIA-930 grid data, EIA natural gas, CAISO, NYISO, SPP, ERCOT and ISO-NE wholesale prices in their own `power_*` tables (about 504 MB in production on 2026-11-15); admin-only reads, never in a GPU statistic (section 5a) |
@@ -62,7 +62,7 @@ Counts recomputed from the code on 2026-11-13.
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination. Built on top, tested against fake provider APIs only: **batches** (a sweep or shard list as one batch: placement across clouds, one budget, one approval), **resume** from a verified checkpoint, opt-in **OOM escalation** and **move** to another GPU; automatic relaunch / OOM escalation and move are off by default (`JOB_AUTO_RELAUNCH_ENABLED`, `JOB_MOVE_ENABLED`) |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
 | Workload intelligence | GPU memory estimator (text LLMs; recommendations also size audio, image + text and video workloads, section 6c), measured performance from completed real jobs (none yet), project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (hosted at `/mcp` with an API key: 15 tools, 2 prompts; local via uvx: 16 tools, 3 prompts), grounded assistant, RL post-training cost estimator |
-| Automated tests | **144** Python test files + **14** JavaScript test files, all 158 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
+| Automated tests | **145** Python test files + **14** JavaScript test files, all 159 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
 
 ---
 
@@ -302,7 +302,7 @@ internal sources, each with its reason, is `provider_meta.INTERNAL_SOURCES`:
 | Fireworks AI | the whole provider (listings, capacity, signals) | its terms forbid copying or distributing any part of the Service |
 | DeepInfra | container-API hourly prices (listings ending `:api`) | not the public price-page prices; its terms treat non-public pricing as confidential. Its public listings stay the price-page ones |
 | AWS | Spot Instance Advisor interruption bands and savings | AWS's site terms restrict republishing data from aws.amazon.com |
-| Lium | data-partner feeds (trades, hourly GPU usage, daily VWAP, nightly dumps) and the keyless market feeds other than prices (launch stats, requests, executor stats, spot idle rates, idle-pay capacity, shared-config reference prices, the public stats feed) | partner terms not agreed; Lium names only `pricing.json` and the nodes feed as listable, and its terms grant only a limited licence. Lium's listings and capacity stay public |
+| Lium | data-partner feeds (trades, hourly GPU usage, daily VWAP, nightly dumps) and the keyless market feeds other than prices (launch stats, requests, executor stats, spot idle rates, idle-pay capacity, shared-config reference prices, the public stats feed) | partner terms not agreed; Lium names only `pricing.json` and the nodes feed as listable (the same holds for its public Grafana dashboards: rental starts, hourly spend and fleet), and its terms grant only a limited licence. Lium's listings and capacity stay public |
 
 Everything else is public, and `enforce()` fails closed: anything not exactly `public` is stored internal. Every
 public statistic (market view, rollups, indices, fixings, spreads, capacity, archived history, trust) reads the public
@@ -316,7 +316,8 @@ the assistant's grounding and every MCP answer (`provider_meta.AI_INPUT_EXCLUDED
 `ai-input=no`).
 
 ### 3.9 Lium market data beyond prices (`lium_data/`, `api/lium.py`, methodology/lium-data.md)
-Raw first, change-only, every row INTERNAL (section 3.8), in its own tables (migration `0040_lium_data`):
+Raw first, change-only, every row INTERNAL (section 3.8), in its own tables (migrations `0040_lium_data`,
+`0041_lium_grafana`: `lium_grafana_rentals`, `lium_grafana_hourly`):
 `lium_feed_snapshots` (every distinct answer of every feed, CSV / JSON verbatim, failures included; a repeat of the
 newest answer, a 403 or a 404 included, only moves `last_seen_at` / `seen_count`), `lium_trades`, `lium_hourly_gpu`,
 `lium_daily_aggregate`, `lium_feed_values` (keyless feeds in long form), `lium_throughput_daily`,
@@ -341,10 +342,23 @@ newest answer, a 403 or a 404 included, only moves `last_seen_at` / `seen_count`
 - **Published throughput**: the public stats feed providers/lium.py already stores raw is parsed into daily GMV,
   GPU-hours, rentals and utilisation (a closed day Lium changes later counts as a revision) and per-model 30-day
   median PAID price, utilisation, cheapest ask (kind transaction, basis `published_aggregate`).
+- **Public Grafana** (job `lium_grafana`, hourly; `LIUM_GRAFANA_ENABLED`, default on, under `LIUM_FEEDS_ENABLED`;
+  `lium_data/grafana.py`): Lium's dashboards at grafana.lium.io are open without an account. Read: one point per
+  rental start with the price per GPU-hour paid ("Marketplace prices", *Rented-at price over time*), read once per
+  tier so each rental carries spot or secure; renter spend per hour, GPUs listed and GPUs rented per UTC hour and
+  GPU model ("Lium network status"). **OpenGrid sends only the query the dashboard itself holds for the panel**,
+  fetched at each run, with the dashboard's own variables at values it lists; a renamed panel, an unknown variable,
+  an unlisted value or a missing tier filter is a failed read stored once, never a guess. Eight requests an hour.
+  Rentals are keyed on start time to the nanosecond + model + price (no double counting on overlap); hourly rows
+  are updated in place. Kind **transaction** (rental starts `trade_record`, spend `published_aggregate`) and
+  **observed** (fleet). No GPU count, end time, renter or provider: statistics count each rental once and are not
+  volume-weighted. History: `python -m lium_data grafana-backfill --since YYYY-MM-DD` (closed chunks, resumable).
 - **Reads** (admin only): `/v1/ops/lium/status`, `/trades/stats` (per UTC end day and GPU: rentals, GPU-hours, VWAP,
   low, high, notional; basis `derived_from_trades`), `/trades/check` (that VWAP against Lium's published daily VWAP),
-  `/hourly`, `/daily-aggregate`, `/throughput`, `/feeds/{feed}`, `/feeds/{feed}/history`. CLI: `python -m lium_data
-  status | poll-public | poll-partner | backfill | reparse | reparse-stats`.
+  `/hourly`, `/daily-aggregate`, `/throughput`, `/feeds/{feed}`, `/feeds/{feed}/history`, `/grafana/rentals` (per
+  UTC day or hour of start, GPU and tier: rentals, median, mean, low, high), `/grafana/hourly` (spend, listed or
+  rented). CLI: `python -m lium_data status | poll-public | poll-partner | backfill | reparse | reparse-stats |
+  poll-grafana | grafana-backfill | grafana-reparse`.
 
 ---
 
@@ -1246,7 +1260,7 @@ the app:
 | Analytics | `/v1/economics`, `/v1/onboarding`, `/v1/partners/me`, `POST /v1/events/track` (anonymous product analytics) |
 | Admin & ops (74 in the schema, 9 more outside it) | execution control, kill switches, validation, reconciliation, orphans, resources, channels, ops, metrics, traces, checklist, partners, funnel, accounts, credits, draft invoices, fee policies, exposures, feedback, quality and quarantine, product analytics / PostHog, usage, internal-data registry, reservation offers, fixing restatements, methodology change notices; outside the schema: `/v1/ops/power/*` (7), `/v1/ops/lium/*` (8) and `/v1/ops/context/equities` (2) |
 
-Counts (from `main.app.openapi()` on a freshly migrated database): 252 operations, 230 under `/v1`, 74 of them under
+Counts (from `main.app.openapi()` on a freshly migrated database): 262 operations, 240 under `/v1`, 84 of them under
 `/v1/ops` or `/v1/admin`, 15 under `/internal`, and 7 operator/debug routes at the root (`/health`, `/fetch`,
 `/normalize`, `/raw`, `/raw/summary`, `/raw/payload`, `/unmapped`). The public customer docs at
 **docs.tryopengrid.com** (`docs-site/`) publish one page per customer endpoint (69), generated by
@@ -1263,7 +1277,7 @@ Railway, one service + Postgres (+ two probe-agent services), built from `pyproj
 (start command, healthcheck, replicas, domains) live in Railway infrastructure-as-code, `.railway/railway.ts` (it replaced `railway.toml`, which Railway stops reading on
 2026-12-01; preview
 `railway config plan`, apply `railway config apply`; variables stay unmanaged), with **exactly one worker** (the poller lives in the web process). Migrations run
-automatically at startup (one head, `0040_lium_data`). A push to GitHub does not trigger a Railway build on its
+automatically at startup (one head, `0041_lium_grafana`). A push to GitHub does not trigger a Railway build on its
 own: deploy with `railway up --service opengrid-terminal --detach`. The app **refuses to start in production**
 without `APP_PASSWORD` and `API_KEY_PEPPER`. `RAILPACK_DEPLOY_APT_PACKAGES=git` puts `git` in the image (the dataset
 backfill needs it). Long one-off backfills (`python -m backfill …`, `python -m news.history run`,
@@ -1272,8 +1286,8 @@ deploy, because a deploy restarts the container and stops them; each resumes whe
 deploy separately (`cd docs-site && vercel deploy --prod`).
 
 ### 15.2 Background jobs
-37 jobs are registered when every optional source is configured (`jobs.JOBS`; the provider poll loops run beside
-them); 33 with the defaults (`context_series`, `context_equities`, `power_forward` and `lium_partner` need keys or
+38 jobs are registered when every optional source is configured (`jobs.JOBS`; the provider poll loops run beside
+them); 34 with the defaults (`context_series`, `context_equities`, `power_forward` and `lium_partner` need keys or
 `POWER_ENABLED`).
 `OPENGRID_NO_JOBS` registers them but starts none; with `POLLER_ENABLED` off, the jobs marked "poller" are not
 registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registered and skip their work when
@@ -1311,6 +1325,7 @@ registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registere
 | `cost_components` | daily | full-cost sources into `cost_snapshots` (poller) |
 | `lium_stream` | 1 min | supervisor of the Lium WebSocket consumer (poller, `LIUM_STREAM_ENABLED`) |
 | `lium_public` | 15 min | Lium's keyless market feeds (launch stats, requests, executor stats, idle pay, reference prices) + its published throughput, internal (poller, `LIUM_FEEDS_ENABLED`; section 3.9) |
+| `lium_grafana` | 1 h | Lium's public Grafana: rental starts with the price paid (per tier), hourly renter spend, GPUs listed and rented, internal (poller, `LIUM_FEEDS_ENABLED` and `LIUM_GRAFANA_ENABLED`; section 3.9) |
 | `lium_partner` | 1 h | Lium data-partner trades, hourly GPU usage, daily VWAP, nightly dumps, internal (poller; only with `LIUM_PARTNER_API_KEY`; while Lium answers 403 it re-checks every 6 h) |
 | `context_series` | daily | EIA state electricity prices and SEC EDGAR series (poller; only with `EIA_API_KEY` or `SEC_USER_AGENT`) |
 | `context_equities` | 1 h | internal equity bars (poller; only with both Alpaca keys) |
@@ -1333,7 +1348,7 @@ registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registere
 | `GCP_API_KEY`, `GCP_SERVICE_ACCOUNT_JSON`, `GCP_PROJECT_ID` | Cloud Billing Catalog; the read-only service account opens GCP regions beyond Iowa |
 | `SHADEFORM_API_KEY`, `VAST_API_KEY`, `VERDA_CLIENT_ID/SECRET` | optional additional routing credentials |
 | `POLLER_ENABLED`, `LIUM_STREAM_ENABLED`, `NEWS_ENABLED`, `SEC_USER_AGENT` | background polling, the Lium stream, news feeds; the SEC fair-access User-Agent (news EDGAR sources and market context) |
-| `LIUM_FEEDS_ENABLED`, `LIUM_PARTNER_API_KEY` | Lium's keyless market feeds (default on); the `X-API-Key` of a Lium account Lium has flagged as a data partner (unset: the `lium_partner` job is not registered; section 3.9) |
+| `LIUM_FEEDS_ENABLED`, `LIUM_GRAFANA_ENABLED`, `LIUM_PARTNER_API_KEY` | Lium's keyless market feeds (default on); its public Grafana dashboards, hourly (default on; off stops only that job); the `X-API-Key` of a Lium account Lium has flagged as a data partner (unset: the `lium_partner` job is not registered; section 3.9) |
 | `UPTIME_ENABLED`, `PROBES_LOCAL_ENABLED`, `PROBES_LOCATION`, `PROBES_RAW_RETENTION_DAYS` | external uptime; OpenGrid's own probes (raw kept 30 days by default) |
 | `GPUHUNT_SNAPSHOT_ENABLED`, `SKYPILOT_CATALOG_ENABLED`, `SKYPILOT_CATALOG_LICENCE` | archived-history sources (SkyPilot off until its licence is confirmed) |
 | `MONTHLY_REPORT_ENABLED` | the `monthly_report` job (default on; off: it skips its work) |
@@ -1368,9 +1383,9 @@ registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registere
 
 ## 16. Testing
 
-144 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
+145 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
 Postgres database, no real provider calls), plus 5 CLI/MCP test files in `cli/tests/`. `tests/run_all.py` runs all
-152 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
+159 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
 (`.github/workflows/tests.yml`) runs it on every push and pull request against a throwaway Postgres 16 whose zone is
 deliberately not UTC. Beyond the per-module tests:
 - unit and integration tests for every analytics module, API and page;
@@ -1411,6 +1426,13 @@ deliberately not UTC. Beyond the per-module tests:
   storage (a recomputed `generated_at`, a repeated 403 / 404 / 500 are one row), the partner job off without a key,
   a 403 warned once and re-checked every 6 h, incremental `from`, dumps, revisions, the dump backfill, VWAP by hand,
   published throughput revisions, the internal tier on every row, admin-only endpoints, migration 0040 up / down;
+- **Lium's public Grafana** (`test_lium_grafana.py`): the real dashboards and panel answers recorded 2026-11-15
+  behind a mock that refuses any query that is not a dashboard's own; the query sent is the dashboard's, and an
+  unknown variable, an unlisted value, a renamed or reshaped panel or a missing tier filter stops the read; one row
+  per rental with its tier and none on a repeat, nanosecond start times, hourly rows updated in place and only on
+  the hour, a zero spend never making a row; every failure one stored row and one warning; the poll window; the
+  backfill walking back, stopping and resuming; reparse; statistics by hand; the internal tier; admin-only
+  endpoints and the job's switch; migration 0041 up / down;
 - **settlement fixings**: finality, TWAP, hash-chain tamper detection, the immutability trigger,
   restatements, evidence retention;
 - **reservations**: state machine, supply-basis enforcement, tenant isolation, nothing launched or billed;

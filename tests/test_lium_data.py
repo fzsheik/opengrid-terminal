@@ -62,7 +62,8 @@ def setup():
 def wipe():
     with normalize.SessionLocal.begin() as s:
         s.execute(text("TRUNCATE lium_feed_values, lium_trades, lium_hourly_gpu, lium_daily_aggregate, "
-                       "lium_throughput_daily, lium_model_stats_daily, lium_feed_snapshots, raw_snapshots, "
+                       "lium_throughput_daily, lium_model_stats_daily, lium_grafana_rentals, lium_grafana_hourly, "
+                       "lium_feed_snapshots, raw_snapshots, "
                        "raw_payloads RESTART IDENTITY CASCADE"))
 
 
@@ -319,13 +320,13 @@ def test_partner_off_without_key():
         schedule._registered, saved_poll = False, settings.poller_enabled
         settings.poller_enabled = True
         jobs.JOBS.pop("lium_partner", None)
-        assert schedule.register() == ["lium_public"] and "lium_partner" not in jobs.JOBS
+        assert schedule.register() == ["lium_public", "lium_grafana"] and "lium_partner" not in jobs.JOBS
         schedule._registered = False
         settings.lium_partner_api_key = KEY
-        assert schedule.register() == ["lium_public", "lium_partner"] and "lium_partner" in jobs.JOBS
+        assert schedule.register() == ["lium_public", "lium_grafana", "lium_partner"] and "lium_partner" in jobs.JOBS
         settings.poller_enabled = saved_poll
-        jobs.JOBS.pop("lium_partner", None)
-        jobs.JOBS.pop("lium_public", None)
+        for name in ("lium_partner", "lium_public", "lium_grafana"):
+            jobs.JOBS.pop(name, None)
     finally:
         settings.lium_partner_api_key = saved
     assert count(LiumFeedSnapshot) == 0
@@ -501,7 +502,7 @@ def test_admin_endpoints():
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["meta"]["visibility"] == "internal" and body["meta"]["kind"] == "observed", body["meta"]
-        assert {f["feed"] for f in body["data"]["feeds"]} == set(F.FEEDS)
+        assert {f["feed"] for f in body["data"]["feeds"]} == set(F.FEEDS) | set(F.GRAFANA_PANELS)
         r = client.get("/v1/ops/lium/trades/stats?days=730", headers=op)
         assert r.status_code == 200 and r.json()["data"] and "transaction" in r.text, r.text
         assert client.get("/v1/ops/lium/hourly?hours=2160", headers=op).status_code == 200

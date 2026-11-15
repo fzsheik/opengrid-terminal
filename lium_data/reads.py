@@ -10,8 +10,8 @@ from sqlalchemy import desc, func, select
 import canonical
 from lium_data import feeds as F
 from lium_data import partner, public
-from store.lium import (LiumDailyAggregate, LiumFeedSnapshot, LiumFeedValue, LiumHourlyGpu, LiumModelStatsDaily,
-                        LiumThroughputDaily, LiumTrade)
+from store.lium import (LiumDailyAggregate, LiumFeedSnapshot, LiumFeedValue, LiumGrafanaHourly, LiumGrafanaRental,
+                        LiumHourlyGpu, LiumModelStatsDaily, LiumThroughputDaily, LiumTrade)
 
 
 def _session():
@@ -26,10 +26,11 @@ def status() -> dict:
     with _session()() as s:
         counts = dict(s.execute(select(LiumFeedSnapshot.feed, func.count()).group_by(LiumFeedSnapshot.feed)).all())
         out = []
-        for feed in F.FEEDS.values():
+        for feed in (*F.FEEDS.values(), *F.GRAFANA_PANELS.values()):
             last = s.execute(select(LiumFeedSnapshot).where(LiumFeedSnapshot.feed == feed.name)
                              .order_by(desc(LiumFeedSnapshot.last_seen_at), desc(LiumFeedSnapshot.id)).limit(1)).scalar()
-            out.append({"feed": feed.name, "path": "/api" + feed.path, "partner": feed.partner, "kind": feed.kind,
+            path = f"{feed.path} · {feed.title}" if isinstance(feed, F.Panel) else "/api" + feed.path
+            out.append({"feed": feed.name, "path": path, "partner": feed.partner, "kind": feed.kind,
                         "basis": feed.basis, "what": feed.what, "stored_answers": counts.get(feed.name, 0),
                         "state": last.state if last else None, "status_code": last.status_code if last else None,
                         "first_seen_at": last.fetched_at if last else None,
@@ -39,10 +40,13 @@ def status() -> dict:
         tables = {name: s.execute(select(func.count()).select_from(t)).scalar() for name, t in (
             ("lium_trades", LiumTrade), ("lium_hourly_gpu", LiumHourlyGpu), ("lium_daily_aggregate", LiumDailyAggregate),
             ("lium_feed_values", LiumFeedValue), ("lium_throughput_daily", LiumThroughputDaily),
-            ("lium_model_stats_daily", LiumModelStatsDaily))}
+            ("lium_model_stats_daily", LiumModelStatsDaily), ("lium_grafana_rentals", LiumGrafanaRental),
+            ("lium_grafana_hourly", LiumGrafanaHourly))}
         span = s.execute(select(func.min(LiumTrade.end_at), func.max(LiumTrade.end_at))).one()
+        starts = s.execute(select(func.min(LiumGrafanaRental.start_at), func.max(LiumGrafanaRental.start_at))).one()
     return {"partner_key_configured": partner.api_key() is not None, "feeds": out, "rows": tables,
-            "trades_end_range": {"first": span[0], "last": span[1]}}
+            "trades_end_range": {"first": span[0], "last": span[1]},
+            "grafana_rentals_start_range": {"first": starts[0], "last": starts[1]}}
 
 
 def current(feed: str) -> dict | None:
@@ -155,3 +159,44 @@ def trade_stats_vs_published(days: int = 30) -> list[dict]:
                     "gpu_hours_from_trades": o["gpu_hours"] if o else None,
                     "gpu_hours_published": t[1] if t else None})
     return out
+
+
+# --------------------------------------------------------------------------
+# Lium's public Grafana (lium_data/grafana.py)
+# --------------------------------------------------------------------------
+
+
+def grafana_rental_stats(days: int = 30, gpu: str | None = None, tier: str | None = None, by: str = "day") -> list[dict]:
+    """Per UTC day (or hour) of rental START, GPU model and tier: rentals, and the median, mean, lowest and highest
+    price per GPU-hour paid. Every rental counts once whatever its size or length: the panel gives no GPU count or
+    end time, so this is not volume-weighted. Rentals at a price of zero are left out."""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    R = LiumGrafanaRental
+    bucket = func.date_trunc("hour" if by == "hour" else "day", R.start_at).label("bucket")
+    price = R.price_per_gpu_hour
+    stmt = (select(bucket, R.gpu_model, R.tier, func.count(), func.percentile_cont(0.5).within_group(price),
+                   func.avg(price), func.min(price), func.max(price))
+            .where(R.start_at >= since, price > 0).group_by(bucket, R.gpu_model, R.tier))
+    if gpu:
+        stmt = stmt.where(R.gpu_model == gpu)
+    if tier:
+        stmt = stmt.where(R.tier == tier)
+    with _session()() as s:
+        rows = s.execute(stmt.order_by(desc(bucket), R.gpu_model, R.tier)).all()
+    when = "hour_utc" if by == "hour" else "day"
+    return [{when: r[0] if by == "hour" else r[0].date(), "gpu_model": r[1],
+             "canonical_gpu_name": canonical.canonical_gpu_name(r[1]), "tier": r[2], "rentals": r[3],
+             "median": round(float(r[4]), 4), "mean": round(float(r[5]), 4), "low": r[6], "high": r[7]} for r in rows]
+
+
+def grafana_hourly(metric: str, hours: int = 48, gpu: str | None = None) -> list[dict]:
+    """One hourly series (a column of lium_grafana_hourly), newest first; hours with no value are left out."""
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    H = LiumGrafanaHourly
+    column = getattr(H, metric)
+    stmt = select(H.hour_utc, H.gpu_model, column, H.updated_at).where(H.hour_utc >= since, column.is_not(None))
+    if gpu:
+        stmt = stmt.where(H.gpu_model == gpu)
+    with _session()() as s:
+        rows = s.execute(stmt.order_by(desc(H.hour_utc), H.gpu_model)).all()
+    return [{"hour_utc": r[0], "gpu_model": r[1], "value": r[2], "updated_at": r[3]} for r in rows]

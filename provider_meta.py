@@ -254,6 +254,14 @@ INTERNAL_SOURCES: tuple[InternalSource, ...] = (
         "admin reads only (/v1/ops/lium/*); not yet used by routing or provider reliability")
       for path in ("/public/v1/launch-stats", "/public/v1/requests", "/executors/stats", "/machines/spot-idle-rates",
                    "/machines/capacity", "/v1/shared-config", "/api/public/v1/stats")),
+    *(InternalSource(
+        "lium", path, ("signals",),
+        "Lium's public Grafana dashboards (docs.lium.io/providers/grafana: open without an account): rental "
+        "starts with the price paid, renter spend and the fleet per hour. Open to read, but Lium's Terms of "
+        "Service grant only a limited licence to use the Service and its partner page does not name the "
+        "dashboards among the feeds to list. Read and kept, not republished, until Lium says otherwise.",
+        "admin reads only (/v1/ops/lium/grafana/*); no route, index or statistic reads it yet")
+      for path in ("grafana.lium.io/d/marketplace-prices-v1", "grafana.lium.io/d/bejrh6ldw5lhcc")),
 )
 
 

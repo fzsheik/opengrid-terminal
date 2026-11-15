@@ -78,3 +78,54 @@ STATS_KIND = (TRANSACTION, PUBLISHED_AGGREGATE)
 
 def url(feed: Feed, **path_params) -> str:
     return BASE_URL + API + feed.path.format(**path_params)
+
+
+# --------------------------------------------------------------------------
+# Lium's public Grafana (grafana.lium.io; docs.lium.io/providers/grafana: "No account is needed")
+# --------------------------------------------------------------------------
+# lium_data/grafana.py reads a panel by running the query the DASHBOARD holds for it at that moment, with the
+# dashboard's own variables at one of their listed values. OpenGrid never writes a query of its own.
+
+GRAFANA_URL = "https://grafana.lium.io"
+# The options of the dashboards' `tier` variable, in the order they are read: the two tiers first, so a rental is
+# stored with its tier at once, then "All" (no filter), which adds the rentals neither tier read returned.
+TIERS = ("spot", "secure", "All")
+
+
+@dataclass(frozen=True)
+class Panel:
+    name: str                  # the feed name in lium_feed_snapshots
+    dashboard: str             # dashboard uid
+    title: str                 # the panel's title exactly as the dashboard prints it
+    kind: str
+    basis: str
+    what: str
+    metric: str | None = None  # the lium_grafana_hourly column of an hourly series; None: one point per rental
+    # what raw.store reads from a Feed
+    fmt: str = "json"
+    partner: bool = False
+    volatile: tuple[str, ...] = ("from", "to")     # the window slides; only the cells decide "changed"
+    keep: tuple[str, ...] = field(default=())
+
+    @property
+    def path(self) -> str:                         # the source provider_meta's registry names
+        return f"grafana.lium.io/d/{self.dashboard}"
+
+
+MARKETPLACE_PRICES, NETWORK_STATUS = "marketplace-prices-v1", "bejrh6ldw5lhcc"
+
+GRAFANA_PANELS: dict[str, Panel] = {p.name: p for p in (
+    Panel("grafana_rentals", MARKETPLACE_PRICES, "Rented-at price over time ($gpu_type)", TRANSACTION, TRADE_RECORD,
+          "one point per rental at its start: start time, GPU model, price per GPU-hour paid; also read once per "
+          "tier (spot, secure). No GPU count, end time, renter or provider"),
+    # the fleet before the spend: a zero spend is written only where the fleet read already made the hour's row
+    Panel("grafana_listed", NETWORK_STATUS, "GPUs listed by type", OBSERVED, "provider_reported",
+          "GPUs listed per UTC hour and GPU model (hourly mean of Lium's inventory samples)", metric="gpus_listed"),
+    Panel("grafana_rented", NETWORK_STATUS, "Rented GPUs by type", OBSERVED, "provider_reported",
+          "GPUs rented per UTC hour and GPU model (hourly mean of Lium's inventory samples)", metric="gpus_rented"),
+    Panel("grafana_spend", NETWORK_STATUS, "Credit spend per hour, by GPU type", TRANSACTION, PUBLISHED_AGGREGATE,
+          "renter spend in USD per hour, per UTC hour and GPU model (Lium's hourly mean of its own samples)",
+          metric="spend_usd_per_hour"),
+)}
+SERIES_PANELS = tuple(p for p in GRAFANA_PANELS.values() if p.metric)
+RENTALS_PANEL = GRAFANA_PANELS["grafana_rentals"]

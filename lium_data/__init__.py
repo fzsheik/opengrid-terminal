@@ -12,7 +12,11 @@ default (provider_meta.INTERNAL_SOURCES; redistribution is not granted by Lium's
                  30-day median paid price per model, parsed from the stats snapshots providers/lium.py stores
     partner.py   the data-partner feeds (job `lium_partner`, only with LIUM_PARTNER_API_KEY): completed rentals
                  (trades.csv, kind transaction), hourly GPU usage, daily VWAP; the nightly dumps for the backfill
+    grafana.py   Lium's public Grafana dashboards (job `lium_grafana`, hourly): one row per rental start with the
+                 price paid and its tier, and renter spend / GPUs listed / GPUs rented per hour and GPU model. It
+                 runs only the queries the dashboards themselves hold; history through grafana-backfill
     reads.py     what the admin endpoints serve (api/lium.py): status, trade statistics, current public values
 
 CLI: python -m lium_data status | poll-public | poll-partner | backfill --since YYYY-MM-DD | reparse-stats
+                       | poll-grafana | grafana-backfill --since YYYY-MM-DD | grafana-reparse
 """

@@ -12,6 +12,9 @@
     GET /v1/ops/lium/feeds/{feed}           the newest answer of a keyless feed, one row per GPU (launch_stats,
                                             requests, executor_stats, spot_idle_rates, idle_capacity, shared_config)
     GET /v1/ops/lium/feeds/{feed}/history   one metric's changes over time
+    GET /v1/ops/lium/grafana/rentals        per UTC day or hour of rental start, GPU model and tier, from Lium's
+                                            public Grafana: rentals, median / mean / low / high price paid
+    GET /v1/ops/lium/grafana/hourly         renter spend, GPUs listed or GPUs rented per UTC hour and GPU model
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -26,7 +29,7 @@ admin = require_scope("admin")
 METHOD = "lium-data"
 NOTE = "INTERNAL data (provider_meta.INTERNAL_SOURCES): never republish"
 
-schedule.register()  # lium_public (and lium_partner when LIUM_PARTNER_API_KEY is set)
+schedule.register()  # lium_public, lium_grafana (and lium_partner when LIUM_PARTNER_API_KEY is set)
 
 
 def _env(data, kind: str, basis: str | None = None, **meta):
@@ -86,3 +89,28 @@ def lium_feed_history(feed: str, subject: str, metric: str, gpu_count: int = 0, 
         raise HTTPException(404, "unknown feed")
     rows = reads.history(feed, subject, metric, gpu_count, days)
     return _env(rows, F.FEEDS[feed].kind, F.FEEDS[feed].basis, count=len(rows))
+
+
+_METRICS = {p.metric: p for p in F.SERIES_PANELS}
+
+
+@router.get("/v1/ops/lium/grafana/rentals", tags=["ops"], summary="Ops: prices paid per GPU on Lium, from its public Grafana (internal)")
+def lium_grafana_rentals(days: int = Query(30, ge=1, le=730), gpu: str | None = None,
+                         tier: str | None = Query(None, pattern="^(spot|secure)$"),
+                         by: str = Query("day", pattern="^(day|hour)$"), who: Principal = Depends(admin)):
+    rows = reads.grafana_rental_stats(days, gpu, tier, by)
+    return _env(rows, TRANSACTION, F.DERIVED_FROM_TRADES, count=len(rows), window_days=days,
+                source="grafana.lium.io, Marketplace prices: one point per rental start",
+                caveat="one vote per rental, not volume-weighted: the panel gives no GPU count or end time; "
+                       "tier is null until the spot or secure read names it")
+
+
+@router.get("/v1/ops/lium/grafana/hourly", tags=["ops"], summary="Ops: Lium renter spend and fleet per hour and GPU, from its public Grafana (internal)")
+def lium_grafana_hourly(metric: str = "spend_usd_per_hour", hours: int = Query(48, ge=1, le=24 * 400),
+                        gpu: str | None = None, who: Principal = Depends(admin)):
+    if metric not in _METRICS:
+        raise HTTPException(404, f"unknown metric; one of {sorted(_METRICS)}")
+    rows = reads.grafana_hourly(metric, hours, gpu)
+    panel = _METRICS[metric]
+    return _env(rows, panel.kind, panel.basis, count=len(rows), source=f"grafana.lium.io, {panel.title}",
+                caveat="Lium's hourly mean of its own samples; the running hour is partial until it closes")

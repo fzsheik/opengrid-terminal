@@ -5,6 +5,39 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-15 — Lium paid prices from its public Grafana: rental starts per tier, hourly spend and fleet (internal)
+
+### What shipped
+- **`lium_data/grafana.py`** (job `lium_grafana`, hourly; migration `0041_lium_grafana`; methodology/lium-data.md
+  "Lium's public Grafana"): Lium's dashboards at grafana.lium.io are open without an account. The job reads one
+  point per rental start with the price per GPU-hour paid (three reads, so each rental carries spot or secure),
+  and renter spend, GPUs listed and GPUs rented per UTC hour and GPU model.
+- **Only the dashboard's own query is sent.** The dashboard is fetched at each run and the panel's stored query is
+  used with the dashboard's own variable values. A renamed panel, an unknown variable, an unlisted value or a
+  missing tier filter stops the read and is stored once as a failure.
+- **Storage**: raw first and change-only in `lium_feed_snapshots` (the answer's non-empty cells), then
+  `lium_grafana_rentals` (keyed on start time to the nanosecond + model + price) and `lium_grafana_hourly` (one row
+  per hour and model, updated in place). Every row INTERNAL.
+- **History**: `python -m lium_data grafana-backfill --since YYYY-MM-DD`, closed chunks, resumable.
+- **Admin reads** `/v1/ops/lium/grafana/rentals` (per day or hour, GPU and tier: rentals, median, mean, low, high)
+  and `/v1/ops/lium/grafana/hourly`; `/v1/ops/lium/status` lists the four panels.
+
+### Not shipped
+- No public surface, and nothing reads it yet (no index, statistic or route): Lium's terms do not license
+  redistribution.
+- No volume weighting: the panel gives no GPU count or end time, so each rental counts once.
+- The other panels (asking-price percentiles, idle time before rent, per-node tables) are not read; asking prices
+  already come from the Lium price poll.
+
+### Left
+- The data-partner feeds still add what the dashboards lack: GPU count, end time, provider country and hashed
+  renter and provider ids. They stay dormant until Lium flags the account.
+
+### Next
+- Compare the rental-start medians with Lium's published 30-day median paid price per model, as a cross-check.
+
+---
+
 ## 2026-11-14 — Lium market data beyond prices: partner trades (dormant until flagged), keyless feeds, published throughput (all internal)
 
 ### What shipped
