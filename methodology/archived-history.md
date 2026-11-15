@@ -104,6 +104,12 @@ can miss short price moves entirely. Stock is never inferred from an archived pa
   their pages print only the GPU component per GPU-hour (vCPUs and RAM extra). Those rows carry provider_tier
   `a-la-carte` / `vm-gpu-component` and their own listing ids: a lower bound on what the GPU cost, never the same
   listing as a whole-instance price.
+- **Pages that print no price.** Oracle's price pages since late 2018 and Google's GPU pages from 2020 to 2024 fill
+  their prices in the browser, so their captures store nothing; older and newer designs of those pages, Oracle's price
+  list API, and Linode's pricing page (matched to plan ids from Linode's own archived API) are read instead.
+  Jarvislabs' 2022 - 23 tables print "Reserved" for the non-preemptible hourly price: read as on-demand. Vast.ai
+  publishes no list price: its pricing pages load prices by script or print only a min - max range over current asks,
+  so Vast's archive stays the Huang monthly transacted medians.
 - **Commitment prices are never read** (reserved, weekly / monthly / 6-month / 2-year columns, starred "3-year"
   rates): only the on-demand column or card, and spot where the page prints one.
 - **Providers not merged yet.** Archived pages of providers whose live module is still on a branch
