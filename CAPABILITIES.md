@@ -353,6 +353,9 @@ newest answer, a 403 or a 404 included, only moves `last_seen_at` / `seen_count`
   are updated in place. Kind **transaction** (rental starts `trade_record`, spend `published_aggregate`) and
   **observed** (fleet). No GPU count, end time, renter or provider: statistics count each rental once and are not
   volume-weighted. History: `python -m lium_data grafana-backfill --since YYYY-MM-DD` (closed chunks, resumable).
+  **Production, 15 Nov 2026**: 92,631 rental starts back to Sept 2025 (972 in Dec 2025, 26,667 in Oct 2026), tier
+  labels only from 10 Nov 2026 on (8,795 rentals); 158,471 hourly rows (spend from 11 Sept 2025, fleet from 10 Dec
+  2025); 69 MB in all.
 - **Reads** (admin only): `/v1/ops/lium/status`, `/trades/stats` (per UTC end day and GPU: rentals, GPU-hours, VWAP,
   low, high, notional; basis `derived_from_trades`), `/trades/check` (that VWAP against Lium's published daily VWAP),
   `/hourly`, `/daily-aggregate`, `/throughput`, `/feeds/{feed}`, `/feeds/{feed}/history`, `/grafana/rentals` (per

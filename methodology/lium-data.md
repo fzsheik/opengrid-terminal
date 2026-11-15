@@ -74,7 +74,10 @@ Each of those is stored as a failed read, once, and never guessed around. The jo
 **Rental starts.** The panel gives no rental id, so a rental's key is a hash of its start time to the nanosecond,
 its GPU model and its price. Reading an overlapping window therefore never counts a rental twice. The panel is read
 three times: the spot read and the secure read store each rental with its tier, and the unfiltered read then adds
-the rentals neither returned (about 4% of those read for 10 to 15 November 2026), which keep an empty tier. A rental is a start: the
+the rentals neither returned, which keep an empty tier. Lium's tier labels begin in November 2026: every rental
+from 11 November on carries one, 10 November is partly labelled, and almost none before it is (92,631 rentals read
+back to September 2025, 8,795 of them with a tier). Spot and secure prices differ widely, so a statistic over
+unlabelled rentals mixes the two. A rental is a start: the
 panel does not say how many GPUs it took or when it ended.
 
 **Hourly series.** One row per UTC hour and GPU model holds GPUs listed, GPUs rented and renter spend. The running
