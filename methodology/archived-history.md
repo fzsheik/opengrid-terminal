@@ -128,6 +128,13 @@ can miss short price moves entirely. Stock is never inferred from an archived pa
   their pages print only the GPU component per GPU-hour (vCPUs and RAM extra). Those rows carry provider_tier
   `a-la-carte` / `vm-gpu-component` and their own listing ids: a lower bound on what the GPU cost, never the same
   listing as a whole-instance price.
+- **EUR pages** (Scaleway, Hetzner, Gcore) are converted exactly like their live pollers: at the ECB EUR->USD rate
+  already published at the capture (`fx.usd_rate`, fail closed when none is under 5 days old), never at a guess. The
+  live FX job stores only about 90 days back, so the ECB's full history (1999 on) is loaded once with
+  `python -m backfill.ecb_history`. The EUR price as printed and the rate used are kept in the row's `note`. A page
+  whose VAT basis is not "excl. VAT" (Hetzner captured from a German address) or whose hourly and monthly figures
+  are in different currencies (Civo, 2023) is not read. IBM Cloud has no usable archive: its Global Catalog pricing
+  API was never captured and its archived GPU pages print only "starting at" prices.
 - **Commitment prices are never read** (reserved, weekly / monthly / 6-month / 2-year columns, starred "3-year"
   rates): only the on-demand column or card, and spot where the page prints one.
 - **Other products of a provider, said so.** Hyperbolic's pages print a weekly "starting from" rate per GPU-hour
