@@ -130,6 +130,11 @@ can miss short price moves entirely. Stock is never inferred from an archived pa
   listing as a whole-instance price.
 - **Commitment prices are never read** (reserved, weekly / monthly / 6-month / 2-year columns, starred "3-year"
   rates): only the on-demand column or card, and spot where the page prints one.
+- **Other products of a provider, said so.** Hyperbolic's pages print a weekly "starting from" rate per GPU-hour
+  (tier `starting-from`, listing `<gpu>:from`; the live data is per rental option) and DeepInfra's /pricing its
+  "Custom LLMs" dedicated-deployment rate per GPU-hour (tier `custom-llm`): their own listing ids, never joined to
+  the live listings. Mithril's archived prices are spot 7-day averages, as live. DeepInfra container-API prices are
+  internal and never archived.
 - **Providers not merged yet.** Archived pages of providers whose live module is still on a branch
   (`backfill.sources.PENDING`) are read with that branch's listing ids and GPU names (`backfill/pending_names.py`),
   so the series join once it lands. Resellers keep their live tier (`resold:<vendor>`).

@@ -380,8 +380,10 @@ its `basis`, `licence`, `attribution` and visibility tier (migration `0031_backf
 - **Internet Archive captures** of provider price pages, one parser per page design (`python -m backfill import`):
   e.g. Azure's Linux VM page 2017-2024, Lambda 2020-2025, CoreWeave 2021-2024, RunPod 2022-2024, Verda/DataCrunch
   2020-2025, Paperspace 2017-2026, Exoscale from 2021, Hugging Face Inference Endpoints from 2022 (`resold:<vendor>`);
-  Arkane from 2023-09, E2E's USD list from 2023-12, Phyntec (Shadeform's `evergreen`) and Atlantic.Net from 2025-03,
-  Koyeb from 2024-11, Yotta (INR at the ECB rate of the capture day) from 2025-11, VESSL and SimplePod (VM book) from 2026-06.
+  Replicate from 2022-07, Arkane from 2023-09, E2E's USD list from 2023-12, DeepInfra from 2024-04 (public page prices
+  only), Koyeb from 2024-11, Mithril/Foundry spot from 2025-01, Hyperbolic "starting from" rates, Phyntec (Shadeform's
+  `evergreen`) and Atlantic.Net from 2025-03, Yotta (INR at the ECB rate of the capture day) from 2025-11, IONOS from
+  2026-01, VESSL and SimplePod (VM book) from 2026-06.
 - **AWS's own EC2 price-list archive**: all 123 monthly versions from 2015-12 (`python -m backfill aws`); reserved
   1y / 3y rows are stored at their effective hourly price, never as on-demand, and are not served yet.
 - **Azure "effective since" anchors**: one point per GPU size, region and market at the current price's
