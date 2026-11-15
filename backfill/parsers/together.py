@@ -78,8 +78,10 @@ def per_gpu_table(page: str, at: datetime) -> list[ComputeListing]:
         if head[:1] != ["Hardware"] or "ON-Demand" not in head:
             raise ValueError(f"together(archive): per-GPU table header not recognised: {head!r}")
         cols = {"on_demand": head.index("ON-Demand")}
-        if "Preemptible Compute" in head:
-            cols["spot"] = head.index("Preemptible Compute")
+        # The page has printed this column as "Preemptible Compute" and, since 2026-11-12, "Preemptible".
+        spot = next((h for h in ("Preemptible Compute", "Preemptible") if h in head), None)
+        if spot is not None:
+            cols["spot"] = head.index(spot)
         out = _listings(_rows(t), cols, at)
         if out:
             return out

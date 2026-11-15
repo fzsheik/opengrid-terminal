@@ -55,17 +55,21 @@ def test_together_designs_pick_the_right_parser_and_prices():
 
 
 def test_together_per_gpu_table_reads_preemptible_like_live():
-    page = next(PROV_FIX.glob("together*"), None)
-    if page is None:
+    # Every stored live page, in a fixed order: glob order differs by filesystem, and checking only the first
+    # match hid a design the archive parser misread (the 2026-11-12 "Preemptible" header) everywhere but CI.
+    pages = sorted(PROV_FIX.glob("together*"))
+    if not pages:
         print("  (no live together fixture; skipped)")
         return
     from providers.together import TogetherProvider, extract
     from types import SimpleNamespace
-    live = TogetherProvider.normalize({"/pricing": [SimpleNamespace(endpoint="/pricing", payload=extract(page.read_text()),
-                                                                    fetched_at=AT)]})
-    mine = TG.per_gpu_table(page.read_text(), AT)
     key = lambda ls: sorted((l.listing_id, l.market_type, l.price_per_gpu_hour) for l in ls)  # noqa: E731
-    assert key(mine) == key(live), "the archive parser agrees with the live parser on the current design"
+    for page in pages:
+        live = TogetherProvider.normalize({"/pricing": [SimpleNamespace(
+            endpoint="/pricing", payload=extract(page.read_text()), fetched_at=AT)]})
+        mine = TG.per_gpu_table(page.read_text(), AT)
+        assert any(l.market_type == "spot" for l in live), (page.name, "the live page prices preemptible")
+        assert key(mine) == key(live), (page.name, "the archive parser agrees with the live parser")
 
 
 def test_together_rejects_unknown_header():
