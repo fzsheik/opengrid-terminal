@@ -78,6 +78,73 @@ def current(feed: str) -> dict | None:
             "generated_at": gen, "feed_wide": meta, "rows": list(rows.values())}
 
 
+def providers() -> dict:
+    """Per Lium provider (miner hotkey): its newest statistics, and from its machine list how many machines and
+    GPUs are rented now and what they earn per hour. Admin read; every value internal."""
+    with _session()() as s:
+        stats = [v for v in public.latest_values(s, "provider_stats").values() if v.present]
+        machines = [v for v in public.latest_values(s, "provider_executors").values() if v.present]
+        checked = dict(s.execute(select(LiumFeedSnapshot.params_key, func.max(LiumFeedSnapshot.last_seen_at))
+                                 .where(LiumFeedSnapshot.feed == "provider_stats").group_by(LiumFeedSnapshot.params_key)).all())
+    rows: dict[str, dict] = {}
+    for v in stats:
+        r = rows.setdefault(v.subject, {"hotkey": v.subject})
+        r[v.metric] = v.value if v.value is not None else (v.value_time or v.value_text)
+    per_machine: dict[str, dict] = defaultdict(dict)
+    for v in machines:
+        per_machine[v.subject][v.metric] = v.value if v.value is not None else (v.value_time or v.value_text)
+    live: dict[str, dict] = {}
+    for subject, m in per_machine.items():
+        hk = subject.split("/", 1)[0]
+        a = live.setdefault(hk, {"machines_listed": 0, "machines_rented": 0, "gpus_listed": 0, "gpus_rented": 0,
+                                 "revenue_per_hour": 0})
+        a["machines_listed"] += 1
+        a["machines_rented"] += 1 if m.get("rented") else 0
+        a["gpus_listed"] += int(m.get("gpu_count") or 0)
+        a["gpus_rented"] += int(m.get("rented_gpu_count") or 0)
+        a["revenue_per_hour"] += m.get("revenue_per_hour") or 0
+    for hk, a in live.items():
+        rows.setdefault(hk, {"hotkey": hk}).update(a)
+    for hk, r in rows.items():
+        r["last_checked_at"] = checked.get(raw_params_key(hk))
+    out = sorted(rows.values(), key=lambda r: (-(r.get("gpus_listed") or r.get("total_gpus") or 0), r["hotkey"]))
+    total = {k: sum(r.get(k) or 0 for r in out) for k in ("machines_listed", "machines_rented", "gpus_listed",
+                                                          "gpus_rented", "revenue_per_hour")}
+    return {"providers": len(out), "totals": total, "rows": out}
+
+
+def raw_params_key(hotkey: str) -> str:
+    from lium_data import raw
+
+    return raw.params_key({"hotkey": hotkey})
+
+
+def provider_machines(hours: int = 6) -> list[tuple[str, list[dict]]]:
+    """(hotkey, stored machine list) of every provider whose machine list was read in the last `hours`: the newest
+    answer per provider. For operators.py, which adds fully rented machines to its Lium fleet from them."""
+    import json
+
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    with _session()() as s:
+        rows = s.execute(select(LiumFeedSnapshot).where(
+            LiumFeedSnapshot.feed == "provider_executors", LiumFeedSnapshot.ok.is_(True),
+            LiumFeedSnapshot.last_seen_at >= since)
+            .order_by(desc(LiumFeedSnapshot.last_seen_at), desc(LiumFeedSnapshot.id))).scalars().all()
+    out, seen = [], set()
+    for r in rows:
+        hk = (r.params or {}).get("hotkey")
+        if not hk or hk in seen or not r.body:
+            continue
+        seen.add(hk)
+        try:
+            body = json.loads(r.body)
+        except ValueError:
+            continue
+        if isinstance(body, list):
+            out.append((hk, body))
+    return out
+
+
 def history(feed: str, subject: str, metric: str, gpu_count: int = 0, days: int = 30) -> list[dict]:
     """One metric's changes over time, newest first (the table is change-only; present false: it left the feed)."""
     since = datetime.now(timezone.utc) - timedelta(days=days)

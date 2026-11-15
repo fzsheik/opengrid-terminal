@@ -1,7 +1,8 @@
 """Who runs the machines: operators per marketplace and candidate matches across marketplaces. INTERNAL.
 
 Two marketplaces publish, for each machine, a key of whoever operates it:
-    lium   `provider_key` (else `miner_hotkey`) on every machine with a free GPU   (providers/lium.py OPERATOR_FIELDS)
+    lium   `provider_key` (else `miner_hotkey`) on every machine with a free GPU   (providers/lium.py OPERATOR_FIELDS);
+           fully rented machines come from the per-provider machine lists (lium_data provider_executors)
     vast   `host_id` on every offer of the price search and, with a key, of the whole-fleet census
 Both are kept in the stored raw copies only. This module reads those copies and computes, on read:
 
@@ -31,8 +32,9 @@ from decimal import Decimal
 MARKETPLACES = ("lium", "vast")
 RAM_TOLERANCE = 0.03
 KIB_PER_GIB = 1024 * 1024
-# Vast: the price search is read every 5 minutes and shows only the 64 cheapest offers per GPU model, a set that
-# changes from round to round, so every round of the last three hours is read (a machine keeps its newest price).
+# Vast: the price search is read every 5 minutes. Offers come and go between rounds (and before 2026-11-15 a round
+# held only the 64 cheapest per model), so every round of the last three hours is read (a machine keeps its newest
+# price).
 # The keyed census runs every 1 to 12 hours.
 VAST_LISTING_WINDOW = timedelta(hours=3)
 VAST_CENSUS_WINDOW = timedelta(hours=26)
@@ -77,6 +79,27 @@ def lium_machines(executors) -> list[dict]:
                             e.get("country_code"), _num(e.get("price_per_gpu")),
                             bool(e.get("available_gpu_count")) if e.get("available_gpu_count") is not None else None))
     return out
+
+
+def lium_provider_machines(hotkey: str, machines) -> list[dict]:
+    """One row per machine of a stored per-provider machine list (lium_data provider_executors, slimmed): every
+    machine the provider runs, fully rented ones included. The operator is the provider's miner hotkey."""
+    out = []
+    for e in machines if isinstance(machines, list) else []:
+        if not isinstance(e, dict) or e.get("id") is None:
+            continue
+        gpus, ram, free = e.get("gpu_count"), _num(e.get("ram_total")), e.get("available_gpu_count")
+        out.append(_machine("lium", e["id"], hotkey, e.get("machine_name"), gpus if isinstance(gpus, int) else None,
+                            e.get("cpu_model"), e.get("cpu_count"), None if ram is None else ram / KIB_PER_GIB,
+                            e.get("country_code"), _num(e.get("price_per_gpu")), None if free is None else bool(free)))
+    return out
+
+
+def merge_lium(listed: list[dict], per_provider: list[dict]) -> list[dict]:
+    """The Lium fleet: machines of the rentable list (they carry the operator's own key, which for a pool is finer
+    than the miner hotkey) plus every machine only the per-provider lists show, which are the fully rented ones."""
+    have = {m["machine_id"] for m in listed}
+    return listed + [m for m in per_provider if m["machine_id"] not in have]
 
 
 def _vast_total_gpus(o: dict) -> int | None:
@@ -306,9 +329,13 @@ def load(now: datetime | None = None) -> dict:
         ex = [r for ep, rows in raw.items() if ep == lium.ENDPOINT for r in rows]
         lium_at = ex[0].fetched_at if ex else None
         lm = lium_machines(ex[0].payload) if ex else []
+        listed = len(lm)
         rounds = _listing_rounds(s, "vast", vast.ENDPOINT, now - VAST_LISTING_WINDOW)
         census = _newest_per_request(s, "vast", vast.ENDPOINT, now - VAST_CENSUS_WINDOW, census=True)
         bodies = _payloads(s, [v[0] for v in census.values()])
+    from lium_data import reads as lium_reads
+
+    lm = merge_lium(lm, [m for hk, body in lium_reads.provider_machines() for m in lium_provider_machines(hk, body)])
     vm = vast_machines([payload for _, payload in rounds],
                        [(req.get("gpu_name"), req.get("rentable"), bodies.get(i)) for i, req, _ in census.values()])
     return {
@@ -317,8 +344,9 @@ def load(now: datetime | None = None) -> dict:
                   "vast": max((at for at, _ in rounds), default=None),
                   "vast_census": max((at for _, _, at in census.values()), default=None)},
         "coverage": {
-            "lium": "machines with a free GPU (the whole-fleet feed carries no operator key or CPU model)",
-            "vast": "machines seen among the 64 cheapest offers per GPU model in the last 3 hours, plus every machine "
+            "lium": f"{listed} machines with a free GPU, plus {len(lm) - listed} more (fully rented ones) from the "
+                    "per-provider machine lists read in the last 6 hours",
+            "vast": "every machine offered in the last 3 hours (each model's whole book), plus every machine "
                     "of the keyed census when it has run in the last 26 hours (census rows have no RAM or price, "
                     "so they match on the build tier only)"},
     }

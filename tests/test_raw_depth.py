@@ -40,7 +40,7 @@ def _vast_raw():
         out = asyncio.run(prov.fetch())
     finally:
         vast.RATE_PAUSE_SECONDS = pause
-    return next(r for r in out if r.request == {"gpu_name": "H100 SXM"}), body["offers"][0]
+    return next(r for r in out if (r.request or {}).get("gpu_name") == "H100 SXM"), body["offers"][0]
 
 
 def test_vast_keeps_cost_and_network_fields():

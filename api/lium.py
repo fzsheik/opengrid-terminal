@@ -12,6 +12,8 @@
     GET /v1/ops/lium/feeds/{feed}           the newest answer of a keyless feed, one row per GPU (launch_stats,
                                             requests, executor_stats, spot_idle_rates, idle_capacity, shared_config)
     GET /v1/ops/lium/feeds/{feed}/history   one metric's changes over time
+    GET /v1/ops/lium/providers              per provider (miner hotkey): rentals started and failed, renters, uptime,
+                                            and how many machines and GPUs are rented now and what they earn per hour
     GET /v1/ops/lium/grafana/rentals        per UTC day or hour of rental start, GPU model and tier, from Lium's
                                             public Grafana: rentals, median / mean / low / high price paid
     GET /v1/ops/lium/grafana/hourly         renter spend, GPUs listed or GPUs rented per UTC hour and GPU model
@@ -29,7 +31,7 @@ admin = require_scope("admin")
 METHOD = "lium-data"
 NOTE = "INTERNAL data (provider_meta.INTERNAL_SOURCES): never republish"
 
-schedule.register()  # lium_public, lium_grafana (and lium_partner when LIUM_PARTNER_API_KEY is set)
+schedule.register()  # lium_public, lium_providers, lium_grafana (and lium_partner when LIUM_PARTNER_API_KEY is set)
 
 
 def _env(data, kind: str, basis: str | None = None, **meta):
@@ -89,6 +91,14 @@ def lium_feed_history(feed: str, subject: str, metric: str, gpu_count: int = 0, 
         raise HTTPException(404, "unknown feed")
     rows = reads.history(feed, subject, metric, gpu_count, days)
     return _env(rows, F.FEEDS[feed].kind, F.FEEDS[feed].basis, count=len(rows))
+
+
+@router.get("/v1/ops/lium/providers", tags=["ops"], summary="Ops: Lium providers, their rental record and what is rented now (internal)")
+def lium_providers(limit: int = Query(100, ge=1, le=1000), who: Principal = Depends(admin)):
+    out = reads.providers()
+    out["rows"] = out["rows"][:limit]
+    return _env(out, OBSERVED, "provider_reported", count=out["providers"],
+                source="lium.io/api/provider-stats/{hotkey} and its /executors, read hourly")
 
 
 _METRICS = {p.metric: p for p in F.SERIES_PANELS}

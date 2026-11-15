@@ -448,8 +448,10 @@ VAST = ProviderMapping(
         storage_gb=(RAW, "cheapest offer's disk_space", "None on the median row"),
     ),
     quirks=[
-        "The API returns at most 64 offers per query, whatever the limit, so a popular "
-        "model's book is cut off: its median is over the 64 cheapest and capacity is withheld.",
+        "The API returns at most 64 offers per query, whatever the limit. Since 2026-11-15 a longer book is read in "
+        "pages (the next query starts at the last price seen), so the median is over the whole book. Before that "
+        "day, and whenever a book cannot be read to its end, the median is over the 64 cheapest and capacity is "
+        "withheld.",
         "Two listings per model: the median ask is the typical price; the cheapest is what "
         "a router would grab and is often a single host.",
         "Only verified hosts are queried. Unverified hosts are often cheaper.",

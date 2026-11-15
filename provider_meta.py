@@ -265,7 +265,15 @@ INTERNAL_SOURCES: tuple[InternalSource, ...] = (
         "for redistribution. Read and kept, not republished, until Lium says otherwise.",
         "admin reads only (/v1/ops/lium/*); not yet used by routing or provider reliability")
       for path in ("/public/v1/launch-stats", "/public/v1/requests", "/executors/stats", "/machines/spot-idle-rates",
-                   "/machines/capacity", "/v1/shared-config", "/api/public/v1/stats")),
+                   "/machines/capacity", "/v1/shared-config", "/api/public/v1/stats", "/machines",
+                   "/machines/capacity/ineligible", "/executors/count", "/executors/total-count", "/version")),
+    *(InternalSource(
+        "lium", path, ("signals",),
+        "Lium's per-provider pages (statistics and the machines one provider runs, with rental state and revenue "
+        "per hour): shown to every visitor without a key, but they describe named operators, and Lium's Terms of "
+        "Service grant only a limited licence to use the Service. Read hourly and kept, never republished.",
+        "admin reads only (/v1/ops/lium/providers, /v1/ops/operators); no route, index or statistic reads it yet")
+      for path in ("/provider-stats/{hotkey}", "/provider-stats/{hotkey}/executors")),
     *(InternalSource(
         "lium", path, ("signals",),
         "Lium's public Grafana dashboards (docs.lium.io/providers/grafana: open without an account): rental "

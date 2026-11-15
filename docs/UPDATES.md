@@ -5,6 +5,47 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-15 — Vast's whole offer book, and Lium's price rules and per-provider feeds (internal)
+
+### What shipped
+- **Vast: the whole book per GPU model** (`providers/vast.py`). Vast's public search returns 64 offers per query
+  and takes no offset, so a longer book is now read in pages: the next query starts at the last price seen, and
+  offers already read are dropped by id. On 2026-11-15 only RTX 5090 (208 offers), RTX 4090 (126) and RTX 3090 (89)
+  needed more than one page: 23 requests a round instead of 18.
+- **This moves three published medians.** Until now those three books were the 64 cheapest offers, so the median
+  read low. Measured on 2026-11-15: RTX 5090 0.749 to 0.868 (+16%), RTX 4090 0.512 to 0.536 (+5%), RTX 3090 0.225
+  to 0.242 (+7%). The other 15 models are unchanged. Their GPU counts, withheld while the book was cut off, are now
+  stated. A book that cannot be read to its end is stored as far as read and treated as cut off, as before.
+- **Lium price rules and counts** (`lium_public`, every 15 minutes): `/machines` (per GPU model: reference price,
+  the band a provider may ask, soft limit, median ask, share rented now and over 30 days, fleet size, pay per epoch
+  rented and idle), the models outside idle pay, the rentable and whole-fleet machine counts, and the API build.
+- **Lium per provider** (new job `lium_providers`, hourly): each provider's rental record
+  (`/provider-stats/{hotkey}`) and every machine it runs with rental state, GPUs rented, revenue per hour and rented
+  since (`.../executors`). Stored slimmed; ticking counters alone store nothing. Admin read
+  `/v1/ops/lium/providers`.
+- **Operators read**: Lium's fully rented machines now come from those machine lists, so the Lium side covers the
+  whole fleet of every known provider, not only machines with a free GPU.
+- **Stored news re-classified** with the miner companies added earlier today.
+
+### Not shipped
+- **No history for any of this.** Lium publishes no past values for these feeds, Vast has no past books, and the
+  Internet Archive holds no copy of Bitdeer's price feed (its four captures of the pricing page have no prices in
+  them, because the page loads them from the feed). Each series starts on 2026-11-15.
+- **Lium `/machines/estimate`** (a calculator over the same numbers `/machines` gives) and **billing history**
+  (needs a coldkey no feed gives) are not read.
+- **No fixing change notice was posted** for the Vast medians; that is the founders' call.
+
+### Left
+- The Vast medians of RTX 5090, 4090 and 3090 step up on the day of the change; price-move events and alerts on
+  those three will read it as a price rise.
+- `lium_providers` writes a new stored answer whenever a provider's rental state changes; watch the database volume.
+
+### Next
+- Rental starts and ends per machine from the hourly rental state, as a utilisation series per provider.
+- A machine leaving one marketplace and appearing on another (needs a few weeks of stored keys).
+
+---
+
 ## 2026-11-15 — Bitdeer AI (internal), Bitcoin miners in the news classifier, and marketplace operators (internal)
 
 ### What shipped

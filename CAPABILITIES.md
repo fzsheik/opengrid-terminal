@@ -54,7 +54,7 @@ Counts recomputed from the code on 2026-11-13.
 | API operations | **262** in the OpenAPI schema: 240 under `/v1` (84 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 12 admin-only reads (7 power, 2 equities, 2 marketplace operators, 1 internal reserved prices), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 47 page routes |
 | Web pages | **47** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar. RL cost (`/rl-cost`) sits under GPUs; Batches (`/batches`, `/batch/{id}`) under My Jobs; the internal Monthly report (`/reports`, `/reports/{month}`) under Markets, locked |
 | Database tables | **119** in a freshly migrated database (118 application tables plus `alembic_version`; Postgres, migrated by Alembic: 43 migrations, head `0041_lium_grafana`) |
-| Background jobs | **37** registered when every optional source is configured (**33** with the defaults: no EIA / SEC / Alpaca keys, `POWER_ENABLED` off), beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets, the monthly market report…; table 15.2) |
+| Background jobs | **38** registered when every optional source is configured (**34** with the defaults: no EIA / SEC / Alpaca keys, `POWER_ENABLED` off), beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets, the monthly market report…; table 15.2) |
 | Capacity (stock) feeds | **32** providers report in-stock state or counts from their own APIs (section 3.6) |
 | Power markets (internal) | EIA-930 grid data, EIA natural gas, CAISO, NYISO, SPP, ERCOT and ISO-NE wholesale prices in their own `power_*` tables (about 504 MB in production on 2026-11-15); admin-only reads, never in a GPU statistic (section 5a) |
 | Provisioning adapters | **9 providers** (Lambda, RunPod, Hyperstack, DigitalOcean, Crusoe/Denvr/Latitude via Shadeform, Vast, Verda) |
@@ -62,7 +62,7 @@ Counts recomputed from the code on 2026-11-13.
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination. Built on top, tested against fake provider APIs only: **batches** (a sweep or shard list as one batch: placement across clouds, one budget, one approval), **resume** from a verified checkpoint, opt-in **OOM escalation** and **move** to another GPU; automatic relaunch / OOM escalation and move are off by default (`JOB_AUTO_RELAUNCH_ENABLED`, `JOB_MOVE_ENABLED`) |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
 | Workload intelligence | GPU memory estimator (text LLMs; recommendations also size audio, image + text and video workloads, section 6c), measured performance from completed real jobs (none yet), project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (hosted at `/mcp` with an API key: 15 tools, 2 prompts; local via uvx: 16 tools, 3 prompts), grounded assistant, RL post-training cost estimator |
-| Automated tests | **147** Python test files + **14** JavaScript test files, all 161 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
+| Automated tests | **149** Python test files + **14** JavaScript test files, all 163 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
 
 ---
 
@@ -153,7 +153,7 @@ Exoscale 1 h. Lium is also read live from its public WebSocket (section 3.7).
 | Massed Compute | neocloud | authenticated API (`gpu-inventory`, `MASSEDCOMPUTE_API_KEY`: prices and launchable counts); the public price page without the key or when the API call fails |
 | DigitalOcean | general cloud | authenticated API |
 | Salad | decentralized | authenticated API |
-| Vast.ai | marketplace | public API |
+| Vast.ai | marketplace | public API (each GPU model's whole offer book: the search returns 64 offers per query, so since 2026-11-15 a longer book is read in pages by price; before that the three longest books, RTX 5090, 4090 and 3090, were the 64 cheapest offers and their median read low) |
 | Hyperbolic | marketplace | public API |
 | Lium | decentralized | public API: free machines, plus the whole fleet incl. rented machines (rented stay listed, unavailable, at their current price; capacity = real utilisation) and Lium's 30-day paid-price stats (raw, parsed internal); further Lium market feeds are read into their own internal tables (section 3.9) |
 | Nosana | decentralized | public API |
@@ -329,8 +329,8 @@ indices or routing imports the module (`tests/test_operators.py`). Computed on r
   tiers (**strong**: GPU model, GPU count, CPU model, country, RAM within 3%; **build**: GPU model, CPU model,
   country), the price each side asks, and the operator pairs behind the matches. A match is a candidate, not proof;
   every answer says how many fingerprints are unique within each marketplace.
-Limits: only two marketplaces; Lium's fully rented machines carry no key; Vast census rows match on the build tier
-only; one moment is compared, so a machine moving between marketplaces over time is not detected yet. History
+Lium's fully rented machines come from the per-provider machine lists (section 3.9), filed under the miner hotkey.
+Limits: only two marketplaces; Vast census rows match on the build tier only; one moment is compared, so a machine moving between marketplaces over time is not detected yet. History
 starts 2026-11-15 (older snapshots have no keys).
 
 ### 3.9 Lium market data beyond prices (`lium_data/`, `api/lium.py`, methodology/lium-data.md)
@@ -356,8 +356,17 @@ newest answer, a 403 or a 404 included, only moves `last_seen_at` / `seen_count`
   (`/executors/stats`), spot idle pay per GPU-hour and idle-pay capacity buckets (`/machines/spot-idle-rates`,
   `/machines/capacity`: what Lium pays providers, a supply floor, not a renter price), reference prices
   (`/v1/shared-config` `machine_prices` and p90; only the price keys are kept). Kind **observed** (reported by Lium).
-  Per-provider endpoints (`/provider-stats/{hotkey}`, billing history) are deliberately not read (the provider
-  key itself is kept in the stored executors since 2026-11-15, internal: section 3.8a).
+  Since 2026-11-15 also: Lium's price rules per GPU model (`/machines`: reference price, the band a provider may
+  ask, soft limit, median ask, share rented now and over 30 days, fleet size, pay per epoch rented and idle), the
+  models outside idle pay (`/machines/capacity/ineligible`), the rentable and whole-fleet machine counts
+  (`/executors/count`, `/executors/total-count`) and the API build (`/version`).
+- **Per provider** (job `lium_providers`, hourly, about 115 requests at 1.5 s apart; `lium_data/public.py`): for
+  every miner hotkey in the stored executors, and every provider that answered in the last 30 days,
+  `/provider-stats/{hotkey}` (rentals started and failed, unique renters, feedback, uptime, reclaimed machines) and
+  `/provider-stats/{hotkey}/executors` (every machine it runs, rented ones included: rented or not, GPUs rented,
+  revenue per hour, rented since, price, CPU, RAM, country). Stored slimmed: no coordinates, GPU serials or
+  validator keys. Counters that tick on every read (jobs finished, average uptime) do not make a new row alone.
+  Read: `GET /v1/ops/lium/providers` (admin). Billing history is not read (it needs a coldkey no feed gives).
 - **Published throughput**: the public stats feed providers/lium.py already stores raw is parsed into daily GMV,
   GPU-hours, rentals and utilisation (a closed day Lium changes later counts as a revision) and per-model 30-day
   median PAID price, utilisation, cheapest ask (kind transaction, basis `published_aggregate`).
@@ -1346,6 +1355,7 @@ registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registere
 | `fx_rates` | 1 h | ECB reference rates (poller) |
 | `cost_components` | daily | full-cost sources into `cost_snapshots` (poller) |
 | `lium_stream` | 1 min | supervisor of the Lium WebSocket consumer (poller, `LIUM_STREAM_ENABLED`) |
+| `lium_providers` | 1 h | Lium per-provider statistics and machine lists with rental state and revenue per hour, internal (poller, `LIUM_FEEDS_ENABLED`; section 3.9) |
 | `lium_public` | 15 min | Lium's keyless market feeds (launch stats, requests, executor stats, idle pay, reference prices) + its published throughput, internal (poller, `LIUM_FEEDS_ENABLED`; section 3.9) |
 | `lium_grafana` | 1 h | Lium's public Grafana: rental starts with the price paid (per tier), hourly renter spend, GPUs listed and rented, internal (poller, `LIUM_FEEDS_ENABLED` and `LIUM_GRAFANA_ENABLED`; section 3.9) |
 | `lium_partner` | 1 h | Lium data-partner trades, hourly GPU usage, daily VWAP, nightly dumps, internal (poller; only with `LIUM_PARTNER_API_KEY`; while Lium answers 403 it re-checks every 6 h) |
@@ -1405,9 +1415,9 @@ registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registere
 
 ## 16. Testing
 
-147 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
+149 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
 Postgres database, no real provider calls), plus 5 CLI/MCP test files in `cli/tests/`. `tests/run_all.py` runs all
-161 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
+163 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
 (`.github/workflows/tests.yml`) runs it on every push and pull request against a throwaway Postgres 16 whose zone is
 deliberately not UTC. Beyond the per-module tests:
 - unit and integration tests for every analytics module, API and page;

@@ -581,13 +581,13 @@ def test_admin_endpoints_and_job():
 
         # the job: on with the Lium feeds, off by its own switch
         settings.poller_enabled = True
-        for on, want in ((True, ["lium_public", "lium_grafana"]), (False, ["lium_public"])):
+        for on, want in ((True, ["lium_public", "lium_providers", "lium_grafana"]), (False, ["lium_public", "lium_providers"])):
             schedule._registered, settings.lium_grafana_enabled = False, on
-            for name in ("lium_public", "lium_grafana", "lium_partner"):
+            for name in ("lium_public", "lium_providers", "lium_grafana", "lium_partner"):
                 jobs.JOBS.pop(name, None)
             names = schedule.register()
             assert [n for n in names if n != "lium_partner"] == want and ("lium_grafana" in jobs.JOBS) is on
-        for name in ("lium_public", "lium_grafana", "lium_partner"):
+        for name in ("lium_public", "lium_providers", "lium_grafana", "lium_partner"):
             jobs.JOBS.pop(name, None)
     finally:
         (settings.app_password, settings.public_pages, settings.viewer_user, settings.viewer_password,

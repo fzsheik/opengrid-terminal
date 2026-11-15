@@ -147,7 +147,145 @@ def parse_shared_config(doc) -> tuple[None, list[dict]]:
     return None, out
 
 
-PARSERS = {"launch_stats": parse_launch_stats, "requests": parse_requests, "executor_stats": parse_executor_stats,
+def _flag(v):
+    return None if v is None else int(bool(v))
+
+
+_MACHINE_NUMBERS = ("price", "base_price", "p_min", "p_max", "soft_price_limit", "median_price", "rental_rate",
+                    "avg_rental_rate_30d", "total_gpu_count", "k", "usd_per_epoch_rented", "usd_per_epoch_unrented")
+
+
+def parse_machines(doc) -> tuple[None, list[dict]]:
+    if not isinstance(doc, list) or not any(isinstance(r, dict) and r.get("name") for r in doc):
+        raise ValueError("machines: not a list of GPU models")
+    out = []
+    for r in doc:
+        if not isinstance(r, dict) or not r.get("name"):
+            continue
+        out += [_v(r["name"], m, r.get(m)) for m in _MACHINE_NUMBERS]
+        out += [_v(r["name"], "supported", _flag(r.get("supported"))),
+                _v(r["name"], "estimates_available", _flag(r.get("estimates_available"))),
+                _v(r["name"], "gpu_class", text=r.get("gpu_class"))]
+    return None, out
+
+
+def parse_idle_ineligible(doc) -> tuple[None, list[dict]]:
+    if not isinstance(doc, list):
+        raise ValueError("machines/capacity/ineligible: not a list")
+    return None, [_v(r["model"], "reason", text=r.get("reason")) for r in doc if isinstance(r, dict) and r.get("model")]
+
+
+def _parse_count(key: str):
+    def parse(doc) -> tuple[None, list[dict]]:
+        if not isinstance(doc, dict) or isinstance(doc.get(key), bool) or not isinstance(doc.get(key), int):
+            raise ValueError(f"no integer `{key}`")
+        return None, [_v("*", "count", doc[key])]
+    return parse
+
+
+def parse_version(doc) -> tuple[None, list[dict]]:
+    if not isinstance(doc, dict) or not doc.get("build_id"):
+        raise ValueError("version: no `build_id`")
+    return None, [_v("*", "build_id", text=str(doc["build_id"])),
+                  _v("*", "started_at", at=_time(doc.get("started_at")), text=doc.get("started_at")),
+                  _v("*", "features", text=json.dumps(sorted(doc.get("features") or [])))]
+
+
+# ---- per provider. Stored slimmed (raw.SLIMMERS): coordinates, GPU serials, validator keys and live counters
+# (uptime minutes, free disk, open ports) are not kept, so an unchanged provider is one stored answer.
+
+def slim_provider_stats(doc) -> dict:
+    if not isinstance(doc, dict) or not isinstance(doc.get("rental_successes"), dict):
+        raise ValueError("provider-stats: no `rental_successes`")
+    out = {k: doc.get(k) for k in ("miner_hotkey", "shared_pool", "average_network_speed", "feedback_rates",
+                                   "rental_failures", "rental_successes", "uptime_counts", "max_rental_time",
+                                   "unique_renters", "unique_positive_renters")}
+    out["locations"] = sorted({(str(x.get("country_code") or ""), str(x.get("city") or ""))
+                               for x in doc.get("locations") or [] if isinstance(x, dict)})
+    load = doc.get("host_load") if isinstance(doc.get("host_load"), dict) else {}
+    out["host_load"] = {"enabled": load.get("enabled"), "marked_node_count": load.get("marked_node_count")}
+    return out
+
+
+_EXECUTOR_INFO = ("machine_name", "gpu_count", "available_gpu_count", "price_per_gpu", "pending_price_per_hour",
+                  "price_change_effective_date", "active", "verified", "finished_jobs", "reclaimed", "reclaimed_at",
+                  "created_at")
+_EXECUTOR_TOP = ("rented", "rented_gpu_count", "revenue_per_hour", "rented_since", "listing_hidden",
+                 "listing_hidden_reasons")
+
+
+def slim_provider_executors(doc) -> list[dict]:
+    if not isinstance(doc, list):
+        raise ValueError("provider executors: not a list")
+    out = []
+    for x in doc:
+        info = x.get("executor_info") if isinstance(x, dict) else None
+        if not isinstance(info, dict) or not (x.get("id") or info.get("id")):
+            raise ValueError("provider executors: a machine without executor_info or id")
+        specs = info.get("specs") if isinstance(info.get("specs"), dict) else {}
+        loc = x.get("location") if isinstance(x.get("location"), dict) else {}
+        out.append({"id": str(x.get("id") or info.get("id")),
+                    **{k: info.get(k) for k in _EXECUTOR_INFO}, **{k: x.get(k) for k in _EXECUTOR_TOP},
+                    "cpu_model": (specs.get("cpu") or {}).get("model"), "cpu_count": (specs.get("cpu") or {}).get("count"),
+                    "ram_total": (specs.get("ram") or {}).get("total"),
+                    "country_code": loc.get("country_code"), "city": loc.get("city")})
+    return sorted(out, key=lambda r: r["id"])
+
+
+def parse_provider_stats(doc, hotkey: str) -> tuple[None, list[dict]]:
+    d = slim_provider_stats(doc)
+    g = lambda k, m: (d.get(k) or {}).get(m) if isinstance(d.get(k), dict) else None  # noqa: E731
+    pairs = [("rental_successes", g("rental_successes", "rental_successes")),
+             ("success_rate_pct", g("rental_successes", "success_rate_percentage")),
+             ("rental_failures", g("rental_failures", "rental_failures")),
+             ("unique_renters", g("unique_renters", "unique_renters")),
+             ("unique_positive_renters", g("unique_positive_renters", "unique_positive_renters")),
+             ("good_feedbacks", g("feedback_rates", "good_feedbacks")),
+             ("bad_feedbacks", g("feedback_rates", "bad_feedbacks")),
+             ("average_uptime_hours", g("uptime_counts", "average_uptime_hours")),
+             ("reclaimed_count", g("uptime_counts", "reclaimed_count")),
+             ("total_machines", g("uptime_counts", "total_machines")), ("total_gpus", g("uptime_counts", "total_gpus")),
+             ("max_rental_duration_hours", g("max_rental_time", "max_rental_duration_hours")),
+             ("average_upload_mbps", g("average_network_speed", "average_upload_speed_mbps")),
+             ("average_download_mbps", g("average_network_speed", "average_download_speed_mbps")),
+             ("shared_pool", _flag(d.get("shared_pool")))]
+    out = [_v(hotkey, m, v) for m, v in pairs]
+    out.append(_v(hotkey, "countries", text=",".join(sorted({c for c, _ in d["locations"] if c}))))
+    return None, out
+
+
+def parse_provider_executors(doc, hotkey: str) -> tuple[None, list[dict]]:
+    out = []
+    for r in slim_provider_executors(doc):
+        subject = f"{hotkey}/{r['id']}"
+        out += [_v(subject, m, r.get(m)) for m in ("gpu_count", "available_gpu_count", "price_per_gpu",
+                                                   "rented_gpu_count", "revenue_per_hour", "finished_jobs")]
+        out += [_v(subject, m, _flag(r.get(m))) for m in ("rented", "active", "verified", "reclaimed", "listing_hidden")]
+        out += [_v(subject, "rented_since", at=_time(r.get("rented_since")), text=r.get("rented_since")),
+                _v(subject, "created_at", at=_time(r.get("created_at")), text=r.get("created_at")),
+                _v(subject, "machine_name", text=r.get("machine_name"))]
+    return None, out
+
+
+def _stable_provider_stats(d: dict) -> dict:
+    up = {k: v for k, v in (d.get("uptime_counts") or {}).items() if k != "average_uptime_hours"}
+    return {**d, "uptime_counts": up}
+
+
+def _stable_provider_executors(rows: list[dict]) -> list[dict]:
+    return [{k: v for k, v in r.items() if k != "finished_jobs"} for r in rows]
+
+
+raw.SLIMMERS.update(provider_stats=slim_provider_stats, provider_executors=slim_provider_executors)
+# Average uptime grows with every read and a busy machine finishes jobs every hour: both are kept in the stored
+# body and written as values whenever anything else about the provider changes, but neither makes a new row alone.
+raw.STABLE.update(provider_stats=_stable_provider_stats, provider_executors=_stable_provider_executors)
+
+PARSERS = {"machines": parse_machines, "idle_ineligible": parse_idle_ineligible,
+           "executors_count": _parse_count("count"), "executors_total": _parse_count("total_count"),
+           "version": parse_version, "provider_stats": parse_provider_stats,
+           "provider_executors": parse_provider_executors,
+           "launch_stats": parse_launch_stats, "requests": parse_requests, "executor_stats": parse_executor_stats,
            "spot_idle_rates": parse_spot_idle_rates, "idle_capacity": parse_idle_capacity,
            "shared_config": parse_shared_config}
 
@@ -157,15 +295,18 @@ PARSERS = {"launch_stats": parse_launch_stats, "requests": parse_requests, "exec
 # --------------------------------------------------------------------------
 
 
-def latest_values(s, feed: str, at: datetime | None = None) -> dict[tuple, LiumFeedValue]:
+def latest_values(s, feed: str, at: datetime | None = None, scope: str | None = None) -> dict[tuple, LiumFeedValue]:
     """The value in force for every (subject, gpu_count, metric) of `feed` at `at` (default: now), absent ones
-    included (present False). lium_feed_values is change-only, so this is the newest row per key."""
+    included (present False). lium_feed_values is change-only, so this is the newest row per key.
+    `scope` (a provider's hotkey) limits it to that provider's subjects: the hotkey itself and "hotkey/machine"."""
     stmt = (select(LiumFeedValue).where(LiumFeedValue.feed == feed)
             .order_by(LiumFeedValue.subject, LiumFeedValue.gpu_count, LiumFeedValue.metric,
                       LiumFeedValue.observed_at.desc(), LiumFeedValue.id.desc())
             .distinct(LiumFeedValue.subject, LiumFeedValue.gpu_count, LiumFeedValue.metric))
     if at is not None:
         stmt = stmt.where(LiumFeedValue.observed_at <= at)
+    if scope is not None:
+        stmt = stmt.where((LiumFeedValue.subject == scope) | LiumFeedValue.subject.startswith(scope + "/", autoescape=True))
     return {(v.subject, v.gpu_count, v.metric): v for v in s.execute(stmt).scalars()}
 
 
@@ -182,10 +323,13 @@ def save(f: raw.Fetched) -> dict:
     that differ from the ones in force are written, and a key the answer no longer carries is written once with
     present = false (a GPU that dropped out of launch-stats, a request class that closed)."""
     gen, values = None, []
+    # A per-provider answer speaks only for its own provider: its keys are compared with that provider's alone.
+    scope = str(f.params.get("hotkey")) if f.feed.per_provider else None
     if f.status_code == 200 and f.body is not None:
         try:
-            gen, values = PARSERS[f.feed.name](json.loads(f.body))
-        except (ValueError, KeyError, TypeError) as exc:
+            parse = PARSERS[f.feed.name]
+            gen, values = parse(json.loads(f.body), scope) if f.feed.per_provider else parse(json.loads(f.body))
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
             f.error = f"parse: {exc}"[:500]
             values = []
     written = 0
@@ -193,7 +337,7 @@ def save(f: raw.Fetched) -> dict:
         st = raw.store(s, f, rows=len(values))
         if st.new and st.state in ("ok", "empty"):
             new = {(v["subject"], v["gpu_count"], v["metric"]): v for v in values}
-            old = latest_values(s, f.feed.name)
+            old = latest_values(s, f.feed.name, scope=scope)
             common = {"snapshot_id": st.snapshot.id, "feed": f.feed.name, "observed_at": f.fetched_at,
                       "generated_at": gen, "visibility": st.snapshot.visibility}
             rows = [LiumFeedValue(**common, **v, present=True) for k, v in new.items()
@@ -226,6 +370,71 @@ async def poll(http: httpx.AsyncClient | None = None, gap: float = 0.2) -> dict:
         log.warning("lium stats parse failed: %s", exc)
         stats = {"error": f"{type(exc).__name__}: {exc}"[:300]}
     return {"feeds": results, "stats": stats}
+
+
+# --------------------------------------------------------------------------
+# Per provider (job `lium_providers`, hourly)
+# --------------------------------------------------------------------------
+
+PROVIDERS_POLL_SECONDS = 3600
+KNOWN_PROVIDER_DAYS = 30
+
+
+def known_hotkeys() -> list[str]:
+    """Every provider to ask about: the miner hotkeys in the newest stored /api/executors copy (machines with a free
+    GPU), plus every provider that answered within the last 30 days, so one whose machines are all rented now is
+    still read."""
+    from datetime import timedelta
+
+    from providers.lium import ENDPOINT as EXECUTORS
+    from store.lium import LiumFeedSnapshot
+    from tables import RawSnapshot
+
+    keys: set[str] = set()
+    with _session()() as s:
+        newest = s.execute(select(RawSnapshot).where(RawSnapshot.provider == "lium", RawSnapshot.endpoint == EXECUTORS,
+                                                     RawSnapshot.ok.is_(True))
+                           .order_by(RawSnapshot.fetched_at.desc(), RawSnapshot.id.desc()).limit(1)).scalar()
+        if newest is not None and isinstance(newest.payload, list):
+            keys |= {e["miner_hotkey"] for e in newest.payload if isinstance(e, dict) and e.get("miner_hotkey")}
+        since = datetime.now(timezone.utc) - timedelta(days=KNOWN_PROVIDER_DAYS)
+        seen = s.execute(select(LiumFeedSnapshot.params).where(
+            LiumFeedSnapshot.feed == "provider_stats", LiumFeedSnapshot.state == "ok",
+            LiumFeedSnapshot.last_seen_at >= since)).scalars()
+        keys |= {p["hotkey"] for p in seen if isinstance(p, dict) and p.get("hotkey")}
+    return sorted(str(k) for k in keys)
+
+
+async def poll_providers(http: httpx.AsyncClient | None = None, gap: float = F.POLITE_GAP_SECONDS,
+                         hotkeys: list[str] | None = None) -> dict:
+    """The `lium_providers` job: both per-provider feeds for every known provider, one request at a time. A 429
+    ends the round (the next one starts over); every other answer, a 404 included, is stored change-only."""
+    hotkeys = known_hotkeys() if hotkeys is None else hotkeys
+    own = http is None
+    http = http or raw.client()
+    states: dict[str, int] = {}
+    changed = written = 0
+    stopped = None
+    try:
+        for hk in hotkeys:
+            for feed in F.PROVIDER_FEEDS:
+                r = save(await raw.fetch(feed, http, path={"hotkey": hk}))
+                states[r["state"]] = states.get(r["state"], 0) + 1
+                changed += bool(r["changed"])
+                written += r["values_written"]
+                if r["state"] == "rate_limited":
+                    stopped = "rate_limited"
+                    break
+                await asyncio.sleep(gap)
+            if stopped:
+                break
+    finally:
+        if own:
+            await http.aclose()
+    if stopped:
+        log.warning("lium providers: rate limited; round ended early")
+    return {"providers": len(hotkeys), "states": states, "answers_changed": changed, "values_written": written,
+            "stopped": stopped}
 
 
 # --------------------------------------------------------------------------

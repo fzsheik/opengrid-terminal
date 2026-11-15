@@ -35,6 +35,13 @@ from store.lium import LiumFeedSnapshot
 
 log = logging.getLogger(__name__)
 
+# feed name -> function(JSON document) -> the document to store. A feed whose answer carries live counters or
+# identifiers OpenGrid does not keep (lium_data/public.py registers them) is stored slimmed, like `keep` for an object.
+SLIMMERS: dict = {}
+# feed name -> function(stored document) -> the part that decides "changed". Counters that tick on every read
+# (jobs finished, average uptime) stay in the stored body but do not make a new row by themselves.
+STABLE: dict = {}
+
 _STATES = {200: "ok", 401: "unauthorized", 403: "forbidden", 404: "not_found", 422: "invalid", 429: "rate_limited",
            503: "unavailable"}
 QUIET_STATES = ("forbidden", "unauthorized", "not_found", "unavailable")   # an expected answer, not a broken feed
@@ -113,7 +120,16 @@ def stored_body(f: Fetched) -> tuple[str | None, str | None]:
         if f.feed.keep and isinstance(doc, dict):
             doc = {k: doc.get(k) for k in f.feed.keep}
             body = json.dumps(doc, sort_keys=True, separators=(",", ":"))
+        slim = SLIMMERS.get(f.feed.name)
+        if slim is not None:
+            try:
+                doc = slim(doc)
+            except (ValueError, KeyError, TypeError, AttributeError):
+                return body, hashlib.sha256(body.encode()).hexdigest()   # unreadable: kept as received, parse reports it
+            body = json.dumps(doc, sort_keys=True, separators=(",", ":"))
         stable = {k: v for k, v in doc.items() if k not in f.feed.volatile} if isinstance(doc, dict) else doc
+        if slim is not None and f.feed.name in STABLE:
+            stable = STABLE[f.feed.name](doc)
         return body, hashlib.sha256(json.dumps(stable, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     if f.status_code != 200:
         # error bodies carry a request id and a timestamp: hash only the status and Lium's error code

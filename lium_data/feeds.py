@@ -33,6 +33,7 @@ class Feed:
     what: str
     volatile: tuple[str, ...] = ("generated_at",)   # JSON keys left out of the change-only hash (kept in the body)
     keep: tuple[str, ...] = field(default=())        # JSON keys kept from a large object (empty: the whole body)
+    per_provider: bool = False   # one answer per provider: the path takes {hotkey}; read by lium_providers, hourly
 
 
 FEEDS: dict[str, Feed] = {f.name: f for f in (
@@ -67,9 +68,32 @@ FEEDS: dict[str, Feed] = {f.name: f for f in (
          "keys are kept (the rest is chain and driver configuration)",
          keep=("machine_prices", "machine_prices_p90", "machine_max_price_rate", "machine_min_price_rate",
                "soft_limit_price_rate", "rental_fees_rate", "volume_gb_hour_price_usd")),
+    # public, no key, read since 2026-11-15
+    Feed("machines", "/machines", "json", False, OBSERVED, "provider_reported",
+         "Lium's price rules per GPU model: reference price, the band a provider may ask (p_min to p_max), the soft "
+         "price limit, the median asking price, the share rented now and over 30 days, GPUs in the fleet, and what "
+         "a provider is paid per epoch for a rented and for an idle GPU"),
+    Feed("idle_ineligible", "/machines/capacity/ineligible", "json", False, OBSERVED, "provider_reported",
+         "GPU models outside the idle-pay programme, with Lium's reason"),
+    Feed("executors_count", "/executors/count", "json", False, OBSERVED, "provider_reported",
+         "machines with a free GPU right now (the rentable list)"),
+    Feed("executors_total", "/executors/total-count", "json", False, OBSERVED, "provider_reported",
+         "active machines in the whole fleet right now, rented ones included"),
+    Feed("version", "/version", "json", False, OBSERVED, "provider_reported",
+         "Lium's API build and feature flags: a change here dates a platform release",
+         volatile=("uptime_seconds",)),
+    # public, no key, one answer per provider (lium_providers, hourly). The provider pages show these to every
+    # visitor; the hotkeys come from the stored /api/executors copy (providers/lium.py OPERATOR_FIELDS).
+    Feed("provider_stats", "/provider-stats/{hotkey}", "json", False, OBSERVED, "provider_reported",
+         "per provider: rentals that started and failed, unique renters, renter feedback, average uptime, machines "
+         "reclaimed, machines and GPUs, measured network speed; coordinates are not kept", per_provider=True),
+    Feed("provider_executors", "/provider-stats/{hotkey}/executors", "json", False, OBSERVED, "provider_reported",
+         "per provider, every machine it runs, rented ones included: rented or not, GPUs rented, revenue per hour, "
+         "rented since, jobs finished, price, CPU, RAM, country; only these fields are kept", per_provider=True),
 )}
 
-PUBLIC_FEEDS = tuple(f for f in FEEDS.values() if not f.partner)
+PUBLIC_FEEDS = tuple(f for f in FEEDS.values() if not f.partner and not f.per_provider)
+PROVIDER_FEEDS = tuple(f for f in FEEDS.values() if f.per_provider)
 PARTNER_FEEDS = tuple(f for f in FEEDS.values() if f.partner)
 # Lium's public stats feed is fetched and stored raw by providers/lium.py (raw_snapshots, endpoint STATS); this
 # package parses it (public.parse_stats). Same kinds as above.

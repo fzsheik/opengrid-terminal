@@ -7,7 +7,8 @@ and the cheapest ask (what a router would actually grab).
 
 Capacity (only with VAST_API_KEY): a census per GPU model, two searches of verified on-demand machines, one for
 rentable offers and one for offers that are not rentable now. A keyed search returns up to CENSUS_CAP offers (the
-public one stops at 64), and only a keyed search returns machines that are not rentable. An offer is a slice of one
+public one stops at 64 per query and is read in pages, see API_CAP), and only a keyed search returns machines that
+are not rentable. An offer is a slice of one
 machine: `gpu_ids` names its GPUs and `gpu_frac` its share of the machine, so
 
     free GPUs  = distinct gpu_ids across the rentable offers
@@ -56,9 +57,18 @@ GPU_NAMES = [
 LIMIT = 300
 # Vast's documented limit is 1 request/second.
 RATE_PAUSE_SECONDS = 1.2
-# The API returns at most this many offers per query however large the limit,
-# so a book this size is cut off and its counts are lower bounds.
+# The public search returns at most this many offers per query however large the limit, and takes no offset. So a
+# model's book is read in pages (since 2026-11-15): offers come cheapest first, and the next query asks for
+# dph_total >= the last price seen (offers already read are dropped by id). A page shorter than the cap ends the book.
+# On 2026-11-15 only RTX 5090 (208 offers), RTX 4090 (126) and RTX 3090 (89) needed more than one page: 23 requests a
+# round instead of 18. Before that day the stored book of those models was the 64 cheapest offers, so their median
+# read low (RTX 5090: 0.749 over the 64 cheapest, 0.868 over the whole book) and their capacity was withheld.
 API_CAP = 64
+# A book longer than this many pages is stored as far as read and treated as cut off (capacity withheld).
+MAX_PAGES = 12
+# request["book"] of a search that read the whole book. Absent: one page only (every snapshot before 2026-11-15), or
+# a book that could not be read to its end.
+FULL_BOOK = "full"
 # A keyed search stops at this many offers (checked 2026-10-30, "truncated": false regardless); a census that hits it
 # is incomplete, so its counts are withheld.
 CENSUS_CAP = 512
@@ -80,17 +90,19 @@ def _census_query(gpu_name: str, rentable: bool) -> dict:
             "gpu_name": {"eq": gpu_name}, "limit": 5000}
 
 
-def _query(gpu_name: str) -> str:
-    return json.dumps(
-        {
-            "verified": {"eq": True},
-            "rentable": {"eq": True},
-            "type": "on-demand",
-            "gpu_name": {"eq": gpu_name},
-            "order": [["dph_total", "asc"]],
-            "limit": LIMIT,
-        }
-    )
+def _query(gpu_name: str, price_from: float | None = None, strict: bool = False) -> str:
+    """The public search for one model, cheapest first; `price_from` continues a book past the 64-offer cap."""
+    q = {
+        "verified": {"eq": True},
+        "rentable": {"eq": True},
+        "type": "on-demand",
+        "gpu_name": {"eq": gpu_name},
+        "order": [["dph_total", "asc"]],
+        "limit": LIMIT,
+    }
+    if price_from is not None:
+        q["dph_total"] = {"gt" if strict else "gte": price_from}
+    return json.dumps(q)
 
 
 # The fields normalize() reads.
@@ -135,8 +147,8 @@ def _retry_after(raw: RawResponse) -> int | None:
 
 class VastProvider(Provider):
     name = "vast"
-    # Fast tier: the public search (one request per GPU model, ~18, paced to Vast's documented 1/second: ~25 s) every
-    # 5 minutes. Capacity is the keyed census, on its own daily row budget (1-12 h apart, unchanged): its cadence is
+    # Fast tier: the public search (one request per GPU model and per page of its book, ~23, paced to Vast's
+    # documented 1/second: ~35 s) every 5 minutes. Capacity is the keyed census, on its own daily row budget (1-12 h apart, unchanged): its cadence is
     # the longest gap, CENSUS_MAX_GAP, for the stale flag and the capacity-silence alert.
     polling = PollingPolicy(interval_seconds=300, timeout_seconds=180, tier="fast",
                             capacity_interval_seconds=int(CENSUS_MAX_GAP.total_seconds()), rate_limit=(1, 1.0))
@@ -163,19 +175,43 @@ class VastProvider(Provider):
         return reshaped(raw, payload, request={"census": True, "gpu_name": gpu_name, "rentable": rentable})
 
     async def _one(self, gpu_name: str) -> RawResponse:
-        raw = await self.get(ENDPOINT, params={"q": _query(gpu_name)})
-        offers = (raw.payload or {}).get("offers") if isinstance(raw.payload, dict) else None
-        payload = None if offers is None else [_keep(o) for o in offers]
-        # The model asked for goes in `request`: the body does not repeat it
-        # when the book is empty.
-        return reshaped(raw, payload, request={"gpu_name": gpu_name})
+        """One model's whole book, as one stored response: page after page until a page is shorter than the cap.
+
+        The first page decides the response (status, timing, failure). A later page that fails, a book longer than
+        MAX_PAGES, or more than a page of offers at one price leaves the book cut off: stored as far as read, without
+        the FULL_BOOK mark, so normalize withholds its capacity as it always did for a capped book.
+        """
+        first = await self._paced(lambda: self.get(ENDPOINT, params={"q": _query(gpu_name)}))
+        offers = (first.payload or {}).get("offers") if isinstance(first.payload, dict) else None
+        # The model asked for goes in `request`: the body does not repeat it when the book is empty.
+        if offers is None:
+            return reshaped(first, None, request={"gpu_name": gpu_name})
+        book = {o.get("id"): o for o in offers if isinstance(o, dict)}
+        page, full, pages = offers, len(offers) < API_CAP, 1
+        while not full and pages < MAX_PAGES:
+            last = page[-1].get("dph_total") if isinstance(page[-1], dict) else None
+            if not isinstance(last, (int, float)):
+                break
+            raw = await self._paced(lambda: self.get(ENDPOINT, params={"q": _query(gpu_name, last)}))
+            page = (raw.payload or {}).get("offers") if raw.ok and isinstance(raw.payload, dict) else None
+            if not isinstance(page, list):
+                break  # a failed page: keep what was read, cut off
+            pages += 1
+            new = [o for o in page if isinstance(o, dict) and o.get("id") not in book]
+            book.update((o.get("id"), o) for o in new)
+            if len(page) < API_CAP:
+                full = True
+            elif not new:
+                break  # a whole page of offers at one price, all read already: the rest cannot be reached
+        request = {"gpu_name": gpu_name, "book": FULL_BOOK} if full else {"gpu_name": gpu_name}
+        return reshaped(first, [_keep(o) for o in book.values()], request=request)
 
     async def fetch(self) -> list[RawResponse]:
         # The API allows one request per second and answers 429 beyond it, so
-        # go one model at a time, with one retry after the stated wait.
+        # go one model at a time (each request paced, with one retry after the stated wait).
         responses = []
-        for call in [lambda n=n: self._one(n) for n in GPU_NAMES]:
-            responses.append(await self._paced(call))
+        for n in GPU_NAMES:
+            responses.append(await self._one(n))
         now = datetime.now(timezone.utc)
         if self._api_key and (self._census_next is None or now >= self._census_next):
             responses += await self._census_round(now)
@@ -245,11 +281,14 @@ class VastProvider(Provider):
 
     @staticmethod
     def normalize(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[ComputeListing]:
-        listings = []
+        listings, done = [], set()
         for snapshot in find_endpoint(by_endpoint, ENDPOINT):
             if (snapshot.request or {}).get("census"):
                 continue  # capacity census rows (keyed, verified-only); prices come from the public search
             gpu_name = (snapshot.request or {}).get("gpu_name")
+            if gpu_name in done:
+                continue  # two rounds within the read window (a deploy): the newest book of a model wins
+            done.add(gpu_name)
             offers = [
                 o
                 for o in snapshot.payload or []
@@ -265,8 +304,9 @@ class VastProvider(Provider):
             cheapest = min(offers, key=lambda o: o["dph_total"] / o["num_gpus"])
             median = Decimal(str(statistics.median(asks)))
             total_gpus = sum(o["num_gpus"] for o in offers)
-            # A capped book undercounts supply, so say nothing rather than a low number.
-            capped = len(offers) >= API_CAP
+            # A book cut off at the cap undercounts supply, so say nothing rather than a low number. A book read
+            # to its end (FULL_BOOK) is whole however long it is.
+            capped = (snapshot.request or {}).get("book") != FULL_BOOK and len(offers) >= API_CAP
 
             def listing(kind: str, per_gpu: Decimal, **extra) -> ComputeListing:
                 return ComputeListing(

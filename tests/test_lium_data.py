@@ -125,7 +125,12 @@ def public_routes(**over):
          "/api/executors/stats": (200, fx("executors_stats_2026-11-15.json")),
          "/api/machines/spot-idle-rates": (200, fx("spot_idle_rates_2026-11-15.json")),
          "/api/machines/capacity": (200, fx("machines_capacity_2026-11-15.json")),
-         "/api/v1/shared-config": (200, fx("shared_config_2026-11-15.json"))}
+         "/api/v1/shared-config": (200, fx("shared_config_2026-11-15.json")),
+         "/api/machines": (200, fx("machines_2026-11-15.json")),
+         "/api/machines/capacity/ineligible": (200, fx("machines_ineligible_2026-11-15.json")),
+         "/api/executors/count": (200, fx("executors_count_2026-11-15.json")),
+         "/api/executors/total-count": (200, fx("executors_total_2026-11-15.json")),
+         "/api/version": (200, fx("version_2026-11-15.json"))}
     r.update(over)
     return r
 
@@ -207,9 +212,10 @@ def test_public_poll_change_only():
         out = run(public.poll(srv.client(), gap=0))
     states = {r["feed"]: r["state"] for r in out["feeds"]}
     assert states == {"launch_stats": "ok", "requests": "not_found", "executor_stats": "ok", "spot_idle_rates": "ok",
-                      "idle_capacity": "ok", "shared_config": "ok"}, states
+                      "idle_capacity": "ok", "shared_config": "ok", "machines": "ok", "idle_ineligible": "ok",
+                      "executors_count": "ok", "executors_total": "ok", "version": "ok"}, states
     assert not logs.warnings(), logs.warnings()           # a switched-off public feed is not a warning
-    assert count(LiumFeedSnapshot) == 6
+    assert count(LiumFeedSnapshot) == 11
     n_values = count(LiumFeedValue)
     assert n_values > 100
     # shared-config keeps only the price keys (no chain or driver configuration)
@@ -226,7 +232,7 @@ def test_public_poll_change_only():
     with Logs() as logs:
         out = run(public.poll(srv.client(), gap=0))
     assert not any(r["changed"] for r in out["feeds"]) and not logs.warnings()
-    assert count(LiumFeedSnapshot) == 6 and count(LiumFeedValue) == n_values
+    assert count(LiumFeedSnapshot) == 11 and count(LiumFeedValue) == n_values
     with normalize.SessionLocal() as s:
         seen = dict(s.execute(select(LiumFeedSnapshot.feed, LiumFeedSnapshot.seen_count)).all())
     assert seen == {f.name: 2 for f in F.PUBLIC_FEEDS}, seen
@@ -320,12 +326,12 @@ def test_partner_off_without_key():
         schedule._registered, saved_poll = False, settings.poller_enabled
         settings.poller_enabled = True
         jobs.JOBS.pop("lium_partner", None)
-        assert schedule.register() == ["lium_public", "lium_grafana"] and "lium_partner" not in jobs.JOBS
+        assert schedule.register() == ["lium_public", "lium_providers", "lium_grafana"] and "lium_partner" not in jobs.JOBS
         schedule._registered = False
         settings.lium_partner_api_key = KEY
-        assert schedule.register() == ["lium_public", "lium_grafana", "lium_partner"] and "lium_partner" in jobs.JOBS
+        assert schedule.register() == ["lium_public", "lium_providers", "lium_grafana", "lium_partner"] and "lium_partner" in jobs.JOBS
         settings.poller_enabled = saved_poll
-        for name in ("lium_partner", "lium_public", "lium_grafana"):
+        for name in ("lium_partner", "lium_public", "lium_providers", "lium_grafana"):
             jobs.JOBS.pop(name, None)
     finally:
         settings.lium_partner_api_key = saved

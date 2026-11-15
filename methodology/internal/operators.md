@@ -21,7 +21,7 @@ Code: `operators.py`, admin read `api/operators.py` (`/v1/ops/operators`, `/v1/o
 | Marketplace | Field | Where | Covers |
 |---|---|---|---|
 | Lium | `provider_key`, `miner_hotkey` | the stored copy of `/api/executors` | machines with a free GPU |
-| Vast.ai | `host_id` | price-search offers (already kept), and now the keyed census with `cpu_name`, `cpu_cores` | machines seen among the 64 cheapest offers per GPU model in the last 3 hours; the whole fleet when the census runs |
+| Vast.ai | `host_id` | price-search offers (already kept), and now the keyed census with `cpu_name`, `cpu_cores` | every machine offered in the last 3 hours (each model's whole book since 2026-11-15); the whole fleet when the census runs |
 
 Not kept, on purpose: IP addresses, hostnames, coordinates, GPU serials and Clore's owner ids. Lium's per-provider
 endpoints (`/provider-stats/{hotkey}`, billing history) are still not read.
@@ -66,7 +66,8 @@ is counted. A pair with several strong matches is the useful signal: one busines
 
 ## Limits
 
-- **Lium:** only machines with a free GPU carry an operator key and a CPU model; fully rented machines do not.
+- **Lium:** machines with a free GPU carry the operator's own key (for a pool, finer than the miner hotkey). Fully
+  rented machines come from the hourly per-provider machine lists and are filed under the miner hotkey.
 - **Vast:** census rows have no RAM and no price, so they can match on the build tier only.
 - **Same moment only:** the read compares the newest stored copies. A machine that leaves one marketplace and
   appears on another later is not detected yet; the stored history allows it.

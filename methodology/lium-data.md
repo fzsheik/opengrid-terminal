@@ -34,6 +34,10 @@ may.
 | `/executors/stats` | GPUs rented and GPUs in total per GPU type, now | observed (reported by Lium) | every 15 minutes |
 | `/machines/spot-idle-rates`, `/machines/capacity` | What Lium pays a provider per idle GPU-hour of a spot node, and its open idle-pay buckets: a supply-side floor, not a renter price | observed (reported by Lium) | every 15 minutes |
 | `/v1/shared-config` | Lium's reference price per GPU model and its p90, and the price-rule rates (only these keys are kept) | observed (reported by Lium) | every 15 minutes |
+| `/machines` | Lium's price rules per GPU model: reference price, the band a provider may ask (`p_min` to `p_max`), the soft price limit, the median asking price, the share rented now and over 30 days, GPUs in the fleet, and what a provider is paid per epoch for a rented and for an idle GPU | observed (reported by Lium) | every 15 minutes, since 2026-11-15 |
+| `/machines/capacity/ineligible`, `/executors/count`, `/executors/total-count`, `/version` | GPU models outside idle pay; machines with a free GPU and machines in the whole fleet; the API build and feature flags | observed (reported by Lium) | every 15 minutes, since 2026-11-15 |
+| `/provider-stats/{hotkey}` | Per provider: rentals that started and failed, unique renters, renter feedback, average uptime, machines reclaimed, machines and GPUs, measured network speed | observed (reported by Lium) | hourly, since 2026-11-15 |
+| `/provider-stats/{hotkey}/executors` | Per provider, every machine it runs, rented ones included: rented or not, GPUs rented, revenue per hour, rented since, jobs finished, price, CPU, RAM, country | observed (reported by Lium) | hourly, since 2026-11-15 |
 | Grafana, "Marketplace prices": *Rented-at price over time* | One point per rental at its start: start time, GPU model, price per GPU-hour paid, and its tier (spot or secure). No GPU count, end time, renter or provider | transaction (trade record) | hourly; history by backfill |
 | Grafana, "Lium network status": *Credit spend per hour, by GPU type* | Renter spend in USD per hour, per UTC hour and GPU model | transaction (published aggregate) | hourly; history by backfill |
 | Grafana, "Lium network status": *GPUs listed by type*, *Rented GPUs by type* | GPUs listed and GPUs rented per UTC hour and GPU model (hourly means of Lium's inventory samples) | observed (reported by Lium) | hourly; history by backfill |
@@ -95,6 +99,26 @@ two empty chunks in a row. Three failed chunks in a row stop a panel.
 **Limits.** The dashboards are Lium's own account of its market and cannot be checked against trade records
 without the partner feed. Lium can change or remove a panel at any time; the collector then records the failure
 and stores nothing until the panel is back in a shape it can read.
+
+## Per-provider feeds
+
+The two per-provider feeds are read hourly for every miner hotkey in the newest stored executors list, and for every
+provider that answered in the last 30 days, so a provider whose machines are all rented is still read. Requests go
+one at a time, 1.5 seconds apart (Lium allows 60 a minute); a 429 ends the round.
+
+- **What is kept.** Each answer is stored slimmed: no coordinates, GPU serials, validator keys or live counters
+  (uptime minutes, free disk, open ports).
+- **What counts as a change.** The jobs-finished counter and the average uptime move on almost every read. They
+  stay in the stored body and are written as values whenever anything else about the provider changes, but they do
+  not make a new row by themselves. A rental starting or ending, a price change, or a machine joining or leaving
+  does.
+- **One provider at a time.** An answer speaks only for its own provider: a machine missing from it is written
+  once as absent for that provider, and never touches another provider's machines.
+- **History starts 2026-11-15.** Lium publishes no history for these; `created_at` and `rented_since` on each
+  machine are the only dates that reach further back.
+
+Read: `/v1/ops/lium/providers` (admin). `operators.py` also uses the machine lists to add fully rented machines to
+its Lium fleet.
 
 ## Statistics OpenGrid computes
 
