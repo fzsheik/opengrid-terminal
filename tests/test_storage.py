@@ -189,5 +189,64 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(raw_store.latest_payload("storage_test", "/items"), body)
 
 
+class VolumeWatchTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        scratchdb.create(DB)
+        db.init_db()
+
+    @classmethod
+    def tearDownClass(cls):
+        db.engine.dispose()
+        scratchdb.drop(DB)
+
+    def test_volume_usage_reads_postgres(self):
+        with db.SessionLocal() as s:
+            u = storage.volume_usage(s)
+        self.assertGreater(u["database_bytes"], 0)
+        self.assertGreaterEqual(u["estimated_volume_bytes"], u["database_bytes"])
+        self.assertTrue(0 < u["share"] < 1 and len(u["top"]) <= 3)
+
+    def _usage(self, share):
+        limit = 10240 * 1024 * 1024
+        return {"database_bytes": int(share * limit / 1.2), "wal_bytes": 1024, "estimated_volume_bytes": int(share * limit),
+                "limit_bytes": limit, "share": share, "top": [{"name": "raw_payloads", "bytes": 1}]}
+
+    def test_volume_alert_once_a_day_and_escalates(self):
+        from unittest import mock
+
+        from alerts import channels
+
+        sent = []
+        day = datetime(2026, 11, 15, 12, tzinfo=timezone.utc)
+        with mock.patch.object(channels, "send", side_effect=lambda c, p: sent.append((c, p)) or True):
+            def run(share, at):
+                with mock.patch.object(storage, "volume_usage", return_value=self._usage(share)):
+                    return storage.volume_check(at)["posted"]
+            self.assertFalse(run(0.60, day), "under the threshold: nothing")
+            self.assertTrue(run(0.90, day))
+            self.assertFalse(run(0.91, day + timedelta(hours=6)), "once a day")
+            self.assertTrue(run(0.90, day + timedelta(days=1)), "again the next day")
+            self.assertTrue(run(0.97, day + timedelta(days=1, hours=6)), "escalates past 95% the same day")
+            self.assertFalse(run(0.98, day + timedelta(days=1, hours=10)))
+        self.assertEqual([c for c, _ in sent], ["ops"] * 3)
+        msg = sent[-1][1]["embeds"][0]
+        self.assertIn("97% full", msg["title"])
+        self.assertIn("writes stop", msg["title"])
+        self.assertIn("Grow the volume", msg["description"])
+
+    def test_failed_send_is_retried(self):
+        from unittest import mock
+
+        from alerts import channels
+
+        day = datetime(2026, 12, 1, tzinfo=timezone.utc)
+        with mock.patch.object(storage, "volume_usage", return_value=self._usage(0.9)):
+            with mock.patch.object(channels, "send", return_value=False):
+                self.assertFalse(storage.volume_check(day)["posted"])
+            with mock.patch.object(channels, "send", return_value=True):
+                self.assertTrue(storage.volume_check(day)["posted"], "an undelivered alert must not be marked sent")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

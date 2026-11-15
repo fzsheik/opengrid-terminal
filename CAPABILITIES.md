@@ -54,7 +54,7 @@ Counts recomputed from the code on 2026-11-13.
 | API operations | **252** in the OpenAPI schema: 230 under `/v1` (74 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 9 admin-only reads (7 power, 2 equities), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 47 page routes |
 | Web pages | **47** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar. RL cost (`/rl-cost`) sits under GPUs; Batches (`/batches`, `/batch/{id}`) under My Jobs; the internal Monthly report (`/reports`, `/reports/{month}`) under Markets, locked |
 | Database tables | **117** in a freshly migrated database (116 application tables plus `alembic_version`; Postgres, migrated by Alembic: 42 migrations, head `0040_lium_data`) |
-| Background jobs | **34** registered when every optional source is configured (**31** with the defaults: no EIA / SEC / Alpaca keys, `POWER_ENABLED` off), beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets, the monthly market report…; table 15.2) |
+| Background jobs | **37** registered when every optional source is configured (**33** with the defaults: no EIA / SEC / Alpaca keys, `POWER_ENABLED` off), beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets, the monthly market report…; table 15.2) |
 | Capacity (stock) feeds | **32** providers report in-stock state or counts from their own APIs (section 3.6) |
 | Power markets (internal) | EIA-930 grid data, EIA natural gas, CAISO, NYISO, SPP and ERCOT wholesale prices in their own `power_*` tables (about 490 MB in production on 2026-11-14); admin-only reads, never in a GPU statistic (section 5a) |
 | Provisioning adapters | **9 providers** (Lambda, RunPod, Hyperstack, DigitalOcean, Crusoe/Denvr/Latitude via Shadeform, Vast, Verda) |
@@ -1270,8 +1270,8 @@ deploy, because a deploy restarts the container and stops them; each resumes whe
 deploy separately (`cd docs-site && vercel deploy --prod`).
 
 ### 15.2 Background jobs
-36 jobs are registered when every optional source is configured (`jobs.JOBS`; the provider poll loops run beside
-them); 32 with the defaults (`context_series`, `context_equities`, `power_forward` and `lium_partner` need keys or
+37 jobs are registered when every optional source is configured (`jobs.JOBS`; the provider poll loops run beside
+them); 33 with the defaults (`context_series`, `context_equities`, `power_forward` and `lium_partner` need keys or
 `POWER_ENABLED`).
 `OPENGRID_NO_JOBS` registers them but starts none; with `POLLER_ENABLED` off, the jobs marked "poller" are not
 registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registered and skip their work when
@@ -1297,6 +1297,7 @@ registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registere
 | `alerts` | 3 min | watchlist alert evaluation |
 | `quality_schema_watch` | 2 min | provider response schema changes |
 | `raw_storage` | 1 min | raw payload deduplication and retention |
+| `db_volume_watch` | 6 h | estimates the Postgres volume in use (database + WAL × `DB_VOLUME_OVERHEAD`) and posts to the Discord ops channel at most once a day past `DB_VOLUME_ALERT_SHARE` (85%), once more past 95% (`storage.volume_check`) |
 | `route_outcomes`, `product_events` | 5 min | routing quality and product analytics |
 | `db_latency` | 1 min | database latency metric |
 | `api_usage_flush`, `api_usage_retention` | 10 s / daily | API usage logging |
@@ -1347,6 +1348,7 @@ registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registere
 | `PUBLIC_PAGES` | open read-only market pages to anonymous visitors (default off) |
 | `POSTHOG_KEY`, `POSTHOG_HOST`, `POSTHOG_PROJECT_ID`, `POSTHOG_PERSONAL_API_KEY` | optional PostHog product analytics (the CSP's connect-src adds the ingest origin only with `POSTHOG_KEY`) |
 | `RAW_PAYLOAD_RETENTION_DAYS`, `RAW_SNAPSHOT_RETENTION_DAYS` | raw storage retention (payloads referenced by settlement fixings are always kept) |
+| `DB_VOLUME_MB`, `DB_VOLUME_ALERT_SHARE`, `DB_VOLUME_OVERHEAD` | the database volume watch: volume size (default 10240, Railway's current Postgres volume; update it after growing the volume), alert share (0.85), filesystem overhead factor (1.15) |
 | `JOB_CALLBACK_BASE_URL` | where GPU runners call back (default `PUBLIC_BASE_URL`; https required) |
 | `JOB_ARTIFACT_STORE`, `JOB_ARTIFACT_MAX_MB`, `JOB_ARTIFACT_S3_*` | training artifacts: Postgres (default) or S3-compatible; 64 MB per artifact |
 | `JOB_CHECKPOINT_MAX_MB`, `JOB_CHECKPOINT_KEEP` | resume checkpoints: at most 32 MB each, the newest 2 kept |

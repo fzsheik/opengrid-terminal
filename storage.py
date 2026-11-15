@@ -111,6 +111,73 @@ def maintain(batch: int = 250, max_batches: int = 100) -> dict:
     return result
 
 
+# ---------------------------------------------------------------------------
+# Volume watch: a daily ops alert before the Postgres volume fills. A full volume stops every write (prices,
+# indices, fixings) and live data not recorded cannot be backfilled.
+# ---------------------------------------------------------------------------
+
+CRITICAL_SHARE = 0.95
+
+
+def volume_usage(session) -> dict:
+    """Bytes Postgres reports (database + WAL), the estimated volume use and its share of DB_VOLUME_MB."""
+    db_bytes = session.execute(text("SELECT pg_database_size(current_database())")).scalar_one()
+    try:
+        with session.begin_nested():
+            wal = session.execute(text("SELECT coalesce(sum(size), 0) FROM pg_ls_waldir()")).scalar_one()
+    except Exception:  # pg_ls_waldir needs pg_monitor; without it the overhead factor carries the WAL too
+        wal = 0
+    est = (db_bytes + int(wal)) * settings.db_volume_overhead
+    limit = settings.db_volume_mb * 1024 * 1024
+    top = [dict(r._mapping) for r in session.execute(text("""
+        SELECT relname AS name, pg_total_relation_size(relid) AS bytes
+        FROM pg_stat_user_tables ORDER BY pg_total_relation_size(relid) DESC LIMIT 3"""))]
+    return {"database_bytes": int(db_bytes), "wal_bytes": int(wal), "estimated_volume_bytes": int(est),
+            "limit_bytes": limit, "share": est / limit, "top": top}
+
+
+def volume_message(u: dict) -> dict:
+    from alerts.channels import _base, _embed
+
+    mb = lambda b: f"{b / 1024 / 1024:,.0f} MB"  # noqa: E731
+    critical = u["share"] >= CRITICAL_SHARE
+    title = (f"Database volume {u['share']:.0%} full" + (": writes stop when it fills" if critical else ""))
+    desc = ("The Postgres volume is close to full. When it fills, price polling, indices and fixings stop "
+            "writing, and live data that is not recorded cannot be backfilled. Grow the volume in Railway "
+            "(Postgres service, Volume) or move raw payloads to object storage.")
+    fields = [("Estimated used", f"{mb(u['estimated_volume_bytes'])} of {mb(u['limit_bytes'])}", True),
+              ("Database + WAL", f"{mb(u['database_bytes'])} + {mb(u['wal_bytes'])}", True),
+              ("Largest tables", ", ".join(f"{t['name']} {mb(t['bytes'])}" for t in u["top"]), False)]
+    return {**_base(), "embeds": [_embed(title, desc, fields, url=None, at=datetime.now(timezone.utc),
+                                         footer="storage.volume_check · daily")]}
+
+
+@job("db_volume_watch", every_seconds=6 * 3600, initial_delay_seconds=600)
+def volume_check(now: datetime | None = None) -> dict:
+    """Post to the ops channel at most once a day while the volume is past DB_VOLUME_ALERT_SHARE (and once more
+    the same day if it crosses 95%)."""
+    from alerts import channels
+
+    now = now or datetime.now(timezone.utc)
+    with SessionLocal() as s:
+        u = volume_usage(s)
+    out = {"share": round(u["share"], 4), "posted": False}
+    if u["share"] < settings.db_volume_alert_share:
+        return out
+    level = "critical" if u["share"] >= CRITICAL_SHARE else "warn"
+    key = f"db_volume:{now.date().isoformat()}:{level}"
+    with SessionLocal.begin() as s:
+        if not channels._claim(s, "ops", key):
+            return out
+    if channels.send("ops", volume_message(u)):
+        out["posted"] = True
+    else:
+        with SessionLocal.begin() as s:
+            channels._unclaim(s, "ops", key)
+    log.warning("database volume %.0f%% of %s MB (posted=%s)", u["share"] * 100, settings.db_volume_mb, out["posted"])
+    return out
+
+
 def status() -> dict:
     with SessionLocal() as s:
         size = s.execute(text("SELECT pg_database_size(current_database())")).scalar_one()

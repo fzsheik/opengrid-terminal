@@ -70,6 +70,12 @@ class Settings(BaseSettings):
     raw_payload_retention_days: int = Field(default=30, ge=1)
     raw_snapshot_retention_days: int = Field(default=90, ge=1)
     news_fetch_retention_days: int = Field(default=90, ge=1)
+    # Database volume watch (storage.volume_check): the Postgres volume's size, the share of it that triggers an
+    # ops alert, and the factor from what Postgres reports (database + WAL) to what the volume shows used
+    # (filesystem overhead; 1.15 measured on Railway on 2026-11-15: 7,164 MB used vs 6,232 MB database + WAL).
+    db_volume_mb: int = Field(default=10240, ge=1)
+    db_volume_alert_share: float = Field(default=0.85, gt=0, le=1)
+    db_volume_overhead: float = Field(default=1.15, ge=1)
     # Alert webhooks to private / loopback addresses are refused unless this is set (dev only).
     alerts_webhook_allow_private: bool = False
     # ---- security (methodology/security.md) ----
