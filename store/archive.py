@@ -7,7 +7,8 @@ archive (migration 0025_archived_prices; methodology/archived-history.md).
                       and sampled only on the days a capture exists.
 
     catalog_snapshots third-party catalogue files kept verbatim (0031_backfill_sources), e.g. dstack's gpuhunt
-                      catalogues, whose public versions expire after about 90 days.
+                      catalogues, whose public versions expire after about 90 days; also AWS's own spot price
+                      change log per region and UTC day (source aws_spot_history), which AWS keeps 90 days.
 
 Never mixed into listing_observations / market_hourly: percentiles, indices, events and routing read only
 observed data. Every row names the exact document it came from (source_url, the human-checkable capture) and the
@@ -25,10 +26,11 @@ from tables import Base
 
 # Where an archived point came from (archived_prices.source). The first two are read from the publisher's own
 # documents; the datasets are third parties' compilations, recorded with their licence on every point.
-SOURCES = ("wayback", "aws_price_list", "azure_retail", "fsdl_cloud_gpus", "huang_vast_monthly", "skypilot_catalog")
+SOURCES = ("wayback", "aws_price_list", "azure_retail", "aws_spot_history", "fsdl_cloud_gpus", "huang_vast_monthly",
+           "skypilot_catalog")
 # Primary sources win over compilations: a dataset point that repeats one of these for the same provider / listing /
 # date is stored as corroboration on the primary row, never as a second point (backfill/datasets/dedupe.py).
-PRIMARY_SOURCES = ("aws_price_list", "azure_retail", "wayback")
+PRIMARY_SOURCES = ("aws_price_list", "azure_retail", "aws_spot_history", "wayback")
 
 # What one point means (archived_prices.basis). NULL on rows from before 0031: capture (wayback) or
 # price_list_version (aws_price_list).
@@ -40,6 +42,9 @@ BASES = {
     "dataset_snapshot": "a row of a third-party dataset as of one revision (e.g. a git commit date)",
     "monthly_median": "a third party's monthly median of transacted rates (not a posted price)",
     "catalog_commit": "a row of a third-party catalogue as of one git commit",
+    "provider_api_history": "the price the provider's own price-history API states was in force at observed_at, "
+                            "read after the fact (AWS DescribeSpotPriceHistory: 00:00 UTC of each day; the day's full "
+                            "change log is kept raw in catalog_snapshots); a sample, not every change",
 }
 
 # Reserved terms live in their own market_type and never in on_demand / spot (reserved.py founders' rule).

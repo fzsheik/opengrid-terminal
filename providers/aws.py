@@ -48,6 +48,8 @@ form bodies to https://ec2.<region>.amazonaws.com/, API version 2016-11-15). Wit
                                the AZ, market_type spot, interruptible, per-GPU price = spot price / GPUs; the earlier
                                prices in the window become history rows of their own (models.PriceChange,
                                normalize._superseded) with the AWS timestamp as provider_changed_at (changed_at.py).
+                               The paged reader itself is spot_history(region, start, end), shared with the 90-day
+                               backfill (backfill/aws_spot.py, archived rows, never listings).
     GetSpotPlacementScores     PLACEMENT_TYPES, one fixed request configuration each (one instance of that type,
                                regional scores over PLACEMENT_REGIONS), refreshed every PLACEMENT_TTL, not every poll: new
                                accounts get a low target-capacity limit and AWS may throttle new configurations per
@@ -358,6 +360,16 @@ class AwsProvider(Provider):
         """Every Linux spot price change since the last poll, plus the price in force at its start, per GPU type and
         AZ, in one region (all pages). GPU rows verbatim. On success the window moves on to `now`."""
         start, end = self.spot_window(region, now)
+        raw = await self.spot_history(region, start, end)
+        if raw.ok:
+            self._spot_since[region] = end
+        return raw
+
+    async def spot_history(self, region: str, start: datetime, end: datetime) -> RawResponse:
+        """DescribeSpotPriceHistory over [start, end] in one region, every page: per GPU type and AZ, the price in
+        force at `start` plus every change inside the window, Linux/UNIX, GPU rows verbatim and sorted. Zero GPU
+        rows, a reshaped page or more than SPOT_MAX_PAGES pages is a failed fetch. Read by the live change log
+        (_spot_prices) and by the 90-day backfill (backfill/aws_spot.py), one 24 h window at a time."""
         types = sorted(GPU_INSTANCES)
         params = {**{f"InstanceType.{i}": t for i, t in enumerate(types, 1)}, "ProductDescription.1": SPOT_PRODUCT,
                   "StartTime": start.strftime("%Y-%m-%dT%H:%M:%SZ"), "EndTime": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -384,7 +396,6 @@ class AwsProvider(Provider):
         rows = [i for i in items if isinstance(i, dict) and i.get("instanceType") in GPU_INSTANCES]
         if not rows:
             return _failed(first, f"aws spot: no GPU rows in {region}", params)
-        self._spot_since[region] = end
         # Sorted so the same rows always store as the same body, whatever order the pages came in.
         rows.sort(key=lambda r: (str(r.get("instanceType")), str(r.get("availabilityZone")), str(r.get("timestamp"))))
         return reshaped(first, {"region": region, "product_description": SPOT_PRODUCT, "spotPriceHistorySet": rows},

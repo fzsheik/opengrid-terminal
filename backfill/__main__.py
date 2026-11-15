@@ -6,6 +6,10 @@
     python -m backfill import --since 2016-01 --provider azure --no-aws     everything archived since Jan 2016
     python -m backfill aws [--since 2015-12-01] [--no-download] [--dry-run]
                               AWS's EC2 price-list archive only (all 123 versions by default; on-demand + reserved)
+    python -m backfill aws-spot [--days 90] [--dry-run] [--region us-east-1 ...] [--report report.json]
+                              AWS's own EC2 spot price history (DescribeSpotPriceHistory, read-only key; AWS keeps 90
+                              days): the price in force at 00:00 UTC per GPU type, AZ and day before OpenGrid recorded
+                              that region live, archived (basis provider_api_history); each day's change log kept raw
     python -m backfill azure-since [--dry-run]
                               Azure Retail Prices API: one "effective since" point per GPU size / region / market
     python -m backfill datasets [--only fsdl|huang] [--dry-run]
@@ -72,6 +76,11 @@ def main(argv=None) -> int:
     p.add_argument("--since", default=AWS_FIRST_VERSION)
     p.add_argument("--no-download", action="store_true")
     p.add_argument("--dry-run", action="store_true")
+    p = sub.add_parser("aws-spot", help="AWS EC2 spot price history, last 90 days (DescribeSpotPriceHistory)")
+    p.add_argument("--days", type=int, default=90)
+    p.add_argument("--region", action="append", help="only these spot regions (repeatable)")
+    p.add_argument("--dry-run", action="store_true", help="fetch and parse, store nothing")
+    p.add_argument("--report", help="write the JSON report here")
     p = sub.add_parser("azure-since", help="Azure effectiveStartDate anchors (one point each, not a series)")
     p.add_argument("--dry-run", action="store_true")
     p = sub.add_parser("datasets", help="FSDL (MIT) and Huang/Zenodo (CC BY) as archived points")
@@ -111,6 +120,24 @@ def main(argv=None) -> int:
         print(json.dumps(rep, default=str, indent=1) if a.json else coverage.render(rep))
         return 0
 
+    if a.cmd == "aws-spot":
+        from backfill import aws_spot
+        from providers.aws import SPOT_REGIONS
+        bad = [r for r in a.region or [] if r not in SPOT_REGIONS]
+        if bad:
+            raise SystemExit(f"backfill: {bad} not in providers.aws.SPOT_REGIONS")
+        r = aws_spot.run(a.days, dry_run=a.dry_run, regions=a.region)
+        for x in r["regions"]:
+            for f in x["failures"][:5]:
+                print(f"failed: {x['region']} {f}", file=sys.stderr)
+        if a.report:
+            with open(a.report, "w") as f:
+                json.dump(r, f, indent=1, default=str)
+        print(json.dumps({"rows": r["rows"], "inserted": r["inserted"], "failed": r["failed"],
+                          "earliest": r["earliest"], "by_gpu": r["by_gpu"],
+                          "by_region": {x["region"]: {k: x[k] for k in ("days", "rows", "inserted", "first", "last")}
+                                        for x in r["regions"]}}, indent=1, default=str))
+        return 1 if r["failed"] else 0
     if a.cmd == "azure-since":
         from backfill import azure_since
         r = azure_since.run(dry_run=a.dry_run)
