@@ -1,7 +1,7 @@
 # OpenGrid Terminal: Capabilities & Features
 
 **OpenGrid Terminal is a market-intelligence and execution terminal for GPU compute.**
-It watches 60 GPU clouds, turns their prices into one trustworthy market, explains what is moving
+It watches 61 GPU clouds (60 published), turns their prices into one trustworthy market, explains what is moving
 and why, and routes a workload to the best provider through one OpenGrid API key, with every
 decision audited and every dollar reconciled.
 
@@ -47,16 +47,16 @@ Counts recomputed from the code on 2026-11-13.
 
 | | |
 |---|---|
-| GPU clouds monitored | **60** polled, 59 published, out of **61** registered (`providers.PROVIDERS`; Alibaba Cloud is built but dormant until an AccessKey is set, section 3.1) (Fireworks AI is the only wholly internal provider: used for routing, never republished; two more sources of public providers are internal, DeepInfra's container-API prices and AWS's Spot Advisor bands, section 3.8) (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb, Civo, Atlantic.Net, E2E Networks, Modal, Replicate, Baseten, Beam, Arkane Cloud, VESSL AI, Mithril, DeepInfra, SimplePod, Nosana, Thunder Compute, Clore.ai, Paperspace, Akash Network, Hydra Host, CUDO Compute, GPU.ai, Exoscale, Hugging Face Inference Endpoints, Gcore, Fireworks AI, IONOS Cloud, Hetzner, Yotta Shakti Cloud, Sakura Internet) |
+| GPU clouds monitored | **61** polled, 60 published, out of **61** registered (`providers.PROVIDERS`; Alibaba Cloud has been polled since 2026-11-15, when its read-only AccessKey was set, section 3.1) (Fireworks AI is the only wholly internal provider: used for routing, never republished; two more sources of public providers are internal, DeepInfra's container-API prices and AWS's Spot Advisor bands, section 3.8) (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb, Civo, Atlantic.Net, E2E Networks, Modal, Replicate, Baseten, Beam, Arkane Cloud, VESSL AI, Mithril, DeepInfra, SimplePod, Nosana, Thunder Compute, Clore.ai, Paperspace, Akash Network, Hydra Host, CUDO Compute, GPU.ai, Exoscale, Hugging Face Inference Endpoints, Gcore, Fireworks AI, IONOS Cloud, Hetzner, Yotta Shakti Cloud, Sakura Internet) |
 | Canonical GPU models | **100**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL); each has a hardware spec row (100 in `hardware.py`) |
 | OpenGrid indices defined | **269**: 100 per-GPU, 100 spot, 40 regional, 25 provider-class, 4 composites (H100 / H200 / A100 class and the overall GPU Compute Index) |
-| News & signal sources | **81** registered, **66** enabled (41 RSS, 4 Atom, 3 US Federal Register, 16 SEC EDGAR, 2 GDELT queries); the 15 disabled ones are listed with the reason. About 68k items stored in production (67,932 on 2026-11-14), history backfill included |
+| News & signal sources | **81** registered, **66** enabled (41 RSS, 4 Atom, 3 US Federal Register, 16 SEC EDGAR, 2 GDELT queries); the 15 disabled ones are listed with the reason. About 87k items stored in production (86,523 on 2026-11-15), history backfill included |
 | API operations | **252** in the OpenAPI schema: 230 under `/v1` (74 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 9 admin-only reads (7 power, 2 equities), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 47 page routes |
 | Web pages | **47** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar. RL cost (`/rl-cost`) sits under GPUs; Batches (`/batches`, `/batch/{id}`) under My Jobs; the internal Monthly report (`/reports`, `/reports/{month}`) under Markets, locked |
 | Database tables | **117** in a freshly migrated database (116 application tables plus `alembic_version`; Postgres, migrated by Alembic: 42 migrations, head `0040_lium_data`) |
 | Background jobs | **37** registered when every optional source is configured (**33** with the defaults: no EIA / SEC / Alpaca keys, `POWER_ENABLED` off), beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets, the monthly market report…; table 15.2) |
 | Capacity (stock) feeds | **32** providers report in-stock state or counts from their own APIs (section 3.6) |
-| Power markets (internal) | EIA-930 grid data, EIA natural gas, CAISO, NYISO, SPP and ERCOT wholesale prices in their own `power_*` tables (about 490 MB in production on 2026-11-14); admin-only reads, never in a GPU statistic (section 5a) |
+| Power markets (internal) | EIA-930 grid data, EIA natural gas, CAISO, NYISO, SPP, ERCOT and ISO-NE wholesale prices in their own `power_*` tables (about 504 MB in production on 2026-11-15); admin-only reads, never in a GPU statistic (section 5a) |
 | Provisioning adapters | **9 providers** (Lambda, RunPod, Hyperstack, DigitalOcean, Crusoe/Denvr/Latitude via Shadeform, Vast, Verda) |
 | Discord channels | **4** (ops, deployments, market, news) with OpenGrid-branded embeds |
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination. Built on top, tested against fake provider APIs only: **batches** (a sweep or shard list as one batch: placement across clouds, one budget, one approval), **resume** from a verified checkpoint, opt-in **OOM escalation** and **move** to another GPU; automatic relaunch / OOM escalation and move are off by default (`JOB_AUTO_RELAUNCH_ENABLED`, `JOB_MOVE_ENABLED`) |
@@ -69,7 +69,7 @@ Counts recomputed from the code on 2026-11-13.
 ## 2. Architecture
 
 ```
-                    ┌──────────────────────── 60 GPU clouds ───────────────────────┐
+                    ┌──────────────────────── 61 GPU clouds ───────────────────────┐
                     │ APIs · public price pages · pricing files · aggregator feeds │
                     └──────────────────────────────┬────────────────────────────────┘
                                                    │ independent poll loop per provider
@@ -139,7 +139,7 @@ Exoscale 1 h. Lium is also read live from its public WebSocket (section 3.7).
 
 | Provider | Class | How OpenGrid reads prices |
 |---|---|---|
-| Alibaba Cloud | hyperscaler | authenticated API (ECS: GPU spot per zone and the pay-as-you-go price it is stated against); **dormant**: not polled until `ALIBABA_ACCESS_KEY_ID` + `ALIBABA_ACCESS_KEY_SECRET` are set |
+| Alibaba Cloud | hyperscaler | authenticated API (ECS: GPU spot per zone and the pay-as-you-go price it is stated against); live in production since 2026-11-15 (first poll: 30 responses, 0 failed; 51 USD listings, 32 spot and 19 pay-as-you-go: T4, A10, V100, L20N; no A100 / H100 sold as spot in the polled regions); polled only while `ALIBABA_ACCESS_KEY_ID` + `ALIBABA_ACCESS_KEY_SECRET` are set |
 | AWS | hyperscaler | public pricing files (on-demand in 15 regions; Compute Savings Plans, reserved section only); with a read-only IAM key, the EC2 API for spot prices per AZ in 15 regions and spot placement scores (six regions) (capacity tiers) |
 | Google Cloud | hyperscaler | Cloud Billing Catalog API, in every region Compute Engine offers the shape (read-only service account; us-central1 without it; attachable T4/V100 are GPU-only and kept out of market statistics); on-demand and Spot (Spot proven against Google's page; H100 x1/2/4 and B200 Spot-only shapes) |
 | Microsoft Azure | hyperscaler | public API (Retail Prices, eastus + eastus2) |
@@ -193,8 +193,8 @@ Exoscale 1 h. Lium is also read live from its public WebSocket (section 3.7).
 
 Candidates checked and **not** added (2026-10-13): Paperspace (its own page contradicts the aggregator),
 Thunder Compute (terms forbid anonymous automated access), TensorWave ("starting at" floors only), Fluidstack,
-Nscale and Sesterce (no public prices), Genesis Cloud (unreachable). Alibaba Cloud: built 2026-11-13 on the keyed ECS API (spot per zone + pay-as-you-go), dormant until an AccessKey
-is set (its public pages carry no spot price; robots.txt disallows the page's data files, which are not read). TensorDock (key-only API, "from" floors), Cudo Compute (public
+Nscale and Sesterce (no public prices), Genesis Cloud (unreachable). Alibaba Cloud: built 2026-11-13 on the keyed ECS API (spot per zone + pay-as-you-go), polled only with an AccessKey
+(set in production on 2026-11-15) (its public pages carry no spot price; robots.txt disallows the page's data files, which are not read). TensorDock (key-only API, "from" floors), Cudo Compute (public
 on-demand closed 2026-03-31), SF Compute (login; robots disallows /api), Akash (estimates from stale bids, variants mixed),
 io.net and Oblivus (terms forbid scraping), Prime Intellect (auth; an aggregator),
 Exoscale (no GPU model in the keyless feed), Gcore (EUR only without a key), Seeweb (EUR only), and
@@ -431,9 +431,10 @@ its `basis`, `licence`, `attribution` and visibility tier (migration `0031_backf
   (2026) Vast monthly transacted medians (CC BY 4.0, stored as their own market `transacted`). A dataset point that
   repeats a primary source becomes corroboration on the primary row, never a second point.
 
-Depth in production after the archive import: **17 providers** reach back at least 24 months, **15** at least 36
-months and **7** at least 60 months (AWS, Azure, CoreWeave, Exoscale, Lambda, OVHcloud, Verda); about 30 providers
-have no archive. `python -m backfill coverage` reports the depth per provider and GPU. Shown per provider at
+Depth in production after the archive imports (checked 2026-11-15): **209,179 archived prices across 51 providers**
+(101,822 of them AWS's own 90-day spot history, 67,385 from Internet Archive captures, 37,861 from AWS's price-list
+archive). **25 providers** reach back at least 24 months, **18** at least 36 months and **9** at least 60 months (AWS,
+Azure, CoreWeave, Exoscale, Google Cloud, Lambda, Oracle, OVHcloud, Verda); 10 providers have no archive. `python -m backfill coverage` reports the depth per provider and GPU. Shown per provider at
 `GET /v1/markets/{gpu}/history/archived`, each sample linked to the exact archived document. The 1Y / ALL price
 chart runs one continuous line through it (archived stretch drawn lighter and labelled), via
 `GET /v1/markets/{gpu}/history/daily`. Sampled only on capture days (monthly for AWS), so it misses short moves;
@@ -569,7 +570,7 @@ clouds with a document at the start and inside the month and have no index level
   Vultr, Scaleway, NVIDIA, AMD, the **US Federal Register** (BIS export controls, FERC data-center
   rules), DatacenterDynamics, The Register, HPCwire, Tom's Hardware, SemiAnalysis, The
   Information, and more. The 15 sources that couldn't be verified are listed as disabled with the reason.
-- **About 68k items** are stored in production (67,932 on 2026-11-14), the history backfill included; the earliest is from 2008-02.
+- **About 87k items** are stored in production (86,523 on 2026-11-15), the history backfill included; the earliest is from 2008-02.
 - **Raw first** (re-classifiable), conditional GET (ETag / Last-Modified), per-source health.
 - **Deduplication**: canonical URLs, plus story clustering across sources (one story, N sources).
 - **Classification** (deterministic, re-runnable): providers (with aliases), GPUs ("H100" → the
@@ -637,7 +638,7 @@ US wholesale electricity, grid data and natural gas, hub and zone level (never n
   market day with the day's values as a compact `real[]` (24 hourly or 288 five-minute slots, DST days 23/25 or
   276/300) plus the day's mean, min and max; `power_fetches`, raw first: every request (failures and "no data"
   answers too) with its URL, status, byte count and SHA-256, and the bytes only where they are small. A value the
-  source did not give is NULL, never 0 and never carried over. About **490 MB** in production (2026-11-14).
+  source did not give is NULL, never 0 and never carried over. About **504 MB** in production (2026-11-15), before the ISO-NE history finishes loading.
 - **Sources** (`power/sources/`; each module's terms verdict is read by `power/registry.py`):
 
   | Source | What | Tier | In production |
@@ -649,10 +650,11 @@ US wholesale electricity, grid data and natural gas, hub and zone level (never n
   | SPP | SPPNORTH_HUB and SPPSOUTH_HUB, day-ahead and real-time | internal | on, back to 2021 |
   | ERCOT (keyless public MIS reports) | day-ahead hourly and real-time 15-minute settlement point prices, 6 hubs and 8 load zones | public (its terms permit redistributing raw public data in compilations) | on, back to 2011 |
   | PJM (Data Miner 2) | hub and zone LMPs | internal | off: needs `PJM_API_KEY` |
-  | ISO-NE (web services) | hub and zone LMPs | internal | off: needs an ISO Express account (`ISONE_USERNAME`, `ISONE_PASSWORD`) |
+  | ISO-NE (web services) | hub and zone LMPs | internal | on since 2026-11-15 (ISO Express account; `POWER_SOURCES` names it); day-ahead and real-time history from 2021-01 loading |
   | MISO | hub LMPs | internal | off and must stay off: its site terms forbid automated access to its public files; its Data Exchange API (subscription key) is not implemented |
 
-  PJM and ISO-NE are built from their documented formats and not verified live yet. ERCOT and EIA-930 are
+  PJM is built from its documented format and not verified live yet. ISO-NE was verified live on 2026-11-15
+  (hub + 8 zones, 24 hourly prices per location per day, the JSON shape the parser expected). ERCOT and EIA-930 are
   public-tier, but they too are served only through the admin routes below.
 - **Runner** (`python -m power backfill|forward|status|sources`): idempotent and resumable (stored days are skipped,
   "no data" days recorded), one request at a time per source, paced, streamed (nothing written to disk). The
@@ -1337,7 +1339,7 @@ registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registere
 | `MONTHLY_REPORT_ENABLED` | the `monthly_report` job (default on; off: it skips its work) |
 | `EIA_API_KEY` | EIA API v2: market-context state electricity prices, and the EIA-930 and natural-gas power sources |
 | `ALPACA_DATA_KEY_ID`, `ALPACA_DATA_SECRET_KEY`, `EQUITY_TICKERS` | internal equities (market data only); ticker override |
-| `POWER_ENABLED`, `POWER_SOURCES`, `POWER_PUE` | power markets: the `power_forward` job (default off; on in production); sources (empty: each module's default); facility overhead (1.3) |
+| `POWER_ENABLED`, `POWER_SOURCES`, `POWER_PUE` | power markets: the `power_forward` job (default off; on in production); sources (empty: each module's default; production names the six defaults plus `isone`); facility overhead (1.3) |
 | `PJM_API_KEY`, `ISONE_USERNAME`, `ISONE_PASSWORD` | PJM and ISO-NE power sources (unset: off) |
 | `ERCOT_API_SUBSCRIPTION_KEY`, `ERCOT_API_USERNAME`, `ERCOT_API_PASSWORD` | defined for ERCOT's Public API, but not read: ERCOT is read keyless from its public MIS reports |
 | `ROUTING_LIVE_PROVISIONING` | env ceiling for real launches (default off) |
@@ -1453,6 +1455,8 @@ exceed the 10-minute timeout on a busy machine.
 
 - **Market intelligence**: live in production; window statistics (7d/30d/90d) fill in as history
   accumulates.
+- **Storage** (checked 2026-11-15): the database is 5.9 GB and the Railway Postgres volume 7.2 GB of 10 GB (70%), up from
+  2.9 GB on 2026-11-02. The `db_volume_watch` job posts to the ops channel past 85%. The volume has not been grown.
 - **Public pages** are OFF in production (`PUBLIC_PAGES=false`, checked 2026-11-14, a deliberate choice: the market
   data is the product): every page and `/robots.txt` / `/sitemap.xml` need the site login, so nothing on
   `terminal.tryopengrid.com` is indexed by search engines; the Data API host needs an API key. The marketing site
@@ -1473,13 +1477,13 @@ exceed the 10-minute timeout on a busy machine.
   at production size. A few website pages still translate new field names back to old ones in the browser
   (`OG.legacyGpu`, `OG.legacyHistory`).
 - **Power markets** (§5a): internal only. Every read is admin-only under `/v1/ops/power/*`; there is no public power
-  route, even for the public-tier ERCOT and EIA-930 series. Missing markets: **PJM** (needs `PJM_API_KEY`), **ISO-NE**
-  (needs an ISO Express account) and **MISO** (its terms forbid automated access to its public files; the Data
+  route, even for the public-tier ERCOT and EIA-930 series. Missing markets: **PJM** (needs `PJM_API_KEY`; PJM must first enable
+  API access on the account) and **MISO** (its terms forbid automated access to its public files; the Data
   Exchange API is not implemented). CAISO history before 2023-08 is not available from OASIS. A derived
   cross-analysis row is internal unless every input is public, and all of them are served to admins only.
 - **Market context and equities**: EIA and EDGAR series are public at `/v1/macro/*`; all 40 equity tickers are
   internal.
-- **Archived history**: about 30 of the 60 providers have no archive; AWS reserved archive rows are stored but not
+- **Archived history**: 10 of the 61 providers have no archive; AWS reserved archive rows are stored but not
   served; archived points are sampled on capture days only.
 - **News**: GDELT throttles (HTTP 429 "limit requests"), so GDELT history runs are paced at one request per 5.5 s
   and are slow; the GDELT GPU-cloud query returned nothing before d2fad60.
@@ -1499,7 +1503,9 @@ a real GPU provider yet. The next step is one supervised **Lambda validation run
   launch, and batches still run allowlisted templates only, so the `/v1/batches/preview` body is the shape of a plan,
   refused (`unknown_template`) for any other workload today. Only single-GPU replicas are proposed (no multi-GPU or
   multi-node replicas).
-- **Providers**: Alibaba Cloud is built but dormant until an AccessKey is set. RunPod's market-data poller reads pods
+- **Lium data** (checked 2026-11-15): the keyless feeds are recording (3,294 feed values; 33 days of published daily
+  totals). `LIUM_PARTNER_API_KEY` is unset, so no rentals are stored: Lium has to flag the account as a data partner.
+- **Providers**: Alibaba Cloud is live (2026-11-15). RunPod's market-data poller reads pods
   from REST v2 when `RUNPOD_API_KEY` is set (REST needs a key; confirmed in production on 2026-11-14: the
   production key has `catalog:read`, 9 responses, 0 failed), but still reads RunPod's GraphQL API, which RunPod
   retires in early 2027, for (a) serverless pool flex/active prices, which REST v2 does not publish, and (b) pods when
