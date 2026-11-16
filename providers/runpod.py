@@ -83,9 +83,11 @@ AUTH_PAUSE_SECONDS = 3600
 # One fetch round: normalize's own window (normalize._latest_raw keeps rows within 120 s of an endpoint's newest).
 ROUND = timedelta(seconds=120)
 
-# Fields of LowestPrice we actually use. rentedCount, totalCount,
-# rentalPercentage and availableGpuCounts also exist but are null in every
-# combination tried, so there is no capacity number to be had.
+# Fields of LowestPrice we actually use. rentedCount, totalCount, rentalPercentage, availableGpuCounts and
+# maxUnreservedGpuCount also exist but are null in every combination tried (re-checked keyless 2026-11-16 for every
+# GPU type, both clouds, and with dataCenterId set), so there is no capacity number to be had. gpuTypes'
+# maxGpuCountSecureCloud / maxGpuCountCommunityCloud and REST v2's `maxCount` are not stock either: the v2 spec calls
+# maxCount "a ceiling, not a stock level" (the largest machine of that type), so none of them is read as a count.
 _PRICE_FIELDS = "uninterruptablePrice stockStatus minVcpu minMemory minDisk"
 
 

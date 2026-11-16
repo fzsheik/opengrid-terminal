@@ -424,6 +424,9 @@ app.include_router(lium_api.router)
 from api import operators as operators_api  # noqa: E402  (marketplace operators and hardware matches; admin only)
 
 app.include_router(operators_api.router)
+from api import stock_counts as stock_counts_api  # noqa: E402  (GPUs free per GPU type and provider; admin only)
+
+app.include_router(stock_counts_api.router)
 from api import reports as reports_api  # noqa: E402  (internal monthly market report; registers monthly_report)
 
 app.include_router(reports_api.router)

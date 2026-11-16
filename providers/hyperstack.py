@@ -4,6 +4,11 @@ Capacity: /core/stocks gives, per region and GPU model, `configurations` (deploy
 {"1x": 4, "2x": 2, "4x": 1} for 4 free GPUs) and `available` (GPUs, a floor estimate such as "10+"). Each
 GPU flavor gets one row: in_stock from the flavor's own `stock_available` flag, available_count from the
 configurations count for its size, in VMs.
+
+A flavor whose GPU model /core/stocks does not list at all (2026-11 fixture: RTX-PRO6000-SE and its spot form in
+CANADA-1, H100-80G-SXM5 in US-1 and CANADA-2, A100-80G-SXM4-spot in US-1, every one `stock_available: false`) keeps
+only its flag: there is no other stock endpoint, and a missing model is not read as zero. The model's `available`
+("10+") is a floor, so it stays in raw_value and never becomes a count.
 """
 
 import asyncio

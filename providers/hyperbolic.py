@@ -6,6 +6,10 @@ whole-option price, so the per-GPU rate is derived.
 Capacity: each option carries `totalAvailable` (GPUs) and `enabled`. A count; in stock only when the option is
 enabled and has GPUs. Options can share GPU, size and region but differ by machine type and network, so the
 capacity sku includes both.
+
+Options without `totalAvailable` (3 of 6 on 2026-11-16, all 1x VMs and the bare-metal 8x) have no count anywhere
+in the keyless API, so they stay unknown. That the unit is GPUs rests on the field name and on every live 8x option
+reading 8; Hyperbolic does not define it. `spotAvailable` is kept in the raw answer, not read (no option sells spot).
 """
 
 import logging

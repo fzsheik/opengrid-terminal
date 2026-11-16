@@ -25,6 +25,10 @@ can stop the price response from being returned.
 Capacity is yes/no per instance type, location and market: every GPU type in the catalogue, at every location the
 availability response names, is in stock exactly when the location lists it. The sku is the listing_id
 (`<type>` on-demand, `<type>:spot` spot) because Verda reports the two markets separately.
+
+No count exists to read: every availability call in the spec (/v1/instance-availability, its per-type form, which
+answers a bare boolean, and /v1/cluster-availability) returns type names or true/false, and the spec has no
+quantity, stock or remaining field anywhere (checked 2026-11-16).
 """
 
 import logging

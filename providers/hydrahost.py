@@ -20,7 +20,14 @@ marketplace of independent suppliers (93+ data centres), so each device is its o
 
 Stock: stockStatus "on demand" is deployable now (available True); "reserve" and "preorder" are not
 (False: the price is real but not rentable this minute). The same word is the capacity row
-(boolean shape, one row per device, sku = the device id = the listing sku).
+(one row per device, sku = the device id = the listing sku).
+
+Capacity counts (since 2026-11-16): the inventory lists physical servers, one entry per device, so each row is
+a count of exactly one server (unit instance, `gpu_count` GPUs each): available_count 1 when it is on demand,
+0 when reserve or preorder, and total_count 1 either way. That is the inventory's own granularity, not a number
+made up from a yes/no: two on-demand H100 servers in one location are two rows, and they are different machines,
+so they add up. Total means servers listed in the inventory now, including reserve and preorder ones, which may
+not be racked yet. A status word outside the three known ones leaves both counts unknown.
 
 Fetch keeps only the fields read (no IP addresses, disk serials or OS lists). A response without a
 `data` list, or an inventory with no priced GPU device, fails the normalize.
@@ -229,7 +236,7 @@ class HydraHostProvider(Provider):
 
     @staticmethod
     def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
-        """One row per active GPU device: is it deployable on demand now."""
+        """One row per active GPU device: is it deployable on demand now; one server, so counts of 1 or 0."""
         rows = find_endpoint(by_endpoint, INVENTORY)
         if not rows:
             return []
@@ -240,9 +247,12 @@ class HydraHostProvider(Provider):
             if gpu is None or (d.get("listing") or {}).get("isActive") is False:
                 continue
             status, location = d.get("stockStatus"), (d.get("location") or "").strip() or None
+            known = status in STATUSES
             out.append(CapacityObservation(
                 provider="hydrahost", sku=d["id"], region=location, country=country_of(location),
                 raw_gpu_name=gpu[0], canonical_gpu_name=canonical.canonical_gpu_name(gpu[0]), gpu_count=gpu[1],
-                in_stock=status == ON_DEMAND if status in STATUSES else None, raw_value=str(status),
+                in_stock=status == ON_DEMAND if known else None,
+                available_count=int(status == ON_DEMAND) if known else None, total_count=1 if known else None,
+                count_unit="instance" if known else None, raw_value=str(status),
                 source=INVENTORY, observed_at=fetched_at))
         return out

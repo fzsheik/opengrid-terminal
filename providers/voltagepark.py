@@ -7,6 +7,11 @@
 
 Capacity: bare-metal gives GPUs in stock per location and fabric (a count); presets give the locations with stock
 (yes per listed location, one provider-wide no when none is listed). Locations are ids, not region names.
+
+A VM count exists but needs an account key OpenGrid does not hold: the API's own spec
+(cloud-api.voltagepark.com/api/v1/openapi.json, read 2026-11-16) gives `available_vms` per preset and location at
+GET /virtual-machines/instant/locations, and free GPUs per host node at GET /locations/, both behind a bearer key.
+Until a key is held, VM presets stay yes/no.
 """
 
 import asyncio

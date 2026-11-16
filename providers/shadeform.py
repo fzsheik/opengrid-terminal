@@ -18,7 +18,9 @@ Each subclass fetches the whole catalogue and keeps only its own cloud's rows. C
 providers/crusoe.py: its prices come from here, its capacity from Crusoe's own API when a key is set.
 
 Capacity: each instance type's `availability` list says, per region, whether Shadeform can launch it now
-(a boolean). One row per (type, region) for the rental type the listing uses.
+(a boolean). One row per (type, region) for the rental type the listing uses. There is no count to read for any
+cloud routed here: Shadeform's own spec (api.shadeform.ai/v1/openapi.json and the clusters spec, read 2026-11-16)
+defines `available` as "True when the instance type can be launched in this region right now" and nothing else.
 
 Not read, on purpose: "excesssupply" (Excess Supply is Shadeform's own white-label
 pool of other neoclouds' spare capacity; its types carry Lambda, Nebius and Phyntec
