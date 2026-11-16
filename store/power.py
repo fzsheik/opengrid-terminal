@@ -17,6 +17,9 @@
                     input is public
     power_leadlag   DERIVED (power/cross.py): the correlation of daily GPU price / capacity changes with daily power
                     price changes at lags of -LAG..+LAG days. A correlation, never a cause
+    power_generators, power_generator_history, power_plant_generation, power_queue_projects
+                    PHYSICAL SITES (power/sites/; 0045): EIA generator inventory with its change-only history,
+                    annual net generation per plant, and interconnection-queue projects per published edition
 
 Nothing here is read by listings, rollups, indices, fixings, archived prices or any GPU statistic.
 """
@@ -24,7 +27,7 @@ Nothing here is read by listings, rollups, indices, fixings, archived prices or 
 from datetime import date, datetime
 
 from sqlalchemy import BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, LargeBinary
-from sqlalchemy import REAL, SmallInteger, String, Text, UniqueConstraint
+from sqlalchemy import REAL, CheckConstraint, SmallInteger, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -142,3 +145,118 @@ class PowerLeadLag(Base):
     visibility: Mapped[str] = mapped_column(String(16))
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     method: Mapped[str] = mapped_column(Text)
+
+
+# --------------------------------------------------------------------------- physical sites (power/sites/; 0045)
+# Where plants are, how much they run, and what is queued to connect. Snapshots, not series: their own tables.
+# Every request is a power_fetches row (dataset "sites.*", url + sha256; bodies are never kept: each source keeps
+# its files online). Tiers come from power/sites/registry.py.
+
+class PowerGenerator(Base):
+    """One row per EIA generator, the latest state seen: `period` is the inventory month it reflects and `via`
+    which publication said so ("api": the operable inventory, "file": the monthly EIA-860M workbook, which adds
+    planned, retired and canceled generators). A later month replaces a row; for the same month the file wins."""
+    __tablename__ = "power_generators"
+    __table_args__ = (Index("ix_power_generators_state_county", "state", "county"),
+                      Index("ix_power_generators_ba", "ba_code"))
+
+    plant_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    generator_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    plant_name: Mapped[str | None] = mapped_column(String(200))
+    entity_id: Mapped[int | None] = mapped_column(Integer)
+    entity_name: Mapped[str | None] = mapped_column(String(200))
+    state: Mapped[str | None] = mapped_column(String(2))
+    county: Mapped[str | None] = mapped_column(String(64))
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
+    ba_code: Mapped[str | None] = mapped_column(String(16))
+    sector: Mapped[str | None] = mapped_column(String(64))
+    technology: Mapped[str | None] = mapped_column(String(80))
+    energy_source: Mapped[str | None] = mapped_column(String(8))
+    prime_mover: Mapped[str | None] = mapped_column(String(8))
+    nameplate_mw: Mapped[float | None] = mapped_column(Float)
+    summer_mw: Mapped[float | None] = mapped_column(Float)
+    winter_mw: Mapped[float | None] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(8))              # EIA code: OP SB OA OS | P L T U V TS OT | RE | CN
+    status_group: Mapped[str] = mapped_column(String(16))       # operating standby out_of_service planned retired
+                                                                # canceled
+    operating_ym: Mapped[str | None] = mapped_column(String(7))           # "YYYY-MM"
+    planned_operation_ym: Mapped[str | None] = mapped_column(String(7))
+    planned_retirement_ym: Mapped[str | None] = mapped_column(String(7))
+    retirement_ym: Mapped[str | None] = mapped_column(String(7))
+    period: Mapped[date] = mapped_column(Date)                   # inventory month (first day)
+    via: Mapped[str] = mapped_column(String(8))                  # "api" | "file"
+    first_period: Mapped[date] = mapped_column(Date)
+    fetch_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("power_fetches.id", ondelete="SET NULL"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PowerGeneratorHistory(Base):
+    """Change-only: a row when a generator first appears, when its status, capacity or (planned) retirement /
+    operation month changes, and when it leaves the operable inventory ("left")."""
+    __tablename__ = "power_generator_history"
+    __table_args__ = (UniqueConstraint("plant_id", "generator_id", "period", name="uq_power_generator_history"),
+                      Index("ix_power_generator_history_period", "period"))
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    plant_id: Mapped[int] = mapped_column(Integer)
+    generator_id: Mapped[str] = mapped_column(String(16))
+    period: Mapped[date] = mapped_column(Date)
+    change: Mapped[str] = mapped_column(String(8))               # "new" | "changed" | "left"
+    status: Mapped[str] = mapped_column(String(8))
+    status_group: Mapped[str] = mapped_column(String(16))
+    nameplate_mw: Mapped[float | None] = mapped_column(Float)
+    summer_mw: Mapped[float | None] = mapped_column(Float)
+    planned_operation_ym: Mapped[str | None] = mapped_column(String(7))
+    planned_retirement_ym: Mapped[str | None] = mapped_column(String(7))
+    retirement_ym: Mapped[str | None] = mapped_column(String(7))
+    via: Mapped[str] = mapped_column(String(8))
+    fetch_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("power_fetches.id", ondelete="SET NULL"))
+
+
+class PowerPlantGeneration(Base):
+    """Annual net generation per plant (EIA-923, all fuels and prime movers). Negative for storage-heavy plants."""
+    __tablename__ = "power_plant_generation"
+
+    plant_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    year: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    net_mwh: Mapped[float | None] = mapped_column(Float)
+    state: Mapped[str | None] = mapped_column(String(2))
+    fetch_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("power_fetches.id", ondelete="SET NULL"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revisions: Mapped[int] = mapped_column(SmallInteger, default=0, server_default="0")
+
+
+class PowerQueueProject(Base):
+    """One interconnection request as one edition of one queue publication lists it. Editions are kept side by
+    side (LBNL yearly, ERCOT GIS monthly), so a project's path through the queue is its rows across editions."""
+    __tablename__ = "power_queue_projects"
+    __table_args__ = (Index("ix_power_queue_projects_place", "state", "county"),
+                      CheckConstraint("visibility IN ('public', 'internal')",
+                                      name="ck_power_queue_projects_visibility"))
+
+    source: Mapped[str] = mapped_column(String(24), primary_key=True)     # "lbnl_queues" | "ercot_gis"
+    edition: Mapped[date] = mapped_column(Date, primary_key=True)         # data as of
+    project_id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    iso: Mapped[str | None] = mapped_column(String(24))          # LBNL region (an ISO, West, Southeast) | "ERCOT"
+    entity: Mapped[str | None] = mapped_column(String(120))      # transmission provider
+    state: Mapped[str | None] = mapped_column(String(2))
+    county: Mapped[str | None] = mapped_column(String(64))
+    fips: Mapped[str | None] = mapped_column(String(5))
+    kind: Mapped[str] = mapped_column(String(12))                # "generation" | "load"
+    type: Mapped[str | None] = mapped_column(String(48))         # "Solar", "Solar+Battery", "Gas", ...
+    type_detail: Mapped[str | None] = mapped_column(String(120))
+    mw: Mapped[float | None] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(16))              # "active" | "withdrawn" | "suspended" | "operational"
+    phase: Mapped[str | None] = mapped_column(String(80))
+    queue_date: Mapped[date | None] = mapped_column(Date)
+    proposed_cod: Mapped[date | None] = mapped_column(Date)
+    on_date: Mapped[date | None] = mapped_column(Date)
+    withdrawn_date: Mapped[date | None] = mapped_column(Date)
+    ia_date: Mapped[date | None] = mapped_column(Date)
+    poi: Mapped[str | None] = mapped_column(String(200))
+    project_name: Mapped[str | None] = mapped_column(String(200))
+    developer: Mapped[str | None] = mapped_column(String(200))
+    visibility: Mapped[str] = mapped_column(String(8), server_default="internal")
+    fetch_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("power_fetches.id", ondelete="SET NULL"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

@@ -524,7 +524,7 @@ def test_migration_0043():
     try:
         cfg = dbmod._alembic_config()
         script = ScriptDirectory.from_config(cfg)
-        assert script.get_heads() == ["0043_lium_grafana_history"]                  # one head
+        assert script.get_heads() == ["0045_power_sites"]                           # one head (0045 follows)
         assert script.get_revision("0043_lium_grafana_history").down_revision == "0042_operator_daily"
         command.upgrade(cfg, "0043_lium_grafana_history")
         eng = create_engine(url)

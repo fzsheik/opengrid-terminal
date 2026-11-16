@@ -129,6 +129,10 @@ class Settings(BaseSettings):
     power_enabled: bool = False
     power_sources: str | None = None
     power_pue: float = 1.3                       # power/cross.py: facility overhead on GPU board power (documented)
+    # Physical sites (power/sites/): plant inventory, plant generation, interconnection queues. Turns on the weekly
+    # power_sites job; its EIA sources also need eia_api_key. The first run is the backfill (`python -m power.sites
+    # sync`, run detached, does the same).
+    power_sites_enabled: bool = False
     ercot_api_subscription_key: str | None = None   # https://apiexplorer.ercot.com (free account, "Public API")
     ercot_api_username: str | None = None
     ercot_api_password: str | None = None

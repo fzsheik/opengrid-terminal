@@ -10,6 +10,13 @@
                                      with power price moves. Correlation, never cause
     GET /v1/ops/power/shifts         ADMIN ONLY. Power-price spikes in each major shift's window, joined at read
                                      time (market_shift_items untouched). Related, not causal
+    GET /v1/ops/power/plants         ADMIN ONLY. Plants (EIA-860M generators summed) with capacity factor (EIA-923),
+                                     idle MW and planned retirements; ?state ba technology status county year sort
+                                     (idle | retirement | nameplate | cf) limit
+    GET /v1/ops/power/queues         ADMIN ONLY. Interconnection-queue projects (LBNL Queued Up, ERCOT GIS), latest
+                                     edition per source unless ?edition; plus MW queued per county, generation and
+                                     load apart, active requests only
+    GET /v1/ops/power/sites/status   ADMIN ONLY. Site tables: rows, bytes, editions, fetches; and the registry
 
 Every power read is admin-only, with Cache-Control: private, no-store. There is no public route: power data is for
 OpenGrid's own routing and research (the EIA-930 series are public domain and could be published later, through
@@ -23,6 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from accounts.auth import Principal, require_scope
 from api.common import OBSERVED, envelope
 from power import cross, reads, registry, runner
+from power.sites import reads as site_reads, registry as site_registry, runner as sites_runner
 
 router = APIRouter()
 ADMIN = require_scope("admin")
@@ -30,6 +38,8 @@ DOC = "methodology/power-markets.md"
 MAX_KEYS = 20
 
 runner.register()  # the power_forward job (off until POWER_ENABLED)
+sites_runner.register()  # the power_sites job (off until POWER_SITES_ENABLED)
+SITES_DOC = "methodology/power-markets.md#physical-sites"
 
 
 def _ops(resp: Response, rows, **kw):
@@ -106,3 +116,54 @@ def ops_power_shifts(response: Response, gpu: str | None = None, limit: int = Qu
                      who: Principal = Depends(ADMIN)):
     rows = cross.shift_power(limit, gpu)
     return _ops(response, rows, count=len(rows), visibility="internal", note=cross.RULE)
+
+
+# --------------------------------------------------------------------------- physical sites (power/sites/)
+
+def _sites(resp: Response, rows, **kw):
+    resp.headers["Cache-Control"] = "private, no-store"
+    return envelope(rows, kind=OBSERVED, doc=SITES_DOC, **kw)
+
+
+@router.get("/v1/ops/power/plants", tags=["ops"], include_in_schema=False,
+            summary="Ops: power plants with capacity factor, idle MW and planned retirements")
+def ops_power_plants(response: Response, state: str | None = None, ba: str | None = None,
+                     technology: str | None = None, county: str | None = None,
+                     status: str | None = Query(None, description="operating | standby | out_of_service | planned | "
+                                                                  "retired | canceled | removed"),
+                     sort: str = Query("idle", description="idle | retirement | nameplate | cf"),
+                     year: int | None = Query(None, ge=2001, le=2100),
+                     limit: int = Query(100, ge=1, le=5000), who: Principal = Depends(ADMIN)):
+    if sort not in site_reads.SORTS:
+        raise HTTPException(422, {"code": "bad_sort", "message": f"sort must be one of {site_reads.SORTS}"})
+    rows = site_reads.plants(state=state, ba=ba, technology=technology, status=status, sort=sort, limit=limit,
+                             year=year, county=county)
+    return _sites(response, rows, count=len(rows), year=rows[0]["year"] if rows else None,
+                  method=site_reads.METHOD,
+                  attribution=site_registry.EIA_TERMS.attribution)
+
+
+@router.get("/v1/ops/power/queues", tags=["ops"], include_in_schema=False,
+            summary="Ops: interconnection-queue projects and MW queued per county")
+def ops_power_queues(response: Response, source: str | None = Query(None, description="lbnl_queues | ercot_gis"),
+                     edition: date | None = None, state: str | None = None, county: str | None = None,
+                     iso: str | None = None, type: str | None = None,
+                     status: str | None = Query(None, description="active | withdrawn | suspended | operational"),
+                     kind: str | None = Query(None, description="generation | load"),
+                     limit: int = Query(500, ge=1, le=50000), counties: int = Query(50, ge=0, le=5000),
+                     who: Principal = Depends(ADMIN)):
+    rows = site_reads.queue_projects(source, edition, state, county, iso, type, status, kind, limit)
+    totals = site_reads.queued_mw_by_county(source, edition, state, iso, kind, "active", type, limit=counties or None)
+    return _sites(response, rows, count=len(rows), editions=site_reads.latest_editions(),
+                  county_totals={"generation": [t for t in totals if t["kind"] == "generation"],
+                                 "load": [t for t in totals if t["kind"] == "load"]},
+                  note="County totals: active requests only, per source and edition (LBNL includes ERCOT's queue; "
+                       "never add the two). No public source lists large-load requests by project yet.")
+
+
+@router.get("/v1/ops/power/sites/status", tags=["ops"], include_in_schema=False,
+            summary="Ops: site tables, editions and fetches; the site registry")
+def ops_power_sites_status(response: Response, who: Principal = Depends(ADMIN)):
+    st = sites_runner.status()
+    return _sites(response, st["tables"], sources=site_registry.as_list(), **{k: v for k, v in st.items()
+                                                                               if k != "tables"})

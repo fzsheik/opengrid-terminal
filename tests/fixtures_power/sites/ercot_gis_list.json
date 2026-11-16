@@ -1,0 +1,60 @@
+{
+ "ListDocsByRptTypeRes": {
+  "DocumentList": [
+   {
+    "Document": {
+     "ExpiredDate": "2033-11-08T23:59:59-06:00",
+     "ILMStatus": "EXT",
+     "SecurityStatus": "P",
+     "ContentSize": "519629",
+     "Extension": "xlsx",
+     "ReportTypeID": "15933",
+     "Prefix": "RPT",
+     "FriendlyName": "Co-located_Battery_Identification_Report_October_2026",
+     "ConstructedName": "RPT.00015933.0000000000000000.20261110.154726421.Co-located_Battery_Identification_Report_October_2026.xlsx",
+     "DocID": "1297142362",
+     "PublishDate": "2026-11-10T15:47:25-06:00",
+     "ReportName": "GIS Report",
+     "DUNS": "0000000000000000",
+     "DocCount": "0"
+    }
+   },
+   {
+    "Document": {
+     "ExpiredDate": "2033-10-31T23:59:59-05:00",
+     "ILMStatus": "EXT",
+     "SecurityStatus": "P",
+     "ContentSize": "669942",
+     "Extension": "xlsx",
+     "ReportTypeID": "15933",
+     "Prefix": "RPT",
+     "FriendlyName": "GIS_Report_October2026",
+     "ConstructedName": "RPT.00015933.0000000000000000.20261102.150249942.GIS_Report_October2026.xlsx",
+     "DocID": "1293955078",
+     "PublishDate": "2026-11-02T15:02:48-06:00",
+     "ReportName": "GIS Report",
+     "DUNS": "0000000000000000",
+     "DocCount": "0"
+    }
+   },
+   {
+    "Document": {
+     "ExpiredDate": "2033-09-29T23:59:59-05:00",
+     "ILMStatus": "EXT",
+     "SecurityStatus": "P",
+     "ContentSize": "673369",
+     "Extension": "xlsx",
+     "ReportTypeID": "15933",
+     "Prefix": "RPT",
+     "FriendlyName": "GIS_Report_September2026",
+     "ConstructedName": "RPT.00015933.0000000000000000.20261001.160829144.GIS_Report_September2026.xlsx",
+     "DocID": "1281327706",
+     "PublishDate": "2026-10-01T16:08:28-06:00",
+     "ReportName": "GIS Report",
+     "DUNS": "0000000000000000",
+     "DocCount": "0"
+    }
+   }
+  ]
+ }
+}

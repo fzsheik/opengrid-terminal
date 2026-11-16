@@ -186,3 +186,109 @@ only. The power side takes its series' tier. ISO prices are internal, so today e
 | `/v1/ops/power/cross/regional` | power cost per GPU-hour, spread and power share per region and day |
 | `/v1/ops/power/cross/leadlag` | the latest window's lagged correlations |
 | `/v1/ops/power/shifts` | power spikes around major shifts (related, not causal) |
+
+## Physical sites
+
+The prices above say what power costs. Siting a small datacenter on spare power also needs the physical side:
+where the power plants are, how much each one actually runs, which ones are retiring, and what new generation is
+queued to connect nearby. A large plant that rarely runs, or one with a planned retirement, marks a grid
+connection that has room. Code: `power/sites/`. Tables: `power_generators`, `power_generator_history`,
+`power_plant_generation`, `power_queue_projects` (migration 0045). These are snapshots, not time series, so they
+have their own registry (`power/sites/registry.py`) with the same terms rule as `power/registry.py`.
+
+### Sources and tiers
+
+| Source | What OpenGrid reads | Tier | Why (terms, checked 2026-11-15) |
+|---|---|---|---|
+| **EIA-860M** via API v2 `electricity/operating-generator-capacity` | Every operable generator, every month from 2008-01: plant, operator, state, county, latitude and longitude, balancing authority, technology, energy source, prime mover, nameplate, summer and winter MW, status, operating month, planned retirement month | **public** | U.S.-government work, public domain ([copyright and reuse](https://www.eia.gov/about/copyrights_reuse.php)) |
+| **EIA-860M** monthly workbook ([eia860m](https://www.eia.gov/electricity/data/eia860m/)) | The newest file only: its Operating, Planned, Retired and Canceled sheets. Planned generators (with their planned month and construction status) and exact retirement months exist only here | **public** | as above |
+| **EIA-923** via API v2 `electricity/facility-fuel` | Annual net generation per plant (fuel ALL, prime mover ALL), from 2008 | **public** | as above |
+| **Berkeley Lab "Queued Up"** ([data page](https://eta-publications.lbl.gov/publications/us-interconnection-queue-data-0)) | Every interconnection request in the US queues (the 7 ISOs and about 50 utilities): state, county, type, MW, queue, proposed, online and withdrawn dates, status. One workbook a year, every edition kept | 2026 edition **public**; 2025 edition internal | The 2026 edition is "licensed CC BY 4.0 ... attribute it to Lawrence Berkeley National Laboratory and GridTracker". The 2025 edition's page states no licence, so it stays internal. emp.lbl.gov answers automated clients with a Cloudflare challenge, which is not bypassed: the files are read from eta-publications.lbl.gov |
+| **ERCOT GIS report** (PG7-200-ER, public MIS) | Monthly: every generation project with a full interconnection study requested (county, fuel, technology, MW, projected commercial date, study phase), from 2018-12 | **public** | ERCOT terms section 5 allow redistributing raw public data in compilations. Each document is downloaded once |
+
+**Large loads.** ERCOT publishes no project-level large-load queue. Large loads appear only as zone and total
+figures in PDF slides (the Monthly Operational Overview, LLWG and TAC updates), so nothing is read. Queued Up
+covers generation and storage only. The tables and the county totals keep generation and load apart (`kind`), so
+a load source can be added later, but today every queued row is generation.
+
+### How a generator's state and history are kept
+
+- `power_generators` holds one row per (plant, generator): its latest state, the inventory month of its last change
+  (`period`) and which publication said so (`via`: `api` or `file`).
+- A month is applied whole or not at all (a missing page would look like generators that left). Months are applied
+  oldest first.
+- For the same month the workbook outranks the API. The two publications spell shared generators identically
+  (checked on 2026-11-15), so a generator does not flip between them.
+- `power_generator_history` is change-only: a row when a generator first appears, when its status, nameplate,
+  summer capacity, planned operation month, planned retirement month or retirement month changes, and when it
+  leaves. A generator stored as operable that an API month no longer lists has left the operable inventory: status
+  `RE`, retirement month unknown until the workbook gives it. A generator missing from every sheet of a workbook
+  becomes status `XX` (group `removed`).
+- Re-applying the same answer stores nothing. EIA-923 years are upserted where the value changed, and each change
+  is counted (`revisions`). The two newest complete years are re-read every run, because EIA revises them.
+
+### Capacity factor and idle MW
+
+For plant *p* and year *Y*:
+
+- **capacity factor** = net generation in *Y* (EIA-923) / (sum over the plant's non-storage generators of nameplate
+  MW x the hours of *Y* each was in service).
+- A generator is in service from its operating month. If it is retired, it is in service until the month before
+  its retirement month. A generator that left the inventory at an unknown month is not counted. A currently operable
+  generator is taken as in service for the whole year (EIA's monthly status before 2008 is not read).
+- Storage (batteries, pumped hydro, flywheels, compressed air) is left out of the denominator, because it consumes
+  more than it makes and would make a plant look idle. Net generation includes the storage's losses, so a plant
+  with a lot of storage can read slightly low.
+- The factor is not clamped. A value above 1 means the inventory's nameplate understates the plant.
+- **Idle MW** = operable non-storage nameplate x (1 - capacity factor, clamped to 0..1): the MW that sat unused on
+  average over the year.
+- Example (EIA-923 2025 and the September 2026 EIA-860M): Limestone, Texas, 7,523,395 MWh / ((893 + 956.8) MW x
+  8,760 h) = 0.464, so 991 idle MW.
+- The default year is the newest one with generation for at least half as many plants as the year before.
+
+### Queued MW per county
+
+- Only `active` requests count as queued. Withdrawn, suspended, operational and unknown requests are kept but never
+  counted.
+- Totals are per source and edition. Queued Up already includes ERCOT's queue, so the two sources are never added.
+- MW is the request's capacity. A hybrid request adds its parts (Queued Up `mw_1 + mw_2 + mw_3`). ERCOT reports
+  repowering as a net change, so some ERCOT values are zero or negative. They are kept as published.
+- A Queued Up request has the id `<entity>|<queue id>`. Requests without a queue id, or with a repeated one, get
+  `#2`, `#3` in file order, so those ids are not stable across editions.
+
+### Raw first, depth and size
+
+- Every request is a `power_fetches` row (dataset `sites.*`) with its URL and SHA-256. No body is kept: EIA, LBNL
+  and ERCOT keep every file online, and the hash verifies a re-fetch.
+- Depth: the EIA-860M API from 2008-01; EIA-923 from 2008 (the route has 2001); every Queued Up edition listed in
+  `power/sites/lbnl.py`; every GIS report ERCOT still lists (94 months, 2018-12 onward, measured 2026-11-15).
+- Measured bytes per row (heap and indexes, on the full real files): generator 314, history 185, queue project 312.
+- Estimated size after the first run: about 45 k generators (14 MB), 100 k history rows (20 MB), 250 k plant-years
+  (20 MB), 170 k queue rows (55 MB). About 110 MB in all.
+
+### Running it
+
+- `python -m power.sites sync [--source eia860m,eia923,lbnl_queues,ercot_gis] [--since YYYY-MM] [--dry-run]`:
+  - fetches what is not stored yet, so the first run is the backfill and every later run a refresh;
+  - is resumable: an interrupted run continues from the last month, year or edition stored;
+  - runs the sources side by side, one request at a time within a source (EIA one a second, LBNL one every 5
+    seconds, ERCOT one every 2.5 seconds). EIA-860M's two parts and EIA-923 share one EIA queue.
+- The first run asks about 1,350 API pages for EIA-860M (225 months of about 6 pages of about 5 MB of JSON). That
+  is about 6 GB received over 1 to 2 hours. It also asks about 55 pages for EIA-923, 2 Queued Up workbooks (30 MB)
+  and 94 GIS reports (about 55 MB).
+- `--since 2015-01` starts the EIA-860M history later and halves that.
+- `python -m power.sites status` prints rows and bytes per table, generators per status, and queue editions.
+- The `power_sites` job runs `sync` weekly when `POWER_SITES_ENABLED=true`. EIA-860M and the GIS report are
+  monthly, so a weekly look picks each one up within a week. The EIA sources also need `EIA_API_KEY`.
+- A new Queued Up edition is one line in `power/sites/lbnl.py` plus its verdict in `power/sites/registry.py`, added
+  after reading that edition's licence.
+
+| Endpoint (admin only) | What |
+|---|---|
+| `/v1/ops/power/plants` | plants with capacity factor, idle MW and planned retirements; `?state ba technology status county year sort=idle\|retirement\|nameplate\|cf limit` |
+| `/v1/ops/power/queues` | queue projects (latest edition per source unless `?edition`); `?source state county iso type status kind`; plus MW queued per county, generation and load apart |
+| `/v1/ops/power/sites/status` | site tables: rows, bytes, editions, fetches, and the site registry |
+
+Python, for the site-ranking work (plain dicts, `power/sites/reads.py`): `plants(...)`,
+`plants_near(lat, lon, km)`, `plants_in_county(state, county)`, `queue_projects(...)`,
+`queued_mw_by_county(...)`.
