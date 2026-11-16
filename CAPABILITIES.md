@@ -51,18 +51,18 @@ Counts recomputed from the code on 2026-11-13; providers, API operations, jobs a
 | Canonical GPU models | **100**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL); each has a hardware spec row (100 in `hardware.py`) |
 | OpenGrid indices defined | **269**: 100 per-GPU, 100 spot, 40 regional, 25 provider-class, 4 composites (H100 / H200 / A100 class and the overall GPU Compute Index) |
 | News & signal sources | **93** registered, **78** enabled (41 RSS, 4 Atom, 3 US Federal Register, 26 SEC EDGAR, 4 GDELT queries); the 15 disabled ones are listed with the reason. About 87k items stored in production (86,523 on 2026-11-15), history backfill included |
-| API operations | **266** in the OpenAPI schema: 244 under `/v1` (88 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 19 admin-only reads (13 power, 2 equities, 3 marketplace operators, 1 internal reserved prices), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 47 page routes |
+| API operations | **267** in the OpenAPI schema: 245 under `/v1` (89 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 20 admin-only reads (13 power, 1 GPUs free per type, 2 equities, 3 marketplace operators, 1 internal reserved prices), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 47 page routes |
 | Web pages | **47** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar. RL cost (`/rl-cost`) sits under GPUs; Batches (`/batches`, `/batch/{id}`) under My Jobs; the internal Monthly report (`/reports`, `/reports/{month}`) under Markets, locked |
 | Database tables | **133** in a freshly migrated database (132 application tables plus `alembic_version`; Postgres, migrated by Alembic: 48 migrations, head `0047_power_nodal`) |
 | Background jobs | **41** registered when every optional source is configured (**36** with the defaults: no EIA / SEC / Alpaca keys, `POWER_ENABLED` off), beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets, the monthly market report…; table 15.2) |
-| Capacity (stock) feeds | **35** providers report in-stock state or counts from their own APIs (section 3.6) |
+| Capacity (stock) feeds | **35** providers (16 give a number) report in-stock state or counts from their own APIs (section 3.6) |
 | Power markets (internal) | EIA-930 grid data, EIA natural gas, CAISO, NYISO, SPP, ERCOT and ISO-NE wholesale prices in their own `power_*` tables (about 504 MB in production on 2026-11-15); admin-only reads, never in a GPU statistic (section 5a) |
 | Provisioning adapters | **9 providers** (Lambda, RunPod, Hyperstack, DigitalOcean, Crusoe/Denvr/Latitude via Shadeform, Vast, Verda) |
 | Discord channels | **4** (ops, deployments, market, news) with OpenGrid-branded embeds |
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination. Built on top, tested against fake provider APIs only: **batches** (a sweep or shard list as one batch: placement across clouds, one budget, one approval), **resume** from a verified checkpoint, opt-in **OOM escalation** and **move** to another GPU; automatic relaunch / OOM escalation and move are off by default (`JOB_AUTO_RELAUNCH_ENABLED`, `JOB_MOVE_ENABLED`) |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
 | Workload intelligence | GPU memory estimator (text LLMs; recommendations also size audio, image + text and video workloads, section 6c), measured performance from completed real jobs (none yet), project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (hosted at `/mcp` with an API key: 15 tools, 2 prompts; local via uvx: 16 tools, 3 prompts), grounded assistant, RL post-training cost estimator |
-| Automated tests | **154** Python test files + **14** JavaScript test files, all 168 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
+| Automated tests | **156** Python test files + **14** JavaScript test files, all 170 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
 
 ---
 
@@ -292,6 +292,21 @@ keyless signal; each reason is in methodology/capacity.md.
 A row its provider has stopped reporting is removed after a day (six capacity reads where those are further apart),
 with one closing row in the history; until then it carries `stale: true`. Before 2026-11-16 such rows stayed for
 ever with their last state (349 of 2,863 rows that day, 294 of them still reading "in stock").
+**Stock reaches routing and listings** (`capacity_history.py`, routing-1.1): routing's availability history is the
+share of time a provider was actually in stock, time-weighted from its own feed (`capacity_changes`, 7 and 30 days;
+closing and stale rows end the data). Before 2026-11-16 it counted hours with a price listed, so a provider whose
+prices stay up while sold out looked fully reliable (last 14 days: Verda priced 100% of hours, in stock 5%; Hyperstack
+99% vs 22%; Lambda 100% vs 61%). Providers with no feed fall back to listed prices, unknown stock at half credit,
+labelled. A fresh feed row saying sold out excludes a listing that does not state its own stock
+(`sold_out_stock_feed`); one saying in stock scores it available now. `GET /v1/listings` shows `stock`,
+`stock_source`, `stock_observed_at`, `stock_feed`, `stock_rows_stale` and `in_stock_share_30d` (public feed rows
+only). Admin: `GET /v1/ops/availability/quality` (feed coverage, join rate and in-stock share per provider) and
+`GET /v1/ops/availability/counts?gpu=` (one table per GPU type: GPUs free per provider and region where a number is
+given, instances converted to GPUs, rows sharing one pool never added, resold capacity kept apart, yes/no and tiers
+shown as they are, gaps named). Hydra Host now gives counts. A count search of every yes/no and tier provider found no
+other free stock number: RunPod's count fields are null and its `maxCount` is a ceiling; Verda, the Shadeform clouds,
+DigitalOcean, Lambda, Linode, Thunder, DeepInfra, Hetzner, Hugging Face, Koyeb and Scaleway publish none; Voltage
+Park's VM counts need a key.
 
 ### 3.7 Live feeds (`live/`, methodology/live-feeds.md)
 One source pushes changes: Lium's public executor WebSocket (no key). Changes are stored change-only in
@@ -1341,7 +1356,7 @@ the app:
 | Watchlists | `/v1/watchlists`, `/v1/watchlists/{id}`, `…/items`, `…/items/{item_id}`, `/v1/alerts`, `/v1/alerts/{id}`, `…/test`, `/v1/alerts/firings` |
 | Reports (internal; `data:read`, never anonymous, not on the Data API host) | `/v1/reports/monthly`, `/v1/reports/monthly/{month}`; admin: `POST /v1/reports/monthly/{month}/regenerate` (section 4.10) |
 | Analytics | `/v1/economics`, `/v1/onboarding`, `/v1/partners/me`, `POST /v1/events/track` (anonymous product analytics) |
-| Admin & ops (88 in the schema, 19 more outside it) | execution control, kill switches, validation, reconciliation, orphans, resources, channels, ops, metrics, traces, checklist, partners, funnel, accounts, credits, draft invoices, fee policies, exposures, feedback, quality and quarantine, product analytics / PostHog, usage, internal-data registry, reservation offers, fixing restatements, methodology change notices; in the schema, `/v1/ops/lium/*` (14); outside the schema: `/v1/ops/power/*` (13), `/v1/ops/context/equities` (2), `/v1/ops/operators` (3) and `/v1/ops/reserved/internal` (1) |
+| Admin & ops (89 in the schema, 20 more outside it) | execution control, kill switches, validation, reconciliation, orphans, resources, channels, ops, metrics, traces, checklist, partners, funnel, accounts, credits, draft invoices, fee policies, exposures, feedback, quality and quarantine, product analytics / PostHog, usage, internal-data registry, reservation offers, fixing restatements, methodology change notices; in the schema, `/v1/ops/lium/*` (14); outside the schema: `/v1/ops/power/*` (13), `/v1/ops/context/equities` (2), `/v1/ops/operators` (3) and `/v1/ops/reserved/internal` (1) |
 
 Counts (from `main.app.openapi()` on a freshly migrated database): 262 operations, 240 under `/v1`, 84 of them under
 `/v1/ops` or `/v1/admin`, 15 under `/internal`, and 7 operator/debug routes at the root (`/health`, `/fetch`,
@@ -1469,9 +1484,9 @@ registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registere
 
 ## 16. Testing
 
-154 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
+156 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
 Postgres database, no real provider calls), plus 5 CLI/MCP test files in `cli/tests/`. `tests/run_all.py` runs all
-168 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
+170 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
 (`.github/workflows/tests.yml`) runs it on every push and pull request against a throwaway Postgres 16 whose zone is
 deliberately not UTC. Beyond the per-module tests:
 - unit and integration tests for every analytics module, API and page;

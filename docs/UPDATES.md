@@ -5,6 +5,32 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-16 — Availability: routing uses real stock; GPUs free per GPU type (not yet in production)
+
+### What shipped (merged, tested, 170/170 test files; deploy on hold)
+- **Routing reads stock, not listed prices** (`capacity_history.py`, methodology version routing-1.1). Availability
+  history used to count the hours a provider had a price listed, so a provider whose prices stay up while sold out
+  looked fully reliable. Last 14 days in production: Verda priced 100% of hours, in stock 5%; Hyperstack 99% vs 22%;
+  Lambda 100% vs 61%; Lium 100% vs 89%. It is now the share of time in stock from the provider's own feed.
+  Providers without a feed keep a labelled listed-price signal with unknown stock at half credit. A listing whose
+  provider feed says sold out right now is excluded; one whose feed says in stock is scored as available now.
+- **Listings show stock**: `stock`, `stock_source`, `stock_observed_at`, `stock_feed`, `stock_rows_stale`,
+  `in_stock_share_30d` on `GET /v1/listings`.
+- **GPUs free per GPU type** (`GET /v1/ops/availability/counts?gpu=`, admin) and **feed coverage per provider**
+  (`GET /v1/ops/availability/quality`, admin).
+- **Hydra Host gives counts** (one server per inventory device).
+
+### Not shipped
+- **No free count exists** for RunPod (count fields null; `maxCount` is a ceiling), Verda, the Shadeform-routed
+  clouds, DigitalOcean, Lambda, Linode, Thunder, DeepInfra, Hetzner, Hugging Face, Koyeb or Scaleway. Voltage Park's
+  VM counts need a key. No launch-based probing: the founders ruled out anything that costs money.
+
+### Left
+- Speed at production size is unmeasured: a listings page over several GPUs reads about 30 days of stock history
+  (cached 5 minutes).
+
+---
+
 ## 2026-11-16 — Power: where spare electricity is, for siting small datacenters (not yet in production)
 
 ### What shipped (merged, tested; not deployed: deploys are on hold while another backfill runs, and the database
