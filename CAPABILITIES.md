@@ -50,7 +50,7 @@ Counts recomputed from the code on 2026-11-13; providers, API operations, jobs a
 | GPU clouds monitored | **62** polled, 60 published, out of **62** registered (`providers.PROVIDERS`; Alibaba Cloud has been polled since 2026-11-15, when its read-only AccessKey was set, section 3.1) (Fireworks AI and Bitdeer AI are the two wholly internal providers: used for routing, never republished; two more sources of public providers are internal, DeepInfra's container-API prices and AWS's Spot Advisor bands, section 3.8) (AWS, Google Cloud, Microsoft Azure, Oracle Cloud, IBM Cloud, Lambda, RunPod, CoreWeave, Together AI, Vast.ai, Salad, Hyperstack, Hyperbolic, Nebius, DigitalOcean, Vultr, Lium, Massed Compute, Verda, Voltage Park, Jarvislabs, Hot Aisle, Crusoe, Denvr, Latitude.sh, Boost Run, Horizon Compute, Phyntec, Scaleway, Akamai/Linode, OVHcloud, Koyeb, Civo, Atlantic.Net, E2E Networks, Modal, Replicate, Baseten, Beam, Arkane Cloud, VESSL AI, Mithril, DeepInfra, SimplePod, Nosana, Thunder Compute, Clore.ai, Paperspace, Akash Network, Hydra Host, CUDO Compute, GPU.ai, Exoscale, Hugging Face Inference Endpoints, Gcore, Fireworks AI, IONOS Cloud, Hetzner, Yotta Shakti Cloud, Sakura Internet) |
 | Canonical GPU models | **100**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL); each has a hardware spec row (100 in `hardware.py`) |
 | OpenGrid indices defined | **269**: 100 per-GPU, 100 spot, 40 regional, 25 provider-class, 4 composites (H100 / H200 / A100 class and the overall GPU Compute Index) |
-| News & signal sources | **81** registered, **66** enabled (41 RSS, 4 Atom, 3 US Federal Register, 16 SEC EDGAR, 2 GDELT queries); the 15 disabled ones are listed with the reason. About 87k items stored in production (86,523 on 2026-11-15), history backfill included |
+| News & signal sources | **93** registered, **78** enabled (41 RSS, 4 Atom, 3 US Federal Register, 26 SEC EDGAR, 4 GDELT queries); the 15 disabled ones are listed with the reason. About 87k items stored in production (86,523 on 2026-11-15), history backfill included |
 | API operations | **263** in the OpenAPI schema: 241 under `/v1` (85 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 13 admin-only reads (7 power, 2 equities, 3 marketplace operators, 1 internal reserved prices), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 47 page routes |
 | Web pages | **47** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar. RL cost (`/rl-cost`) sits under GPUs; Batches (`/batches`, `/batch/{id}`) under My Jobs; the internal Monthly report (`/reports`, `/reports/{month}`) under Markets, locked |
 | Database tables | **121** in a freshly migrated database (120 application tables plus `alembic_version`; Postgres, migrated by Alembic: 44 migrations, head `0042_operator_daily`) |
@@ -614,9 +614,14 @@ clouds with a document at the start and inside the month and have no index level
 
 ## 5. News & external signals
 
-- **81 registered sources, 66 enabled** (`news/sources.py`): 41 RSS and 4 Atom feeds, 3 US Federal Register
-  queries, 16 SEC EDGAR submissions sources and 2 GDELT queries; official feeds and APIs only, no HTML scraping.
-  Enabled by category: 19 trade press, 16 filings, 12 hyperscaler, 12 provider, 4 vendor, 3 regulation. They include
+- **93 registered sources, 78 enabled** (`news/sources.py`): 41 RSS and 4 Atom feeds, 3 US Federal Register
+  queries, 26 SEC EDGAR submissions sources and 4 GDELT queries; official feeds and APIs only, no HTML scraping.
+  Since 2026-11-15 they include Bitcoin miners moving into AI compute: two GDELT queries (miners that rent GPUs;
+  miners that lease powered space), each also requiring AI, GPU, HPC or data center in the article, and ten EDGAR
+  filers (Bitdeer, IREN, Hut 8, HIVE Digital, Bit Digital, WhiteFiber, Applied Digital, Core Scientific, Cipher
+  Digital, TeraWulf). GDELT gives titles only, so a miner is named on an item only when the title has compute
+  context.
+  Enabled by category: 21 trade press, 26 filings, 12 hyperscaler, 12 provider, 4 vendor, 3 regulation. They include
   AWS, Google Cloud, Azure, Meta, Lambda, CoreWeave, RunPod, Together, Voltage Park, Hyperstack, DigitalOcean,
   Vultr, Scaleway, NVIDIA, AMD, the **US Federal Register** (BIS export controls, FERC data-center
   rules), DatacenterDynamics, The Register, HPCwire, Tom's Hardware, SemiAnalysis, The

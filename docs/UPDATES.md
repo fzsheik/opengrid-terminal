@@ -5,6 +5,42 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-15 — History: a daily operator series, and news sources for Bitcoin miners moving into AI compute
+
+### What shipped
+- **Operators per day** (`operator_daily`, `operator_overlap_daily`; migration `0042_operator_daily`; hourly job
+  `operators_daily`; admin read `/v1/ops/operators/history`): one row per marketplace and day as the market stood at
+  12:00 UTC, and one for the Lium and Vast hardware matches. `python -m operators backfill --since YYYY-MM-DD`
+  rebuilds past days from the stored raw copies.
+- **Backfilled in production from our own stored data**: Vast operators and machines from 2026-10-13, Vast GPU
+  shares and the Lium and Vast matches from 2026-11-02, Lium machine counts from 2026-10-09.
+- **Every row says what that day covered.** Vast days before 2026-11-15 are the 64 cheapest offers per model and
+  Lium days before it carry no operator key; neither is comparable with later days, and the row's `coverage` says so.
+- **News sources for the miners** (`news/sources.py`): two GDELT queries (miners that rent GPUs; miners that lease
+  powered space to GPU clouds), each also requiring AI, GPU, HPC, "data center" or "artificial intelligence" in the
+  article, and ten SEC EDGAR filers (Bitdeer, IREN, Hut 8, HIVE Digital, Bit Digital, WhiteFiber, Applied Digital,
+  Core Scientific, Cipher Digital, TeraWulf). 93 sources registered, 78 enabled.
+- **EDGAR history keeps only filings since `--since`** (a small filer's recent block reaches back decades), and the
+  classifier matches Cipher Mining's new name, Cipher Digital.
+
+### Not shipped
+- **Lium operators before 2026-11-15**: the keys were never stored, so they cannot be recovered.
+- **Vast GPU shares before 2026-11-02**: the field that sizes a machine was not stored before then.
+- **No EDGAR source for CleanSpark, Riot, MARA or Galaxy Digital**: most of their filings are about mining or crypto
+  finance and a filing's title does not say what it is about. GDELT covers their AI news.
+- **HIVE's 40-F annual reports** are not read, and no press-release feed was added.
+
+### Left
+- A month holds at most 250 GDELT articles per query; a busy month loses some.
+- Old company names (Iris Energy, HIVE Blockchain, Applied Blockchain) are not in the queries.
+- In a three-month trial about 1 GDELT item in 5 carried a miner: GDELT matches the article's text but returns only
+  the title, and the classifier reads the title.
+
+### Next
+- The history from Lium's public Grafana (asking prices, launches and failures, penalties).
+
+---
+
 ## 2026-11-15 — Vast's whole offer book, and Lium's price rules and per-provider feeds (internal)
 
 ### What shipped
