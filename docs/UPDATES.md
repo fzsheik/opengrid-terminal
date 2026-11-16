@@ -20,6 +20,12 @@ what is left, and what is next. Add an entry in the same commit as the change.
   powered space to GPU clouds), each also requiring AI, GPU, HPC, "data center" or "artificial intelligence" in the
   article, and ten SEC EDGAR filers (Bitdeer, IREN, Hut 8, HIVE Digital, Bit Digital, WhiteFiber, Applied Digital,
   Core Scientific, Cipher Digital, TeraWulf). 93 sources registered, 78 enabled.
+- **Lium Grafana history** (migration `0043_lium_grafana_history`; `lium_data/grafana.py`): five more panels are
+  read with the dashboards' own queries, and Lium's own history of them is recovered. Median asking and median paid
+  price per UTC day and GPU model (paid from 2025-12-03, asking from 2026-09-16); rentals created (from 2025-09-04)
+  and node-side deploy failures (from 2026-08-12) per UTC hour, whole network; failed deploys by cause (from
+  2026-08-13) and penalties by reason code (from 2026-04-28) per UTC day. Admin reads
+  `/v1/ops/lium/grafana/prices-daily`, `/launches`, `/daily-counts`.
 - **EDGAR history keeps only filings since `--since`** (a small filer's recent block reaches back decades), and the
   classifier matches Cipher Mining's new name, Cipher Digital.
 
@@ -29,6 +35,9 @@ what is left, and what is next. Add an entry in the same commit as the change.
 - **No EDGAR source for CleanSpark, Riot, MARA or Galaxy Digital**: most of their filings are about mining or crypto
   finance and a filing's title does not say what it is about. GDELT covers their AI news.
 - **HIVE's 40-F annual reports** are not read, and no press-release feed was added.
+- **Not read from Lium's Grafana**: the hourly share-rented panel (capped at 30 days by its own query, repeats the
+  fleet series), the "Price your GPUs" daily panel (30 days fixed in the query), the per-node penalty table and the
+  node check logs. Launch counts are network-wide; Lium's panel does not split them by GPU model.
 
 ### Left
 - A month holds at most 250 GDELT articles per query; a busy month loses some.
@@ -37,7 +46,7 @@ what is left, and what is next. Add an entry in the same commit as the change.
   the title, and the classifier reads the title.
 
 ### Next
-- The history from Lium's public Grafana (asking prices, launches and failures, penalties).
+- Rental starts and ends per machine from the hourly rental state, as a utilisation series per provider.
 
 ---
 
