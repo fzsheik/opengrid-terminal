@@ -55,14 +55,14 @@ Counts recomputed from the code on 2026-11-13; providers, API operations, jobs a
 | Web pages | **47** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar. RL cost (`/rl-cost`) sits under GPUs; Batches (`/batches`, `/batch/{id}`) under My Jobs; the internal Monthly report (`/reports`, `/reports/{month}`) under Markets, locked |
 | Database tables | **124** in a freshly migrated database (123 application tables plus `alembic_version`; Postgres, migrated by Alembic: 45 migrations, head `0043_lium_grafana_history`) |
 | Background jobs | **40** registered when every optional source is configured (**36** with the defaults: no EIA / SEC / Alpaca keys, `POWER_ENABLED` off), beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets, the monthly market report…; table 15.2) |
-| Capacity (stock) feeds | **32** providers report in-stock state or counts from their own APIs (section 3.6) |
+| Capacity (stock) feeds | **35** providers report in-stock state or counts from their own APIs (section 3.6) |
 | Power markets (internal) | EIA-930 grid data, EIA natural gas, CAISO, NYISO, SPP, ERCOT and ISO-NE wholesale prices in their own `power_*` tables (about 504 MB in production on 2026-11-15); admin-only reads, never in a GPU statistic (section 5a) |
 | Provisioning adapters | **9 providers** (Lambda, RunPod, Hyperstack, DigitalOcean, Crusoe/Denvr/Latitude via Shadeform, Vast, Verda) |
 | Discord channels | **4** (ops, deployments, market, news) with OpenGrid-branded embeds |
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination. Built on top, tested against fake provider APIs only: **batches** (a sweep or shard list as one batch: placement across clouds, one budget, one approval), **resume** from a verified checkpoint, opt-in **OOM escalation** and **move** to another GPU; automatic relaunch / OOM escalation and move are off by default (`JOB_AUTO_RELAUNCH_ENABLED`, `JOB_MOVE_ENABLED`) |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
 | Workload intelligence | GPU memory estimator (text LLMs; recommendations also size audio, image + text and video workloads, section 6c), measured performance from completed real jobs (none yet), project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (hosted at `/mcp` with an API key: 15 tools, 2 prompts; local via uvx: 16 tools, 3 prompts), grounded assistant, RL post-training cost estimator |
-| Automated tests | **150** Python test files + **14** JavaScript test files, all 164 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
+| Automated tests | **151** Python test files + **14** JavaScript test files, all 165 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
 
 ---
 
@@ -279,11 +279,19 @@ the `freshness` block of `GET /v1/reliability/providers`.
 
 ### 3.6 Capacity (`capacity.py`, methodology/capacity.md)
 What each provider says it can supply now, read from its own API and stored raw first: `capacity_current` (current
-state) plus change-only `capacity_changes`. **32 providers** implement it (counted from the modules that define
+state) plus change-only `capacity_changes`. **35 providers** implement it (counted from the modules that define
 `normalize_capacity`, including the Shadeform-routed clouds). Shapes are kept as the provider states them: a tier
 word (RunPod `High/Medium/Low`, Scaleway `available/scarce/shortage`), a count (Hyperstack deployable VMs, Lium free
 GPUs) or a boolean (Linode, Verda). An unknown stays unknown, never "in stock". Capacity runs after the price refresh
 and fails open: a capacity error never touches prices. `GET /v1/capacity`, `/v1/capacity/history`; page `/capacity`.
+SimplePod, Nosana and Hetzner report capacity since 2026-11-16, all without a key: SimplePod the instances available
+per listed offer (`numOfInstances`), Nosana the hosts idle in each market's queue (a market with none is out of
+stock), Hetzner yes/no per GEX model and location from the file its own order configurator reads (undocumented by
+Hetzner; a product missing from the file stays unknown). The other 27 providers were surveyed and have no honest
+keyless signal; each reason is in methodology/capacity.md.
+A row its provider has stopped reporting is removed after a day (six capacity reads where those are further apart),
+with one closing row in the history; until then it carries `stale: true`. Before 2026-11-16 such rows stayed for
+ever with their last state (349 of 2,863 rows that day, 294 of them still reading "in stock").
 
 ### 3.7 Live feeds (`live/`, methodology/live-feeds.md)
 One source pushes changes: Lium's public executor WebSocket (no key). Changes are stored change-only in
@@ -1436,9 +1444,9 @@ registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registere
 
 ## 16. Testing
 
-150 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
+151 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
 Postgres database, no real provider calls), plus 5 CLI/MCP test files in `cli/tests/`. `tests/run_all.py` runs all
-164 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
+165 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
 (`.github/workflows/tests.yml`) runs it on every push and pull request against a throwaway Postgres 16 whose zone is
 deliberately not UTC. Beyond the per-module tests:
 - unit and integration tests for every analytics module, API and page;

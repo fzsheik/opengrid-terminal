@@ -5,6 +5,40 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-16 — Availability: leftover rows expire, three more providers, 32 GPU names mapped
+
+### What shipped
+- **Leftover rows expire** (`capacity.expire`): a current row its provider has stopped reporting is removed after a
+  day (six capacity reads where those are further apart, as for Vast's census), with one closing row in the history
+  saying "no longer reported". Before, such rows stayed for ever with their last state: 349 of 2,863 rows on
+  2026-11-16, 294 of them still reading "in stock". Only providers that answered in the same run are touched.
+- **Capacity for three more providers**, 35 in all: SimplePod (instances available per listed offer), Nosana (hosts
+  idle in each market's queue) and Hetzner (in stock yes/no per server model and location). No new credentials.
+- **32 raw GPU names mapped** to existing canonical models (`canonical.py`): 18 on Clore, 6 on GPU.ai, 3 on Lium, 3
+  on Akash, 1 each on Koyeb and Massed Compute. The model count stays at 100.
+- **One earlier decision reversed**: a short memory figure on a datacenter board that exists in one size is that
+  board's usable memory and is now mapped (Clore "Tesla T4 15GB", "L4 23GB", "L40S 45GB", "A10 23GB", "H100 PCIe
+  79GB"). Odd figures on GeForce and workstation cards stay unmapped.
+- **Test runs can take a database-name prefix** (`OPENGRID_TEST_DB_PREFIX`), so two checkouts can run at once.
+
+### Not shipped
+- **27 providers still have no availability**: no signal exists, or a key OpenGrid does not hold is needed (Alibaba,
+  Civo, Gcore, Mithril, Nebius, Azure, Oracle, GCP, Beam), or the terms keep the data confidential (CoreWeave), or
+  the public answer cannot be told from "not shown" (Vultr). Each reason is in methodology/capacity.md.
+- **157 raw names stay unmapped**: 54 leave the variant open, 96 are real GPUs with no canonical model (laptop,
+  old and mining cards; adding models changes the model count and the indices), 7 are not a GPU model.
+- **Lambda quantities**: Lambda's API states where there is stock, never how much, and its launch call has no
+  quantity parameter (spec 1.10.0). A count would need real launches; not built.
+
+### Left
+- Newly mapped listings start to count for their model: Clore joins 15 models' markets, Lium 3, Akash 3.
+- Hetzner's file is undocumented by Hetzner; its meaning is read from the site's own order configurator.
+
+### Next
+- Decide whether to add canonical models for the consumer and laptop cards Salad and Clore list.
+
+---
+
 ## 2026-11-15 — History: a daily operator series, and news sources for Bitcoin miners moving into AI compute
 
 ### What shipped

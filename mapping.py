@@ -1438,8 +1438,11 @@ CLORE = ProviderMapping(
         "skipped, never guessed.",
         "Spot is a bid auction; price.spot is the host's minimum bid and price.usd.spot is 0, so spot is not read.",
         "A multi-GPU server may only rent whole unless partial_gpu_rental is on; the per-GPU figure is a share.",
-        "Datacenter names without a form factor (\"H100 80GB\", \"Tesla T4 15GB\", \"L40S 45GB\") and "
-        "odd VRAM figures (\"RTX 4090 23GB\") stay unmapped.",
+        "A datacenter name that leaves the form factor open (\"H100 80GB\", \"H200 141GB\") stays unmapped, and so "
+        "do odd VRAM figures on GeForce and workstation cards (\"RTX 4090 23GB\"): Clore also lists rebuilt cards. "
+        "A short figure on a datacenter board that exists in one memory size is the usable memory of that board "
+        "and is mapped since 2026-11-16 (\"Tesla T4 15GB\", \"L4 23GB\", \"L40S 45GB\", \"A10 23GB\", "
+        "\"H100 PCIe 79GB\").",
     ],
 )
 
