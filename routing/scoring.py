@@ -11,10 +11,14 @@ alternatives, never auto-provisioned. Everything else is listed in `exclusions` 
 
 Each factor is normalized to 0..1 and reported with its raw value and data kind:
     price                     observed   0.5 at the market median, +/-1 per 100% below/above, clamped
-    availability_now          observed   explicit available 1.0, unknown 0.5 (sold out is excluded)
+    availability_now          observed   explicit available 1.0; listing silent but a fresh joined stock-feed row
+                                         says in stock 1.0; unknown 0.5. Sold out is excluded, by the listing or
+                                         by a fresh joined stock-feed row (code sold_out_stock_feed)
     region_match              observed   in the wanted group 1.0, location unknown 0.5 (only when asked)
     freshness                 observed   1.0 within one polling interval, falling to 0 at stale_after
-    availability_persistence  inferred   share of hours (30d) with priced availability, market_hourly
+    availability_persistence  observed   share of time IN STOCK (30d) from the provider's stock feed
+                                         (capacity_history.py); with no stock feed for the GPU, inferred from
+                                         market_hourly: listed-available hours 1, priced-only hours 0.5 (_persistence)
     price_stability           inferred   1 - CV(30d hourly lowest price)/0.25, clamped
     integration_level         registry   OpenGrid adapter level / 3 (can OpenGrid provision it?)
     reliability               transaction  the provider's reliability score / 100 from OpenGrid's own launches
@@ -36,12 +40,14 @@ price factor's median) is always public-tier only.
 
 from __future__ import annotations
 
+import logging
 import math
 import statistics
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
 
+import capacity_history
 import market
 import normalize
 import provider_meta
@@ -49,7 +55,8 @@ from cache import ttl_cache
 from providers import PROVIDERS
 from routing import adapters
 
-METHODOLOGY_VERSION = "routing-1.0"
+log = logging.getLogger(__name__)
+METHODOLOGY_VERSION = "routing-1.1"   # 1.1: persistence and availability_now read the provider stock feeds
 TIERS = ("public", "all")  # rank_listings(tier=...): see the module docstring
 MODES = ("CHEAPEST", "FASTEST_AVAILABLE", "BALANCED", "MOST_STABLE", "USER_DEFINED")
 FACTORS = ("price", "availability_now", "region_match", "freshness", "availability_persistence",
@@ -176,7 +183,7 @@ _LISTINGS = text(f"""
 
 _HISTORY = text("""
     WITH h AS (
-      SELECT provider, hour, min(min_price) AS p, sum(priced_listings) AS priced
+      SELECT provider, hour, min(min_price) AS p, sum(priced_listings) AS priced, sum(available_listings) AS avail
       FROM market_hourly
       WHERE segment = 'on_demand' AND gpu = :gpu AND hour >= :t30
       GROUP BY provider, hour
@@ -184,6 +191,8 @@ _HISTORY = text("""
     SELECT provider,
            count(*) FILTER (WHERE priced > 0) AS priced_30,
            count(*) FILTER (WHERE priced > 0 AND hour >= :t7) AS priced_7,
+           count(*) FILTER (WHERE priced > 0 AND avail > 0) AS avail_30,
+           count(*) FILTER (WHERE priced > 0 AND avail > 0 AND hour >= :t7) AS avail_7,
            avg(p) AS mean_p, stddev_pop(p) AS sd_p, count(p) AS n_p
     FROM h GROUP BY provider
 """)
@@ -203,6 +212,10 @@ def history(gpu: str) -> dict:
     The denominator is every hour from when the provider was first recorded for this GPU
     (or the window start, if later) to the newest rollup hour: an hour with no rollup row
     means the provider had no live listing, which counts as not available.
+
+    share_*: hours with a listed price (priced, not sold out). listed_score_*: the persistence
+    fallback for providers with no stock feed (see _listed_persistence): an hour whose listing said
+    available counts 1, an hour with only a price and unknown stock counts 0.5.
     """
     with normalize.SessionLocal() as s:
         last = s.execute(text("SELECT max(hour) FROM market_hourly WHERE segment = 'on_demand'")).scalar()
@@ -223,12 +236,37 @@ def history(gpu: str) -> dict:
             "hours_30d": d30, "hours_7d": d7,
             "share_30d": r.priced_30 / d30 if d30 >= MIN_HISTORY_HOURS else None,
             "share_7d": r.priced_7 / d7 if d7 >= MIN_HISTORY_HOURS else None,
-            "priced_hours_30d": int(r.priced_30),
+            "priced_hours_30d": int(r.priced_30), "available_hours_30d": int(r.avail_30),
+            "listed_score_30d": (r.avail_30 + 0.5 * (r.priced_30 - r.avail_30)) / d30 if d30 >= MIN_HISTORY_HOURS else None,
+            "listed_score_7d": (r.avail_7 + 0.5 * (r.priced_7 - r.avail_7)) / d7 if d7 >= MIN_HISTORY_HOURS else None,
             "cv_30d": (sd / mean) if (mean and sd is not None and r.n_p >= MIN_HISTORY_HOURS) else None,
             "mean_30d": mean, "priced_samples_30d": int(r.n_p),
             "first_recorded": first.isoformat(),
         }
     return {"last_hour": last.isoformat(), "providers": out}
+
+
+_NO_STOCK = {"stock": None, "stock_source": None, "stock_observed_at": None, "stock_feed": False,
+             "stock_rows_stale": 0, "in_stock_share_30d": None}
+
+
+def _book(gpu: str, tier: str):
+    # The capacity tier follows the ranking's: a public ranking never reads an internal capacity row.
+    try:
+        return capacity_history.book(gpu, tier)
+    except Exception:  # noqa: BLE001 - capacity data must never break routing; it is then simply not used
+        log.exception("capacity history for %s unavailable; ranking without it", gpu)
+        return None
+
+
+def _stock(bk, row: dict, now: datetime) -> dict | None:
+    if bk is None:
+        return None
+    try:
+        return capacity_history.listing_stock(bk, row, now)
+    except Exception:  # noqa: BLE001
+        log.exception("capacity join failed for %s %s", row.get("provider"), row.get("listing_id"))
+        return None
 
 
 def _region_groups(provider, region, country):
@@ -293,7 +331,52 @@ def _factor(value, raw, kind, note, weight=0.0):
             "weight": weight, "contribution": None, "imputed": False}
 
 
-def factors(row: dict, *, median: float, hist: dict, want_group: str | None, now: datetime) -> dict:
+def _persistence(row: dict, h: dict | None, stock: dict | None) -> dict:
+    """availability_persistence: the share of time IN STOCK from the provider's stock feed when it has one for this
+    GPU, else the weaker listed-price signal.
+
+    Stock feed (kind observed): in-stock hours / hours with a stock answer (in + out) over 30 days, from
+    capacity_changes (capacity_history.py), the listing's own joined rows when they join, else the provider's rows for
+    this GPU combined. Unknown and no-data hours are evidence of neither and are left out of the denominator. Under
+    MIN_HISTORY_HOURS of answers it is thin: null, imputed 0.5 when weighted.
+
+    No stock feed (kind inferred): market_hourly, hours from first record. An hour in which a listing said
+    available counts 1; an hour with only a price listed (stock unknown) counts 0.5; no live listing counts 0. A
+    listed price is not stock: production showed Verda priced 100% of hours while in stock 5%, so a priced hour of
+    unknown stock is worth what availability_now gives unknown stock now (0.5), never full credit. Without that,
+    every provider without a stock feed would outrank honest feeds that report sell-outs.
+    """
+    hs = stock and stock.get("history")
+    d30 = hs and hs["30d"]
+    if d30 and d30["known_hours"] > 0:
+        src = {"listing": "this listing's rows", "gpu": "this GPU and size",
+               "provider_gpu": "all of the provider's rows for this GPU"}[stock["history_grain"]]
+        raw = {"source": "capacity feed", "grain": stock["history_grain"], "rows": stock["history_rows"],
+               "in_stock_share_30d": d30["in_stock_share"], "in_stock_share_7d": hs["7d"]["in_stock_share"],
+               **{f"{k}_30d": d30[k] for k in ("share_in_stock", "share_out_of_stock", "share_unknown",
+                                                "share_no_data", "known_hours", "covered_hours")}}
+        if d30["in_stock_share"] is None:
+            return _factor(None, raw, "observed", f"stock feed history insufficient ({d30['known_hours']:.0f} h "
+                                                  f"with a stock answer, need {MIN_HISTORY_HOURS})")
+        return _factor(d30["in_stock_share"], raw, "observed",
+                       f"in stock {d30['in_stock_share']:.0%} of last 30 days (provider stock feed, {src}, "
+                       f"{d30['known_hours']:.0f} h observed)")
+    if h and h["listed_score_30d"] is not None:
+        raw = {"source": "listed prices (market_hourly)", "share_30d": h["share_30d"], "share_7d": h["share_7d"],
+               "hours_30d": h["hours_30d"], "priced_hours_30d": h["priced_hours_30d"],
+               "available_hours_30d": h["available_hours_30d"], "listed_score_30d": round(h["listed_score_30d"], 4)}
+        avail = h["available_hours_30d"] / h["hours_30d"] if h["hours_30d"] else 0.0
+        said = f", listed as available {avail:.0%}" if h["available_hours_30d"] else ""
+        return _factor(h["listed_score_30d"], raw, "inferred",
+                       f"price listed {h['share_30d']:.0%} of last 30 days{said}; no stock feed "
+                       f"(a listed price of unknown stock counts half)")
+    hrs = h["hours_30d"] if h else 0
+    return _factor(None, {"hours_30d": hrs}, "inferred", f"availability history insufficient ({hrs} h recorded)")
+
+
+def factors(row: dict, *, median: float, hist: dict, want_group: str | None, now: datetime,
+            stock: dict | None = None) -> dict:
+    """stock: capacity_history.listing_stock() for the row (None: no capacity data considered)."""
     p = float(row["price_per_gpu_hour"])
     pct = (p - median) / median if median else 0.0
     if not median:  # no public listing of this GPU to compare with (only internal ones): neutral, and said so
@@ -310,9 +393,16 @@ def factors(row: dict, *, median: float, hist: dict, want_group: str | None, now
         word = "derived" if basis == "inferred" else "explicit"
         out["availability_now"] = _factor(1.0, {"available": True, "basis": basis or word}, "observed",
                                           f"available now ({word})")
+    elif stock and stock["stock_source"] == "capacity feed" and stock["stock"] == capacity_history.IN:
+        out["availability_now"] = _factor(1.0, {"available": None, "stock": capacity_history.IN,
+                                                "basis": "capacity feed", "grain": stock["join"],
+                                                "observed_at": _iso(stock["stock_observed_at"])}, "observed",
+                                          "in stock now (provider stock feed)")
     else:
+        stale = stock["current"]["stale"] if stock else 0
         out["availability_now"] = _factor(0.5, {"available": None, "basis": basis or "unknown"}, "observed",
-                                          "stock not published by the provider")
+                                          "stock not published by the provider" if not stale else
+                                          "stock unknown: the provider's stock feed for it is stale")
 
     if want_group:
         groups, ok = _region_groups(row["provider"], row["region"], row["country"])
@@ -337,14 +427,7 @@ def factors(row: dict, *, median: float, hist: dict, want_group: str | None, now
                                f"{word} {_source_text(row['provider'])} ({_age_text(age)} old)")
 
     h = hist.get(row["provider"])
-    if h and h["share_30d"] is not None:
-        out["availability_persistence"] = _factor(
-            h["share_30d"], {k: h[k] for k in ("share_30d", "share_7d", "hours_30d", "priced_hours_30d")},
-            "inferred", f"priced availability {h['share_30d']:.0%} of last 30 days")
-    else:
-        hrs = h["hours_30d"] if h else 0
-        out["availability_persistence"] = _factor(None, {"hours_30d": hrs}, "inferred",
-                                                  f"availability history insufficient ({hrs} h recorded)")
+    out["availability_persistence"] = _persistence(row, h, stock)
     if h and h["cv_30d"] is not None:
         cv = h["cv_30d"]
         out["price_stability"] = _factor(clamp(1 - cv / CV_ZERO), {"cv_30d": round(cv, 4), "mean_30d": h["mean_30d"]},
@@ -510,6 +593,8 @@ def rank_listings(gpu: str, *, count: int = 1, region_group: str | None = None, 
     if tier == "public":
         rows = public_rows      # an internal row is not even an exclusion on a public answer
     hist = history(gpu)
+    bk = _book(gpu, tier)
+    stocks: dict = {}
     mkt = market_snapshot(public_rows, now)
     excluded_set = {p.lower() for p in exclude_providers or ()}
     include_set = None if include_providers is None else {p.lower() for p in include_providers}
@@ -530,6 +615,12 @@ def rank_listings(gpu: str, *, count: int = 1, region_group: str | None = None, 
         if age > market.stale_after(prov):
             exclusions.append(_exclusion(r, "stale", f"stale: last seen {_age_text(age.total_seconds())} ago, "
                                                      f"past {_age_text(market.stale_after(prov).total_seconds())}"))
+            continue
+        st = stocks[(prov, r["listing_id"])] = _stock(bk, r, now)
+        if st and st["stock_source"] == "capacity feed" and st["stock"] == capacity_history.OUT:
+            age_s = (now - st["stock_observed_at"]).total_seconds()
+            exclusions.append(_exclusion(r, "sold_out_stock_feed", f"sold out per the provider's stock feed "
+                                                                   f"({_age_text(age_s)} ago)"))
             continue
         shape = "exact"
         if r["gpu_count"] != count:
@@ -559,14 +650,15 @@ def rank_listings(gpu: str, *, count: int = 1, region_group: str | None = None, 
             exclusions.append(_exclusion(r, "below_required_level", f"OpenGrid integration level "
                                                                     f"{adapters.level(prov)} < required {require_level}"))
             continue
-        if require_available and r["available"] is not True:
+        if require_available and r["available"] is not True and not (st and st["stock"] == capacity_history.IN):
             exclusions.append(_exclusion(r, "availability_unknown", "stock not published by the provider; explicit "
                                                                     "availability required"))
             continue
         (exact if shape == "exact" else multi).append(r)
 
     def build(r):
-        fs = factors(r, median=mkt["median"], hist=hist["providers"], want_group=region_group, now=now)
+        st = stocks.get((r["provider"], r["listing_id"]))
+        fs = factors(r, median=mkt["median"], hist=hist["providers"], want_group=region_group, now=now, stock=st)
         lvl = adapters.level(r["provider"])
         c = {
             "provider": r["provider"], "provider_display": provider_meta.meta(r["provider"]).display_name,
@@ -576,6 +668,7 @@ def rank_listings(gpu: str, *, count: int = 1, region_group: str | None = None, 
             "price_per_gpu_hour": float(r["price_per_gpu_hour"]),
             "price_per_instance_hour": _f(r["price_per_instance_hour"]),
             "price_kind": "observed_market_price", "available": r["available"],
+            **(capacity_history.listing_fields(st) if st else _NO_STOCK),
             "observed_at": _iso(r["observed_at"]), "age_seconds": round((now - r["observed_at"]).total_seconds()),
             "integration_level": lvl, "provisionable": lvl >= 2,
             "visibility": r.get("visibility") or provider_meta.INTERNAL,

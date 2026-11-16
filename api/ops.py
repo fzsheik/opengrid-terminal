@@ -112,6 +112,16 @@ def ops_internal_data(provider: str | None = None, who: Principal = Depends(admi
                     note="INTERNAL data: usable by routing, recommendations and deployment; never republish")
 
 
+@router.get("/v1/ops/availability/quality", summary="Ops: stock-feed coverage and in-stock history per provider")
+def ops_availability_quality(who: Principal = Depends(admin)):
+    """Per provider: GPUs with a stock feed, the share of live listings that join to it, in-stock share over 7 and
+    30 days (any of the provider's rows in stock), stale rows and the last read. Every tier, internal included."""
+    import capacity_history
+    return envelope(capacity_history.coverage(), kind=OBSERVED, methodology="capacity",
+                    note="admin only; includes internal capacity rows. in_stock_share: in-stock hours / hours with a "
+                         "stock answer. A provider with listings and stock_feed false has no stock feed at all.")
+
+
 @router.get("/v1/ops/jobs", summary="Ops: background job health")
 def ops_jobs(who: Principal = Depends(admin)):
     return envelope(ops.jobs_health(), kind=OBSERVED, methodology=M_QUALITY)

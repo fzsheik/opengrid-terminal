@@ -229,7 +229,11 @@ def test_factors_and_explanations():
     st, ch, mid = by["syn_stable"], by["syn_cheap"], by["syn_mid"]
     p = st["factors"]["availability_persistence"]
     assert p["kind"] == "inferred" and p["value"] > 0.99, p
-    assert 0.4 < ch["factors"]["availability_persistence"]["value"] < 0.65, ch["factors"]["availability_persistence"]
+    # routing-1.1: syn_cheap has no stock feed and its listing never states stock, so a priced hour counts half
+    # (was: the priced share itself, about 0.53)
+    chp = ch["factors"]["availability_persistence"]
+    assert 0.4 < chp["raw"]["share_30d"] < 0.65 and abs(chp["value"] - chp["raw"]["share_30d"] / 2) < 1e-3, chp
+    assert "no stock feed" in chp["note"] and chp["kind"] == "inferred", chp
     assert st["factors"]["price_stability"]["value"] == 1.0
     assert mid["factors"]["price_stability"]["value"] == 0.0, "alternating 0.8/1.4 is far past 25% CV"
     assert ch["factors"]["availability_now"]["value"] == 0.5 and st["factors"]["availability_now"]["value"] == 1.0
@@ -243,7 +247,7 @@ def test_factors_and_explanations():
     assert [c["score"] for c in r["candidates"]] == sorted((c["score"] for c in r["candidates"]), reverse=True)
     assert "5% below current market median ($1.05)" in ch["explanation"], ch["explanation"]
     assert "14% above current market median" in st["explanation"], st["explanation"]
-    assert "available now (explicit)" in st["explanation"] and "priced availability 100% of last 30 days" in st["explanation"]
+    assert "available now (explicit)" in st["explanation"] and "price listed 100% of last 30 days, listed as available 100%; no stock feed" in st["explanation"]
     assert "stock not published by the provider" in ch["explanation"]
     assert "old)" in st["explanation"] and "OpenGrid can provision via API (level 3)" in st["explanation"]
     assert "market data only" in ch["explanation"]

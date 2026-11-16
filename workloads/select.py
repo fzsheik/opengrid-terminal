@@ -608,7 +608,8 @@ def _blockers(gpus: dict, eligible_out: list, kept: list, by_code: dict) -> list
                                    ("wrong_region", "relax resources.region"),
                                    ("region_unconfirmed", "turn off strict_region"),
                                    ("stale", "market data is stale: listings refresh when the provider poller runs"),
-                                   ("sold_out", "compatible GPUs are sold out: try later"))
+                                   ("sold_out", "compatible GPUs are sold out: try later"),
+                                   ("sold_out_stock_feed", "the providers' stock feeds say sold out: try later"))
                  if by_code.get(code)]
         if not listed:
             hints.append("no compatible GPU model has any listing: choose gpu 'auto' or another GPU")

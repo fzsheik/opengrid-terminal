@@ -966,12 +966,57 @@ def test_power_internal_never_public():
     assert body_leaks(c.get("/v1/ops/power/cross/regional", headers=BASIC)), "the admin read does carry them"
 
 
-TESTS = [test_registry, test_derived_tables_have_no_internal_rows, test_every_public_route_is_clean,
+def test_internal_stock_never_reaches_public_reads():
+    """An INTERNAL capacity row joined to a PUBLIC listing (same provider and sku): it drives OpenGrid's own ranking
+    (tier all: excluded as sold out by the stock feed) and never a public one or /v1/listings (stock stays unknown)."""
+    import capacity_history
+    from routing import scoring
+    from store.capacity import CapacityChange, CapacityCurrent
+
+    Session, now = W["Session"], datetime.now(timezone.utc)
+    with Session() as s:
+        lid = s.execute(text("SELECT listing_id FROM compute_listings WHERE provider = 'syn_alpha' AND visibility = "
+                             "'public' AND canonical_gpu_name = :g AND market_type = 'on_demand' AND gpu_count = 1"),
+                        {"g": H100}).scalars().first()
+    assert lid, "fixtures: syn_alpha sells H100 publicly"
+    with Session.begin() as s:
+        s.execute(text("UPDATE compute_listings SET available = NULL, observed_at = :n WHERE listing_id = :l"),
+                  {"l": lid, "n": now})
+        s.add(CapacityCurrent(provider="syn_alpha", sku=lid, region_key="", region=None, country=None,
+                              raw_gpu_name="H100", canonical_gpu_name=H100, gpu_count=1, in_stock=False,
+                              raw_value=TOKEN, source="/synthetic/capacity", observed_at=now, first_seen_at=now,
+                              changed_at=now, visibility="internal"))
+        s.add(CapacityChange(provider="syn_alpha", sku=lid, region_key="", canonical_gpu_name=H100,
+                             observed_at=now - timedelta(days=5), in_stock=False, raw_value=TOKEN, visibility="internal"))
+    cache.clear_all()
+    try:
+        pub = scoring.rank_listings(H100, mode="BALANCED", limit=200)
+        cand = {c["listing_id"]: c for c in pub["candidates"]}
+        assert lid in cand and cand[lid]["stock"] == "unknown" and cand[lid]["stock_feed"] is False, cand.get(lid)
+        assert (cand[lid]["factors"]["availability_persistence"]["raw"] or {}).get("source") != "capacity feed"
+        allt = scoring.rank_listings(H100, mode="BALANCED", limit=200, tier="all")
+        assert {e["listing_id"]: e["code"] for e in allt["exclusions"]}.get(lid) == "sold_out_stock_feed"
+        assert capacity_history.book(H100, "public").provider_keys("syn_alpha", H100).get(("syn_alpha", lid, "")) is None
+        c = _client()
+        r = c.get("/v1/listings?provider=syn_alpha&limit=1000", headers=BASIC)
+        row = next(x for x in r.json()["data"] if x["listing_id"] == lid)
+        assert row["stock"] == "unknown" and row["stock_source"] is None and row["stock_feed"] is False, row
+        assert row["in_stock_share_30d"] is None and not body_leaks(r), body_leaks(r)[:5]
+    finally:
+        with Session.begin() as s:
+            s.execute(text("DELETE FROM capacity_current WHERE sku = :l"), {"l": lid})
+            s.execute(text("DELETE FROM capacity_changes WHERE sku = :l"), {"l": lid})
+            s.execute(text("UPDATE compute_listings SET available = true WHERE listing_id = :l"), {"l": lid})
+        cache.clear_all()
+
+
+TESTS = [test_registry,test_derived_tables_have_no_internal_rows, test_every_public_route_is_clean,
          test_public_posts_are_clean, test_routing_and_recommend_see_internal, test_admin_view_labels_internal_rows,
          test_save_stamps_the_tier, test_deepinfra_internal_listings_route, test_fireworks_is_wholly_internal,
          test_context_power_counts_public_listings_only, test_reserved_and_provider_lists,
          test_customers_never_see_internal_values, test_workload_market_reference_is_public,
-         test_admins_still_see_internal_values, test_power_internal_never_public]
+         test_admins_still_see_internal_values, test_power_internal_never_public,
+         test_internal_stock_never_reaches_public_reads]
 
 if __name__ == "__main__":
     saved = (settings.app_password, settings.public_pages, settings.public_rate_limit_per_minute,

@@ -183,6 +183,55 @@ provider's report for one GPU type in one table, one line per provider and regio
   yes/no or tier; how many are unknown, gaps included.
 - Each line says its age (since the oldest row in it was read) and `stale` on the same rule as `/v1/capacity`.
 
+## What reaches routing and listings
+
+Since 2026-11-16 the stock feeds are not only shown here: routing (`/methodology/best-execution`) and the listing read
+use them. Code: `capacity_history.py`.
+
+**In-stock history.** `capacity_changes` is change-only, so a row's state holds from its `observed_at` until the next
+row for the same (provider, sku, region). Over 7 and 30 days time is split into in stock, out of stock, unknown (a
+row with `in_stock` null: AWS's placement score, a word OpenGrid does not map) and no data (before the first row,
+after a "no longer reported" row, and past the stale rule). The state is the row's own `in_stock`, which each
+provider's normalizer already derives from its words and counts (a RunPod `Low` is in stock, `None` is not); where only
+a count is given, above zero is in stock. No threshold is added. A closing "no longer reported" row is not "out of
+stock": the data ends at its "last seen" time plus the stale window. A current row's last state holds until its last
+sighting plus the stale window (three capacity intervals), then becomes no data. The in-stock share is in-stock hours
+/ hours with a stock answer; it needs 24 such hours. Several rows combine as "in stock when any is" (one region or
+size in stock is enough to launch), unknown before out.
+
+**Joining capacity to listings.** Capacity uses the provider's listing `sku` or `listing_id`. Where the two sides
+use different words the join is spelled out per provider:
+
+| Providers | Join | Grain |
+|---|---|---|
+| Lambda, Hyperstack, CUDO, Akash, Thunder Compute, Nosana, Hot Aisle, Hugging Face, SimplePod, Massed Compute (API), Salad, RunPod (pods), Clore, Vast, DeepInfra, Hydra Host (region compared on its first 64 characters), GPU.ai | sku or listing_id, same region or provider-wide | listing. Clore and Vast: one provider-wide row for the median and cheapest listings. GPU.ai: one row per offering, all offerings of a sku and region combine. DeepInfra: the page and API listings share the row. |
+| Koyeb, DigitalOcean, Scaleway, Hetzner | sku; the capacity region must be one of the regions the listing is priced for (a joined list) | listing (any of its regions) |
+| Verda, Linode (base price), Voltage Park VMs | sku or listing_id; the listing has no region (priced for every location), so every location's row joins | listing (any location) |
+| Voltage Park bare metal | sku, and the location id in the listing id (`bm:<id>:<fabric>`) | listing |
+| Lium | sku and city; a row with no city joins only listings with no city | listing |
+| Jarvislabs | `<sku>:<workload from the listing id>`, on-demand listings only (the counts are on-demand free GPUs) | listing |
+| Hyperbolic | `<sku>:<machine>:<link>` from the listing id, same region | listing |
+| Shadeform clouds (Latitude, Denvr, Boost Run, Horizon, Phyntec, Paperspace), Crusoe | sku; the listing region is Shadeform's display text for all its regions and cannot be compared with region codes, so every region row joins | listing (any region) |
+| Massed Compute without its key | Shadeform type names never equal the page's sku: GPU and GPU count | GPU and size |
+| AWS | never: spot placement scores, no in/out answer, and listings are per AZ | none |
+
+A listing that does not join may still be scored on the provider's rows for its GPU combined (persistence only,
+never "out of stock now").
+
+**Listing reads.** `GET /v1/listings` adds `stock` (`in_stock` / `out_of_stock` / `unknown`), `stock_source`
+(`listing` when the listing states its own stock, `capacity feed` when it is silent and a fresh joined row answers),
+`stock_observed_at`, `stock_feed` (a capacity row joins), `stock_rows_stale` and `in_stock_share_30d` (joined rows
+only). `available` is unchanged: normalize owns it and nothing here writes it. Computed on read, public capacity rows
+only; the point-in-time read (`as_of`) shows the listing's own stock only.
+
+**Routing.** `availability_persistence` is the 30-day in-stock share when the provider reports capacity for the GPU;
+`availability_now` takes a fresh joined row's answer for a silent listing and a fresh "out of stock" excludes it
+(`sold_out_stock_feed`). Stale rows decide neither. A public ranking reads public rows only.
+
+**Coverage.** `GET /v1/ops/availability/quality` (admin): per provider, the GPUs with a stock feed and their 7- and
+30-day in-stock shares, live listings and how many join, rows current, stale and unmapped, and the last read. A
+provider with listings and `stock_feed: false` has no stock feed.
+
 ## What this does not show
 
 - A provider's own report, not a launch test. "In stock" means the provider says so.

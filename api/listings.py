@@ -48,8 +48,39 @@ def previous_prices(provider: str | None = None) -> dict:
         return {(r.provider, r.listing_id): r for r in s.execute(q)}
 
 
-def listing_row(r: dict, trust_ctx, prev: dict | None = None) -> dict:
-    """One compute_listings row -> the public listing object."""
+def stock_fields(rows: list[dict], now: datetime | None = None) -> dict:
+    """{(provider, listing_id): stock fields} from the PUBLIC capacity feeds (capacity_history.listing_stock).
+
+    Computed on read: compute_listings.available belongs to normalize and is never overwritten. A listing that
+    states its own stock keeps it (stock_source "listing"); a silent one takes a fresh joined capacity row's answer
+    (stock_source "capacity feed"). Internal capacity rows are never read here."""
+    import capacity_history
+    now = now or datetime.now(timezone.utc)
+    gpus = {r.get("canonical_gpu_name") for r in rows} - {None}
+    out = {}
+    for r in rows:
+        gpu = r.get("canonical_gpu_name")
+        bk = None
+        if gpu:
+            try:  # a page spanning many GPUs reads every GPU's history once instead of once per GPU
+                bk = capacity_history.book_all("public") if len(gpus) > 3 else capacity_history.book(gpu, "public")
+            except Exception:  # noqa: BLE001 - stock is an addition; a capacity failure must not break listings
+                bk = None
+        st = (capacity_history.listing_stock(bk, r, now) if bk is not None else
+              capacity_history.listing_stock(capacity_history.Book(now=now), r, now))
+        out[(r["provider"], r["listing_id"])] = capacity_history.listing_fields(st)
+    return out
+
+
+def listing_row(r: dict, trust_ctx, prev: dict | None = None, stock: dict | None = None) -> dict:
+    """One compute_listings row -> the public listing object. stock: stock_fields() for the row, or None (a
+    point-in-time read: the listing's own `available` only)."""
+    if stock is None:
+        a = r["available"]
+        stock = {"stock": "unknown" if a is None else ("in_stock" if a else "out_of_stock"),
+                 "stock_source": None if a is None else "listing",
+                 "stock_observed_at": None if a is None else r["observed_at"].isoformat(),
+                 "stock_feed": None, "stock_rows_stale": None, "in_stock_share_30d": None}
     original = None
     if r["original_currency"] and r["original_currency"] != "USD":
         original = {"currency": r["original_currency"],
@@ -67,7 +98,8 @@ def listing_row(r: dict, trust_ctx, prev: dict | None = None) -> dict:
             "price_per_gpu_hour": _num(r["price_per_gpu_hour"]),
             "price_per_instance_hour": _num(r["price_per_instance_hour"]), "currency": r["currency"],
             "original": original,
-            "available": r["available"], "capacity": r["capacity"], "capacity_unit": r["capacity_unit"],
+            "available": r["available"], **stock,
+            "capacity": r["capacity"], "capacity_unit": r["capacity_unit"],
             "vcpu": r["vcpu"], "ram_gb": r["ram_gb"], "storage_gb": r["storage_gb"],
             "observed_at": r["observed_at"].isoformat(), "first_seen_at": r["first_seen_at"].isoformat(),
             "trust": trust.listing_trust(r, trust_ctx) if trust_ctx is not None else None,
@@ -117,7 +149,9 @@ def listings(gpu: str | None = None, provider: str | None = None, region_group: 
     ctx = trust.context(sorted({r["provider"] for r in items}) or [provider or ""],
                         [(r["provider"], r["listing_id"]) for r in items])
     prev = previous_prices(provider) if previous else None
-    return envelope([listing_row(r, ctx, prev) for r in items], kind=OBSERVED, methodology="data-trust",
+    stock = stock_fields(items)
+    return envelope([listing_row(r, ctx, prev, stock[(r["provider"], r["listing_id"])]) for r in items],
+                    kind=OBSERVED, methodology="data-trust",
                     price_concept="list_price", trust_kind="inferred", **pg)
 
 
