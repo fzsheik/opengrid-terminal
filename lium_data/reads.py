@@ -10,8 +10,9 @@ from sqlalchemy import desc, func, select
 import canonical
 from lium_data import feeds as F
 from lium_data import partner, public
-from store.lium import (LiumDailyAggregate, LiumFeedSnapshot, LiumFeedValue, LiumGrafanaHourly, LiumGrafanaRental,
-                        LiumHourlyGpu, LiumModelStatsDaily, LiumThroughputDaily, LiumTrade)
+from store.lium import (LiumDailyAggregate, LiumFeedSnapshot, LiumFeedValue, LiumGrafanaDailyCount, LiumGrafanaHourly,
+                        LiumGrafanaNetworkHourly, LiumGrafanaPriceDaily, LiumGrafanaRental, LiumHourlyGpu,
+                        LiumModelStatsDaily, LiumThroughputDaily, LiumTrade)
 
 
 def _session():
@@ -41,7 +42,8 @@ def status() -> dict:
             ("lium_trades", LiumTrade), ("lium_hourly_gpu", LiumHourlyGpu), ("lium_daily_aggregate", LiumDailyAggregate),
             ("lium_feed_values", LiumFeedValue), ("lium_throughput_daily", LiumThroughputDaily),
             ("lium_model_stats_daily", LiumModelStatsDaily), ("lium_grafana_rentals", LiumGrafanaRental),
-            ("lium_grafana_hourly", LiumGrafanaHourly))}
+            ("lium_grafana_hourly", LiumGrafanaHourly), ("lium_grafana_network_hourly", LiumGrafanaNetworkHourly),
+            ("lium_grafana_price_daily", LiumGrafanaPriceDaily), ("lium_grafana_daily_counts", LiumGrafanaDailyCount))}
         span = s.execute(select(func.min(LiumTrade.end_at), func.max(LiumTrade.end_at))).one()
         starts = s.execute(select(func.min(LiumGrafanaRental.start_at), func.max(LiumGrafanaRental.start_at))).one()
     return {"partner_key_configured": partner.api_key() is not None, "feeds": out, "rows": tables,
@@ -271,3 +273,53 @@ def grafana_hourly(metric: str, hours: int = 48, gpu: str | None = None) -> list
     with _session()() as s:
         rows = s.execute(stmt.order_by(desc(H.hour_utc), H.gpu_model)).all()
     return [{"hour_utc": r[0], "gpu_model": r[1], "value": r[2], "updated_at": r[3]} for r in rows]
+
+
+def grafana_price_daily(days: int = 30, gpu: str | None = None) -> list[dict]:
+    """Per UTC day and GPU model, newest first: Lium's median asking price of unrented nodes, its median price paid
+    on rented nodes, and the gap between them (asking over paid, minus one) where it gave both."""
+    since = datetime.now(timezone.utc).date() - timedelta(days=days)
+    P = LiumGrafanaPriceDaily
+    stmt = select(P).where(P.day >= since)
+    if gpu:
+        stmt = stmt.where(P.gpu_model == gpu)
+    with _session()() as s:
+        rows = s.execute(stmt.order_by(desc(P.day), P.gpu_model)).scalars().all()
+    return [{"day": r.day, "gpu_model": r.gpu_model, "canonical_gpu_name": canonical.canonical_gpu_name(r.gpu_model),
+             "median_asking": r.median_asking, "median_paid": r.median_paid,
+             "asking_over_paid_pct": round(float(r.median_asking / r.median_paid - 1) * 100, 2)
+             if r.median_asking is not None and r.median_paid else None,
+             "updated_at": r.updated_at} for r in rows]
+
+
+def grafana_launches(hours: int = 48, by: str = "hour") -> list[dict]:
+    """Whole-network rentals created and node-side deploy failures per UTC hour (or summed per UTC day), newest
+    first, and the failures per 100 rentals. A missing count stays null: the panel has no row for an hour with
+    nothing, and no failure log before 2026-08-12."""
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    N = LiumGrafanaNetworkHourly
+    if by == "day":
+        bucket = func.date_trunc("day", func.timezone("UTC", N.hour_utc)).label("bucket")
+        stmt = (select(bucket, func.sum(N.rentals_created), func.sum(N.node_deploy_failures))
+                .where(N.hour_utc >= since).group_by(bucket).order_by(desc(bucket)))
+    else:
+        stmt = (select(N.hour_utc, N.rentals_created, N.node_deploy_failures).where(N.hour_utc >= since)
+                .order_by(desc(N.hour_utc)))
+    with _session()() as s:
+        rows = s.execute(stmt).all()
+    return [{("day" if by == "day" else "hour_utc"): r[0].date() if by == "day" else r[0],
+             "rentals_created": r[1], "node_deploy_failures": r[2],
+             "failures_per_100_rentals": round(100 * r[2] / r[1], 2) if r[1] and r[2] is not None else None}
+            for r in rows]
+
+
+def grafana_daily_counts(series: str, days: int = 30, label: str | None = None) -> list[dict]:
+    """One daily count series (deploy_failures by cause, penalties by reason code), newest first."""
+    since = datetime.now(timezone.utc).date() - timedelta(days=days)
+    C = LiumGrafanaDailyCount
+    stmt = select(C.day, C.label, C.count, C.updated_at).where(C.series == series, C.day >= since)
+    if label:
+        stmt = stmt.where(C.label == label)
+    with _session()() as s:
+        rows = s.execute(stmt.order_by(desc(C.day), desc(C.count), C.label)).all()
+    return [{"day": r[0], "label": r[1], "count": r[2], "updated_at": r[3]} for r in rows]

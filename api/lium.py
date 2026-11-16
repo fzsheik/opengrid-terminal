@@ -17,6 +17,10 @@
     GET /v1/ops/lium/grafana/rentals        per UTC day or hour of rental start, GPU model and tier, from Lium's
                                             public Grafana: rentals, median / mean / low / high price paid
     GET /v1/ops/lium/grafana/hourly         renter spend, GPUs listed or GPUs rented per UTC hour and GPU model
+    GET /v1/ops/lium/grafana/prices-daily   Lium's median asking price and median price paid per UTC day and GPU model
+    GET /v1/ops/lium/grafana/launches       rentals created and node-side deploy failures on the whole network, per
+                                            UTC hour or day
+    GET /v1/ops/lium/grafana/daily-counts   failed deploys by cause, or penalties by reason code, per UTC day
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -124,3 +128,38 @@ def lium_grafana_hourly(metric: str = "spend_usd_per_hour", hours: int = Query(4
     panel = _METRICS[metric]
     return _env(rows, panel.kind, panel.basis, count=len(rows), source=f"grafana.lium.io, {panel.title}",
                 caveat="Lium's hourly mean of its own samples; the running hour is partial until it closes")
+
+
+@router.get("/v1/ops/lium/grafana/prices-daily", tags=["ops"], summary="Ops: Lium's daily median asking and paid price per GPU, from its public Grafana (internal)")
+def lium_grafana_prices_daily(days: int = Query(30, ge=1, le=730), gpu: str | None = None,
+                              who: Principal = Depends(admin)):
+    rows = reads.grafana_price_daily(days, gpu)
+    panel = F.GRAFANA_PANELS["grafana_price_daily"]
+    return _env(rows, panel.kind, panel.basis, count=len(rows), window_days=days,
+                source=f"grafana.lium.io, {panel.title}",
+                columns={"median_asking": "observed: unrented nodes' asking price per GPU-hour",
+                         "median_paid": "transaction, published aggregate: price per GPU-hour on rented nodes"},
+                caveat="Lium's medians over its six-hourly samples, one vote per node, models with three nodes or "
+                       "more; paid from 2025-12-03, asking from 2026-09-16; the running day is partial")
+
+
+@router.get("/v1/ops/lium/grafana/launches", tags=["ops"], summary="Ops: rentals created and node-side deploy failures on Lium, from its public Grafana (internal)")
+def lium_grafana_launches(hours: int = Query(48, ge=1, le=24 * 730), by: str = Query("hour", pattern="^(hour|day)$"),
+                          who: Principal = Depends(admin)):
+    rows = reads.grafana_launches(hours, by)
+    panel = F.GRAFANA_PANELS["grafana_launch_created"]
+    return _env(rows, panel.kind, panel.basis, count=len(rows), source=f"grafana.lium.io, {panel.title}",
+                caveat="whole network, not per GPU model; a null count is an hour the panel had no row for, and "
+                       "Lium's failure log begins 2026-08-12; failures Lium puts down to the renter are left out")
+
+
+@router.get("/v1/ops/lium/grafana/daily-counts", tags=["ops"], summary="Ops: Lium's failed deploys by cause or penalties by reason per day, from its public Grafana (internal)")
+def lium_grafana_daily_counts(series: str = "deploy_failures", days: int = Query(30, ge=1, le=730),
+                              label: str | None = None, who: Principal = Depends(admin)):
+    if series not in F.COUNT_SERIES:
+        raise HTTPException(404, f"unknown series; one of {sorted(F.COUNT_SERIES)}")
+    rows = reads.grafana_daily_counts(series, days, label)
+    panel = F.COUNT_SERIES[series]
+    return _env(rows, panel.kind, panel.basis, count=len(rows), window_days=days,
+                source=f"grafana.lium.io, {panel.title}",
+                caveat="Lium's own classification; the running day is partial until it closes")

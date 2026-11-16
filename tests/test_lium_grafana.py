@@ -48,9 +48,11 @@ DB = "og_test_lium_grafana"
 UTC = timezone.utc
 NOW = datetime(2026, 11, 15, 6, 40, tzinfo=UTC)          # just after the fixtures were captured
 BOARDS = {uid: json.loads((FIX / f"grafana_dashboard_{uid}_2026-11-15.json").read_text())
-          for uid in (F.MARKETPLACE_PRICES, F.NETWORK_STATUS)}
+          for uid in (F.MARKETPLACE_PRICES, F.NETWORK_STATUS, F.RENTAL_CHECK)}
 ANSWERS = {name: json.loads((FIX / f"grafana_{name}_2026-11-15.json").read_text())
-           for name in ("rentals_All", "rentals_spot", "rentals_secure", "spend", "listed", "rented", "empty")}
+           for name in ("rentals_All", "rentals_spot", "rentals_secure", "spend", "listed", "rented", "empty",
+                        # the panels read since migration 0043 (tests/test_lium_grafana_history.py checks them)
+                        "launch_created", "launch_failures", "price_daily", "deploy_causes", "penalties")}
 
 
 def setup():
@@ -75,7 +77,9 @@ HOURLY_ROWS = len(FLEET | {k for k, v in SPEND.items() if v != 0})
 
 def wipe():
     with normalize.SessionLocal.begin() as s:
-        s.execute(text("TRUNCATE lium_grafana_rentals, lium_grafana_hourly, lium_feed_snapshots RESTART IDENTITY CASCADE"))
+        s.execute(text("TRUNCATE lium_grafana_rentals, lium_grafana_hourly, lium_grafana_network_hourly, "
+                       "lium_grafana_price_daily, lium_grafana_daily_counts, lium_feed_snapshots "
+                       "RESTART IDENTITY CASCADE"))
 
 
 def count(model, *where):
@@ -115,13 +119,16 @@ def expected_sql(panel: F.Panel, tier: str = "All") -> str:
     """What the dashboard itself would send: its stored query with its two variables filled in."""
     for p in G._walk(BOARDS[panel.dashboard]["dashboard"]["panels"]):
         if p["title"] == panel.title:
-            return (p["targets"][0]["rawSql"].replace("${gpu_type:sqlstring}", "'All'")
+            target = next(t for t in p["targets"] if panel.ref in (None, t["refId"]))
+            return (target["rawSql"].replace("${gpu_type:sqlstring}", "'All'")
                     .replace("${tier:sqlstring}", f"'{tier}'"))
     raise AssertionError(panel.title)
 
 
 ALLOWED = {expected_sql(F.RENTALS_PANEL, t): f"rentals_{t}" for t in F.TIERS}
-ALLOWED.update({expected_sql(p): p.name.removeprefix("grafana_") for p in F.SERIES_PANELS})
+ALLOWED.update({expected_sql(p): p.name.removeprefix("grafana_")
+                for p in (*F.SERIES_PANELS, *F.NETWORK_PANELS, *F.DAILY_PANELS)})
+HISTORY = [p.name for p in (*F.NETWORK_PANELS, *F.DAILY_PANELS)]     # read after the six panels checked here
 
 
 class Grafana:
@@ -296,11 +303,12 @@ def test_poll_stores_rentals_with_their_tier():
     out = run(G.poll(g.client(), now=NOW, gap=0))
     assert [(r["feed"], r.get("tier"), r["state"]) for r in out["panels"]] == [
         ("grafana_rentals", "spot", "ok"), ("grafana_rentals", "secure", "ok"), ("grafana_rentals", "All", "ok"),
-        ("grafana_listed", None, "ok"), ("grafana_rented", None, "ok"), ("grafana_spend", None, "ok")], out
-    # two dashboards read once each, six queries, each one of the dashboards' own
+        ("grafana_listed", None, "ok"), ("grafana_rented", None, "ok"), ("grafana_spend", None, "ok"),
+        *((name, None, "ok") for name in HISTORY)], out
+    # three dashboards read once each, eleven queries, each one of the dashboards' own
     assert sorted(c.url.path for c in g.calls if c.method == "GET") == sorted(
         f"/api/dashboards/uid/{u}" for u in BOARDS)
-    assert len(g.posts()) == 6 and all(q["queries"][0]["rawSql"] in ALLOWED for q in g.queries)
+    assert len(g.posts()) == 11 and all(q["queries"][0]["rawSql"] in ALLOWED for q in g.queries)
     # nothing stored yet: the first window is the last six hours; the hourly panels start on the hour
     first = g.queries[0]
     assert (int(first["from"]), int(first["to"])) == (int((NOW - timedelta(hours=6)).timestamp() * 1000), int(NOW.timestamp() * 1000))
@@ -319,14 +327,16 @@ def test_poll_stores_rentals_with_their_tier():
     assert count(H, H.spend_usd_per_hour > 0) == sum(1 for v in SPEND.values() if v != 0)
     assert count(H, H.spend_usd_per_hour == 0) == sum(1 for k, v in SPEND.items() if v == 0 and k in FLEET) > 0
     assert sum(1 for k, v in SPEND.items() if v == 0 and k not in FLEET) > 0
-    assert count(LiumFeedSnapshot) == 6
+    assert count(LiumFeedSnapshot) == 11
     for model in (LiumGrafanaRental, LiumGrafanaHourly, LiumFeedSnapshot):
         assert count(model, model.visibility != "internal") == 0, model.__tablename__
 
-    # the same answers again: nothing new anywhere, the six stored answers are seen twice
+    # the same answers again: nothing new anywhere; the eight hourly answers are seen twice (the three daily
+    # panels were read less than six hours ago and are not asked again)
     again = run(G.poll(Grafana().client(), now=NOW + timedelta(hours=1), gap=0))
     assert not any(r["changed"] for r in again["panels"]) and count(LiumGrafanaRental) == 194
-    assert count(LiumFeedSnapshot) == 6 and count(LiumFeedSnapshot, LiumFeedSnapshot.seen_count == 2) == 6
+    assert len(again["panels"]) == 8
+    assert count(LiumFeedSnapshot) == 11 and count(LiumFeedSnapshot, LiumFeedSnapshot.seen_count == 2) == 8
 
     # one more rental arrives (a secure H200 at 02:00): one new row, tier named by the secure read
     def plus_one(name):
@@ -367,7 +377,7 @@ def test_series_update_in_place():
     col = next(i for i, f in enumerate(frame["schema"]["fields"]) if f["name"] == "NVIDIA H200")
     frame["data"]["values"][col][-1] += 7                       # the running hour (06:00) moves
     out = run(G.poll(Grafana(answers={"rented": moved}).client(), now=NOW + timedelta(minutes=30), gap=0))
-    assert [r["written"] for r in out["panels"][3:]] == [0, 1, 0], out["panels"][3:]
+    assert [r["written"] for r in out["panels"][3:6]] == [0, 1, 0], out["panels"][3:6]
     after = value(running)
     assert after[0] == before[0] + 7 and after[1] == before[1] and after[2] > before[2]
     assert value(closed) == before_closed                       # an hour that did not move is not rewritten
@@ -396,8 +406,8 @@ def test_failures_are_one_row_and_one_warning():
         a = run(G.poll(g.client(), now=NOW, gap=0))
         b = run(G.poll(Grafana(boards=renamed).client(), now=NOW + timedelta(hours=1), gap=0))
     assert [r["state"] for r in a["panels"][:3]] == ["error"] * 3 and "panel_not_found" in a["panels"][0]["error"]
-    assert [r["state"] for r in a["panels"][3:]] == ["ok"] * 3            # the other dashboard is unaffected
-    assert len(g.posts()) == 3 and count(LiumGrafanaRental) == 0
+    assert [r["state"] for r in a["panels"][3:]] == ["ok"] * 8            # every other panel is unaffected
+    assert len(g.posts()) == 8 and count(LiumGrafanaRental) == 0
     assert count(LiumFeedSnapshot, LiumFeedSnapshot.feed == "grafana_rentals") == 3
     assert count(LiumFeedSnapshot, LiumFeedSnapshot.feed == "grafana_rentals", LiumFeedSnapshot.seen_count == 2) == 3
     assert not any(r["changed"] for r in b["panels"][:3])
@@ -492,7 +502,7 @@ def test_reparse_rebuilds_from_stored_bodies():
     with normalize.SessionLocal.begin() as s:
         s.execute(text("TRUNCATE lium_grafana_rentals, lium_grafana_hourly"))
     out = G.reparse()
-    assert sum(out["snapshots"].values()) == 6
+    assert sum(out["snapshots"].values()) == 11
     assert count(LiumGrafanaRental) == 194 and count(LiumGrafanaRental, LiumGrafanaRental.tier == "spot") == 51
     assert count(LiumGrafanaHourly) == HOURLY_ROWS
 

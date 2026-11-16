@@ -124,7 +124,13 @@ class Panel:
     kind: str
     basis: str
     what: str
-    metric: str | None = None  # the lium_grafana_hourly column of an hourly series; None: one point per rental
+    metric: str | None = None  # the column this panel fills in its table; None: one point per rental
+    # Where the parsed rows go: "model_hourly" (lium_grafana_hourly; the rentals panel has no metric and its own
+    # table), "network_hourly" (lium_grafana_network_hourly), "price_daily" (lium_grafana_price_daily) or
+    # "daily_counts" (lium_grafana_daily_counts, where `metric` is the series name).
+    table: str = "model_hourly"
+    ref: str | None = None     # a panel that holds several queries: the refId of the one to read
+    column: str | None = None  # the value column that query's answer must carry; any other answer is a failed read
     # what raw.store reads from a Feed
     fmt: str = "json"
     partner: bool = False
@@ -136,7 +142,9 @@ class Panel:
         return f"grafana.lium.io/d/{self.dashboard}"
 
 
-MARKETPLACE_PRICES, NETWORK_STATUS = "marketplace-prices-v1", "bejrh6ldw5lhcc"
+MARKETPLACE_PRICES, NETWORK_STATUS, RENTAL_CHECK = "marketplace-prices-v1", "bejrh6ldw5lhcc", "fejrp6bf9f5s0e"
+# How the daily-medians panel names its two series per GPU model (the end of each column name).
+ASKING_SUFFIX, PAID_SUFFIX = " - asking, unrented", " - paid, rented"
 
 GRAFANA_PANELS: dict[str, Panel] = {p.name: p for p in (
     Panel("grafana_rentals", MARKETPLACE_PRICES, "Rented-at price over time ($gpu_type)", TRANSACTION, TRADE_RECORD,
@@ -150,6 +158,29 @@ GRAFANA_PANELS: dict[str, Panel] = {p.name: p for p in (
     Panel("grafana_spend", NETWORK_STATUS, "Credit spend per hour, by GPU type", TRANSACTION, PUBLISHED_AGGREGATE,
           "renter spend in USD per hour, per UTC hour and GPU model (Lium's hourly mean of its own samples)",
           metric="spend_usd_per_hour"),
+    # read since 2026-11-15 (migration 0043): Lium's own history of these reaches back before OpenGrid's collection
+    Panel("grafana_launch_created", RENTAL_CHECK, "Rentals created and node-side deploy failures", OBSERVED,
+          "provider_reported", "rentals created per UTC hour on the whole network (a rental that continues the "
+          "previous one on the same node is not counted); history from 2025-09-04",
+          metric="rentals_created", table="network_hourly", ref="A", column="Rentals created"),
+    Panel("grafana_launch_failures", RENTAL_CHECK, "Rentals created and node-side deploy failures", OBSERVED,
+          "provider_reported", "deploys that failed on the node's side per UTC hour on the whole network (failures "
+          "Lium puts down to the renter's image are left out); history from 2026-08-12",
+          metric="node_deploy_failures", table="network_hourly", ref="B", column="Node-side deploy failures"),
+    Panel("grafana_price_daily", MARKETPLACE_PRICES, "Asking price vs paid price, daily medians, 30 days ($gpu_type)",
+          OBSERVED, "provider_reported",
+          "per UTC day and GPU model: the median asking price of unrented nodes and the median price paid on rented "
+          "nodes (Lium's medians over its six-hourly samples, models with three nodes or more); paid from "
+          "2025-12-03, asking from 2026-09-16", table="price_daily"),
+    Panel("grafana_deploy_causes", RENTAL_CHECK, "Deploy failures per day, by cause", OBSERVED, "provider_reported",
+          "failed deploys per UTC day and cause, node-side and renter-side, as Lium classifies them; history from "
+          "2026-08-13", metric="deploy_failures", table="daily_counts"),
+    Panel("grafana_penalties", NETWORK_STATUS, "Penalty events per day, by reason", OBSERVED, "provider_reported",
+          "penalties applied to providers per UTC day and reason code; history from 2026-04-28",
+          metric="penalties", table="daily_counts"),
 )}
-SERIES_PANELS = tuple(p for p in GRAFANA_PANELS.values() if p.metric)
+SERIES_PANELS = tuple(p for p in GRAFANA_PANELS.values() if p.metric and p.table == "model_hourly")
 RENTALS_PANEL = GRAFANA_PANELS["grafana_rentals"]
+NETWORK_PANELS = tuple(p for p in GRAFANA_PANELS.values() if p.table == "network_hourly")
+DAILY_PANELS = tuple(p for p in GRAFANA_PANELS.values() if p.table in ("price_daily", "daily_counts"))
+COUNT_SERIES = {p.metric: p for p in GRAFANA_PANELS.values() if p.table == "daily_counts"}

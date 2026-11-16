@@ -22,6 +22,11 @@ Raw first, change-only, every row INTERNAL by default (provider_meta.INTERNAL_SO
                            migration 0041): start time, GPU model, price per GPU-hour paid, tier (spot / secure)
     lium_grafana_hourly    hourly series from the same Grafana, one row per UTC hour and GPU model: renter spend,
                            GPUs listed, GPUs rented; a revised hour is updated in place
+    lium_grafana_network_hourly  whole-network counts per UTC hour from the "Rental check" dashboard (migration
+                           0043): rentals created, deploys that failed on the node's side
+    lium_grafana_price_daily     per UTC day and GPU model: Lium's median asking price of unrented nodes and median
+                           price paid on rented nodes
+    lium_grafana_daily_counts    per UTC day, series and label: failed deploys by cause, penalties by reason code
 """
 
 from datetime import date, datetime
@@ -206,5 +211,43 @@ class LiumGrafanaHourly(Base):
     spend_usd_per_hour: Mapped[Decimal | None] = mapped_column(Numeric(16, 6))
     gpus_listed: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))     # an hourly mean, so not whole
     gpus_rented: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    visibility: Mapped[str] = _vis()
+
+
+class LiumGrafanaNetworkHourly(Base):
+    __tablename__ = "lium_grafana_network_hourly"
+    __table_args__ = (CheckConstraint(_VIS, name="ck_lium_grafana_network_hourly_visibility"),)
+
+    hour_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    # NULL: the panel had no row for the hour. Its queries count rows, so an hour with nothing has no row; Lium's
+    # failure log begins 2026-08-12, and before it a NULL means "not recorded", not zero.
+    rentals_created: Mapped[int | None] = mapped_column(Integer)
+    node_deploy_failures: Mapped[int | None] = mapped_column(Integer)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    visibility: Mapped[str] = _vis()
+
+
+class LiumGrafanaPriceDaily(Base):
+    __tablename__ = "lium_grafana_price_daily"
+    __table_args__ = (CheckConstraint(_VIS, name="ck_lium_grafana_price_daily_visibility"),)
+
+    day: Mapped[date] = mapped_column(Date, primary_key=True)                  # UTC day of Lium's samples
+    gpu_model: Mapped[str] = mapped_column(String(128), primary_key=True)      # as Lium writes it
+    # NULL: Lium gave no median for the day (fewer than three nodes, or before its samples begin)
+    median_asking: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))      # unrented nodes, per GPU-hour
+    median_paid: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))        # rented nodes, per GPU-hour
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    visibility: Mapped[str] = _vis()
+
+
+class LiumGrafanaDailyCount(Base):
+    __tablename__ = "lium_grafana_daily_counts"
+    __table_args__ = (CheckConstraint(_VIS, name="ck_lium_grafana_daily_counts_visibility"),)
+
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    series: Mapped[str] = mapped_column(String(32), primary_key=True)          # deploy_failures | penalties
+    label: Mapped[str] = mapped_column(String(128), primary_key=True)          # Lium's cause / reason code
+    count: Mapped[int] = mapped_column(Integer)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     visibility: Mapped[str] = _vis()

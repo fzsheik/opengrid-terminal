@@ -2,13 +2,14 @@
 
 Lium documents grafana.lium.io as public ("No account is needed", docs.lium.io/providers/grafana). Its "Marketplace
 prices" dashboard plots one point per rental (start time, GPU model, price paid) and its "Lium network status"
-dashboard plots renter spend and the fleet per hour and GPU model. This module reads four of those panels
-(feeds.GRAFANA_PANELS).
+dashboard plots renter spend and the fleet per hour and GPU model. Its "Rental check" dashboard counts the rentals
+created and the deploys that failed. This module reads nine of those panels (feeds.GRAFANA_PANELS).
 
 OpenGrid never writes a query. For every read it
 
     1. fetches the dashboard (GET /api/dashboards/uid/<uid>) and finds the panel by its exact title;
-    2. takes the query the dashboard holds for that panel at that moment;
+    2. takes the query the dashboard holds for that panel at that moment (a panel that holds two queries is read
+       one query at a time, each picked by the refId the dashboard gives it);
     3. fills the dashboard's own variables with values the dashboard lists (gpu_type "All"; tier "All", "spot" or
        "secure"), the way the page does when a visitor picks them; a variable this module does not know, or a value
        the dashboard does not list, stops the read before anything is sent;
@@ -27,6 +28,19 @@ answer's non-empty cells, with the window left out of the "changed?" comparison)
                            running hour and the hours before it are re-read each poll and updated in place. A zero
                            spend is written only on a row the fleet panels made: the spend panel lists about 100
                            models and most of them, never listed, would be rows of nothing.
+    lium_grafana_network_hourly  one row per UTC hour for the whole network: rentals_created and
+                           node_deploy_failures, two queries of one panel. An answer without the expected value
+                           column is a failed read.
+    lium_grafana_price_daily     one row per UTC day and GPU model: Lium's median asking price of unrented nodes and
+                           median price paid on rented nodes. Lium's own history: paid from 2025-12-03, asking from
+                           2026-09-16.
+    lium_grafana_daily_counts    one row per UTC day, series and label: failed deploys by cause (from 2026-08-13),
+                           penalties by reason code (from 2026-04-28).
+
+The daily panels are whole-day buckets, so they are only ever asked from a UTC midnight: a window starting mid-day
+would return a partial first day and overwrite the full one. For the same reason a closed backfill chunk of these
+panels ends one millisecond before its last midnight (the dashboards filter with BETWEEN, both ends included).
+The running day is partial until it closes; the daily panels are re-read every DAILY_POLL_EVERY, not every hour.
 
 Every row is INTERNAL (provider_meta.INTERNAL_SOURCES). poll() runs hourly; backfill() walks the history back in
 closed chunks, resumable. One request every feeds.POLITE_GAP_SECONDS at most.
@@ -52,7 +66,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from lium_data import feeds as F
 from lium_data import raw
-from store.lium import LiumFeedSnapshot, LiumGrafanaHourly, LiumGrafanaRental
+from store.lium import (LiumFeedSnapshot, LiumGrafanaDailyCount, LiumGrafanaHourly, LiumGrafanaNetworkHourly,
+                        LiumGrafanaPriceDaily, LiumGrafanaRental)
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +75,7 @@ POLL_SECONDS = 3600
 UTC = timezone.utc
 EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 HOUR_MS = 3_600_000
+DAY_MS = 24 * HOUR_MS
 SIX_DP = Decimal("0.000001")
 
 OVERLAP = timedelta(hours=1)          # a poll starts this long before the newest stored point
@@ -68,6 +84,9 @@ FIRST_WINDOW = timedelta(hours=6)     # nothing stored yet
 MAX_WINDOW = timedelta(hours=72)      # after a longer outage the backfill fills the rest
 RENTAL_CHUNK_DAYS = 3                 # backfill: about 3,500 rentals per answer
 SERIES_CHUNK_DAYS = 14                # backfill: under 1,000 hours, so the dashboard's own step stays one hour
+DAILY_CHUNK_DAYS = 30                 # backfill: the window the daily panels show on the page
+DAILY_POLL_EVERY = timedelta(hours=5, minutes=30)   # a daily panel is re-read on the first hourly run after this
+DAILY_MAX_DAYS = 30                   # after a longer outage the backfill fills the rest
 EMPTY_CHUNKS_STOP = 2                 # backfill without --since: stop after this many empty chunks in a row
 ERROR_CHUNKS_STOP = 3
 
@@ -146,7 +165,7 @@ def _listed_values(variable: dict) -> set[str]:
 
 def resolve(board: dict, panel: F.Panel, values: dict[str, str]) -> Query:
     """The query the dashboard holds for `panel`, with its variables set to `values`. Raises PanelError when the
-    panel is missing, has no single SQL query, uses a variable `values` does not name, or when a value is not one
+    panel is missing, has no single SQL query (or, for a panel read by refId, no single query with that refId), uses a variable `values` does not name, or when a value is not one
     the dashboard lists for that variable. A value other than "All" must actually be used by the query: reading
     "spot" from a query with no tier filter would label every rental spot."""
     dash = board.get("dashboard") if isinstance(board, dict) else None
@@ -157,6 +176,8 @@ def resolve(board: dict, panel: F.Panel, values: dict[str, str]) -> Query:
         raise PanelError("panel_not_found", f"{len(hits)} panels titled {panel.title!r} on {panel.dashboard}")
     p = hits[0]
     targets = [t for t in p.get("targets") or [] if isinstance(t, dict) and not t.get("hide")]
+    if panel.ref is not None:
+        targets = [t for t in targets if t.get("refId") == panel.ref]
     if len(targets) != 1 or not isinstance(targets[0].get("rawSql"), str) or not targets[0]["rawSql"].strip():
         raise PanelError("panel_reshaped", f"{panel.title!r} no longer has exactly one SQL query")
     target = targets[0]
@@ -239,7 +260,8 @@ def _label(fld: dict) -> str:
 
 def compact(frames: list, *, panel: F.Panel, sha: str, start: datetime, end: datetime) -> dict:
     """The answer's non-empty cells, in a stable order: [time ms, label index, value] plus the nanoseconds past
-    the millisecond when there are any. Nothing the frames say about the data is dropped."""
+    the millisecond when there are any. Nothing the frames say about the data is dropped. A table answer with text
+    columns (day, cause, n) keeps each row together: the row's text values are the label of its numbers."""
     cells = []
     for frame in frames:
         fields = frame["schema"]["fields"]
@@ -248,13 +270,17 @@ def compact(frames: list, *, panel: F.Panel, sha: str, start: datetime, end: dat
             continue
         t = next(i for i, f in enumerate(fields) if f.get("type") == "time")
         nanos = (frame["data"].get("nanos") or [None] * len(fields))[t] or []
-        for i, fld in enumerate(fields):
-            if i == t:
-                continue
-            label = _label(fld)
+        text = [i for i, f in enumerate(fields) if i != t and f.get("type") == "string"]
+        numbers = [i for i in range(len(fields)) if i != t and i not in text]
+        for i in numbers:
+            label = _label(fields[i])
             for row, v in enumerate(values[i]):
-                if v is not None:
-                    cells.append((values[t][row], nanos[row] if row < len(nanos) else 0, label, v))
+                if v is None:
+                    continue
+                if text:
+                    parts = ["" if values[d][row] is None else str(values[d][row]) for d in text]
+                    label = " | ".join(parts + ([_label(fields[i])] if len(numbers) > 1 else []))
+                cells.append((values[t][row], nanos[row] if row < len(nanos) else 0, label, v))
     labels = sorted({c[2] for c in cells})
     at = {label: i for i, label in enumerate(labels)}
     cells.sort(key=lambda c: (c[0], c[1] or 0, c[2], c[3]))
@@ -368,6 +394,65 @@ def series_from(doc: dict) -> tuple[list[dict], int]:
     return list(rows.values()), rejected
 
 
+def _count(v) -> int | None:
+    n = _number(v)
+    return int(n) if n is not None and n >= 0 and n == n.to_integral_value() else None
+
+
+def _none_read(rows, rejected: int, what: str):
+    """An answer that has cells but not one this parser can read is a reshaped panel, not an empty window."""
+    if rejected and not rows:
+        raise ValueError(f"{rejected} cells and {what} among them")
+    return list(rows.values()), rejected
+
+
+def network_from(doc: dict, column: str) -> tuple[list[dict], int]:
+    """(hour rows, cells that are not one) of a whole-network count. Only the named value column is read."""
+    rows, rejected = {}, 0
+    for c in _cells(doc):
+        value = _count(c[2]) if c else None
+        if c is None or value is None or c[1] != column or c[0] % HOUR_MS or c[3]:
+            rejected += 1
+            continue
+        rows[c[0]] = {"hour_utc": EPOCH + timedelta(milliseconds=c[0]), "value": value}
+    return _none_read(rows, rejected, f"no whole-hour count in a column named {column!r}")
+
+
+def price_daily_from(doc: dict) -> tuple[list[dict], int]:
+    """(rows of day, GPU model, column and value; cells that are not one). The panel names each series
+    "<GPU model> - asking, unrented" or "<GPU model> - paid, rented"; a point must sit on a UTC midnight."""
+    rows, rejected = {}, 0
+    sides = ((F.ASKING_SUFFIX, "median_asking"), (F.PAID_SUFFIX, "median_paid"))
+    for c in _cells(doc):
+        value = _number(c[2]) if c else None
+        model, column = next(((c[1][:-len(end)], col) for end, col in sides if c and c[1].endswith(end)), ("", None))
+        if c is None or value is None or value < 0 or not model or c[0] % DAY_MS or c[3]:
+            rejected += 1
+            continue
+        day = (EPOCH + timedelta(milliseconds=c[0])).date()
+        rows[(day, model[:128], column)] = {"day": day, "gpu_model": model[:128], "column": column, "value": value}
+    return _none_read(rows, rejected, "no asking or paid median on a UTC midnight")
+
+
+def counts_from(doc: dict) -> tuple[list[dict], int]:
+    """(rows of day, label and count; cells that are not one). The label is Lium's cause or reason code."""
+    rows, rejected = {}, 0
+    for c in _cells(doc):
+        value = _count(c[2]) if c else None
+        if c is None or value is None or not c[1] or c[0] % DAY_MS or c[3]:
+            rejected += 1
+            continue
+        day = (EPOCH + timedelta(milliseconds=c[0])).date()
+        rows[(day, c[1][:128])] = {"day": day, "label": c[1][:128], "value": value}
+    return _none_read(rows, rejected, "no whole-day count")
+
+
+def history_from(panel: F.Panel, doc: dict) -> tuple[list[dict], int]:
+    if panel.table == "network_hourly":
+        return network_from(doc, panel.column)
+    return price_daily_from(doc) if panel.table == "price_daily" else counts_from(doc)
+
+
 def _parsed(f: raw.Fetched, parse) -> tuple[list[dict], int]:
     if f.status_code != 200 or f.body is None or f.error:
         return [], 0
@@ -430,6 +515,31 @@ def write_series(s, metric: str, rows: list[dict], visibility: str, at: datetime
     return written
 
 
+def _set_column(s, model, keys: tuple[str, ...], column: str, rows: list[dict], visibility: str, at: datetime) -> int:
+    """Set one column of `model` from rows of its key columns plus "value". New keys are inserted; a value that
+    moved (the running hour or day, or a revision) is updated in place; an unchanged one is not rewritten."""
+    col, written = getattr(model, column), 0
+    for batch in _batches(rows):
+        stmt = pg_insert(model).values([{**{k: r[k] for k in keys}, column: r["value"], "updated_at": at,
+                                         "visibility": visibility} for r in batch])
+        written += len(s.execute(stmt.on_conflict_do_update(
+            index_elements=list(keys), set_={column: stmt.excluded[column], "updated_at": stmt.excluded.updated_at},
+            where=col.is_distinct_from(stmt.excluded[column])).returning(col)).all())
+    return written
+
+
+def write_history(s, panel: F.Panel, rows: list[dict], visibility: str, at: datetime) -> int:
+    """Write the rows of a network_hourly, price_daily or daily_counts panel. Returns the rows written."""
+    if panel.table == "network_hourly":
+        return _set_column(s, LiumGrafanaNetworkHourly, ("hour_utc",), panel.metric, rows, visibility, at)
+    if panel.table == "price_daily":
+        return sum(_set_column(s, LiumGrafanaPriceDaily, ("day", "gpu_model"), column,
+                               [r for r in rows if r["column"] == column], visibility, at)
+                   for column in ("median_asking", "median_paid"))
+    return _set_column(s, LiumGrafanaDailyCount, ("day", "series", "label"), "count",
+                       [{**r, "series": panel.metric} for r in rows], visibility, at)
+
+
 def _report(f: raw.Fetched, st: raw.Stored, rows: int, **more) -> dict:
     raw.log_outcome(st, f)
     return {"feed": f.feed.name, **f.params, "state": st.state, "status_code": f.status_code, "changed": st.new,
@@ -457,6 +567,23 @@ def save_series(panel: F.Panel, f: raw.Fetched) -> dict:
     return _report(f, st, len(rows), rejected=rejected, written=written)
 
 
+def save_history(panel: F.Panel, f: raw.Fetched) -> dict:
+    rows, rejected = _parsed(f, lambda doc: history_from(panel, doc))
+    written = 0
+    with _session().begin() as s:
+        st = raw.store(s, f, rows=len(rows), rejected=rejected)
+        if st.new and st.state == "ok":
+            written = write_history(s, panel, rows, st.snapshot.visibility, f.fetched_at)
+    return _report(f, st, len(rows), rejected=rejected, written=written)
+
+
+def save(panel: F.Panel, f: raw.Fetched, tier: str | None = None) -> dict:
+    """Store one answer of any panel. `tier` matters to the rentals panel only."""
+    if panel.table != "model_hourly":
+        return save_history(panel, f)
+    return save_series(panel, f) if panel.metric else save_rentals(f, None if tier == "All" else tier)
+
+
 # --------------------------------------------------------------------------
 # The hourly job
 # --------------------------------------------------------------------------
@@ -467,25 +594,47 @@ def _window(newest: datetime | None, now: datetime) -> tuple[datetime, datetime]
     return max(min(start, now - MIN_WINDOW), now - MAX_WINDOW), now
 
 
+def _day_window(newest: date | None, now: datetime) -> tuple[datetime, datetime]:
+    """From the midnight before the newest stored day (that day may have been partial when read) to now."""
+    today = now.date()
+    start = min(newest, today) - timedelta(days=1) if newest else today - timedelta(days=1)
+    return _midnight(max(start, today - timedelta(days=DAILY_MAX_DAYS))), now
+
+
 def windows(now: datetime) -> dict[str, tuple[datetime, datetime]]:
     """Per panel, the range the next poll reads: from a little before its newest stored point to now."""
-    H = LiumGrafanaHourly
+    H, N, P, C = LiumGrafanaHourly, LiumGrafanaNetworkHourly, LiumGrafanaPriceDaily, LiumGrafanaDailyCount
     with _session()() as s:
         newest = {F.RENTALS_PANEL.name: s.execute(select(func.max(LiumGrafanaRental.start_at))).scalar()}
         for p in F.SERIES_PANELS:
             newest[p.name] = s.execute(select(func.max(H.hour_utc)).where(getattr(H, p.metric).is_not(None))).scalar()
-    out = {}
+        for p in F.NETWORK_PANELS:
+            newest[p.name] = s.execute(select(func.max(N.hour_utc)).where(getattr(N, p.metric).is_not(None))).scalar()
+        days = {p.name: s.execute(select(func.max(P.day)) if p.table == "price_daily" else
+                                  select(func.max(C.day)).where(C.series == p.metric)).scalar()
+                for p in F.DAILY_PANELS}
+    out = {name: _day_window(last, now) for name, last in days.items()}
     for name, last in newest.items():
         start, end = _window(last, now)
-        if name != F.RENTALS_PANEL.name:
+        if name != F.RENTALS_PANEL.name:                                 # (the daily panels are set above)
             start = start.replace(minute=0, second=0, microsecond=0)     # whole hours only
         out[name] = (start, end)
     return out
 
 
+def _due(panel: F.Panel, now: datetime) -> bool:
+    """A daily panel is read when its last poll (answered or failed) is DAILY_POLL_EVERY old, or was never made."""
+    with _session()() as s:
+        last = s.execute(select(func.max(LiumFeedSnapshot.last_seen_at))
+                         .where(LiumFeedSnapshot.feed == panel.name,
+                                LiumFeedSnapshot.params_key == raw.params_key({}))).scalar()
+    return last is None or now - last >= DAILY_POLL_EVERY
+
+
 async def poll(http: httpx.AsyncClient | None = None, now: datetime | None = None,
                gap: float = F.POLITE_GAP_SECONDS) -> dict:
-    """The `lium_grafana` job: the rentals panel once per tier value (feeds.TIERS), then the three hourly series."""
+    """The `lium_grafana` job: the rentals panel once per tier value (feeds.TIERS), the three hourly series per
+    GPU model, the two whole-network hourly counts, and the daily panels that are due (DAILY_POLL_EVERY)."""
     own = http is None
     http = http or raw.client()
     now = now or datetime.now(UTC)
@@ -501,6 +650,10 @@ async def poll(http: httpx.AsyncClient | None = None, now: datetime | None = Non
             f = await read(http, boards, panel, *ranges[panel.name])
             results.append(save_series(panel, f))
             await asyncio.sleep(gap)
+        for panel in (*F.NETWORK_PANELS, *(p for p in F.DAILY_PANELS if _due(p, now))):
+            f = await read(http, boards, panel, *ranges[panel.name])
+            results.append(save_history(panel, f))
+            await asyncio.sleep(gap)
     finally:
         if own:
             await http.aclose()
@@ -510,6 +663,9 @@ async def poll(http: httpx.AsyncClient | None = None, now: datetime | None = Non
 # --------------------------------------------------------------------------
 # Backfill
 # --------------------------------------------------------------------------
+
+
+BACKFILL_GROUPS = ("rentals", "series", "launches", "daily")
 
 
 def _midnight(d: date) -> datetime:
@@ -530,18 +686,26 @@ async def backfill(since: date | None = None, until: date | None = None, *, only
                    force: bool = False, http: httpx.AsyncClient | None = None, now: datetime | None = None,
                    gap: float = F.POLITE_GAP_SECONDS) -> dict:
     """History, newest chunk first, back to `since` (default: until EMPTY_CHUNKS_STOP empty chunks in a row).
-    `only`: "rentals" or "series". A chunk read after it closed is skipped unless `force`, so a stopped run
-    resumes where it left off. Stops a panel after ERROR_CHUNKS_STOP failed chunks in a row."""
+    `only`: any of BACKFILL_GROUPS, comma-separated (default: all). A chunk read after it closed is skipped unless
+    `force`, so a stopped run resumes where it left off. Stops a panel after ERROR_CHUNKS_STOP failed chunks in a
+    row."""
     own = http is None
     http = http or raw.client()
     now = now or datetime.now(UTC)
     last_day = (until or now.date()) + timedelta(days=1)
     boards = Boards(http)
+    groups = set(only.split(",")) if only else set(BACKFILL_GROUPS)
+    if groups - set(BACKFILL_GROUPS):
+        raise ValueError(f"only takes {', '.join(BACKFILL_GROUPS)}")
     plans = []
-    if only in (None, "rentals"):
+    if "rentals" in groups:
         plans.append((F.RENTALS_PANEL, RENTAL_CHUNK_DAYS, F.TIERS))
-    if only in (None, "series"):
+    if "series" in groups:
         plans += [(p, SERIES_CHUNK_DAYS, (None,)) for p in F.SERIES_PANELS]
+    if "launches" in groups:
+        plans += [(p, SERIES_CHUNK_DAYS, (None,)) for p in F.NETWORK_PANELS]
+    if "daily" in groups:
+        plans += [(p, DAILY_CHUNK_DAYS, (None,)) for p in F.DAILY_PANELS]
     out = {}
     try:
         for panel, days, tiers in plans:
@@ -556,6 +720,9 @@ async def backfill(since: date | None = None, until: date | None = None, *, only
                     tally["stopped"] = "reached --since"
                     break
                 chunk, states = f"{lo}/{hi}", []
+                # the dashboards filter BETWEEN both ends: a bucket that begins on the closing midnight would come
+                # back holding one instant of the next chunk and overwrite the full value already stored
+                end = _midnight(hi) - (timedelta(milliseconds=1) if panel.table != "model_hourly" else timedelta(0))
                 for tier in tiers:
                     params = {"chunk": chunk}
                     key = {**({"tier": tier} if tier else {}), **params}
@@ -564,8 +731,8 @@ async def backfill(since: date | None = None, until: date | None = None, *, only
                         tally["skipped"] += 1
                         states.append(done)
                         continue
-                    f = await read(http, boards, panel, _midnight(lo), _midnight(hi), tier=tier, params=params)
-                    r = save_series(panel, f) if panel.metric else save_rentals(f, None if tier == "All" else tier)
+                    f = await read(http, boards, panel, _midnight(lo), end, tier=tier, params=params)
+                    r = save(panel, f, tier)
                     tally["rows"] += r["rows"]
                     tally["written"] += r.get("written", 0) + r.get("new", 0)
                     states.append(r["state"])
@@ -610,7 +777,9 @@ def reparse() -> dict:
             snap = s.get(LiumFeedSnapshot, snapshot_id)
             panel = F.GRAFANA_PANELS[snap.feed]
             doc = json.loads(snap.body)
-            if panel.metric:
+            if panel.table != "model_hourly":
+                write_history(s, panel, history_from(panel, doc)[0], snap.visibility, snap.fetched_at)
+            elif panel.metric:
                 write_series(s, panel.metric, series_from(doc)[0], snap.visibility, snap.fetched_at)
             else:
                 tier = (snap.params or {}).get("tier")

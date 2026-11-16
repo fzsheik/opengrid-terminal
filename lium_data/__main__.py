@@ -1,7 +1,8 @@
 """python -m lium_data status | poll-public | poll-partner | backfill [--since YYYY-MM-DD] [--until YYYY-MM-DD]
                                                                        [--force] | reparse | reparse-stats
                       | poll-grafana | grafana-backfill [--since YYYY-MM-DD] [--until YYYY-MM-DD]
-                                                         [--only rentals|series] [--force] | grafana-reparse
+                                                         [--only rentals,series,launches,daily] [--force]
+                      | grafana-reparse
 
     status          every feed's newest answer and the row counts
     poll-public     one run of the lium_public job (keyless feeds + published throughput)
@@ -12,10 +13,16 @@
                     nohup .venv/bin/python -m lium_data backfill --since 2026-01-01 > /tmp/lium-backfill.log 2>&1 &
     reparse         re-parse every stored partner CSV body (after a parser change)
     reparse-stats   re-parse every stored Lium stats snapshot (raw_snapshots) into the throughput tables
-    poll-grafana    one run of the lium_grafana job (Lium's public Grafana: rental starts, hourly spend and fleet)
+    poll-grafana    one run of the lium_grafana job (Lium's public Grafana: rental starts, hourly spend and fleet,
+                    rentals created and failed deploys per hour, daily asking and paid medians, failure causes,
+                    penalties)
     grafana-backfill  that history, newest first, back to --since (default: until 2 empty chunks in a row); a
-                    chunk read after it closed is skipped unless --force. Resumable. Run it detached on the server:
+                    chunk read after it closed is skipped unless --force. Resumable. --only names the groups to
+                    read: rentals (rental starts), series (hourly spend and fleet per GPU model), launches (hourly
+                    rentals created and failed deploys), daily (daily medians, failure causes, penalties). Run it
+                    detached on the server:
                     nohup python -m lium_data grafana-backfill --since 2025-10-01 > /tmp/lium-grafana.log 2>&1 &
+                    nohup python -m lium_data grafana-backfill --only launches,daily --since 2025-09-01
     grafana-reparse re-parse every stored Grafana answer (after a parser change)
 """
 
@@ -64,8 +71,8 @@ def main(argv: list[str]) -> int:
         out = asyncio.run(grafana.poll())
     elif cmd == "grafana-backfill":
         since, until, only = _one(argv, "--since"), _one(argv, "--until"), _one(argv, "--only")
-        if only not in (None, "rentals", "series"):
-            print("--only takes rentals or series", file=sys.stderr)
+        if only is not None and set(only.split(",")) - set(grafana.BACKFILL_GROUPS):
+            print(f"--only takes {', '.join(grafana.BACKFILL_GROUPS)} (several: comma-separated)", file=sys.stderr)
             return 2
         out = asyncio.run(grafana.backfill(date.fromisoformat(since) if since else None,
                                            date.fromisoformat(until) if until else None, only=only,

@@ -4,8 +4,9 @@
                    LIUM_FEEDS_ENABLED (default on).
     lium_providers hourly: per-provider statistics and machine lists (rental state, revenue per hour), for every
                    provider key seen in the stored executors. Needs POLLER_ENABLED and LIUM_FEEDS_ENABLED.
-    lium_grafana   hourly: rental starts and hourly spend / fleet from Lium's public Grafana dashboards. Needs
-                   POLLER_ENABLED, LIUM_FEEDS_ENABLED and LIUM_GRAFANA_ENABLED (default on).
+    lium_grafana   hourly: rental starts, hourly spend / fleet, rentals created and failed deploys from Lium's public
+                   Grafana dashboards; its daily panels (asking and paid medians, failure causes, penalties) about
+                   every six hours. Needs POLLER_ENABLED, LIUM_FEEDS_ENABLED and LIUM_GRAFANA_ENABLED (default on).
     lium_partner   hourly: the data-partner feeds. Registered only when LIUM_PARTNER_API_KEY is set (and the poller
                    is on); while Lium answers 403 it re-checks every 6 h (partner.FORBIDDEN_RECHECK_HOURS).
 """
