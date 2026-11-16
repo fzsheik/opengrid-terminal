@@ -14,7 +14,7 @@ Methodology: methodology/capacity.md.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, tuple_
 from sqlalchemy.dialects.postgresql import insert
@@ -28,6 +28,11 @@ from store.capacity import CapacityChange, CapacityCurrent
 log = logging.getLogger(__name__)
 
 STATE = ("in_stock", "tier", "available_count", "total_count")
+# A current row its provider has stopped reporting is removed once it has not been seen for this long: a day, or six
+# of the provider's capacity reads when those are further apart (Vast's census runs up to 12 hours apart).
+EXPIRE_AFTER = timedelta(hours=24)
+EXPIRE_AFTER_READS = 6
+EXPIRED = "no longer reported"
 
 
 def supported() -> list[str]:
@@ -88,7 +93,7 @@ def prune(observations: list[CapacityObservation]) -> int:
 
     A provider that moved to its own API (Massed Compute off Shadeform) would otherwise keep the old source's rows
     forever beside the new ones. Rows from a source still in use are kept even when this run lacks them: those age
-    into `stale: true` (methodology/capacity.md). A provider whose normalizer failed or returned nothing is absent
+    into `stale: true` (methodology/capacity.md) and are removed by expire() after a day. A provider whose normalizer failed or returned nothing is absent
     here and keeps its previous state. History stays in capacity_changes.
     """
     sources: dict[str, set[str]] = {}
@@ -105,8 +110,44 @@ def prune(observations: list[CapacityObservation]) -> int:
     return dropped
 
 
+def expire(observations: list[CapacityObservation], now: datetime | None = None) -> int:
+    """Remove current rows a provider has stopped reporting, for every provider in this run.
+
+    A sku and region the provider's answer no longer carries (a machine type that left a marketplace, a plan that
+    was withdrawn) used to stay in capacity_current for ever with its last state, so "in stock" could describe a
+    row nobody had seen for weeks. Until EXPIRE_AFTER it only ages into `stale: true`, which covers a provider
+    leaving a row out for a few reads. After that the row is deleted, and one last capacity_changes row with no
+    state and raw_value "no longer reported (last seen ...)" marks the end in the history.
+
+    Only providers that answered in this run are touched, and only rows this run did not report: a provider whose
+    read failed keeps everything, however old.
+    """
+    now = now or datetime.now(timezone.utc)
+    reported: dict[str, set[tuple[str, str, str]]] = {}
+    for o in observations:
+        reported.setdefault(o.provider, set()).add(_key(o))
+    gone = 0
+    with normalize.SessionLocal.begin() as s:
+        for provider, keys in reported.items():
+            cadence = PROVIDERS[provider].polling.capacity_seconds if provider in PROVIDERS else 0
+            cutoff = now - max(EXPIRE_AFTER, timedelta(seconds=EXPIRE_AFTER_READS * cadence))
+            old = [r for r in s.scalars(select(CapacityCurrent).where(CapacityCurrent.provider == provider,
+                                                                       CapacityCurrent.observed_at < cutoff))
+                   if (r.provider, r.sku, r.region_key) not in keys]
+            for r in old:
+                s.add(CapacityChange(provider=r.provider, sku=r.sku, region_key=r.region_key,
+                                     canonical_gpu_name=r.canonical_gpu_name, observed_at=now, in_stock=None, tier=None,
+                                     available_count=None, total_count=None,
+                                     raw_value=f"{EXPIRED} (last seen {r.observed_at.isoformat()})",
+                                     visibility=r.visibility))
+                s.delete(r)
+            gone += len(old)
+    return gone
+
+
 def refresh(only: list[str] | None = None) -> dict:
     observations = normalize_all(only)
     out = save(observations)
     out["pruned"] = prune(observations)
+    out["expired"] = expire(observations)
     return out

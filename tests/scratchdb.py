@@ -17,10 +17,17 @@ import sys
 from sqlalchemy import create_engine, text
 
 SERVER = os.environ.get("TEST_PG_URL", "postgresql+psycopg://localhost:5432")
+# Two checkouts running the suite at once on one Postgres server (a second worktree) would create and drop each
+# other's databases. OPENGRID_TEST_DB_PREFIX gives a run its own names; empty by default.
+PREFIX = os.environ.get("OPENGRID_TEST_DB_PREFIX", "")
+
+
+def _name(name: str) -> str:
+    return name if not PREFIX or name == "postgres" or name.startswith(PREFIX) else PREFIX + name
 
 
 def url(name: str) -> str:
-    return f"{SERVER}/{name}"
+    return f"{SERVER}/{_name(name)}"
 
 
 def _admin(sql: str) -> None:
@@ -33,13 +40,13 @@ def _admin(sql: str) -> None:
 
 
 def drop(name: str) -> None:
-    _admin(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+    _admin(f'DROP DATABASE IF EXISTS "{_name(name)}" WITH (FORCE)')
 
 
 def create(name: str) -> str:
     """Drop and recreate `name`; returns its URL."""
     drop(name)
-    _admin(f'CREATE DATABASE "{name}"')
+    _admin(f'CREATE DATABASE "{_name(name)}"')
     return url(name)
 
 

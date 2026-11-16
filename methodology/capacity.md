@@ -100,6 +100,8 @@ When a provider changes where its capacity comes from (for example Massed Comput
 its own API's counts), current rows from the source it no longer uses are removed at the next refresh, so the two
 sources are never shown side by side. Their history stays in `capacity_changes`.
 
+A row its provider has stopped reporting (a machine type that left a marketplace, a withdrawn plan) is removed from the current state once it has not been seen for a day, or for six of the provider's capacity reads when those are further apart (Vast's census). Until then it only carries `stale: true`. Its history ends with one row that has no state and says "no longer reported" with the time it was last seen. Only providers that answered in the same run are touched, so a provider whose read failed loses nothing. Before 2026-11-16 such rows stayed for ever with their last state.
+
 ## What this does not show
 
 - A provider's own report, not a launch test. "In stock" means the provider says so.

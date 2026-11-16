@@ -194,7 +194,9 @@ def test_refresh_drops_rows_from_a_source_the_provider_left():
         from store.capacity import CapacityCurrent
 
         def obs(sku, region, source, provider="koyeb"):
-            return _obs(sku=sku, region=region, provider=provider).model_copy(update={"source": source})
+            # seen just now: a row unseen for over a day is removed by capacity.expire (tests/test_capacity_expiry.py)
+            return _obs(sku=sku, region=region, provider=provider, at=datetime.now(timezone.utc)).model_copy(
+                update={"source": source})
 
         real_latest, real = normalize._latest_raw, {n: c.normalize_capacity for n, c in capacity.PROVIDERS.items()}
         normalize._latest_raw = lambda s, p: {}
