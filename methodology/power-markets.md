@@ -139,7 +139,7 @@ A hub average hides stranded power. Over the 12 months to 2026-11-16, SPP South 
 real-time intervals and below zero in 17%, but the cheapest power sits at specific nodes behind congested lines.
 To rank candidate sites for small data centres that would run on cheap excess power, OpenGrid summarises every
 priced node of ERCOT and SPP once a day. Code: `power/nodal.py`. Tables: `power_nodes`, `power_node_days`
-(migration 0044).
+(migration 0047_power_nodal).
 
 **What is stored.** One row per (market, day, node), where market is `rt` or `da`:
 - intervals with a price (`n`);

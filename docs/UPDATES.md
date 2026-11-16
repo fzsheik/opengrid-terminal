@@ -5,6 +5,39 @@ what is left, and what is next. Add an entry in the same commit as the change.
 
 ---
 
+## 2026-11-16 — Power: where spare electricity is, for siting small datacenters (not yet in production)
+
+### What shipped (merged, tested; not deployed: deploys are on hold while another backfill runs, and the database
+volume needs growing first)
+- **Stranded power, node by node** (`power/nodal.py`, migration `0047_power_nodal`): one daily summary row per ERCOT
+  settlement point (about 1,131) and SPP settlement location (about 1,626): intervals priced, below $0, below $20,
+  mean, p10, median, min, max. Interval prices are never stored per node. Admin read `/v1/ops/power/nodes/cheap`
+  ranks nodes by the share of intervals below $20/MWh. A local sample: West Texas wind nodes around Sweetwater were
+  below $0 in 18-23% of intervals over 2026-11-09..13 while the West hub never was; in SPP over 2026-11-02..08, 412 of
+  1,626 locations were below $20 in more than half of all intervals.
+- **Physical sites** (`power/sites/`, migration `0045_power_sites`): every US generator from EIA-860M with
+  coordinates, status and planned retirement, and its change history; annual net generation per plant from EIA-923,
+  so capacity factor and idle MW per plant; interconnection queues from Berkeley Lab Queued Up and ERCOT's monthly
+  GIS report. Pecos County, Texas has the most generation queued in ERCOT (21.4 GW, October 2026 report). Reads
+  `/v1/ops/power/plants`, `/queues`, `/sites/status`; weekly `power_sites` job behind `POWER_SITES_ENABLED`.
+- **Wasted energy** (`power/waste.py`, `power/flaring.py`, migration `0046_power_waste`): wind and solar curtailment
+  for CAISO (from 2014-05, about 5.4 TWh in the last 12 months) and SPP (from 2014-03, about 13 TWh in 2024), an
+  ERCOT proxy labelled as such, and gas flaring sites (World Bank 2017-2021, CC BY; North Dakota monthly per section
+  and county from 2015-05). Reads `/v1/ops/power/curtailment`, `/flaring`.
+
+### Not shipped
+- **The production backfills**: about 125 MB (nodal), 110 MB (sites) and 60 MB (waste); run after the volume grows.
+- **ERCOT nodal history before the forward job**: its public reports keep 7 days; the archive needs an account.
+- **Node coordinates**: neither ERCOT nor SPP publishes them; nothing is geocoded by guessing.
+- **Large-load queues**: no public project-level source. **EOG VIIRS flaring, the World Bank 2012-2025 files and
+  Texas RRC flaring**: declined on their terms (non-commercial or session-only).
+
+### Next
+- A site ranking that joins the three: cheap nodes, idle or retiring plants nearby, curtailment and flaring in the
+  area, and what else is queued to connect.
+
+---
+
 ## 2026-11-16 — Availability: leftover rows expire, three more providers, 32 GPU names mapped
 
 ### What shipped

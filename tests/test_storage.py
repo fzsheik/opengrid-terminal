@@ -51,7 +51,7 @@ class StorageTests(unittest.TestCase):
 
     def setUp(self):
         with db.engine.begin() as c:
-            self.assertEqual(c.execute(text("select current_database()")).scalar(), DB)
+            self.assertEqual(c.execute(text("select current_database()")).scalar(), scratchdb._name(DB))  # OPENGRID_TEST_DB_PREFIX may rename it
             c.execute(text("TRUNCATE raw_snapshots, raw_payloads, quality_cursor, source_schemas, news_fetch_log, compute_listings CASCADE"))
 
     def test_dedupe_preserves_attempts_requests_freshness_and_reads(self):
