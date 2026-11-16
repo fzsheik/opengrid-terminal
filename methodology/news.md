@@ -21,6 +21,28 @@ material events and earnings, quarterly and annual reports, Form D funding notic
 Project). Past items are recovered from archives and marked backfilled: see [news history](news-history). Major
 price shifts list the items around them, never as a cause: see [shifts](shifts).
 
+**GDELT searches.** There are four, each over the last day, every 6 hours, newest 100 articles:
+
+| Source | What it searches for |
+|---|---|
+| `gdelt_gpu_cloud` | a GPU model name (H100, H200, B200, GB200, MI300X, A100) with GPU, cloud or datacenter |
+| `gdelt_gpu_market` | GPU prices, GPU rental, GPU shortage, GPU cloud, neocloud, AI compute prices |
+| `gdelt_miner_gpu_clouds` | Bitcoin miners that rent GPUs: Bitdeer, Hut 8 (Highrise AI), HIVE Digital (BUZZ HPC), Bit Digital (WhiteFiber), IREN, Applied Digital |
+| `gdelt_miner_datacenters` | Bitcoin miners that lease powered space to GPU clouds: Core Scientific, Galaxy Digital, Cipher Mining (Cipher Digital since 2026), TeraWulf, CleanSpark, Riot Platforms, MARA Holdings (Marathon Digital) |
+
+Both miner searches also require one of AI, GPU, HPC, "data center" or "artificial intelligence" in the article,
+so plain bitcoin-mining coverage is mostly left out. GDELT matches the article's text and gives back only the
+title. The classifier reads that title: a miner is named on the item only when the title itself has compute
+context (see Classification). An article that matched on its text but whose title is about mining or the share
+price is stored without the company on it and scores low. GDELT limits how a query is written: a quoted phrase
+of one short word is refused, so short names stay unquoted, and each miner query is kept under 250 characters.
+
+**SEC EDGAR filers.** 26 companies. Ten are Bitcoin miners whose filings are now largely about AI compute:
+Bitdeer, IREN, Hut 8, HIVE Digital, Bit Digital, WhiteFiber, Applied Digital, Core Scientific, Cipher Digital and
+TeraWulf. A filing's title is its form and item codes, not its subject, so the company comes from the source and
+a mining-only filing of these ten carries the company too. CleanSpark, Riot, MARA and Galaxy Digital are not read
+from EDGAR for that reason: most of their filings are about mining or crypto finance.
+
 Each source carries:
 
 - **category**: `provider`, `vendor`, `hyperscaler`, `trade_press`, `regulation` or `markets`.
@@ -120,6 +142,12 @@ poll (CoreWeave, Together AI, Fluidstack, Nscale and others), each with aliases:
 
 Ambiguous names ("Lambda", "Crusoe", "Oracle", "OCI", "Verda", "Lium", "Rubin") count only
 when the item also has compute context. "AWS Lambda" never counts as Lambda.
+
+Bitcoin miners moving into AI compute are providers too. Most of their news is about mining, so the company
+name (Bitdeer, Hut 8, Core Scientific, Cipher Mining or Cipher Digital, TeraWulf...) counts only in an item with
+compute context. Their AI brands (Highrise AI, BUZZ HPC, WhiteFiber, Bitdeer AI) count without it. The ones that
+rent GPUs are `neocloud`. The ones that lease powered space to GPU clouds are `datacenter`, a class used in news
+only.
 
 **Regions.** Country and place keywords are mapped to ISO codes, then to the region groups
 defined in `regions.py` (US, Canada, Europe, UK, APAC, Middle East, LATAM, Africa).

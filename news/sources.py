@@ -7,7 +7,8 @@ Rules for adding a source:
       listed disabled with the reason, so the gap is visible rather than forgotten.
 
 Verified 2026-10-06 from the dev machine (HTTP status, feed type, item count). SEC EDGAR, changelog
-and status feeds added 2026-11-01 (verified the same way).
+and status feeds added 2026-11-01 (verified the same way). Bitcoin miners moving into AI compute (two GDELT
+searches, ten EDGAR filers) added 2026-11-15, each checked against the live API.
 
 Fields
     kind          rss | atom | json_api (JSON Feed) | federal_register | edgar | gdelt
@@ -29,13 +30,23 @@ Fields
 from dataclasses import dataclass, field
 from urllib.parse import urlencode as _urlencode
 
-# GPU-market searches run against GDELT (live: the last day; history: month by month, news/history.py).
+# Searches run against GDELT (live: the last day; history: month by month, news/history.py).
 _GDELT_Q = {
     # Model names stay unquoted: GDELT rejects a quoted phrase this short ("The specified phrase is too short").
     "gdelt_gpu_cloud": '(H100 OR H200 OR B200 OR GB200 OR MI300X OR A100) (GPU OR cloud OR datacenter) '
                        'sourcelang:english',
     "gdelt_gpu_market": '("GPU prices" OR "GPU rental" OR "GPU shortage" OR "GPU cloud" OR "neocloud" OR '
                         '"AI compute prices") sourcelang:english',
+    # Bitcoin miners moving into AI compute (docs/MINER_PROVIDERS.md). GDELT matches the article's text, so the second
+    # group keeps mining-only coverage out of the answer; the classifier then reads the title alone and tags the
+    # company only when the title itself has compute context. Two searches, not one: the miners that rent GPUs and
+    # the landlords are each a full list of names, and together a busy month would pass GDELT's 250 articles.
+    "gdelt_miner_gpu_clouds": '(Bitdeer OR "Hut 8" OR "HIVE Digital" OR "Bit Digital" OR WhiteFiber OR "Highrise AI" OR '
+                              '"BUZZ HPC" OR IREN OR "Applied Digital") '
+                              '(AI OR GPU OR HPC OR "data center" OR "artificial intelligence") sourcelang:english',
+    "gdelt_miner_datacenters": '("Core Scientific" OR "Galaxy Digital" OR "Cipher Mining" OR "Cipher Digital" OR TeraWulf OR '
+                               'CleanSpark OR "Riot Platforms" OR "MARA Holdings" OR "Marathon Digital") '
+                               '(AI OR GPU OR HPC OR "data center" OR "artificial intelligence") sourcelang:english',
 }
 
 _FR = ("https://www.federalregister.gov/api/v1/documents.json?per_page=50&order=newest"
@@ -200,6 +211,22 @@ _ALL = [
           ("crusoe", "Crusoe Inc. (Form D)", 1924674, {"provider": "crusoe"}, "private issuer: Form D notices of exempt offerings (funding)"),
           ("crusoe_energy", "Crusoe Energy Systems (Form D)", 1770688, {"provider": "crusoe"}, "private issuer: Form D (funding), earlier entity"),
           ("fluidstack", "Fluidstack Ltd (Form D)", 2104151, {"provider": "fluidstack"}, "private issuer: Form D (funding)"),
+          # Bitcoin miners whose filings are now largely about AI compute (docs/MINER_PROVIDERS.md). A filing's title
+          # is its form and item codes, never its subject, so the company comes from the hint and a mining-only
+          # filing is tagged too. That is why miners whose filings are still mostly about mining or crypto finance
+          # (CleanSpark, Riot, MARA, Galaxy Digital) are not listed here: GDELT covers their AI news.
+          ("btdr", "Bitdeer", 1899123, {"provider": "bitdeer"}, "foreign private issuer: 6-K, 20-F"),
+          ("iren", "IREN", 1878848, {"provider": "iren"}, "6-K and 20-F until 2025, then 8-K, 10-Q, 10-K"),
+          ("hut", "Hut 8", 1964789, {"provider": "hut8"}, ""),
+          ("hive", "HIVE Digital", 1720424, {"provider": "hive"},
+           "6-K, then 8-K, 10-Q, 10-K; its older annual reports (40-F) are not read"),
+          ("btbt", "Bit Digital", 1710350, {"provider": "bitdigital"}, "6-K and 20-F, then 8-K, 10-Q, 10-K"),
+          ("wyfi", "WhiteFiber", 2042022, {"provider": "bitdigital"},
+           "Bit Digital's GPU cloud, listed in 2025: S-1, 424B4, 8-K, 10-Q, 10-K"),
+          ("apld", "Applied Digital", 1144879, {"provider": "applieddigital"}, ""),
+          ("corz", "Core Scientific", 1839341, {"provider": "corescientific"}, ""),
+          ("cifr", "Cipher Digital (Cipher Mining until 2026)", 1819989, {"provider": "cipher"}, ""),
+          ("wulf", "TeraWulf", 1083301, {"provider": "terawulf"}, ""),
       )],
     # ---------------------------------------------------------------- GDELT (open data; attribution required)
     *[Source(sid, f"GDELT: {label}", "https://api.gdeltproject.org/api/v2/doc/doc?" + _urlencode(
@@ -210,6 +237,8 @@ _ALL = [
       for sid, label, q in (
           ("gdelt_gpu_cloud", "GPU cloud coverage", _GDELT_Q["gdelt_gpu_cloud"]),
           ("gdelt_gpu_market", "GPU market coverage", _GDELT_Q["gdelt_gpu_market"]),
+          ("gdelt_miner_gpu_clouds", "Bitcoin miners renting GPUs", _GDELT_Q["gdelt_miner_gpu_clouds"]),
+          ("gdelt_miner_datacenters", "Bitcoin miners leasing AI data centers", _GDELT_Q["gdelt_miner_datacenters"]),
       )],
     # ---------------------------------------------------------------- not enabled (could not verify a feed)
     Source("cme_press", "CME Group press releases", "https://www.cmegroup.com/media-room/press-releases.rss",

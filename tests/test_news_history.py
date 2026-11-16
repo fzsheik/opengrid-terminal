@@ -120,6 +120,43 @@ def test_sources_registry():
     for sid, q in registry._GDELT_Q.items():
         short = [ph for ph in re.findall(r'"([^"]+)"', q) if " " not in ph and len(ph) < 7]
         assert not short, f"{sid}: GDELT rejects short quoted phrases ({short}): leave them unquoted"
+    # Counts (CAPABILITIES.md states them): 93 registered, 78 enabled; 26 EDGAR filers, 4 GDELT queries.
+    assert (len(s), len(registry.enabled())) == (93, 78), (len(s), len(registry.enabled()))
+    assert len(edgar) == 26 and sum(x.kind == "gdelt" for x in s.values()) == 4
+
+    # Bitcoin miners moving into AI compute: two GDELT queries shaped like the GPU-market ones.
+    from urllib.parse import parse_qs, urlsplit
+    from news import classify
+    miners = ("gdelt_miner_gpu_clouds", "gdelt_miner_datacenters")
+    for sid in miners:
+        m, g, q = s[sid], s["gdelt_gpu_market"], registry._GDELT_Q[sid]
+        assert (m.kind, m.category, m.trust_tier, m.poll_seconds, m.max_items, m.topics, m.enabled) == \
+            (g.kind, g.category, g.trust_tier, g.poll_seconds, g.max_items, g.topics, True), sid
+        assert parse_qs(urlsplit(m.url).query) == {"query": [q], "mode": ["artlist"], "format": ["json"],
+                                                   "maxrecords": ["100"], "sort": ["datedesc"], "timespan": ["1d"]}
+        assert history.methods_for(m) == ["gdelt"] and history.GDELT_QUERIES[sid] == q
+        # The shape GDELT accepted live on 2026-11-15: two OR groups in parentheses (names, then compute words),
+        # English only, 249 characters at most (the longest one sent; a longer query was never tried).
+        names, context = re.fullmatch(r"\((.+?)\) \((.+?)\) sourcelang:english", q).groups()
+        assert len(q) <= 249 and q.count('"') % 2 == 0, (sid, len(q))
+        assert 2 <= len(names.split(" OR ")) <= 9 and context == 'AI OR GPU OR HPC OR "data center" OR "artificial intelligence"'
+        for term in names.split(" OR "):
+            assert term.startswith('"') == (" " in term), f"{sid}: quote a phrase, never a single word ({term})"
+            # Every name searched for is one the classifier knows, or its hits could never carry the company.
+            found = classify.classify(f"{term.strip(chr(34))} opens an AI data center", None)["entities"]["providers"]
+            assert len(found) == 1, (sid, term, found)
+    cls_of = lambda sid: {classify.provider_class(p["id"]) for t in registry._GDELT_Q[sid].split(") (")[0][1:].split(" OR ")  # noqa: E731
+                          for p in classify.classify(f"{t.strip(chr(34))} opens an AI data center", None)["entities"]["providers"]}
+    assert cls_of(miners[0]) == {"neocloud"} and cls_of(miners[1]) == {"datacenter"}
+    # Their EDGAR filers: the same submissions API, the company from the hint (a filing's title has no subject).
+    filers = {"sec_btdr": "bitdeer", "sec_iren": "iren", "sec_hut": "hut8", "sec_hive": "hive", "sec_btbt": "bitdigital",
+              "sec_wyfi": "bitdigital", "sec_apld": "applieddigital", "sec_corz": "corescientific", "sec_cifr": "cipher",
+              "sec_wulf": "terawulf"}
+    for sid, pid in filers.items():
+        assert s[sid].entity_hints == {"provider": pid} and pid in classify.PROVIDERS and s[sid].enabled, sid
+        assert (s[sid].max_items, s[sid].poll_seconds, s[sid].trust_tier) == (40, 3 * 3600, "official")
+    assert len({x.url for x in edgar}) == len(edgar), "one source per CIK"
+    assert not {"sec_clsk", "sec_riot", "sec_mara", "sec_glxy"} & set(s), "mostly mining / crypto finance filings: GDELT only"
     assert history.methods_for(s["lambda_blog"]) == ["feed_archive", "wayback_feed"]
     assert history.methods_for(s["crusoe_blog"]) == ["wayback_index"], "feedless provider: archived index pages"
     assert history.methods_for(s["sec_amd"]) == ["edgar"] and history.methods_for(s["cme_press"]) == []
@@ -253,7 +290,82 @@ def test_db_backfill_dedupe_provenance():
         scratchdb.drop(DB)
 
 
+def test_db_miner_history():
+    """The history run of a Bitcoin-miner GDELT query over GDELT's real answer for September 2026 (fetched
+    2026-11-15; trimmed from 88 articles to 9, each article object untouched), and EDGAR's --since window."""
+    url = scratchdb.create(DB + "_miners")
+    normalize.SessionLocal = fixtures.session(url)
+    try:
+        from sqlalchemy import text
+        S = normalize.SessionLocal
+        sid = "gdelt_miner_datacenters"
+        a, b = datetime(2026, 9, 1, tzinfo=UTC), datetime(2026, 10, 1, tzinfo=UTC)
+        routes = {history.GDELT_DOC + "?*": _read("gdelt_miner_datacenters_2026-09.json")}
+
+        http = FakeHttp(routes)
+        rep = history.run(a, b, only=[sid], methods=["gdelt"], http=http)
+        assert len(rep) == 1 and rep[0]["items"] == 9 and rep[0]["new_items"] == 9 and not rep[0]["errors"], rep
+        from urllib.parse import parse_qs, urlsplit
+        asked = parse_qs(urlsplit(http.seen[0]).query)
+        assert http.requests == 1, "one request for one month"
+        assert asked["query"] == [registry._GDELT_Q[sid]] and asked["maxrecords"] == ["250"]
+        assert (asked["startdatetime"], asked["enddatetime"]) == (["20260901000000"], ["20261001000000"])
+
+        def providers():
+            with S() as s:
+                rows = s.execute(text("""
+                    SELECT i.title, coalesce((SELECT string_agg(e.entity_value, ',' ORDER BY e.entity_value) FROM news_entities e
+                                              WHERE e.item_id = i.id AND e.entity_type = 'provider'), '') AS p,
+                           i.backfilled, i.provenance, i.source_id, i.published_at
+                    FROM news_items i""")).all()
+            return rows
+        rows = providers()
+        assert len(rows) == 9 and all(r.backfilled and r.source_id == sid for r in rows)
+        assert all(r.provenance["method"] == "gdelt" and "gdeltproject.org" in r.provenance["via"]
+                   and "startdatetime=20260901000000" in r.provenance["archive_url"] for r in rows)
+        assert all(a <= r.published_at < b for r in rows), "GDELT's first-seen time, inside the month asked for"
+        by = lambda start: {r.p for r in rows if r.title.startswith(start)}  # noqa: E731
+        # Compute context in the title ("GPU Financing", "AI Infrastructure"): the miners are named on the item.
+        assert by("IREN Climbs 4 % on $2 . 4B Blue Owl - Led GPU Financing ; Cipher Digital Gains") == {"cipher,iren"}
+        assert by("Cipher Digital Just Scored a Huge AI Infrastructure Breakthrough") == {"cipher"}
+        # A share-price title with no compute word: IREN counts anywhere, the miners' names do not (two outlets).
+        assert by("IREN Sinks 4 % as Rising Yields Reverse Monday Rally , TeraWulf Falls 4 %, Cipher Mining Drops") == {"iren"}
+        assert by("TeraWulf Drops 4 % on Profit Taking") == {"applieddigital,iren"}
+        assert by("Crypto Mining Stocks Fall Harder Than Bitcoin") == {""}, "mining-only news carries no company"
+        assert by("FluidStack Closes") == {"fluidstack"}
+        assert sum("cipher" in r.p or "terawulf" in r.p for r in rows) == 2
+
+        # Resumable: the same run again stores nothing (the real Http would not even download: the month is cached).
+        with S() as s:
+            raw = s.execute(text("SELECT count(*) FROM news_raw_items")).scalar()
+        rep2 = history.run(a, b, only=[sid], methods=["gdelt"], http=FakeHttp(routes))
+        assert rep2[0]["items"] == 9 and rep2[0]["new_items"] == 0
+        with S() as s:
+            assert s.execute(text("SELECT count(*) FROM news_raw_items")).scalar() == raw == 9
+        assert [tuple(r) for r in providers()] == [tuple(r) for r in rows]
+        # A month GDELT refused is an error on the report, never a stored empty month.
+        class Refused(FakeHttp):
+            def get(self, url, cache=True):
+                raise RuntimeError("gave up on " + url)
+        bad = history.run(a, b, only=[sid], methods=["gdelt"], http=Refused({}))
+        assert bad[0]["errors"] and bad[0]["errors"][0].startswith("2026-09: RuntimeError") and bad[0]["new_items"] == 0
+
+        # EDGAR: filings from before --since are not stored (a small filer's recent block reaches back decades).
+        hut = registry.get("sec_hut")
+        docs = {hut.url: _read("edgar_submissions.json")}
+        rep = history.run(a, only=["sec_hut"], methods=["edgar"], http=FakeHttp(docs))  # the fixture: 2 kept filings in August, 1 in September
+        with S() as s:
+            got = s.execute(text("""SELECT min(i.published_at), count(*), count(*) FILTER (WHERE EXISTS (SELECT 1 FROM news_entities e
+                WHERE e.item_id = i.id AND e.entity_type = 'provider' AND e.entity_value = 'hut8')) FROM news_items i
+                WHERE i.source_id = 'sec_hut'""")).one()
+        assert rep[0]["new_items"] == got[1] == got[2] == 1, (rep, tuple(got))
+        assert got[0] >= a, "the company comes from the source hint; older filings are left out"
+    finally:
+        scratchdb.drop(DB + "_miners")
+
+
 if __name__ == "__main__":
-    for t in (test_parse_edgar_gdelt_index, test_pick_next_walk, test_sources_registry, test_db_backfill_dedupe_provenance):
+    for t in (test_parse_edgar_gdelt_index, test_pick_next_walk, test_sources_registry, test_db_backfill_dedupe_provenance,
+              test_db_miner_history):
         t()
         print(t.__name__, "ok")

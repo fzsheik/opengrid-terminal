@@ -180,6 +180,8 @@ def test_classify_providers_regions_topics():
     assert pc("Helios campus: Galaxy secures financing for AI data center buildout")["galaxy"] == "datacenter"
     assert pc("Cipher Mining signs AI hosting lease with Fluidstack for its data center") == \
         {"fluidstack": "neocloud", "cipher": "datacenter"}
+    assert pc("Cipher Digital expands AI data center campus in Texas") == {"cipher": "datacenter"}, "renamed in 2026"
+    assert pc("Cipher Digital reports monthly bitcoin production") == {}
     assert pc("TeraWulf signs 10-year HPC hosting agreements backed by Google") == {"terawulf": "datacenter"}
     assert pc("Riot Platforms evaluates AI data center use for Corsicana site") == {"riot": "datacenter"}
     # Mining-only news is not compute news, and bare common words never match.

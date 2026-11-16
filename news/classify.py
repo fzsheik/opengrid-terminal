@@ -198,7 +198,8 @@ _P = [
     ("galaxy", "Galaxy Digital", [(r"\bGalaxy Digital\b", False, True),
                                   (r"\bHelios\b(?=[^\n]{0,120}\bGalaxy\b)|\bGalaxy\b(?=[^\n]{0,120}\bHelios\b)", True, True)],
      "datacenter"),
-    ("cipher", "Cipher Mining", [(r"\bCipher Mining\b", False, True)], "datacenter"),
+    # Renamed Cipher Digital in February 2026 (SEC EDGAR former names); the id and display name stay.
+    ("cipher", "Cipher Mining", [(r"\bCipher (?:Mining|Digital)\b", False, True)], "datacenter"),
     ("terawulf", "TeraWulf", [(r"\bTeraWulf\b", False, True)], "datacenter"),
     ("cleanspark", "CleanSpark", [(r"\bCleanSpark\b", False, True)], "datacenter"),
     ("riot", "Riot Platforms", [(r"\bRiot (?:Platforms|Blockchain)\b", False, True)], "datacenter"),

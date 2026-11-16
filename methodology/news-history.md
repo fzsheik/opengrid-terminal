@@ -15,8 +15,8 @@ Code: `news/history.py`. Columns: `news_raw_items.origin`, `archive_url`, `captu
 | `feed_archive` | The feed's own archive pages. WordPress `?paged=N` counts only if page 2 is strictly older than page 1, which is checked per source; many feeds ignore the parameter. The Federal Register API is read by publication-date range. | WordPress feeds (NVIDIA blog, AWS blogs, Microsoft, Meta, TechCrunch, ServeTheHome, EE Times, SemiAnalysis, Azure blog...), the Federal Register |
 | `wayback_feed` | The Internet Archive's captures of the feed URL (CDX API). Each capture is the feed as it was that day. | every enabled RSS / Atom source |
 | `wayback_index` | Captures of blog and newsroom index pages, for providers that publish no feed. Only items with a machine-readable date are kept: JSON-LD `datePublished`, a Next.js page's embedded data, or `<time datetime>` inside an `<article>`. An undated link is not stored. | Crusoe, Nebius, Vast, Verda, Fluidstack, Hyperbolic, Silicon Data |
-| `edgar` | The SEC's submissions API, including the older-filings pages. | SEC EDGAR sources |
-| `gdelt` | The GDELT DOC 2.0 API, month by month, for two GPU-market queries. | GDELT sources |
+| `edgar` | The SEC's submissions API, including the older-filings pages. Filings from before `--since` are not stored. | SEC EDGAR sources |
+| `gdelt` | The GDELT DOC 2.0 API, month by month, one request a month for each query: the 250 most relevant articles of that month. | the four GDELT sources (two GPU-market queries, two Bitcoin-miner queries; see [news](news)) |
 
 **Walking the Internet Archive.** Captures are read newest to oldest. After each capture, the next one read is the
 newest capture at or before the oldest item just seen, plus one day of overlap. The feed's whole window is covered
@@ -84,3 +84,24 @@ the walk's budget (`--max-captures`, `--max-pages`).
 - **GDELT**: two GPU-market queries over the last day, every 6 hours.
 
 All of them have the same health tracking as every other source.
+
+## Bitcoin miners moving into AI compute (2026-11-15)
+
+The news sources never searched for these companies, so stored news had almost nothing about them. Two GDELT
+queries and ten EDGAR filers were added (listed in [news](news)). Their past is recovered with:
+
+```
+python -m news.history run --since 2023-01-01 --method gdelt --source gdelt_miner_gpu_clouds --source gdelt_miner_datacenters
+python -m news.history run --since 2023-01-01 --method edgar --source sec_btdr --source sec_iren --source sec_hut \
+    --source sec_hive --source sec_btbt --source sec_wyfi --source sec_apld --source sec_corz --source sec_cifr --source sec_wulf
+```
+
+- **GDELT** is one request a month for each query, newest month first. A month GDELT refused (HTTP 429) is
+  reported as an error and is not cached, so running the same command again asks only for the months still
+  missing. A month already answered costs no request and stores nothing new.
+- A month holds at most 250 articles for each query. In a busy month the rest is not recovered.
+- GDELT gives the title only. The miner is named on an item only when the title has compute context, so many
+  recovered articles (share-price notes, mining updates that mention AI in the text) are stored without a
+  company and score low.
+- **EDGAR** is one request for each filer. Every kept filing since `--since` is stored with the company, mining
+  filings included, because a filing's title does not say what it is about.

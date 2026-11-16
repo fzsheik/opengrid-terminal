@@ -17,8 +17,9 @@ Methods, per source (all idempotent: a re-run stores nothing new and, with the c
                    Vast, ...): only items with a machine-readable date (JSON-LD datePublished, a Next.js page's
                    data, <time datetime>) are kept. An undated link is not news history.
     gdelt          the GDELT DOC 2.0 API (free for any use with attribution to the GDELT Project), month by month,
-                   for GPU-market queries. The time is GDELT's first-seen time for the article (minutes after
-                   publication in practice), stated in the provenance.
+                   for the registry's GDELT queries (GPU market, Bitcoin miners moving into AI compute): one request
+                   a month per query, the 250 most relevant articles. The time is GDELT's first-seen time for the
+                   article (minutes after publication in practice), stated in the provenance.
 
 Politeness: one archive request at a time, at least 4.5 s apart on the Internet Archive (backfill/wayback.py),
 5 s on GDELT (its stated limit), 0.25 s on EDGAR (well under the SEC's 10/s), 2 s on a publisher's own pages;
@@ -323,7 +324,10 @@ def edgar(http: Http, src: registry.Source, since: datetime, dry_run: bool = Fal
         return rep
     doc = json.loads(body)
     name = doc.get("name")
-    items = parse.parse_edgar(body)
+    # The recent block holds up to 1000 filings, for a small filer two decades of them, some from before the
+    # company was what it is now (TeraWulf's CIK was an imaging company until 2021): keep the window asked for.
+    recent = lambda items: [d for d in items if not d.get("published_at") or d["published_at"] >= since]  # noqa: E731
+    items = recent(parse.parse_edgar(body))
     rep.saw(items, _store(src, items, "edgar", src.url, None, dry_run))
     for f in (doc.get("filings") or {}).get("files") or []:
         if (f.get("filingTo") or "9999") < since.strftime("%Y-%m-%d"):
@@ -331,7 +335,7 @@ def edgar(http: Http, src: registry.Source, since: datetime, dry_run: bool = Fal
         url = f"https://data.sec.gov/submissions/{f['name']}"
         b = http.get(url)
         if b:
-            older = parse.parse_edgar(b, name=name)
+            older = recent(parse.parse_edgar(b, name=name))
             rep.saw(older, _store(src, older, "edgar", url, None, dry_run))
     return rep
 
