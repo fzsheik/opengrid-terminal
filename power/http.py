@@ -1,10 +1,11 @@
 """Polite HTTP for power sources: one request at a time per source, paced, retried, secrets redacted.
 
-    Client(client, source, pace_seconds, secrets=()).get(url, params=None, headers=None) -> Fetched
+    Client(client, source, pace_seconds, secrets=()).get(url, params=None, headers=None, max_bytes=None) -> Fetched
 
 The body is read whole (bounded by MAX_BYTES): every power request is one market day or a few, at most a few MB
-(the largest, a MISO all-node day file, is about 3 MB); nothing is written to disk. A 429 waits Retry-After (or
-RETRY_SECONDS); a dropped connection, a timeout or a 5xx backs off and retries. The last answer is returned, never
+(the largest, a MISO all-node day file, is about 3 MB); nothing is written to disk. A source whose archive files are
+known to be larger passes max_bytes (CAISO's 2014-2017 production and curtailment workbook is 68 MB). A 429 waits
+Retry-After (or RETRY_SECONDS); a dropped connection, a timeout or a 5xx backs off and retries. The last answer is returned, never
 raised: the runner stores failures as power_fetches rows too.
 """
 
@@ -43,7 +44,7 @@ class Client:
             s = s.replace(x, "***")
         return s
 
-    async def get(self, url: str, params=None, headers=None) -> Fetched:
+    async def get(self, url: str, params=None, headers=None, max_bytes: int | None = None) -> Fetched:
         full = f"{url}?{urlencode(params, doseq=True)}" if params else url
         shown = self.redact(full)[:1000]
         lock = _locks.setdefault(self.source, asyncio.Lock())
@@ -80,8 +81,9 @@ class Client:
                     transient += 1
                     continue
                 body = resp.content
-                if len(body) > MAX_BYTES:
+                cap = max_bytes or MAX_BYTES
+                if len(body) > cap:
                     return Fetched(shown, resp.status_code, ms, None, resp.headers.get("content-type"),
-                                   error=f"body over {MAX_BYTES} bytes")
+                                   error=f"body over {cap} bytes")
                 err = None if resp.status_code < 400 else f"HTTP {resp.status_code}: {self.redact(resp.text[:300])}"
                 return Fetched(shown, resp.status_code, ms, body, resp.headers.get("content-type"), error=err)

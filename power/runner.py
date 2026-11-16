@@ -207,6 +207,13 @@ async def forward_job() -> dict:
         out["cross"] = await asyncio.to_thread(cross.refresh)
     except ImportError:
         pass
+    try:
+        from power import flaring
+
+        out["flaring"] = await flaring.forward_if_due()
+    except Exception as exc:  # noqa: BLE001 - flaring failing never fails the power prices' job
+        log.exception("power flaring forward failed")
+        out["flaring"] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
     return out
 
 

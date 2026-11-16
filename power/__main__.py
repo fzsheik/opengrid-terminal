@@ -1,12 +1,15 @@
 """python -m power backfill|forward|status|sources [--since YYYY-MM[-DD]] [--until YYYY-MM-DD]
                                                  [--source caiso ...] [--dataset caiso.da_lmp ...] [--dry-run]
+python -m power flaring [--source worldbank_ggfd|ndic] [--since YYYY-MM] [--refresh] [--dry-run]
 
     backfill   every missing market day from --since (default: each source's earliest) to its latest complete
                day; idempotent and resumable (stored days are skipped). Run it detached on the server, e.g.
                nohup .venv/bin/python -m power backfill --since 2021-01 > /tmp/power-backfill.log 2>&1 &
     forward    what the power_forward job does (the last stored days, with an overlap), then the cross-analysis
     status     per dataset: series, series-days, depth, raw bytes kept; table sizes
-    sources    the registry: every source, its terms verdict and what it needs
+    sources    the registry: every source, its terms verdict and what it needs (and the datasets declined)
+    flaring    gas flaring (power/flaring.py): the World Bank CC BY files once, North Dakota's monthly reports from
+               --since (default 2015-05) to the latest posted; idempotent and resumable; --refresh re-reads all
 
 --source may repeat (or be comma-separated); a named source runs even when POWER_SOURCES leaves it out, never
 without its keys. Progress is logged one line per 10 requests.
@@ -38,7 +41,7 @@ def _one(argv: list[str], flag: str) -> str | None:
 
 
 def main(argv: list[str]) -> int:
-    if not argv or argv[0] not in ("backfill", "forward", "status", "sources"):
+    if not argv or argv[0] not in ("backfill", "forward", "status", "sources", "flaring"):
         print(__doc__)
         return 2
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
@@ -48,7 +51,23 @@ def main(argv: list[str]) -> int:
 
     cmd = argv[0]
     if cmd == "sources":
-        print(json.dumps(registry.as_list(), indent=1, default=str))
+        from power import flaring
+
+        print(json.dumps({"sources": registry.as_list(), "flaring": flaring.verdicts(),
+                          "declined": registry.declined_list()}, indent=1, default=str))
+        return 0
+    if cmd == "flaring":
+        from power import flaring
+
+        bad = [s for s in _multi(argv, "--source") if s not in flaring.SOURCES]
+        if bad:
+            print(f"unknown flaring source(s) {bad}; known: {sorted(flaring.SOURCES)}", file=sys.stderr)
+            return 2
+        since = _one(argv, "--since")
+        out = asyncio.run(flaring.run(_multi(argv, "--source") or None, since=since and _date(since),
+                                      refresh="--refresh" in argv, dry_run="--dry-run" in argv))
+        print(json.dumps(out, indent=1, default=str))
+        print(json.dumps(flaring.status(), indent=1, default=str))
         return 0
     if cmd in ("backfill", "forward"):
         sources = _multi(argv, "--source") or None

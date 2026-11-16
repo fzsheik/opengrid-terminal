@@ -17,6 +17,10 @@
                                      edition per source unless ?edition; plus MW queued per county, generation and
                                      load apart, active requests only
     GET /v1/ops/power/sites/status   ADMIN ONLY. Site tables: rows, bytes, editions, fetches; and the registry
+    GET /v1/ops/power/curtailment    ADMIN ONLY. Wind / solar curtailment per region, reason and day (MWh), with the
+                                     curtailed share of potential output where output is known (power/waste.py)
+    GET /v1/ops/power/flaring        ADMIN ONLY. Flare sites ranked by flared volume with coordinates, or (?view=
+                                     counties) regulator volumes by county, or (?lat=&lon=) the volume near a point
 
 Every power read is admin-only, with Cache-Control: private, no-store. There is no public route: power data is for
 OpenGrid's own routing and research (the EIA-930 series are public domain and could be published later, through
@@ -50,8 +54,11 @@ def _ops(resp: Response, rows, **kw):
 @router.get("/v1/ops/power/sources", tags=["ops"], include_in_schema=False,
             summary="Ops: power sources, terms verdicts and configuration")
 def ops_power_sources(response: Response, who: Principal = Depends(ADMIN)):
+    from power import flaring
+
     rows = registry.as_list()
-    return _ops(response, rows, count=len(rows), selected=registry.selected())
+    return _ops(response, rows, count=len(rows), selected=registry.selected(), flaring=flaring.verdicts(),
+                declined=registry.declined_list())
 
 
 @router.get("/v1/ops/power/status", tags=["ops"], include_in_schema=False, summary="Ops: power storage status")
@@ -167,3 +174,49 @@ def ops_power_sites_status(response: Response, who: Principal = Depends(ADMIN)):
     st = sites_runner.status()
     return _sites(response, st["tables"], sources=site_registry.as_list(), **{k: v for k, v in st.items()
                                                                                if k != "tables"})
+
+
+WASTE_DOC = "methodology/power-waste.md"
+
+
+@router.get("/v1/ops/power/curtailment", tags=["ops"], include_in_schema=False,
+            summary="Ops (internal): wind and solar curtailment by region, reason and day")
+def ops_power_curtailment(response: Response, iso: str | None = None, fuel: str | None = None,
+                          since: date | None = None, until: date | None = None,
+                          who: Principal = Depends(ADMIN)):
+    from power import waste
+
+    if since and until and since > until:
+        raise HTTPException(422, {"code": "bad_window", "message": "since is after until"})
+    if since and until and (until - since).days > 3660:
+        raise HTTPException(422, {"code": "window_too_long", "message": "at most ten years per request"})
+    rows = waste.curtailment(since, until, iso, fuel)
+    response.headers["Cache-Control"] = "private, no-store"
+    return envelope(rows, kind=OBSERVED, doc=WASTE_DOC, count=len(rows), visibility="internal", note=waste.NOTE,
+                    share_rule="share_curtailed = curtailed / (curtailed + output), all-reasons rows only",
+                    proxy_rule=("measure 'proxy_hsl_minus_output' (ERCOT) is max(0, HSL - output), an estimate, "
+                                "not reported curtailment"))
+
+
+@router.get("/v1/ops/power/flaring", tags=["ops"], include_in_schema=False,
+            summary="Ops (internal): gas flare sites ranked by volume, county volumes, or volume near a point")
+def ops_power_flaring(response: Response, view: str = Query("sites", pattern="^(sites|counties)$"),
+                      country: str | None = None, state: str | None = None, year: int | None = None,
+                      source: str | None = None, lat: float | None = Query(None, ge=-90, le=90),
+                      lon: float | None = Query(None, ge=-180, le=180),
+                      radius_km: float = Query(50.0, gt=0, le=500), period: date | None = None,
+                      limit: int = Query(100, ge=1, le=5000), who: Principal = Depends(ADMIN)):
+    from power import flaring, waste
+
+    response.headers["Cache-Control"] = "private, no-store"
+    meta = {"doc": WASTE_DOC, "visibility": "internal", "note": waste.NOTE, "energy_rule": flaring.ENERGY_RULE}
+    if (lat is None) != (lon is None):
+        raise HTTPException(422, {"code": "bad_point", "message": "give both lat and lon"})
+    if lat is not None:
+        near = waste.flared_near(lat, lon, radius_km, year, source)
+        return envelope(near, kind=OBSERVED, count=len(near["nearest"]), **meta)
+    if view == "counties":
+        rows = waste.flared_by_county(state, period, "month", source, limit)
+        return envelope(rows, kind=OBSERVED, count=len(rows), **meta)
+    rows = waste.flare_sites(country, state, year, limit, source)
+    return envelope(rows, kind=OBSERVED, count=len(rows), **meta)

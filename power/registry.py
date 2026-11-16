@@ -108,6 +108,73 @@ class Dataset:
     meta: dict = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class Declined:
+    """A dataset considered and NOT pulled: its terms forbid commercial use or automated access, it needs an
+    account, or no honest route exists. Kept here so the verdict is recorded once, beside the pulled sources."""
+    dataset: str
+    terms: Terms
+    why: str
+
+
+DECLINED = (
+    Declined("eog_vnf_annual", Terms(
+        operator="Earth Observation Group, Payne Institute, Colorado School of Mines",
+        visibility=INTERNAL,
+        reason=("VIIRS Nightfire annual flare site records (Zenodo doi:10.5281/zenodo.23091822, 2012-2025, keyless). "
+                "README: 'License: CC BY-NC 4.0 ... Commercial use requires permission from the Earth Observation "
+                "Group, Payne Institute for Public Policy, Colorado School of Mines.' Ranking sites for a commercial "
+                "product is commercial use, so not pulled, not even internally."),
+        terms_url="https://eogdata.mines.edu/products/vnf/global_gas_flare.html", checked="2026-11-15",
+        signup="Commercial licence by request: eog@mines.edu"),
+        "non-commercial licence"),
+    Declined("worldbank_gfmr_2012_2025", Terms(
+        operator="World Bank, Global Flaring and Methane Reduction Partnership",
+        visibility=INTERNAL,
+        reason=("Flare-Volume-Estimates-by-individual-Flare-Location-2012-2025.xlsx and the country file "
+                "(thedocs.worldbank.org) carry no open licence and are not in the Data Catalog, so the site terms "
+                "apply: 'For the remainder of the Materials, you may make non-commercial uses thereof, but you may "
+                "not make any derivative work or commercial use ... without the prior written consent.' The volumes "
+                "are EOG's CC BY-NC release. Not pulled; the CC BY 4.0 catalog files (2017-2021) are used instead."),
+        terms_url="https://www.worldbank.org/ext/en/legal/terms-conditions", checked="2026-11-15"),
+        "non-commercial terms"),
+    Declined("rrc_pdq_dump", Terms(
+        operator="Railroad Commission of Texas",
+        visibility=INTERNAL,
+        reason=("Texas lease-level 'vented or flared' gas (disposition code 04, flared and vented combined) is in the "
+                "Production Data Query dump (PDQ_DSV.zip, 3.45 GB, ~25 GB unzipped, monthly) served through a "
+                "GoAnywhere file-transfer web app (mft.rrc.texas.gov) that needs a browser session, not a plain "
+                "file URL. Site policies: 'RRC grants permission to copy and distribute the information on its "
+                "website for noncommercial use'; the PDQ query pages end sessions that use 'an automated tool'. Not "
+                "pulled in this change: an internal-only, county-level extract is possible but needs a streaming "
+                "reader for a multi-GB zip and a check that the portal allows scripted download."),
+        terms_url="https://www.rrc.texas.gov/site-policies/", checked="2026-11-15"),
+        "multi-GB dump behind a session portal; redistribution noncommercial only"),
+    Declined("ercot_wind_solar_archive", Terms(
+        operator="Electric Reliability Council of Texas",
+        visibility=PUBLIC,
+        reason=("History of NP4-732-CD / NP4-737-CD beyond the ~7 days the MIS keeps is only behind api.ercot.com "
+                "(HTTP 401 without an Ocp-Apim-Subscription-Key, which needs an ERCOT account). No account is "
+                "created, so the ERCOT curtailment proxy starts when the forward job first runs."),
+        terms_url="https://www.ercot.com/help/terms", checked="2026-11-15",
+        signup="ERCOT Public API registration (apiexplorer.ercot.com)"),
+        "needs an account"),
+    Declined("caiso_oasis_curtailment", Terms(
+        operator="California ISO", visibility=INTERNAL,
+        reason=("Not needed: CAISO's production and curtailment workbooks and daily renewable reports "
+                "(power/sources/caiso_curtailment.py) carry curtailment by fuel and reason; OASIS has no "
+                "curtailment report of its own."),
+        terms_url="https://www.caiso.com/privacy-terms-of-use", checked="2026-11-15"),
+        "covered by caiso_curtailment"),
+)
+
+
+def declined_list() -> list[dict]:
+    return [{"dataset": d.dataset, "operator": d.terms.operator, "why": d.why, "reason": d.terms.reason,
+             "terms_url": d.terms.terms_url, "terms_checked": d.terms.checked, "signup": d.terms.signup,
+             "pulled": False} for d in DECLINED]
+
+
 # --------------------------------------------------------------------------- discovery
 
 def modules() -> list:

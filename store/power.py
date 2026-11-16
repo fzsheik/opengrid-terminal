@@ -20,14 +20,18 @@
     power_generators, power_generator_history, power_plant_generation, power_queue_projects
                     PHYSICAL SITES (power/sites/; 0045): EIA generator inventory with its change-only history,
                     annual net generation per plant, and interconnection-queue projects per published edition
+    power_flare_sites / power_flare_volumes / power_flare_areas   gas flared at oil and gas sites: sites with
+                    coordinates, their volume per year, regulator volumes per county and month (power/flaring.py;
+                    methodology/power-waste.md). Curtailment needs no table of its own: it is power_series /
+                    power_days (kind "curtailment")
 
 Nothing here is read by listings, rollups, indices, fixings, archived prices or any GPU statistic.
 """
 
 from datetime import date, datetime
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, LargeBinary
-from sqlalchemy import REAL, CheckConstraint, SmallInteger, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Index, Integer
+from sqlalchemy import LargeBinary, REAL, SmallInteger, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -259,4 +263,77 @@ class PowerQueueProject(Base):
     developer: Mapped[str | None] = mapped_column(String(200))
     visibility: Mapped[str] = mapped_column(String(8), server_default="internal")
     fetch_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("power_fetches.id", ondelete="SET NULL"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+# --------------------------------------------------------------------------- flaring (0046_power_waste)
+# Small: thousands of sites, one row per site and year. Raw first: every file read is a power_fetches row.
+
+class PowerFlareSite(Base):
+    """A flare site: a satellite detection cell (World Bank / VIIRS: 0.01 degree) or a regulator's location (North
+    Dakota: the PLSS section holding the flaring wells). Coordinates are the source's own (WGS84)."""
+    __tablename__ = "power_flare_sites"
+    __table_args__ = (UniqueConstraint("source", "site_key", name="uq_power_flare_sites_source_key"),
+                      Index("ix_power_flare_sites_lat_lon", "lat", "lon"),
+                      Index("ix_power_flare_sites_country_state", "country", "state"),
+                      CheckConstraint("visibility IN ('public', 'internal')", name="ck_power_flare_sites_visibility"))
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(String(32))
+    site_key: Mapped[str] = mapped_column(String(64))           # "c+3103+04728" | "t151r101s11"
+    name: Mapped[str | None] = mapped_column(String(200))
+    kind: Mapped[str | None] = mapped_column(String(32))         # "upstream oil" | "downstream" | "wells" ...
+    country: Mapped[str | None] = mapped_column(String(3))       # ISO 3166 alpha-3
+    country_name: Mapped[str | None] = mapped_column(String(80))
+    state: Mapped[str | None] = mapped_column(String(8))
+    county: Mapped[str | None] = mapped_column(String(64))
+    lat: Mapped[float] = mapped_column(Float)
+    lon: Mapped[float] = mapped_column(Float)
+    meta: Mapped[dict | None] = mapped_column(JSONB)
+    visibility: Mapped[str] = mapped_column(String(8), default="internal", server_default="internal")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PowerFlareVolume(Base):
+    """A site's flared gas in a year, in m3 and mcf (1 mcf = 28.316846592 m3; the source's own unit is exact, the
+    other converted). monthly_mcf holds the months where the source is monthly (North Dakota): slot 1 = January,
+    NULL = not reported (yet). energy_mwh_derived is DERIVED (power/flaring.py: heat content x heat rate)."""
+    __tablename__ = "power_flare_volumes"
+    __table_args__ = (Index("ix_power_flare_volumes_year", "year"),)
+
+    site_id: Mapped[int] = mapped_column(Integer, ForeignKey("power_flare_sites.id", ondelete="CASCADE"),
+                                         primary_key=True)
+    year: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    volume_m3: Mapped[float | None] = mapped_column(Float)
+    volume_mcf: Mapped[float | None] = mapped_column(Float)
+    monthly_mcf: Mapped[list | None] = mapped_column(ARRAY(REAL))
+    months_reported: Mapped[int | None] = mapped_column(SmallInteger)
+    detections: Mapped[int | None] = mapped_column(Integer)      # source rows merged into the site that year
+    energy_mwh_derived: Mapped[float | None] = mapped_column(Float)
+    fetch_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("power_fetches.id", ondelete="SET NULL"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PowerFlareArea(Base):
+    """Flared gas by area and period from a regulator (North Dakota: county x month), with the gas produced there
+    where the source gives it, so the flared share is known."""
+    __tablename__ = "power_flare_areas"
+    __table_args__ = (CheckConstraint("visibility IN ('public', 'internal')", name="ck_power_flare_areas_visibility"),
+                      Index("ix_power_flare_areas_period", "period"))
+
+    source: Mapped[str] = mapped_column(String(32), primary_key=True)
+    area_type: Mapped[str] = mapped_column(String(16), primary_key=True)   # "county" | "state"
+    country: Mapped[str] = mapped_column(String(3), primary_key=True)
+    state: Mapped[str] = mapped_column(String(8), primary_key=True)
+    area: Mapped[str] = mapped_column(String(64), primary_key=True)
+    period: Mapped[date] = mapped_column(Date, primary_key=True)          # first day of the month / year
+    period_type: Mapped[str] = mapped_column(String(8), primary_key=True)  # "month" | "year"
+    volume_mcf: Mapped[float | None] = mapped_column(Float)
+    gas_produced_mcf: Mapped[float | None] = mapped_column(Float)
+    wells: Mapped[int | None] = mapped_column(Integer)                     # wells reporting gas flared > 0
+    energy_mwh_derived: Mapped[float | None] = mapped_column(Float)
+    meta: Mapped[dict | None] = mapped_column(JSONB)
+    fetch_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("power_fetches.id", ondelete="SET NULL"))
+    visibility: Mapped[str] = mapped_column(String(8), default="internal", server_default="internal")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

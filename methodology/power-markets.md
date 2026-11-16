@@ -6,6 +6,9 @@ data in its own tables (`power_*`), and the data is analysed beside GPU prices a
 into them. Power data is never written into listings, rollups, indices, fixings or archived prices. It never votes
 in a GPU statistic, and nothing here says that a power price moved a GPU price.
 
+Wind and solar curtailment and gas flaring (energy thrown away that a small datacenter could use) are in
+[wasted energy](power-waste.md): curtailment is stored in the same power series tables, flaring in its own.
+
 Kind: **observed** (the series), **derived** (the cross-analysis). Code: `power/`. There is no public power route: every read is admin-only, under `/v1/ops/power/`
 (sources, status, series, map, cross/regional, cross/leadlag, shifts).
 
