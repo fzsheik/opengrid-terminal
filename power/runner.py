@@ -199,8 +199,19 @@ async def run(mode: str = "forward", sources: list[str] | None = None, since: da
 
 
 async def forward_job() -> dict:
-    """The power_forward job: forward for the selected sources, then the derived cross-analysis."""
+    """The power_forward job: forward for the selected sources, then the per-node daily summaries (after the hub
+    run, so ERCOT's documents come from memory), then the derived cross-analysis."""
+    from config import settings
+
     out = await run("forward")
+    if settings.power_nodal:
+        from power import nodal
+
+        try:
+            out["nodal"] = await nodal.run("forward")
+        except Exception as exc:  # noqa: BLE001 - the nodal summaries never stop the hub data or the cross-analysis
+            log.exception("power nodal forward failed")
+            out["nodal"] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
     try:
         from power import cross
 

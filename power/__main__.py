@@ -1,6 +1,9 @@
 """python -m power backfill|forward|status|sources [--since YYYY-MM[-DD]] [--until YYYY-MM-DD]
                                                  [--source caiso ...] [--dataset caiso.da_lmp ...] [--dry-run]
-python -m power flaring [--source worldbank_ggfd|ndic] [--since YYYY-MM] [--refresh] [--dry-run]
+       python -m power flaring [--source worldbank_ggfd|ndic] [--since YYYY-MM] [--refresh] [--dry-run]
+       python -m power nodal backfill|forward [--since ..] [--until ..] [--source spp] [--dataset spp.rt_nodal]
+       python -m power nodal status
+       python -m power nodal cheap [--days 90] [--market ercot|spp] [--series rt|da] [--zone ..] [--type ..]
 
     backfill   every missing market day from --since (default: each source's earliest) to its latest complete
                day; idempotent and resumable (stored days are skipped). Run it detached on the server, e.g.
@@ -10,6 +13,10 @@ python -m power flaring [--source worldbank_ggfd|ndic] [--since YYYY-MM] [--refr
     sources    the registry: every source, its terms verdict and what it needs (and the datasets declined)
     flaring    gas flaring (power/flaring.py): the World Bank CC BY files once, North Dakota's monthly reports from
                --since (default 2015-05) to the latest posted; idempotent and resumable; --refresh re-reads all
+    sources    the registry: every source, its terms verdict and what it needs
+    nodal      per-node daily summaries (power/nodal.py): backfill (default: the last 366 days the source still
+               holds; one request a day, ERCOT RT 96), forward (what the power_forward job runs after the hubs),
+               status (nodes, rows, depth, table bytes), cheap (the stranded-power ranking)
 
 --source may repeat (or be comma-separated); a named source runs even when POWER_SOURCES leaves it out, never
 without its keys. Progress is logged one line per 10 requests.
@@ -40,12 +47,52 @@ def _one(argv: list[str], flag: str) -> str | None:
     return v[-1] if v else None
 
 
+def nodal_main(argv: list[str]) -> int:
+    from power import nodal, registry
+
+    cmd = argv[0] if argv else ""
+    if cmd in ("backfill", "forward"):
+        sources = _multi(argv, "--source") or None
+        known = {d.source for d in registry.nodal_datasets()}
+        bad = [s for s in sources or [] if s not in known]
+        if bad:
+            print(f"no nodal datasets for {bad}; known: {sorted(known)}", file=sys.stderr)
+            return 2
+        since, until = _one(argv, "--since"), _one(argv, "--until")
+        out = asyncio.run(nodal.run(cmd, sources=sources, since=since and _date(since), until=until and _date(until),
+                                    dry_run="--dry-run" in argv, datasets=_multi(argv, "--dataset") or None))
+        print(json.dumps(out, indent=1, default=str))
+    elif cmd == "cheap":
+        rows = nodal.cheap_nodes(int(_one(argv, "--days") or 90), _one(argv, "--market"),
+                                 series=_one(argv, "--series") or "rt", zone=_one(argv, "--zone"),
+                                 node_type=_one(argv, "--type"), min_days=int(_one(argv, "--min-days") or 7),
+                                 limit=int(_one(argv, "--limit") or 25))
+        for r in rows:
+            print(f'{r["market"]:5} {r["node"]:24} {r["node_type"] or "-":19} {r["zone"] or "-":10} '
+                  f'<$20 {r["share_below_20"]:6.1%}  <$0 {r["share_below_0"]:6.1%}  {r["hours_below_0"]:7.1f} h<0  '
+                  f'median {r["median"]:7.2f}  days {r["days"]}')
+        return 0
+    elif cmd != "status":
+        print(__doc__)
+        return 2
+    st = nodal.status()
+    for d in st["datasets"]:
+        print(f'{d["dataset"]:16} {d["visibility"]:8} nodes {d["nodes"]:5} rows {d["rows"]:8} days {d["days"]:4} '
+              f'{d["earliest"] or "-"} .. {d["latest"] or "-"} (catalogue {d["catalogue_nodes"]})')
+    print(f'nodal tables total {st["total_bytes"] / 1e6:.1f} MB: '
+          + ", ".join(f"{k} {v / 1e6:.1f}" for k, v in sorted(st["table_bytes"].items())))
+    return 0
+
+
 def main(argv: list[str]) -> int:
-    if not argv or argv[0] not in ("backfill", "forward", "status", "sources", "flaring"):
+    if not argv or argv[0] not in ("backfill", "forward", "status", "sources", "flaring", "nodal"):
         print(__doc__)
         return 2
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    if argv[0] == "nodal":
+        import tables  # noqa: F401  (every model registered)
+        return nodal_main(argv[1:])
     import tables  # noqa: F401  (every model registered)
     from power import registry, runner
 
@@ -81,6 +128,12 @@ def main(argv: list[str]) -> int:
                                      until=until and _date(until), dry_run="--dry-run" in argv,
                                      datasets=_multi(argv, "--dataset") or None))
         if cmd == "forward" and "--dry-run" not in argv:
+            from config import settings
+
+            if settings.power_nodal and not _multi(argv, "--dataset"):
+                from power import nodal
+
+                out["nodal"] = asyncio.run(nodal.run("forward", sources=sources))   # as the job: after the hubs
             try:
                 from power import cross
 

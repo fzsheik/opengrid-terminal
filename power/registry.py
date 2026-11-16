@@ -175,6 +175,81 @@ def declined_list() -> list[dict]:
              "pulled": False} for d in DECLINED]
 
 
+# --------------------------------------------------------------------------- nodal daily summaries
+
+@dataclass(frozen=True)
+class NodalDataset:
+    """Every priced node of one market, read one market day at a time and kept only as one summary row per node
+    and day (power/nodal.py; power_node_days). The interval prices themselves are never stored.
+
+    fetch(get, day, day[, now=]) -> [Fetched] as for Dataset; parse(fetched) -> NodalParsed. A fetch that returns
+    no answer leaves the day unread (asked again next run)."""
+    key: str                      # "ercot.rt_nodal" (power_fetches.dataset)
+    source: str
+    iso: str                      # "ERCOT" | "SPP" (power_nodes.iso)
+    market: str                   # "rt" | "da" (power_node_days.market)
+    interval_minutes: int
+    tz: str
+    earliest: Callable[[datetime], date]   # the first market day the source still holds now
+    latest: Callable[[datetime], date]     # the last complete market day it serves now
+    fetch: Fetch
+    parse: Callable[[Fetched], "NodalParsed"]
+    pace_seconds: float = 2.5
+    overlap_days: int = 0         # forward re-reads the last N days (0: the source's prices are final when posted)
+    empty_statuses: tuple[int, ...] = ()
+    description: str = ""
+
+
+@dataclass
+class NodalParsed:
+    """prices: {node: {interval_start_utc: price}}; nodes: {node: {"node_type": .., "zone": .., "meta": {..}}},
+    what the answer itself says about each node (the catalogue keeps the first non-null value of each field)."""
+    prices: dict[str, dict[datetime, float]] = field(default_factory=dict)
+    nodes: dict[str, dict] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class NodalVerdict:
+    """The terms verdict for a source's nodal datasets, recorded beside (and checked against) its hub verdict."""
+    visibility: str
+    same_terms_as_hub: bool
+    reason: str
+    checked: str
+
+
+# Nodal data comes from the same operators, the same sites and the same terms as each source's hub data, so the
+# verdicts match the hub verdicts (a test pins that). Every nodal read is admin-only anyway (/v1/ops/power/nodes).
+NODAL_VERDICTS = {
+    "ercot": NodalVerdict(
+        visibility=PUBLIC, same_terms_as_hub=True, checked="2026-11-15",
+        reason=("NP6-905-CD (real-time settlement point prices at resource nodes, hubs and load zones), NP4-190-CD "
+                "(DAM settlement point prices) and NP4-160-SG (Settlement Points List and Electrical Buses Mapping) "
+                "are public MIS reports on www.ercot.com, read keyless like the hub data, under the same Terms of "
+                "Use section 5 ('raw data ... may be used, reproduced, and redistributed in compilations, charts, "
+                "and analyses'). The per-document limit of the API terms (three downloads a year) is kept: a "
+                "document the hub dataset already read in this process is reused, not downloaded again. ERCOT's "
+                "deeper nodal archive is only on the Public Data API (api.ercot.com), which needs a registration: "
+                "not used.")),
+    "spp": NodalVerdict(
+        visibility=INTERNAL, same_terms_as_hub=True, checked="2026-11-15",
+        reason=("The same marketplace files as the hub data (RTBM and DA LMP by settlement location, every "
+                "location in each file) under the same SPP Terms & Conditions: commercial use needs SPP's prior "
+                "written authorization, so internal.")),
+}
+
+
+def nodal_visibility(source: str) -> str:
+    """A nodal verdict never looser than the hub verdict; an unknown source is internal."""
+    v = NODAL_VERDICTS.get(source)
+    if v is None or v.visibility != PUBLIC:
+        return INTERNAL
+    return visibility(source)
+
+
+def nodal_datasets(source: str | None = None) -> list[NodalDataset]:
+    return [d for m in modules() if source in (None, m.SOURCE) for d in getattr(m, "NODAL_DATASETS", ())]
+
+
 # --------------------------------------------------------------------------- discovery
 
 def modules() -> list:
@@ -247,4 +322,11 @@ def as_list() -> list[dict]:
                     "datasets": [{"key": d.key, "interval_minutes": d.interval_minutes, "tz": d.tz,
                                   "series": len(d.series), "keep_raw": d.keep_raw, "description": d.description}
                                  for d in m.DATASETS]})
+        nv = NODAL_VERDICTS.get(m.SOURCE)
+        if getattr(m, "NODAL_DATASETS", ()):
+            out[-1]["nodal"] = {"visibility": nodal_visibility(m.SOURCE),
+                                "same_terms_as_hub": bool(nv and nv.same_terms_as_hub),
+                                "reason": nv.reason if nv else None, "terms_checked": nv.checked if nv else None,
+                                "datasets": [{"key": d.key, "market": d.market, "interval_minutes": d.interval_minutes,
+                                              "description": d.description} for d in m.NODAL_DATASETS]}
     return out

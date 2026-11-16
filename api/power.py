@@ -21,6 +21,9 @@
                                      curtailed share of potential output where output is known (power/waste.py)
     GET /v1/ops/power/flaring        ADMIN ONLY. Flare sites ranked by flared volume with coordinates, or (?view=
                                      counties) regulator volumes by county, or (?lat=&lon=) the volume near a point
+    GET /v1/ops/power/nodes/cheap    ADMIN ONLY. ERCOT / SPP nodes ranked by the share of their intervals priced
+                                     below $20/MWh over a window (days=90, at most 365): where power is stranded.
+                                     market=ercot|spp, series=rt|da, zone, node_type, min_days, until, limit
 
 Every power read is admin-only, with Cache-Control: private, no-store. There is no public route: power data is for
 OpenGrid's own routing and research (the EIA-930 series are public domain and could be published later, through
@@ -33,7 +36,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from accounts.auth import Principal, require_scope
 from api.common import OBSERVED, envelope
-from power import cross, reads, registry, runner
+from power import cross, nodal, reads, registry, runner
 from power.sites import reads as site_reads, registry as site_registry, runner as sites_runner
 
 router = APIRouter()
@@ -115,6 +118,20 @@ def ops_power_leadlag(response: Response, gpu: str | None = None, iso: str | Non
                       metric: str | None = None, who: Principal = Depends(ADMIN)):
     rows = cross.leadlag(gpu, iso, metric)
     return _ops(response, rows, count=len(rows), visibility="internal", method=cross.METHOD, note=cross.RULE)
+
+
+@router.get("/v1/ops/power/nodes/cheap", tags=["ops"], include_in_schema=False,
+            summary="Ops (internal): nodes ranked by the share of intervals priced below $20/MWh")
+def ops_power_nodes_cheap(response: Response, days: int = Query(90, ge=1, le=nodal.MAX_WINDOW_DAYS),
+                          market: str | None = Query(None, pattern="^(ercot|spp)$"),
+                          series: str = Query("rt", pattern="^(rt|da)$"), zone: str | None = None,
+                          node_type: str | None = None, min_days: int = Query(7, ge=1, le=nodal.MAX_WINDOW_DAYS),
+                          until: date | None = None, limit: int = Query(100, ge=1, le=5000),
+                          who: Principal = Depends(ADMIN)):
+    rows = nodal.cheap_nodes(days, market, series=series, zone=zone, node_type=node_type, min_days=min_days,
+                             limit=limit, until=until)
+    return _ops(response, rows, count=len(rows), visibility="internal", window_days=days, series=series,
+                note=nodal.READ_NOTE)
 
 
 @router.get("/v1/ops/power/shifts", tags=["ops"], include_in_schema=False,

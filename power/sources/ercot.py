@@ -1,5 +1,5 @@
 """ERCOT: day-ahead (hourly) and real-time (15-minute) settlement point prices at the trading hubs and load zones,
-from ERCOT's public MIS reports. No key, no signup (the Public API at api.ercot.com needs a registration; the same
+from ERCOT's public MIS reports (every settlement point too, kept only as daily summaries: NODAL_DATASETS below). No key, no signup (the Public API at api.ercot.com needs a registration; the same
 data is posted keyless as MIS documents, so the API is not used).
 
     GET https://www.ercot.com/misapp/servlets/IceDocListJsonWS?reportTypeId=<id>     the documents of a report
@@ -44,10 +44,11 @@ import json
 import re
 import zipfile
 import xml.etree.ElementTree as ET
+from collections import OrderedDict
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from power.registry import PUBLIC, Dataset, Fetched, Series, Terms
+from power.registry import PUBLIC, Dataset, Fetched, NodalDataset, NodalParsed, Series, Terms
 from power.storage import days, slots
 
 SOURCE = "ercot"
@@ -103,6 +104,11 @@ REPORTS = {   # market -> (yearly archive report, archive name prefix, daily rep
 SKIP_TYPES = {"LZEW", "LZ_DC", "LZ_DCEW"}
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 _ARCHIVE: dict[str, tuple[str, bytes, str | None, int | None]] = {}   # dataset market -> (DocID, body, type, ms)
+# Daily documents (NP6-905 intervals, NP4-190 days) read in this process, so the nodal datasets reuse what the hub
+# datasets just downloaded: the API terms allow three downloads of a report a year. Bounded by DOC_CACHE_BYTES
+# (two days of interval files plus a few DAM days is about 2.5 MB).
+DOC_CACHE_BYTES = 8 * 1024 * 1024
+_DOCS: "OrderedDict[str, tuple[bytes, str | None, int | None]]" = OrderedDict()
 
 
 def series_key(market: str, point: str) -> str:
@@ -130,6 +136,21 @@ def latest_rt(now: datetime) -> date:
 
 
 # --------------------------------------------------------------------------- documents
+
+async def _doc(get, doc_id: str) -> Fetched:
+    """One MIS document, from this process's cache when a dataset already read it."""
+    url = f"{DOC_URL}?doclookupId={doc_id}"
+    hit = _DOCS.get(doc_id)
+    if hit is not None:
+        _DOCS.move_to_end(doc_id)
+        return Fetched(url, 200, hit[2], hit[0], hit[1])
+    f = await get.get(DOC_URL, params={"doclookupId": doc_id})
+    if f.ok and len(f.body) <= DOC_CACHE_BYTES // 4:
+        _DOCS[doc_id] = (f.body, f.content_type, f.ms)
+        while sum(len(b) for b, _, _ in _DOCS.values()) > DOC_CACHE_BYTES:
+            _DOCS.popitem(last=False)
+    return f
+
 
 def documents(body: bytes) -> list[dict]:
     try:
@@ -242,7 +263,7 @@ def _make_fetch(market: str):
                 if len(mine) < (1 if market == "da" else slots(d, TZ, 15)):
                     continue   # not all posted (or one never will be): left to the next run, then the archive
                 for doc in mine:
-                    f = await get.get(DOC_URL, params={"doclookupId": doc["DocID"]})
+                    f = await _doc(get, doc["DocID"])
                     f.start = f.end = d
                     out.append(f)
         return out
@@ -337,6 +358,22 @@ def interval_start(day: date, hour_ending: int, interval: int, minutes: int, rep
     return local.replace(tzinfo=CT, fold=1 if repeated else 0).astimezone(UTC)
 
 
+def _header(row: list[str]) -> dict[str, int]:
+    h = [_norm(x) for x in row]
+    cols = {
+        "date": h.index("deliverydate"),
+        "point": next(i for i, x in enumerate(h) if x in ("settlementpoint", "settlementpointname")),
+        "price": h.index("settlementpointprice"),
+        "hour": next((i for i, x in enumerate(h) if x in ("hourending", "deliveryhour")), -1),
+        "interval": h.index("deliveryinterval") if "deliveryinterval" in h else -1,
+        "flag": next((i for i, x in enumerate(h) if x in ("dstflag", "repeatedhourflag")), -1),
+        "type": h.index("settlementpointtype") if "settlementpointtype" in h else -1,
+    }
+    if cols["hour"] < 0:
+        raise ValueError(f"ercot: no hour column in {row}")
+    return cols
+
+
 def _make_parse(market: str):
     minutes = REPORTS[market][4]
 
@@ -346,18 +383,7 @@ def _make_parse(market: str):
         seen_header = False
         for row in _rows(f.body):
             if row and _norm(row[0]) == "deliverydate":
-                h = [_norm(x) for x in row]
-                cols = {
-                    "date": h.index("deliverydate"),
-                    "point": next(i for i, x in enumerate(h) if x in ("settlementpoint", "settlementpointname")),
-                    "price": h.index("settlementpointprice"),
-                    "hour": next((i for i, x in enumerate(h) if x in ("hourending", "deliveryhour")), -1),
-                    "interval": h.index("deliveryinterval") if "deliveryinterval" in h else -1,
-                    "flag": next((i for i, x in enumerate(h) if x in ("dstflag", "repeatedhourflag")), -1),
-                    "type": h.index("settlementpointtype") if "settlementpointtype" in h else -1,
-                }
-                if cols["hour"] < 0:
-                    raise ValueError(f"ercot: no hour column in {row}")
+                cols = _header(row)
                 seen_header = True
                 continue
             if cols is None or not row or len(row) <= cols["price"]:
@@ -394,4 +420,160 @@ DATASETS = (
             pace_seconds=2.5, overlap_days=1, keep_raw=False, align="month",
             description="RTM settlement point prices, 15-minute; 6 hubs + 8 load zones; yearly archive ~14 MB, "
                         "NP6-905 interval ~8 KB, 96 a day (url + sha256 only)"),
+)
+
+
+# --------------------------------------------------------------------------- every settlement point (nodal)
+#
+# The same daily documents hold every settlement point: NP6-905 about 1,147 rows per 15-minute interval (types RN
+# 836, PCCRN 160, LCCRN 68, PUN 52, LZ 8, HU 5, AH 1, SH 1, plus LZEW / LZ_DC / LZ_DCEW, skipped as in the hub
+# datasets), NP4-190 about 1,135 points per hour. MIS lists NP6-905 for 7 days and NP4-190 for about 31; the
+# yearly archives (13060 / 13061) hold hubs and load zones only, so nodal history starts when the forward job
+# starts (ERCOT's deeper nodal archive is on the Public Data API, which needs a registration: not used).
+#
+# NP4-160-SG (report 10008), the Settlement Points List and Electrical Buses Mapping, a zip of CSVs re-posted
+# weekly: Settlement_Points_*.csv maps every electrical bus to its substation, voltage, settlement load zone and,
+# where it has one, resource node. It carries no coordinates and no county, so neither is stored.
+
+NODAL_RT_DAYS = 6          # NP6-905 is listed 7 days; the oldest listed day may already be partly rolled off
+NODAL_DA_DAYS = 29         # NP4-190 is listed about 31 days
+NODE_LIST_REPORT = "10008"
+NODE_LIST_SUFFIX = "_SP_List_and_EB_Mapping"
+
+
+def earliest_nodal_rt(now: datetime) -> date:
+    return now.astimezone(CT).date() - timedelta(days=NODAL_RT_DAYS)
+
+
+def earliest_nodal_da(now: datetime) -> date:
+    return now.astimezone(CT).date() - timedelta(days=NODAL_DA_DAYS)
+
+
+def _make_nodal_fetch(market: str):
+    daily_report = REPORTS[market][2]
+
+    async def fetch(get, start: date, end: date, now: datetime | None = None) -> list[Fetched]:
+        today = (now or datetime.now(UTC)).astimezone(CT).date()
+        docs, lf = await _list(get, daily_report)
+        if docs is None:
+            lf.start, lf.end = start, end
+            return [lf]
+        out: list[Fetched] = []
+        for d in days(start, end):
+            mine = daily_docs(market, d, docs)
+            need = 1 if market == "da" else slots(d, TZ, 15)
+            # an RT day missing an interval file is read as it is once it is a day old: ERCOT posts each file
+            # within minutes, so a file still missing then never comes, and nothing older holds the nodes
+            if not mine or (len(mine) < need and (market == "da" or d >= today - timedelta(days=1))):
+                continue
+            for doc in mine:
+                f = await _doc(get, doc["DocID"])
+                f.start = f.end = d
+                out.append(f)
+        return out
+    return fetch
+
+
+def _make_nodal_parse(market: str):
+    minutes = REPORTS[market][4]
+
+    def parse(f: Fetched) -> NodalParsed:
+        out = NodalParsed()
+        cols: dict[str, int] | None = None
+        times: dict[tuple, datetime] = {}
+        for row in _rows(f.body):
+            if row and _norm(row[0]) == "deliverydate":
+                cols = _header(row)
+                continue
+            if cols is None or not row or len(row) <= cols["price"]:
+                continue
+            typ = row[cols["type"]].strip() if cols["type"] >= 0 else None
+            if typ in SKIP_TYPES:
+                continue
+            p = row[cols["point"]].strip()
+            v = row[cols["price"]].strip()
+            if not p or not v:
+                continue
+            try:
+                key = (row[cols["date"]], row[cols["hour"]], row[cols["interval"]] if cols["interval"] >= 0 else "1",
+                       cols["flag"] >= 0 and row[cols["flag"]].strip().upper() == "Y")
+                t = times.get(key)
+                if t is None:   # one conversion per interval, not per row (1,100 rows share it)
+                    t = times[key] = interval_start(_day(key[0]), int(key[1].strip().split(":")[0]), int(key[2]),
+                                                    minutes, key[3])
+                out.prices.setdefault(p, {})[t] = float(v)
+            except (ValueError, IndexError) as exc:
+                raise ValueError(f"ercot: bad row {row[:8]}: {exc}") from exc
+            if p not in out.nodes or (typ and not out.nodes[p].get("node_type")):
+                out.nodes[p] = {"node_type": typ}
+        if cols is None:
+            raise ValueError("ercot: no header row (DeliveryDate ...) in the document")
+        if not out.prices:
+            f.empty = True
+        return out
+    return parse
+
+
+async def fetch_node_list(get, seen=lambda url: False) -> Fetched | None:
+    """The newest Settlement Points List; None when it is the one already read (`seen(url)`)."""
+    docs, lf = await _list(get, NODE_LIST_REPORT)
+    if docs is None:
+        return lf
+    mine = [x for x in docs if x.get("FriendlyName", "").endswith(NODE_LIST_SUFFIX)]
+    if not mine:
+        lf.error = "ercot: no Settlement Points List in report 10008"
+        return lf
+    doc = sorted(mine, key=_published)[-1]
+    if seen(f"{DOC_URL}?doclookupId={doc['DocID']}"):
+        return None
+    return await get.get(DOC_URL, params={"doclookupId": doc["DocID"]})
+
+
+def parse_node_list(body: bytes) -> dict[str, dict]:
+    """{resource node or load zone: {"zone", "substation", "meta"}} from the Settlement Points List zip. A resource
+    node sits on one electrical bus (measured 2026-11-15: 1,048 resource nodes, none on two zones or substations)."""
+    import csv
+
+    try:
+        z = zipfile.ZipFile(io.BytesIO(body))
+    except zipfile.BadZipFile as exc:
+        raise ValueError(f"ercot: the settlement points list is not a zip: {body[:200]!r}") from exc
+    out: dict[str, dict] = {}
+    with z:
+        name = next((n for n in z.namelist() if re.search(r"(^|/)Settlement_Points_[^/]*\.csv$", n)), None)
+        if name is None:
+            raise ValueError(f"ercot: no Settlement_Points csv in {z.namelist()}")
+        rows = csv.DictReader(io.TextIOWrapper(z.open(name), encoding="utf-8-sig"))
+        need = {"ELECTRICAL_BUS", "SUBSTATION", "SETTLEMENT_LOAD_ZONE", "RESOURCE_NODE", "VOLTAGE_LEVEL"}
+        if not need <= set(rows.fieldnames or ()):
+            raise ValueError(f"ercot: settlement points columns {rows.fieldnames} lack {need}")
+        for r in rows:
+            zone = (r["SETTLEMENT_LOAD_ZONE"] or "").strip() or None
+            if zone and zone not in out:
+                out[zone] = {"zone": zone, "substation": None, "meta": {}}
+            rn = (r["RESOURCE_NODE"] or "").strip()
+            if not rn:
+                continue
+            try:
+                kv = float(r["VOLTAGE_LEVEL"])
+            except (TypeError, ValueError):
+                kv = None
+            out[rn] = {"zone": zone, "substation": (r["SUBSTATION"] or "").strip() or None,
+                       "meta": {"electrical_bus": (r["ELECTRICAL_BUS"] or "").strip() or None, "voltage_kv": kv}}
+    if not out:
+        raise ValueError("ercot: an empty settlement points list")
+    return out
+
+
+NODAL_DATASETS = (
+    NodalDataset(key="ercot.rt_nodal", source=SOURCE, iso="ERCOT", market="rt", interval_minutes=15, tz=TZ,
+                 earliest=earliest_nodal_rt, latest=latest_rt, fetch=_make_nodal_fetch("rt"),
+                 parse=_make_nodal_parse("rt"), pace_seconds=2.5,
+                 description="NP6-905-CD real-time settlement point prices, every settlement point (about 1,130 "
+                             "kept), 96 interval files a day (~8 KB each), listed 7 days"),
+    NodalDataset(key="ercot.da_nodal", source=SOURCE, iso="ERCOT", market="da", interval_minutes=60, tz=TZ,
+                 earliest=earliest_nodal_da, latest=latest_da, fetch=_make_nodal_fetch("da"),
+                 parse=_make_nodal_parse("da"), pace_seconds=2.5,
+                 description="NP4-190-CD DAM settlement point prices, every settlement point (about 1,135), one "
+                             "file a day (~190 KB), listed about 31 days"),
 )

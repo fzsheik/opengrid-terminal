@@ -133,6 +133,7 @@ class Settings(BaseSettings):
     # power_sites job; its EIA sources also need eia_api_key. The first run is the backfill (`python -m power.sites
     # sync`, run detached, does the same).
     power_sites_enabled: bool = False
+    power_nodal: bool = True                     # power/nodal.py: per-node daily summaries in the power_forward job
     ercot_api_subscription_key: str | None = None   # https://apiexplorer.ercot.com (free account, "Public API")
     ercot_api_username: str | None = None
     ercot_api_password: str | None = None

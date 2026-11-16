@@ -1,5 +1,5 @@
 """SPP Integrated Marketplace: day-ahead (hourly) and real-time (5-minute) LMP at the two SPP trading hubs,
-SPPNORTH_HUB and SPPSOUTH_HUB. Public marketplace files on the SPP portal's file browser; no key, no signup.
+SPPNORTH_HUB and SPPSOUTH_HUB (every settlement location too, kept only as daily summaries: NODAL_DATASETS below). Public marketplace files on the SPP portal's file browser; no key, no signup.
 
     GET https://portal.spp.org/file-browser-api/download/da-lmp-by-settlement-location
         ?path=/YYYY/MM/By_Day/DA-LMP-SL-YYYYMMDD0100.csv                  one DA operating day, every location
@@ -41,7 +41,7 @@ import zlib
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from power.registry import INTERNAL, Dataset, Fetched, Series, Terms
+from power.registry import INTERNAL, Dataset, Fetched, NodalDataset, NodalParsed, Series, Terms
 from power.storage import days
 
 SOURCE = "spp"
@@ -340,4 +340,79 @@ DATASETS = (
             pace_seconds=2.0, overlap_days=1, keep_raw=False, empty_statuses=(404,),
             description="RTBM LMP by location, 5-minute; 2 hubs; 39-51 MB per day file, ~6 MB per archived member "
                         "(url + sha256 only)"),
+)
+
+
+# --------------------------------------------------------------------------- every settlement location (nodal)
+#
+# The same day files carry every settlement location (2026-11-08: 1,626 locations on 1,574 pnodes; RT 468,288 rows,
+# DA 39,024), each with its pnode and its balancing authority area (BAA: "SPP", or "SWPW" for the RTO West
+# expansion). The files state no location type; SPP names its trading hubs "..._HUB", so those are "hub" and every
+# other location "settlement_location". SPP publishes no coordinates or counties for them in these files, and no
+# keyless public location list was found, so none are stored. Depth: day files for the current and the prior year,
+# the yearly zips (read by Range, as above) before that, so twelve months back is always there.
+
+def _nodal_columns(header: bytes) -> tuple[int, int, int, int | None, int | None]:
+    gmt, loc, lmp = _columns(header)
+    cols = [c.strip().lower().replace(" ", "").replace("_", "") for c in header.decode("utf-8-sig").split(",")]
+    pnode = next((i for i, c in enumerate(cols) if c in ("pnode", "pnodename")), None)
+    baa = cols.index("baa") if "baa" in cols else None
+    return gmt, loc, lmp, pnode, baa
+
+
+def _make_nodal_parse(market: str):
+    step = timedelta(minutes=MARKETS[market][1])
+
+    def parse(f: Fetched) -> NodalParsed:
+        lines = _lines(f.body)
+        header = next(lines, b"")
+        if not header.strip():
+            raise ValueError("spp: empty file")
+        if header.lstrip()[:1] in (b"<", b"{"):
+            raise ValueError(f"spp: not a CSV: {header[:200]!r}")
+        gmt, loc, lmp, pnode, baa = _nodal_columns(header)
+        width = max(gmt, loc, lmp)
+        out = NodalParsed()
+        times: dict[str, datetime] = {}
+        for line in lines:
+            row = line.decode("utf-8", "replace").rstrip("\r\n").split(",")
+            if len(row) <= width:
+                if line.strip():
+                    raise ValueError(f"spp: short row {line[:200]!r}")
+                continue
+            name, v = row[loc].strip(), row[lmp].strip()
+            if not name or not v:
+                continue
+            try:
+                t = times.get(row[gmt])
+                if t is None:   # 1,600 rows share each interval: one conversion per interval
+                    t = times[row[gmt]] = _time(row[gmt]) - step
+                val = float(v)
+            except (ValueError, IndexError) as exc:
+                raise ValueError(f"spp: bad row {line[:200]!r}: {exc}") from exc
+            pts = out.prices.get(name)
+            if pts is None:
+                pts = out.prices[name] = {}
+                meta = {"pnode": row[pnode].strip()} if pnode is not None and len(row) > pnode else {}
+                out.nodes[name] = {"node_type": "hub" if name.endswith("_HUB") else "settlement_location",
+                                   "zone": row[baa].strip() or None if baa is not None and len(row) > baa else None,
+                                   "meta": meta}
+            pts[t] = val
+        if not out.prices:
+            f.empty = True
+        return out
+    return parse
+
+
+NODAL_DATASETS = (
+    NodalDataset(key="spp.rt_nodal", source=SOURCE, iso="SPP", market="rt", interval_minutes=5, tz=TZ,
+                 earliest=earliest, latest=latest_rt, fetch=_make_fetch("rt"), parse=_make_nodal_parse("rt"),
+                 pace_seconds=2.0, empty_statuses=(404,),
+                 description="RTBM LMP by settlement location, 5-minute, every location (about 1,630); one day file "
+                             "of 39-51 MB (archived member ~6 MB) per day"),
+    NodalDataset(key="spp.da_nodal", source=SOURCE, iso="SPP", market="da", interval_minutes=60, tz=TZ,
+                 earliest=earliest, latest=latest_da, fetch=_make_fetch("da"), parse=_make_nodal_parse("da"),
+                 pace_seconds=2.0, overlap_days=1, empty_statuses=(404,),
+                 description="DA LMP by settlement location, hourly, every location (about 1,630); one day file of "
+                             "~4.2 MB (archived member ~480 KB) per day"),
 )

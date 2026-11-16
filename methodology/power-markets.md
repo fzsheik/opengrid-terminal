@@ -1,7 +1,8 @@
 # Power markets
 
-OpenGrid reads US wholesale electricity prices and grid data. The prices are hub-level and zone-level, never
-nodal. The grid data is hourly demand, generation and interchange per balancing authority. Each source stores the
+OpenGrid reads US wholesale electricity prices and grid data. The price series are hub-level and zone-level. For
+ERCOT and SPP, every node is also summarised once a day (see "Nodal daily summaries"), but interval prices are
+never stored per node. The grid data is hourly demand, generation and interchange per balancing authority. Each source stores the
 data in its own tables (`power_*`), and the data is analysed beside GPU prices and capacity without being mixed
 into them. Power data is never written into listings, rollups, indices, fixings or archived prices. It never votes
 in a GPU statistic, and nothing here says that a power price moved a GPU price.
@@ -10,7 +11,7 @@ Wind and solar curtailment and gas flaring (energy thrown away that a small data
 [wasted energy](power-waste.md): curtailment is stored in the same power series tables, flaring in its own.
 
 Kind: **observed** (the series), **derived** (the cross-analysis). Code: `power/`. There is no public power route: every read is admin-only, under `/v1/ops/power/`
-(sources, status, series, map, cross/regional, cross/leadlag, shifts).
+(sources, status, series, map, cross/regional, cross/leadlag, shifts, nodes/cheap).
 
 ## Who may see what
 
@@ -41,8 +42,10 @@ outside the public site.
 
 ## Granularity and time
 
-- **Hub and zone series, never nodal.** Nodal data runs to terabytes. A hub or zone price is what a region's
-  wholesale power costs.
+- **Interval prices are never stored per node; daily summaries are.** Nodal interval data runs to terabytes, so
+  the interval series are hub and zone series. A hub or zone price is what a region's wholesale power costs. Where
+  power is stranded is a nodal question, so ERCOT and SPP nodes get one summary row per node and day (see "Nodal
+  daily summaries" below).
 - **One row per (series, market day).** A row holds the day's values as a `real[]`. Slot *i* is the interval that
   starts at the market day's local midnight + *i* × interval, in absolute time:
   - an hourly day has 24 slots (23 or 25 on DST days);
@@ -130,6 +133,89 @@ cut a 5-minute day to about 400 bytes. It was not taken, because `real[]` keeps 
 - `POWER_SOURCES` (comma-separated) chooses the sources. Empty means each module's default: the no-signup sources
   plus EIA. A source that needs a key stays off until its key is set.
 
+## Nodal daily summaries (where power is stranded)
+
+A hub average hides stranded power. Over the 12 months to 2026-11-16, SPP South hub cleared below $20/MWh in 46% of
+real-time intervals and below zero in 17%, but the cheapest power sits at specific nodes behind congested lines.
+To rank candidate sites for small data centres that would run on cheap excess power, OpenGrid summarises every
+priced node of ERCOT and SPP once a day. Code: `power/nodal.py`. Tables: `power_nodes`, `power_node_days`
+(migration 0044).
+
+**What is stored.** One row per (market, day, node), where market is `rt` or `da`:
+- intervals with a price (`n`);
+- intervals priced below $0 (`n_neg`) and below $20/MWh (`n_lt20`), both strictly below;
+- mean, p10, median (`p50`), min and max of the day's interval prices. Percentiles interpolate linearly between
+  ranks, as Postgres `percentile_cont` does.
+
+The interval prices themselves are never stored per node. A day is the operator's market day in Central prevailing
+time, so DST days have 92 / 100 (ERCOT 15-minute), 276 / 300 (SPP 5-minute) or 23 / 25 (hourly) intervals.
+
+**Sources** (the same public files as the hub data, keyless):
+
+| Dataset | Report / file | Nodes | Interval | How far back |
+|---|---|---|---|---|
+| `ercot.rt_nodal` | NP6-905-CD, one zip per 15-minute interval (~8 KB) | ~1,131 settlement points | 15 min | MIS lists 7 days; the run reads the last 6 |
+| `ercot.da_nodal` | NP4-190-CD, one zip per day (~190 KB) | ~1,135 | hourly | MIS lists about 31 days; the run reads the last 29 |
+| `spp.rt_nodal` | RTBM LMP by settlement location, one CSV per day (39-51 MB) | ~1,626 locations | 5 min | day files for this year and last; yearly zips before that (from 2021 here) |
+| `spp.da_nodal` | DA LMP by settlement location, one CSV per day (~4.2 MB) | ~1,626 locations | hourly | as SPP real-time |
+
+- ERCOT's yearly archives (13060 / 13061) hold hubs and load zones only. ERCOT's deeper nodal archive is on the
+  Public Data API (api.ercot.com), which needs a registration, so it is not used. **ERCOT nodal history therefore
+  starts when the forward job starts** (plus the 6 / 29 days MIS still lists).
+- ERCOT types are as the file states them: `RN` resource node, `PCCRN` / `LCCRN` physical / logical combined-cycle
+  resource node, `PUN` private use network, `LZ` load zone, `HU` hub, `AH` hub average, `SH` hub bus average. The
+  energy-weighted and DC-tie load zones (`LZEW`, `LZ_DC`, `LZ_DCEW`) are skipped, as in the hub data.
+- SPP's files state no location type. A location named `..._HUB` is a `hub`, every other one a
+  `settlement_location`. The SPP zone column holds the balancing authority area the file names (`SPP`, or `SWPW`
+  for the RTO West expansion).
+- **Catalogue.** ERCOT's Settlement Points List and Electrical Buses Mapping (NP4-160-SG, report 10008, re-posted
+  weekly, read only when a new one is posted) gives each resource node its substation, voltage and settlement load
+  zone. **Neither ERCOT nor SPP publishes coordinates or counties for these nodes**, so `latitude`, `longitude` and
+  `county` stay NULL. They are never geocoded by guessing.
+- **Terms.** The nodal datasets come from the same sites under the same terms as each source's hub data, and
+  `power/registry.py` (`NODAL_VERDICTS`) records the same verdict: ERCOT public (raw public data), SPP internal
+  (commercial use needs SPP's written authorization). Every nodal read is admin-only regardless.
+- **ERCOT's three-downloads rule.** The forward job runs the nodal datasets after the hub datasets in the same
+  process. The NP6-905 and NP4-190 documents the hub run just read are reused from memory, not downloaded again.
+
+**Runs.** `python -m power nodal backfill|forward|status|cheap`.
+- The backfill reads every day not yet read, from `--since` (default: the last 366 days) or the source's earliest
+  day, whichever is later. One request per day (ERCOT real-time: one per 15-minute file).
+- Each day is recorded raw-first in `power_fetches` (URL + SHA-256; the bodies are not kept) and committed on its
+  own, so an interrupted run resumes and a re-run stores nothing twice.
+- A day is read once no answer for it failed. An ERCOT real-time day missing a 15-minute file is read as it is
+  once it is a day old.
+- A re-read replaces a day's summary only when it changed and covers at least as many intervals.
+- The `power_forward` job runs `nodal.run("forward")` after the hubs (`POWER_NODAL=false` turns it off).
+
+**Ranking.** `GET /v1/ops/power/nodes/cheap` (admin only) and `power.nodal.cheap_nodes(window_days, market)`:
+- per node over a window (default 90 days, at most 365, ending at the latest stored day): the share of intervals
+  below $0 and below $20, the hours below each, mean, min, max, and the days covered;
+- `median` is the median of the node's daily medians, because the exact median of every interval would need the
+  interval prices;
+- ranked by the share below $20, then the share below $0, then the lower mean;
+- filters: `market` (ercot, spp), `series` (rt, da), `zone`, `node_type`, `min_days` (default 7), `until`, `limit`.
+
+**Size, measured 2026-11-15.** A summary row takes 100 bytes with its primary key (68 bytes of heap), measured on
+200,000 rows. A year of both markets and both series is about 2.0 M rows, about 200 MB:
+
+| Dataset | Rows a year | Size a year |
+|---|---|---|
+| ERCOT real-time (~1,131 nodes) | 413 k | 41 MB |
+| ERCOT day-ahead (~1,135 nodes) | 414 k | 41 MB |
+| SPP real-time (~1,626 locations) | 594 k | 59 MB |
+| SPP day-ahead (~1,626 locations) | 594 k | 59 MB |
+| `power_fetches` (ERCOT real-time: one row per 15-minute file) | 36 k | 21 MB |
+
+- The catalogue is under 1 MB.
+- The first backfill (SPP 12 months, ERCOT the 6 / 29 days MIS lists) is about 1.23 M rows, about 125 MB.
+- Leaving out the two day-ahead datasets would halve the total.
+
+Measured run times from a laptop:
+- an SPP real-time day file (39-51 MB) takes about 32 seconds, so 12 months take about 3.3 hours;
+- an SPP day-ahead day takes about 3 seconds;
+- an ERCOT real-time day (96 files at the 2.5-second pace) takes about 4.2 minutes.
+
 ## Cross-analysis (derived, internal)
 
 **Mapping regions to markets.** Built on `context/geo.py` (unchanged). A provider region gets a state only where
@@ -189,6 +275,7 @@ only. The power side takes its series' tier. ISO prices are internal, so today e
 | `/v1/ops/power/cross/regional` | power cost per GPU-hour, spread and power share per region and day |
 | `/v1/ops/power/cross/leadlag` | the latest window's lagged correlations |
 | `/v1/ops/power/shifts` | power spikes around major shifts (related, not causal) |
+| `/v1/ops/power/nodes/cheap` | ERCOT / SPP nodes ranked by the share of intervals below $20/MWh (stranded power) |
 
 ## Physical sites
 

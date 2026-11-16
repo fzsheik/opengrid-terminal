@@ -25,6 +25,13 @@
                     methodology/power-waste.md). Curtailment needs no table of its own: it is power_series /
                     power_days (kind "curtailment")
 
+    power_nodes     the nodal catalogue (0047): one row per priced node of ERCOT (settlement points) and SPP
+                    (settlement locations): its type as the source states it, its zone, substation, and county /
+                    latitude / longitude only where the source publishes them (neither does today: NULL)
+    power_node_days one row per (market, day, node): the day's summary of every interval price at that node
+                    (intervals priced, below $0, below $20, mean, p10, median, min, max). The interval prices are
+                    never stored per node; the summary is what the stranded-power ranking reads (power/nodal.py)
+
 Nothing here is read by listings, rollups, indices, fixings, archived prices or any GPU statistic.
 """
 
@@ -102,6 +109,44 @@ class PowerDay(Base):
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revisions: Mapped[int] = mapped_column(SmallInteger, default=0, server_default="0")
+
+
+class PowerNode(Base):
+    __tablename__ = "power_nodes"
+    __table_args__ = (UniqueConstraint("iso", "node", name="uq_power_nodes_iso_node"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    iso: Mapped[str] = mapped_column(String(16))                 # "ERCOT" | "SPP"
+    node: Mapped[str] = mapped_column(String(64))                # the source's own name (settlement point / location)
+    node_type: Mapped[str | None] = mapped_column(String(24))    # as stated: ERCOT "RN" "PCCRN" "LZ" "HU" ...; SPP
+                                                                 # "hub" | "settlement_location" (from its naming)
+    zone: Mapped[str | None] = mapped_column(String(32))         # ERCOT settlement load zone; SPP balancing area
+    substation: Mapped[str | None] = mapped_column(String(64))
+    county: Mapped[str | None] = mapped_column(String(64))       # only where the source publishes it (never guessed)
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
+    # source extras: SPP pnode; ERCOT bus, voltage_kv. None is SQL NULL, not JSON null (the merge needs an object)
+    meta: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    first_day: Mapped[date | None] = mapped_column(Date)         # first / last market day it was priced (NULL:
+    last_day: Mapped[date | None] = mapped_column(Date)          # known from the node list only, never priced yet)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PowerNodeDay(Base):
+    """Kept narrow on purpose (about 2 M rows a year for both markets): no timestamps, REAL values, SMALLINT counts."""
+    __tablename__ = "power_node_days"
+
+    market: Mapped[str] = mapped_column(String(2), primary_key=True)   # "rt" | "da"
+    day: Mapped[date] = mapped_column(Date, primary_key=True)          # market day, the operator's local time
+    node_id: Mapped[int] = mapped_column(Integer, ForeignKey("power_nodes.id", ondelete="CASCADE"), primary_key=True)
+    n: Mapped[int] = mapped_column(SmallInteger)                 # intervals with a price
+    n_neg: Mapped[int] = mapped_column(SmallInteger)             # of those, priced below $0/MWh
+    n_lt20: Mapped[int] = mapped_column(SmallInteger)            # of those, priced below $20/MWh
+    mean: Mapped[float] = mapped_column(REAL)
+    p10: Mapped[float] = mapped_column(REAL)                     # linear interpolation (percentile_cont)
+    p50: Mapped[float] = mapped_column(REAL)
+    min: Mapped[float] = mapped_column(REAL)
+    max: Mapped[float] = mapped_column(REAL)
 
 
 class PowerGpuRegionDaily(Base):
