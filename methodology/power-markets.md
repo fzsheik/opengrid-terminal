@@ -9,6 +9,8 @@ in a GPU statistic, and nothing here says that a power price moved a GPU price.
 
 Wind and solar curtailment and gas flaring (energy thrown away that a small datacenter could use) are in
 [wasted energy](power-waste.md): curtailment is stored in the same power series tables, flaring in its own.
+The [site ranking](power-siting.md) joins the prices, the nodal summaries, the physical sites, the wasted energy and
+the EIA-930 series into a county ranking for small datacenters on spare power.
 
 Kind: **observed** (the series), **derived** (the cross-analysis). Code: `power/`. There is no public power route: every read is admin-only, under `/v1/ops/power/`
 (sources, status, series, map, cross/regional, cross/leadlag, shifts, nodes/cheap).
@@ -381,4 +383,4 @@ For plant *p* and year *Y*:
 
 Python, for the site-ranking work (plain dicts, `power/sites/reads.py`): `plants(...)`,
 `plants_near(lat, lon, km)`, `plants_in_county(state, county)`, `queue_projects(...)`,
-`queued_mw_by_county(...)`.
+`queued_mw_by_county(...)`. The [site ranking](power-siting.md) is built on them.

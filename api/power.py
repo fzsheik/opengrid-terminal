@@ -24,6 +24,10 @@
     GET /v1/ops/power/nodes/cheap    ADMIN ONLY. ERCOT / SPP nodes ranked by the share of their intervals priced
                                      below $20/MWh over a window (days=90, at most 365): where power is stranded.
                                      market=ercot|spp, series=rt|da, zone, node_type, min_days, until, limit
+    GET /v1/ops/power/sites/ranking  ADMIN ONLY. US counties ranked for a small datacenter on spare, cheap power
+                                     (power/siting.py): every part shown, the price grain on every row; ?state iso
+                                     min_idle_mw days weights=name:number,... until limit
+    GET /v1/ops/power/sites/near     ADMIN ONLY. The same parts for the area within km of lat / lon
 
 Every power read is admin-only, with Cache-Control: private, no-store. There is no public route: power data is for
 OpenGrid's own routing and research (the EIA-930 series are public domain and could be published later, through
@@ -237,3 +241,50 @@ def ops_power_flaring(response: Response, view: str = Query("sites", pattern="^(
         return envelope(rows, kind=OBSERVED, count=len(rows), **meta)
     rows = waste.flare_sites(country, state, year, limit, source)
     return envelope(rows, kind=OBSERVED, count=len(rows), **meta)
+
+
+# --------------------------------------------------------------------------- site ranking (power/siting.py)
+
+SITING_DOC = "methodology/power-siting.md"
+
+
+def _weights(s: str | None) -> dict | None:
+    from power import siting
+
+    try:
+        return siting.parse_weights(s) or None
+    except ValueError as exc:
+        raise HTTPException(422, {"code": "bad_weights", "message": str(exc)}) from None
+
+
+@router.get("/v1/ops/power/sites/ranking", tags=["ops"], include_in_schema=False,
+            summary="Ops (internal): US counties ranked for a small datacenter on spare, cheap power")
+def ops_power_sites_ranking(response: Response, state: str | None = Query(None, pattern="^[A-Za-z]{2}$"),
+                            iso: str | None = Query(None, description="ERCOT | SPP | CAISO | MISO | PJM | NYISO | "
+                                                                      "ISO-NE"),
+                            min_idle_mw: float | None = Query(None, ge=0),
+                            days: int = Query(90, ge=1, le=365, description="price and curtailment window"),
+                            weights: str | None = Query(None, description="name:number,... e.g. idle:0.4,queue:-0.2"),
+                            until: date | None = None, limit: int = Query(100, ge=1, le=5000),
+                            who: Principal = Depends(ADMIN)):
+    from power import siting
+
+    out = siting.ranking(state=state, iso=iso, min_idle_mw=min_idle_mw, window_days=days, weights=_weights(weights),
+                         limit=limit, until=until)
+    response.headers["Cache-Control"] = "private, no-store"
+    return envelope(out["rows"], kind="derived", doc=SITING_DOC, count=len(out["rows"]), visibility="internal",
+                    **out["meta"])
+
+
+@router.get("/v1/ops/power/sites/near", tags=["ops"], include_in_schema=False,
+            summary="Ops (internal): the site-ranking parts for the area around a point")
+def ops_power_sites_near(response: Response, lat: float = Query(..., ge=-90, le=90),
+                         lon: float = Query(..., ge=-180, le=180), km: float = Query(50.0, gt=0, le=500),
+                         days: int = Query(90, ge=1, le=365), weights: str | None = None,
+                         until: date | None = None, who: Principal = Depends(ADMIN)):
+    from power import siting
+
+    out = siting.near(lat, lon, km, window_days=days, weights=_weights(weights), until=until)
+    meta = out.pop("meta")
+    response.headers["Cache-Control"] = "private, no-store"
+    return envelope(out, kind="derived", doc=SITING_DOC, visibility="internal", **meta)
