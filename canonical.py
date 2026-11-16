@@ -651,6 +651,88 @@ _add("NVIDIA RTX A6000 48GB", "RTX A6000", "RTX A6000 (48GB) NVLink", "RTX A6000
 _add("NVIDIA RTX 5070 Ti 16GB", "NVIDIA GeForce RTX 5070 Ti")     # one 5070 Ti (16 GB); the 5060 Ti has 8 and 16 GB
 
 # --------------------------------------------------------------------------
+# Capacity-queue cleanup (2026-11-15): the 189 (provider, name) pairs the AVAILABILITY table held with no canonical
+# model. No new canonical model here: only names that state one existing model. These override the earlier "left
+# unmapped" notes for the same names (Clore's "no form factor in the name" list above, written before the T4, A30
+# and bare-H200 precedents).
+# --------------------------------------------------------------------------
+# Clore.ai: nvidia-smi's product name with "NVIDIA", "GeForce" and hyphens dropped, plus specs.gpuram.
+# One-product boards (one form factor, one memory size): T4, L4, L40S, A10, A30, A40. Datacenter boards run with ECC
+# on and report less than the nominal figure (T4 15 GB, L4 23 GB, L40S 45 GB, A10 23 GB, H100 PCIe 79 GB): the
+# usable-versus-physical gap noted for the B200 at the top, and none of these has a second memory size to confuse.
+# "A10" is the A10 (PCIe); AWS's card reports itself as "A10G".
+_add("NVIDIA T4 16GB", "Tesla T4 16GB", "Tesla T4 15GB")
+_add("NVIDIA L4 24GB", "L4 23GB")
+_add("NVIDIA L40S 48GB", "L40S 45GB")
+_add("NVIDIA A10 24GB PCIe", "A10 24GB", "A10 23GB")
+_add("NVIDIA A30 24GB", "A30 24GB")
+_add("NVIDIA A40 48GB", "A40 48GB")
+# Names that spell the board: "A100-PCIE-40GB", "A100-SXM4-80GB", "H100 PCIe" and "H100 80GB HBM3" (the SXM5 part's
+# own product name) are all mapped above in their nvidia-smi spelling.
+_add("NVIDIA A100 40GB PCIe", "A100PCIE40GB 40GB")
+_add("NVIDIA A100 80GB SXM4", "A100SXM480GB 80GB")
+_add("NVIDIA H100 80GB PCIe", "H100 PCIe 80GB", "H100 PCIe 79GB")
+_add("NVIDIA H100 80GB SXM5", "H100 80GB HBM3 80GB")
+# Workstation and GeForce cards at their one (or stated) memory size.
+_add("NVIDIA RTX 6000 Ada 48GB", "RTX 6000 Ada Generation 48GB")
+_add("NVIDIA RTX A5000 24GB", "RTX A5000 24GB")
+_add("NVIDIA RTX A4500 20GB", "RTX A4500 20GB")
+_add("NVIDIA RTX PRO 4000 Blackwell SFF 24GB", "RTX PRO 4000 Blackwell SFF Edition 24GB")
+_add("NVIDIA GTX 1660 6GB", "GTX 1660 6GB")
+# Clore, still unmapped on purpose. "H200 141GB": on Clore it is nvidia-smi's bare "H200" (the SXM part), but
+# OVHcloud prints the same words for an unstated board, and a name maps the same for everyone; it needs a
+# Clore-scoped lookup (as Verda's PAGE_NAMES), not an alias. "B300 SXM6 PC 192GB": Lium's unexplained "PC" board,
+# and 192 GB is not the B300's 288. GeForce and workstation cards one GB (or more) off the nominal size stay under
+# the standing odd-figure rule above: a short figure is not what those cards report, and the same marketplace
+# lists rebuilt cards (a 48 GB RTX 4090 D, a 20 GB RTX 3080, a 32 GB RTX 4080 SUPER).
+_add(None, "H200 141GB", "B300 SXM6 PC 192GB", "RTX 4090 23GB", "RTX 3090 20GB", "RTX 4070 11GB",
+     "RTX 4070 Ti SUPER 15GB", "RTX 4070 Laptop GPU 7GB", "RTX 4060 Ti 15GB", "RTX 4060 7GB", "RTX 5070 Ti 15GB",
+     "RTX 5070 11GB", "RTX 5060 Ti 15GB", "RTX 5060 7GB", "RTX 4000 Ada Generation 19GB", "RTX A4500 19GB")
+
+# Lium (nvidia-smi names). The RTX 3070 Ti (8 GB), RTX 4070 Ti SUPER (16 GB) and RTX 5070 (12 GB) exist in one
+# memory size each, and a laptop part is always named "... Laptop GPU". Unmapped on purpose: "NVIDIA GeForce RTX
+# 3060" (8 or 12 GB), "RTX 4060 Ti" and "RTX 5060 Ti" (8 or 16 GB), "NVIDIA B300 SXM6 PC" ("PC" not explained by
+# Lium; never merged into the "AC" board), "NVIDIA Tesla V100 Tensor Core GPU" (16 or 32 GB, board not stated).
+_add("NVIDIA RTX 3070 Ti 8GB", "NVIDIA GeForce RTX 3070 Ti")
+_add("NVIDIA RTX 4070 Ti SUPER 16GB", "NVIDIA GeForce RTX 4070 Ti SUPER")
+_add("NVIDIA RTX 5070 12GB", "NVIDIA GeForce RTX 5070")
+_add(None, "NVIDIA GeForce RTX 3060", "NVIDIA GeForce RTX 4060 Ti", "NVIDIA GeForce RTX 5060 Ti", "NVIDIA B300 SXM6 PC",
+     "NVIDIA Tesla V100 Tensor Core GPU")
+
+# GPU.ai slugs. The NVL cards are one product each (H100 NVL 94 GB, H200 NVL 141 GB); the RTX 4080 and 5080 exist
+# only with 16 GB (the 4080 SUPER has its own name), the RTX A4500 with 20 GB, the RTX A5000 with 24 GB.
+# Unmapped on purpose: "a100_40gb" (SXM4 or PCIe not stated), "v100" (memory and board not stated), "rtx_3080"
+# (10 or 12 GB). GPU.ai is a reseller: its listings never vote, mapped or not.
+_add("NVIDIA H100 94GB NVL", "h100_nvl")
+_add("NVIDIA H200 143GB NVL", "h200_nvl")
+_add("NVIDIA RTX 4080 16GB", "rtx_4080")
+_add("NVIDIA RTX 5080 16GB", "rtx_5080")
+_add("NVIDIA RTX A4500 20GB", "rtx_a4500")
+_add("NVIDIA RTX A5000 24GB", "rtx_a5000")
+_add(None, "a100_40gb", "v100", "rtx_3080")
+
+# Akash: model, memory and interface stated (the desktop RTX 4060 has 8 GB only; the RTX A2000 also comes with 12).
+_add("NVIDIA RTX 4060 8GB", "nvidia rtx4060 8Gi PCIe")
+_add("NVIDIA RTX A2000 6GB", "nvidia rtxa2000 6Gi PCIe")
+_add("NVIDIA Tesla V100 32GB SXM2", "nvidia v100 32Gi SXM2")
+# Koyeb: the B200 exists only as the SXM board (see Oracle above). A sales-gated type: capacity only, no price.
+_add("NVIDIA B200 180GB SXM", "gpu-nvidia-b200 180GB")
+# Massed Compute: the DGX A100 is NVIDIA's own 8-GPU system, built on A100 SXM4 modules (as "HGX" names are SXM).
+# Its plain "A100 (80GB)" heading still states no board and stays unmapped.
+_add("NVIDIA A100 80GB SXM4", "DGX A100 (80GB)")
+# Still unmapped on purpose, variant not stated or sources in conflict: Scaleway's "RTX6000-Blackwell 96GB"
+# (edition), Boost Run's "RTX6000Ada sxm5" (Shadeform tags a PCIe card sxm5), Shadeform's "RTXPro6000 pcie"
+# (edition), Vast's "A100 SXM4" (40 and 80 GB pooled), Linode's "RTX6000", Jarvislabs' and Thunder's bare A100s,
+# Jarvislabs' RTX Pro 6000, Koyeb's bare A100 / H100 / H200 / RTX PRO 6000,
+# Massed's "H100 (80GB)" / "A100 (80GB)" / "RTX PRO 6000 Blackwell (96GB)", and Verda's confidential-computing
+# ("CC") types, a product kept apart from the plain card (providers/verda.py).
+_add(None, "RTX6000-Blackwell 96GB", "RTX6000Ada sxm5", "RTXPro6000 pcie", "A100 SXM4", "RTX6000",
+     "H100 (80GB)", "A100 (80GB)", "RTX PRO 6000 Blackwell (96GB)", "RTX PRO 6000 Blackwell (96GB) [Reduced Storage]",
+     "B200 CC SXM6 180GB", "B300 CC SXM6 268GB", "RTX PRO 6000 CC 96GB",
+     "NVIDIA A100 80GB", "NVIDIA A100 40GB", "NVIDIA RTX Pro 6000 Blackwell 96GB", "gpu-nvidia-a100 80GB",
+     "gpu-nvidia-h100 80GB", "gpu-nvidia-h200 141GB", "gpu-nvidia-rtx-pro-6000 96GB")
+
+# --------------------------------------------------------------------------
 # Seen, deliberately not mapped
 # --------------------------------------------------------------------------
 NOT_A_SINGLE_GPU = {
@@ -661,6 +743,13 @@ NOT_A_SINGLE_GPU = {
     "Stable Diffusion Compatible": "not a GPU model",
     # RunPod ships a placeholder row with zero price and zero VRAM.
     "unknown": "RunPod placeholder entry, not a GPU",
+    # nvidia-smi prints "Graphics Device" for a card its driver cannot name: the model is not stated at all.
+    "NVIDIA Graphics Device": "driver placeholder, GPU model not stated",
+    "Graphics Device 64GB": "driver placeholder, GPU model not stated",
+    "Graphics Device 8GB": "driver placeholder, GPU model not stated",
+    "NVxx 16GB": "placeholder name, GPU model not stated",
+    # A test entry in Akash's own GPU table.
+    "nvidia CANARYI16622GPUMODEL 24Gi PCIe": "Akash canary entry, not a GPU model",
 }
 for _raw in NOT_A_SINGLE_GPU:
     _add(None, _raw)
