@@ -38,7 +38,7 @@ import fetch as fetch_mod  # noqa: E402
 import mapping  # noqa: E402
 import provider_meta  # noqa: E402
 from providers import PROVIDERS  # noqa: E402
-from providers.nosana import ENDPOINT, NosanaProvider  # noqa: E402
+from providers.nosana import ENDPOINT, QUEUED, NosanaProvider  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_providers"
 NOW = datetime(2026, 10, 21, 12, tzinfo=timezone.utc)
@@ -69,17 +69,25 @@ def raises(fn, *a):
     return False
 
 
-def _serve(body: str, status: int = 200):
+def queued_text():
+    return (FIX / "nosana_queued_nodes.json").read_text(encoding="utf-8")
+
+
+def _serve(body: str, status: int = 200, queued: str | None = None, queued_status: int = 200):
     def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.raw_path.decode().split("?")[0] == ENDPOINT:
+        path = request.url.raw_path.decode().split("?")[0]
+        if path == ENDPOINT:
             return httpx.Response(status, text=body, headers={"content-type": "application/json"})
+        if path == QUEUED:
+            return httpx.Response(queued_status, text=queued_text() if queued is None else queued,
+                                  headers={"content-type": "application/json"})
         return httpx.Response(404, text="not found")
     return httpx.MockTransport(handler)
 
 
-def prov(body=None, status=200):
+def prov(body=None, status=200, **queue):
     body = text() if body is None else body
-    return NosanaProvider(httpx.AsyncClient(base_url="https://api.nosana.com", transport=_serve(body, status)))
+    return NosanaProvider(httpx.AsyncClient(base_url="https://api.nosana.com", transport=_serve(body, status, **queue)))
 
 
 def _fetch(p):
@@ -88,7 +96,7 @@ def _fetch(p):
 
 def test_nosana():
     raw = _fetch(prov())
-    assert len(raw) == 1 and raw[0].ok and raw[0].endpoint == ENDPOINT
+    assert [r.endpoint for r in raw] == [ENDPOINT, QUEUED] and all(r.ok for r in raw)
     assert raw[0].payload == load(), "stored untouched"
     out = by_id(NosanaProvider.normalize({ENDPOINT: [snap(raw[0].payload)]}))
     # Read: open PREMIUM markets. Skipped: COMMUNITY (nvidia-4090-community), client-dedicated
@@ -154,13 +162,62 @@ def test_fail_closed():
 
 def test_fetch_failures():
     raw = _fetch(prov("upstream down", status=503))
-    assert len(raw) == 1 and not raw[0].ok and raw[0].status_code == 503 and raw[0].endpoint == ENDPOINT
+    assert len(raw) == 2 and not raw[0].ok and raw[0].status_code == 503 and raw[0].endpoint == ENDPOINT
 
     def boom(request):
         raise httpx.ConnectError("no route")
     p = NosanaProvider(httpx.AsyncClient(base_url="https://api.nosana.com", transport=httpx.MockTransport(boom)))
     raw = _fetch(p)
-    assert len(raw) == 1 and not raw[0].ok and "ConnectError" in raw[0].error
+    assert len(raw) == 2 and not any(r.ok for r in raw) and "ConnectError" in raw[0].error
+
+
+def cap(markets, queued):
+    return {o.sku: o for o in NosanaProvider.normalize_capacity({ENDPOINT: [snap(markets)], QUEUED: [snap(queued)]})}
+
+
+def test_capacity_queued_hosts():
+    """nosana_queued_nodes.json: the whole answer of GET /api/nodes/queued-nodes on 2026-11-15 (87 hosts, untrimmed)."""
+    raw = _fetch(prov())
+    queued = json.loads(queued_text())
+    assert raw[1].ok and raw[1].payload == queued and len(queued) == 87, "stored untouched"
+    out = cap(raw[0].payload, raw[1].payload)
+    # One row per market that has a listing; hosts counted by hand from the fixture.
+    assert set(out) == set(by_id(NosanaProvider.normalize({ENDPOINT: [snap(raw[0].payload)]})))
+    assert {k: v.available_count for k, v in out.items()} == {
+        "nvidia-3060": 5, "nvidia-a6000": 1, "nvidia-pro6000": 1, "nvidia-4090": 0, "nvidia-h100": 0, "nvidia-a100-80gb": 0}
+    a = out["nvidia-3060"]
+    assert a.in_stock is True and a.count_unit == "instance" and a.total_count is None and a.tier is None
+    assert a.region is None and a.gpu_count == 1 and a.raw_value == "5 queued nodes" and a.source == QUEUED
+    assert out["nvidia-4090"].canonical_gpu_name == "NVIDIA RTX 4090 24GB"
+    # No host waiting: a job posted now queues. The linked community market's 5 hosts are not counted in.
+    assert out["nvidia-4090"].in_stock is False and out["nvidia-h100"].in_stock is False
+    assert sum(1 for r in queued if r["marketAddress"] == "Dcwz62TisNbWuto6KJM2EGYGVKnHbdZGVGmgLASzsXy8") == 5
+
+    twice = queued + [r for r in queued if r["marketAddress"] == "EjryZ6XEthz3z7nnLfjXBYafyn7VyHgChfbfM47LfAao"]
+    assert cap(load(), twice)["nvidia-a6000"].available_count == 1, "a host listed twice is one host"
+
+    # Reshaped answers raise; none reads as "nothing in stock".
+    assert raises(cap, load(), []), "an empty queue list"
+    assert raises(cap, load(), {"data": queued})
+    assert raises(cap, load(), [{**queued[0], "state": "RUNNING"}] + queued[1:]), "an unknown state"
+    assert raises(cap, load(), [{k: v for k, v in queued[0].items() if k != "marketAddress"}])
+    assert raises(cap, {"markets": load()}, queued)
+    lost = load()
+    del lost[3]["address"]
+    assert raises(cap, lost, queued), "nothing to join the queue on"
+    # No queue snapshot: no rows (unknown), and prices are untouched either way.
+    assert NosanaProvider.normalize_capacity({ENDPOINT: [snap(load())]}) == []
+    assert NosanaProvider.normalize_capacity({}) == []
+
+
+def test_capacity_failure_leaves_prices():
+    raw = _fetch(prov(queued_status=503))
+    assert raw[0].ok and not raw[1].ok and raw[1].endpoint == QUEUED
+    by = {r.endpoint: [snap(r.payload)] for r in raw if r.ok}
+    assert len(NosanaProvider.normalize(by)) == 6 and NosanaProvider.normalize_capacity(by) == []
+    raw = _fetch(prov(queued="[]"))
+    by = {r.endpoint: [snap(r.payload)] for r in raw if r.ok}
+    assert len(NosanaProvider.normalize(by)) == 6 and raises(NosanaProvider.normalize_capacity, by)
 
 
 def test_registry():
@@ -210,8 +267,8 @@ def test_pipeline():
             bodies = s.execute(sql("SELECT count(*) FROM raw_payloads")).scalar()
             listed = dict(s.execute(sql("SELECT provider, count(*) FROM compute_listings GROUP BY 1")).all())
             held = s.execute(sql("SELECT provider, listing_id, rule FROM quality_quarantine WHERE status = 'pending'")).all()
-        assert stored == {"nosana": 2}, stored
-        assert bodies == 1, "identical bodies from the second poll are stored once"
+        assert stored == {"nosana": 4}, stored  # two polls x (markets, queued nodes)
+        assert bodies == 2, "identical bodies from the second poll are stored once"
         assert listed == {"nosana": 6}, listed
         assert not held, f"nothing held on clean data: {held}"
 
@@ -233,7 +290,8 @@ def test_pipeline():
 
 
 if __name__ == "__main__":
-    for t in (test_nosana, test_fee_matches_chain, test_fail_closed, test_fetch_failures, test_registry,
+    for t in (test_nosana, test_fee_matches_chain, test_fail_closed, test_fetch_failures, test_capacity_queued_hosts,
+              test_capacity_failure_leaves_prices, test_registry,
               test_aliases, test_pipeline):
         t()
         print(t.__name__, "ok")

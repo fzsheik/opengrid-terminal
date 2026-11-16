@@ -19,6 +19,20 @@ ask for fails the poll rather than silently dropping offers. The GPU name is
 gpuModel plus its VRAM ("RTX 3060 (12 GB)"), since some models come in more
 than one memory size. A listing is a live rentable offer, so available=True;
 no separate interruptible price is published, so only on-demand is read.
+
+Capacity: the same two market lists, no extra request. Each offer states
+`numOfInstances`, which SimplePod's API reference (api.simplepod.ai/docs)
+defines as "Number of instances available for this variant": how many
+instances of this exact offer (one host, one GPU count) can be rented now.
+One row per offer, unit instances, in the offer's data centre; the sku is the
+listing_id ("docker:887"), because the count is per offer and one GPU model
+has many. A host's variants draw on the same cards (an 8-GPU host with 5 free
+lists 5 x 1 GPU, 2 x 2 GPUs, 1 x 5 GPUs), so counts of one host's offers are
+never added up; `rigRentalHostId` is kept in raw_value to tell them apart.
+There is no total: a fully rented host leaves the list, so the hosts listed
+are not all the hosts. An offer that is listed but not rentable on demand
+(isAvailableForDemand false, a host error or maintenance) is out of stock.
+A snapshot stored before numOfInstances was kept has no count, only the flag.
 """
 
 import logging
@@ -27,7 +41,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 import canonical
-from models import ComputeListing, RawResponse
+from models import CapacityObservation, ComputeListing, RawResponse
 from providers.base import PollingPolicy, Provider, reshaped, to_decimal
 
 if TYPE_CHECKING:
@@ -46,7 +60,7 @@ MARKETS = {
 _KEEP = (
     "id", "gpuModel", "gpuCount", "gpuMemorySize", "pricePerGpu", "isAvailableForDemand",
     "errors", "rigRentalHostMaintenances", "rigRentalHostId", "cpuCoreCount", "systemMemory",
-    "diskSize", "rig", "rigRentalDatacenter",
+    "diskSize", "rig", "rigRentalDatacenter", "numOfInstances",
 )  # fmt: skip
 
 
@@ -139,3 +153,43 @@ class SimplePodProvider(Provider):
                 )
         return listings
 
+    @staticmethod
+    def normalize_capacity(by_endpoint: "dict[str, list[RawSnapshot]]") -> list[CapacityObservation]:
+        """One listed offer becomes one row: the instances of it that can be rented now (module docstring)."""
+        out = []
+        for endpoint, rows in by_endpoint.items():
+            if "/instances/market/list" not in endpoint or not rows:
+                continue
+            snapshot, mode = rows[0], _endpoint_mode(endpoint)
+            offers = snapshot.payload
+            if not isinstance(offers, list):
+                raise ValueError(f"simplepod: {mode} market is not a list of offers - response reshaped")
+            if len(offers) >= PAGE_SIZE:
+                raise ValueError(f"simplepod: {mode} market fills a whole page - some offers would be missed")
+            for o in offers:
+                if not isinstance(o, dict) or not all(k in o for k in ("id", "gpuModel", "gpuCount", "isAvailableForDemand")):
+                    raise ValueError(f"simplepod: offer lost its id, model, count or on-demand flag: {str(o)[:120]}")
+                count, flag, n = o["gpuCount"], o["isAvailableForDemand"], o.get("numOfInstances")
+                if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+                    continue  # no GPU count to state stock for (normalize() skips it too)
+                if n is not None and (not isinstance(n, int) or isinstance(n, bool) or n < 0):
+                    raise ValueError(f"simplepod: offer {o['id']} numOfInstances {n!r} is not a count - response reshaped")
+                blocked = bool(o.get("errors") or o.get("rigRentalHostMaintenances"))
+                # The flag alone says rentable or not; a stated count of 0 overrides a true flag, never the reverse.
+                in_stock = (flag and not blocked and n != 0) if isinstance(flag, bool) else None
+                # The count is withheld when the offer is not rentable, so a row never says "3 available" beside
+                # in_stock false.
+                available = n if in_stock else (0 if n == 0 else None)
+                mib = o.get("gpuMemorySize")
+                raw_name = o["gpuModel"] + (f" ({mib / 1024:g} GB)" if isinstance(mib, int) and mib > 0 else "")
+                dc = o.get("rigRentalDatacenter") or {}
+                out.append(CapacityObservation(
+                    provider="simplepod", sku=f"{mode}:{o['id']}", region=dc.get("name"),
+                    country=(o.get("rig") or {}).get("country"), raw_gpu_name=raw_name,
+                    canonical_gpu_name=canonical.canonical_gpu_name(raw_name), gpu_count=count,
+                    in_stock=in_stock, available_count=available,
+                    count_unit=None if available is None else "instance",
+                    raw_value=f"numOfInstances={n}; isAvailableForDemand={str(flag).lower()}; "
+                              f"host={o.get('rigRentalHostId')}" + ("; host error or maintenance" if blocked else ""),
+                    source=MARKETS[mode][0], observed_at=snapshot.fetched_at))
+        return out

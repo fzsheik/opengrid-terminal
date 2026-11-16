@@ -186,6 +186,57 @@ def test_simplepod_skips_and_reshape():
     assert raises(sp_normalize, docker, lost)
 
 
+def test_simplepod_capacity():
+    """One row per listed offer: `numOfInstances`, "Number of instances available for this variant"."""
+    raws = _fetch(simplepod_prov())
+    assert "numOfInstances" in raws[0].payload[0], "the count is stored with the offer"
+    by = {r.endpoint: [snap(r.payload)] for r in raws}
+    out = {o.sku: o for o in SimplePodProvider.normalize_capacity(by)}
+    assert len(out) == 37 and set(out) == set(by_id(SimplePodProvider.normalize(by))), "skus are the listing_ids"
+    # Host 211 (8 V100s, 3 rented): 5 x 1 GPU, 2 x 2 GPUs, then one each of 3, 4 and 5 GPUs.
+    assert [out[f"docker:{i}"].available_count for i in (887, 888, 889, 890, 891)] == [5, 2, 1, 1, 1]
+    v = out["docker:887"]
+    assert v.in_stock is True and v.count_unit == "instance" and v.total_count is None and v.tier is None
+    assert v.region == "CA-QB-02" and v.country == "CA" and v.gpu_count == 1 and v.source == SP_DOCKER
+    assert v.canonical_gpu_name == "NVIDIA Tesla V100 16GB PCIe"
+    assert v.raw_value == "numOfInstances=5; isAvailableForDemand=true; host=211"
+    assert out["docker:95"].available_count == 10 and out["docker:95"].canonical_gpu_name is None, "a MIG slice stays unmapped"
+    vm = out["vm:297"]
+    assert vm.available_count == 4 and vm.in_stock is True and vm.region == "EU-PL-01" and vm.source == SP_VM
+    assert out["vm:300"].gpu_count == 4 and out["vm:300"].available_count == 1
+
+    docker, vm_book = json.loads(text("simplepod_market_docker.json")), json.loads(text("simplepod_market_vm.json"))
+    cap = lambda d, v=vm_book: {o.sku: o for o in SimplePodProvider.normalize_capacity({SP_DOCKER: [snap(d)], SP_VM: [snap(v)]})}  # noqa: E731
+    d = copy.deepcopy(docker)
+    d[0]["isAvailableForDemand"] = False        # listed, not rentable on demand
+    d[1]["errors"] = ["gpu fell off the bus"]
+    d[2]["numOfInstances"] = 0                  # a stated zero wins over a true flag
+    del d[3]["numOfInstances"]                  # a snapshot stored before the count was kept
+    d[4]["isAvailableForDemand"] = None         # no flag: unknown, never in stock
+    d[5]["gpuCount"] = 0
+    got = cap(d)
+    ids = [f"docker:{o['id']}" for o in d[:6]]
+    a, b, c, e, f = (got[i] for i in ids[:5])
+    assert (a.in_stock, a.available_count, a.count_unit) == (False, None, None), "no count beside a false flag"
+    assert (b.in_stock, b.available_count) == (False, None) and b.raw_value.endswith("host error or maintenance")
+    assert (c.in_stock, c.available_count, c.count_unit) == (False, 0, "instance")
+    assert (e.in_stock, e.available_count, e.count_unit) == (True, None, None), "the flag alone: in stock, count unknown"
+    assert (f.in_stock, f.available_count) == (None, None), "unknown stays unknown"
+    assert ids[5] not in got and len(got) == 36
+
+    assert raises(cap, {"error": "maintenance"}), "a non-list market is never read as nothing in stock"
+    assert raises(cap, docker * (PAGE_SIZE // len(docker) + 1)), "a full page could hide offers"
+    lost = copy.deepcopy(docker)
+    del lost[0]["isAvailableForDemand"]
+    assert raises(cap, lost)
+    odd = copy.deepcopy(docker)
+    odd[0]["numOfInstances"] = "many"
+    assert raises(cap, odd)
+    # Capacity fails alone: the same reshaped count leaves every price in place.
+    assert len(sp_normalize(odd, vm_book)) == 37
+    assert SimplePodProvider.normalize_capacity({}) == []
+
+
 # --------------------------------------------------------------------------
 # Fetch failures, registry, classes
 # --------------------------------------------------------------------------
@@ -285,6 +336,7 @@ def test_pipeline():
 
 if __name__ == "__main__":
     for t in (test_e2e, test_e2e_skips_and_reshape, test_simplepod, test_simplepod_skips_and_reshape,
+              test_simplepod_capacity,
               test_fetch_failures, test_failed_snapshots_never_become_prices, test_registry, test_pipeline):
         t()
         print(t.__name__, "ok")

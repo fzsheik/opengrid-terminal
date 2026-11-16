@@ -8,6 +8,7 @@ Run:  .venv/bin/python tests/test_provider_hetzner.py
 """
 
 import asyncio
+import json
 import os
 import sys
 from contextlib import contextmanager
@@ -26,9 +27,10 @@ import fx  # noqa: E402
 import mapping  # noqa: E402
 import provider_meta  # noqa: E402
 from providers import PROVIDERS  # noqa: E402
-from providers.hetzner import ENDPOINT, HetznerProvider, extract  # noqa: E402
+from providers.hetzner import ENDPOINT, LIVE, HetznerProvider, extract  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures_providers" / "hetzner_matrix_gpu.html"
+LIVE_FIX = FIX.with_name("hetzner_live_data_upfront.json")
 NOW = datetime(2026, 11, 1, 17, tzinfo=timezone.utc)
 
 
@@ -98,12 +100,80 @@ def test_failures():
         assert raises(HetznerProvider.normalize, {ENDPOINT: [snap(p)]}), "nothing readable is a failure"
     assert HetznerProvider.normalize({}) == []
 
+    raws = asyncio.run(prov().fetch())
+    assert [r.endpoint for r in raws] == [ENDPOINT, LIVE] and raws[0].ok and raws[0].payload == extract(page())
+
+
+def prov(live_status=200, live_text=None):
     def handler(request):
+        if request.url.path == LIVE:
+            return httpx.Response(live_status, text=LIVE_FIX.read_text() if live_text is None else live_text,
+                                  headers={"content-type": "application/json"})
         assert request.url.path == ENDPOINT
         return httpx.Response(200, text=page(), headers={"content-type": "text/html"})
-    raws = asyncio.run(HetznerProvider(httpx.AsyncClient(base_url="https://www.hetzner.com",
-                                                         transport=httpx.MockTransport(handler))).fetch())
-    assert [r.endpoint for r in raws] == [ENDPOINT] and raws[0].ok and raws[0].payload == extract(page())
+    return HetznerProvider(httpx.AsyncClient(base_url="https://www.hetzner.com", transport=httpx.MockTransport(handler)))
+
+
+def cap(cards, live):
+    out = HetznerProvider.normalize_capacity({ENDPOINT: [snap(cards)], LIVE: [snap(live)]})
+    return {(o.sku, o.region): o for o in out}
+
+
+def test_capacity():
+    """hetzner_live_data_upfront.json: the whole file as served on 2026-11-15 (783 bytes, untrimmed)."""
+    raws = asyncio.run(prov().fetch())
+    live = json.loads(LIVE_FIX.read_text())
+    assert raws[1].ok and raws[1].payload == live, "stored untouched"
+    cards = raws[0].payload
+    assert [c["product_key"] for c in cards["cards"]] == [
+        "ROBOT_1768+ROBOT_1266", "ROBOT_1767+ROBOT_1266", "ROBOT_1747+ROBOT_1266", "ROBOT_1769+ROBOT_1266"]
+    out = cap(cards, live)
+    # The file: 1768, 1767 and 1769 -> ["HEL1"]; 1747 -> ["FSN1", "HEL1"]. One row per location a card lists.
+    assert {k: v.in_stock for k, v in out.items()} == {
+        ("GEX45", "HEL1"): True, ("GEX63", "HEL1"): True, ("GEX131", "HEL1"): True, ("GEX131", "FSN1"): True,
+        ("GEX430", "HEL1"): True}
+    a = out[("GEX131", "FSN1")]
+    assert (a.country, a.gpu_count, a.source, a.raw_value) == ("DE", 1, LIVE, "product 1747 orderable in FSN1, HEL1")
+    assert a.tier is None and a.available_count is None and a.total_count is None and a.count_unit is None, "a boolean"
+    assert out[("GEX430", "HEL1")].gpu_count == 4
+    assert out[("GEX430", "HEL1")].canonical_gpu_name == "NVIDIA RTX PRO 6000 Blackwell 96GB Max-Q"
+
+    # A location the card lists but the file does not: out of stock there, in stock elsewhere.
+    gone = cap(cards, {**live, "1747": ["HEL1", "NBG1"]})
+    assert gone[("GEX131", "FSN1")].in_stock is False and gone[("GEX131", "HEL1")].in_stock is True
+    assert ("GEX131", "NBG1") not in gone, "a datacenter the card does not offer gets no row"
+    assert cap(cards, {**live, "1768": []})[("GEX45", "HEL1")].in_stock is False
+    # A product the file does not name: unknown, never in stock and never sold out.
+    missing = cap(cards, {k: v for k, v in live.items() if k != "1769"})[("GEX430", "HEL1")]
+    assert missing.in_stock is None and missing.raw_value == "product 1769 not in the availability file"
+    # Whole product numbers only: 17690 is not 1769.
+    assert cap(cards, {**{k: v for k, v in live.items() if k != "1769"}, "17690": ["HEL1"]})[("GEX430", "HEL1")].in_stock is None
+    assert cap(cards, {**{k: v for k, v in live.items() if k != "1769"}, "1769+1266": ["HEL1"]})[("GEX430", "HEL1")].in_stock is True
+
+    # A card without its product id (stored before it was kept) has no row.
+    old = json.loads(json.dumps(cards))
+    old["cards"][0].pop("product_key")
+    assert ("GEX45", "HEL1") not in cap(old, live) and len(cap(old, live)) == 4
+
+    # Reshaped answers raise; none reads as "nothing in stock".
+    for bad in ({}, [], {"1747": "HEL1"}, {"1747": [1, 2]}, {"error": {"code": 500}}):
+        assert raises(cap, cards, bad), bad
+    assert raises(cap, {"rows": []}, live)
+    assert HetznerProvider.normalize_capacity({ENDPOINT: [snap(cards)]}) == [], "no file: no rows"
+    assert HetznerProvider.normalize_capacity({}) == []
+
+
+def test_capacity_failure_leaves_prices():
+    raws = asyncio.run(prov(live_status=503, live_text="down").fetch())
+    assert raws[0].ok and not raws[1].ok and raws[1].endpoint == LIVE
+    by = {r.endpoint: [snap(r.payload)] for r in raws if r.ok}
+    with ecb_rate():
+        assert len(HetznerProvider.normalize(by)) == 4
+    assert HetznerProvider.normalize_capacity(by) == []
+    raws = asyncio.run(prov(live_text="{}").fetch())
+    by = {r.endpoint: [snap(r.payload)] for r in raws if r.ok}
+    with ecb_rate():
+        assert len(HetznerProvider.normalize(by)) == 4 and raises(HetznerProvider.normalize_capacity, by)
 
 
 def test_registry():
@@ -115,6 +185,7 @@ def test_registry():
 
 
 if __name__ == "__main__":
-    for t in (test_extract, test_normalize, test_failures, test_registry):
+    for t in (test_extract, test_normalize, test_failures, test_capacity, test_capacity_failure_leaves_prices,
+              test_registry):
         t()
         print(t.__name__, "ok")

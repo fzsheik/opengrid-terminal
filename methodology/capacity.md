@@ -7,10 +7,10 @@ Kind: **observed** (the provider's own report). Code: `capacity.py`, each provid
 
 ## Providers and what each reports
 
-Thirty-two providers, every one read from data its own module fetches and stores raw first (the 26 provider modules
+Thirty-five providers, every one read from data its own module fetches and stores raw first (the 29 provider modules
 that define `normalize_capacity`, plus the six clouds read through `providers/shadeform.py`: Latitude, Denvr, Boost
 Run, Horizon, Phyntec and Paperspace). Most of it was already
-being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute, Verda, Hot Aisle, Crusoe and AWS each add a capacity source.
+being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute, Verda, Hot Aisle, Crusoe, AWS, Nosana and Hetzner each add a capacity source.
 
 | Provider | Source | Shape | What the provider says |
 |---|---|---|---|
@@ -39,6 +39,9 @@ being fetched for prices; Koyeb, Linode, Scaleway, Massed Compute, Verda, Hot Ai
 | CUDO Compute | `GET /v1/vms/machine-types`, `GET /v1/machines-types` (no key), the same calls as prices | count | Per data centre: VMs `totalGpuFree` (unit GPUs, sku `vm:<machine type>`); bare metal `machinesFree` (unit instances, sku `baremetal:<type id>`). The API lists only what is in stock or recently stocked. CPU-only types are skipped. |
 | GPU.ai | `GET /v1/pricing` (no key), the same call as prices | count | `available`: launchable offerings (instances, not GPUs) per offering, by GPU.ai's region. Sku is `<gpu>x<count>:<deployment>/<class>`. GPU.ai resells other clouds' GPUs, so its listings never vote in market statistics; capacity is stored and shown the same way. |
 | Hydra Host | `GET /api/v1/inventory` (no key), the same call as prices | boolean | One row per active GPU device: `stockStatus` `on demand` = in stock; `reserve` and `preorder` = not rentable now. Any other word is kept in raw_value with `in_stock` null. Sku is the device id (the listing sku); region is the device's location. |
+| SimplePod | `GET /instances/market/list?rentalStatus=active`, containers and VMs (no key), the same calls as prices | count (free only) | `numOfInstances`, which SimplePod's API reference defines as "Number of instances available for this variant": instances of one offer (one host, one GPU count) that can be rented now, in the offer's data centre; unit is instances. Sku is the listing_id (`docker:887`), because the count is per offer. One host's offers draw on the same cards (8 GPUs with 5 free: 5 x 1 GPU, 2 x 2 GPUs, 1 x 5 GPUs), so never add them up; the host id is kept in raw_value. No total: a fully rented host leaves the list. An offer listed but not rentable on demand (`isAvailableForDemand` false, a host error or maintenance) is `false` with no count. |
+| Nosana | `GET /api/nodes/queued-nodes` (no key) | count (free only) | One row per host waiting in a market's queue (`nodeAddress`, `marketAddress`, state `QUEUED`). Nosana's Jobs program docs: "When there a more nodes than jobs in a given Market, the queue will fill up with nodes", and a queued node "will pick up new job postings". So the count is the hosts idle now and ready for a job, per market, provider-wide; unit is instances (one job, one GPU each). Sku is the market slug (the listing sku); only markets that have a listing. A market with no queued host is 0 and `false`: a job posted now waits. No total: busy hosts are not listed. Whether a job in a PREMIUM market can fall through to its linked COMMUNITY market is not documented, so each market counts its own queue only. An empty list fails the read instead of reading as sold out. |
+| Hetzner | `GET /_resources/app/data/app/live_data_upfront.json` (no key), joined to the price page by the Robot product id each card carries | boolean | The file Hetzner's own order configurator reads: product number -> the datacenters where it can be ordered now. One row per GEX model and location the price page lists: in stock exactly when the file lists that datacenter for the product. Hetzner does not document the file; the meaning is the configurator's behaviour (a location is selectable only when listed; with none, the button reads "Currently not available"). A product the file does not name at all is unknown, not `false`: the configurator skips the check for some products, and which ones is not in the data read here. Base configuration only (GEX131's larger variants are other products). No count and no delivery time. |
 | Hugging Face Endpoints | `GET /v2/provider` (no key), the same call as prices | boolean | Per compute (AWS, GCP or Azure instance in a region): in stock when its `status` is `available` and its region and vendor are up. Resold capacity of clouds OpenGrid also reads directly, so it never votes in market statistics. |
 | Denvr, Boost Run, Horizon, Phyntec, Paperspace | Shadeform `availability` | boolean | Whether Shadeform can launch the type in that region now. |
 | Massed Compute | Its own `GET /api/v1/gpu-inventory` (API key) | count | `capacity_available`: instances of that product (GPU, count, spot or not) that can be launched now, provider-wide; the in-stock regions (`regions_with_capacity_available`) are kept in raw_value. Count unit is instances. Sku is the listing sku. Counts for different sizes of one GPU draw on the same pool, so never add them up. Without the key, Shadeform's boolean (skus are Shadeform's type names, joined to listings by GPU and count); never both. |
@@ -49,8 +52,16 @@ the read-only service account the poller asks calendar-mode advice, which is fut
 on-demand stock; this project gets "The service is not available for this project." so the answers are stored raw
 and no rows are produced, `/methodology/gcp-regions`.) (OVHcloud's anonymous dedicated-server list does give a delivery word, such as `1H-low`, `72H` or
 `unavailable`, per GPU server configuration and datacenter; it is stored raw only, because those bare-metal servers
-are not listings, so there is no price for a row to join to.) Vultr: its availability endpoint is empty for every GPU plan. CoreWeave, Together, IBM:
-no capacity data found.
+are not listings, so there is no price for a row to join to. For Public Cloud GPU flavors OVHcloud has no anonymous
+answer, and its keyed `productAvailability` lists the regions a plan is sold in, not stock.) Vultr:
+`GET /v2/regions/{id}/availability` is public and lists the plans available in a region now, but it and every GPU
+plan's `locations` are empty for all GPU plans (re-checked 2026-11-15 in seven regions), and nothing says whether
+that means sold out or not shown to anonymous callers, so no row is made. Alibaba: its keyed
+`DescribeAvailableResource` states stock per zone (`StatusCategory`), but no real answer has been seen yet.
+Key needed and not held: Civo (`out_of_capacity`), Gcore (flavor `capacity`), Mithril (`/v2/spot/availability`),
+CoreWeave (spot capacity score, which its terms keep confidential). No stock signal found, with or without a key:
+Together, IBM, Exoscale, IONOS, Atlantic.Net, E2E, Bitdeer, Sakura, Yotta, Arkane, VESSL, Baseten, Beam, Modal,
+Replicate, Fireworks.
 
 **Vast's census cadence.** Vast caps keyed searches at 20,000 result rows a day, so the census does not run every poll:
 after each census the next waits rows used / 16,000 of a day (at least 1 hour, at most 12 hours), and a quota refusal
