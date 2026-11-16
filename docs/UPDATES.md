@@ -58,9 +58,17 @@ volume needs growing first)
 - **Large-load queues**: no public project-level source. **EOG VIIRS flaring, the World Bank 2012-2025 files and
   Texas RRC flaring**: declined on their terms (non-commercial or session-only).
 
+- **Site ranking** (`power/siting.py`, methodology/power-siting.md): every US county with a plant, an active queue
+  request or North Dakota flaring, scored from idle MW, retirements in 36 months, rarely-running large plants, the
+  share of intervals below $20 / $0 (grain node / zone / hub / none on every row), flaring, ISO curtailment
+  (regional), queued generation and EIA-930 net export. Parts are shown beside the score with a one-sentence reason;
+  missing parts are null, not 0. Weights are a module constant and a read parameter. Admin reads
+  `/v1/ops/power/sites/ranking` and `/sites/near?lat=&lon=&km=`. Computed on read: no migration.
+
 ### Next
-- A site ranking that joins the three: cheap nodes, idle or retiring plants nearby, curtailment and flaring in the
-  area, and what else is queued to connect.
+- Measure the ERCOT node-to-county rule on the production catalogue once the nodal and sites backfills run (it ties a
+  node only on an exact, unique plant-name key, so most ERCOT counties will use the hub); review the CAISO county-to-
+  hub table against a county map; find an ERCOT county-to-load-zone source.
 
 ---
 

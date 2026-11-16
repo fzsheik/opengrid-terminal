@@ -51,7 +51,7 @@ Counts recomputed from the code on 2026-11-13; providers, API operations, jobs a
 | Canonical GPU models | **100**, variants never merged (H100 SXM ≠ H100 PCIe ≠ H100 NVL); each has a hardware spec row (100 in `hardware.py`) |
 | OpenGrid indices defined | **269**: 100 per-GPU, 100 spot, 40 regional, 25 provider-class, 4 composites (H100 / H200 / A100 class and the overall GPU Compute Index) |
 | News & signal sources | **93** registered, **78** enabled (41 RSS, 4 Atom, 3 US Federal Register, 26 SEC EDGAR, 4 GDELT queries); the 15 disabled ones are listed with the reason. About 87k items stored in production (86,523 on 2026-11-15), history backfill included |
-| API operations | **267** in the OpenAPI schema: 245 under `/v1` (89 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 20 admin-only reads (13 power, 1 GPUs free per type, 2 equities, 3 marketplace operators, 1 internal reserved prices), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 47 page routes |
+| API operations | **267** in the OpenAPI schema: 245 under `/v1` (89 of them under `/v1/ops` or `/v1/admin`), 15 under `/internal` (the website's own reads) and 7 operator/debug routes at the root. Outside the schema: 22 admin-only reads (15 power, 1 GPUs free per type, 2 equities, 3 marketplace operators, 1 internal reserved prices), 5 runner-callback routes (events, instructions, artifacts, resume, complete), `/v1/openapi.json`, the hosted MCP endpoint `/mcp`, the site login (GET form, POST) / logout, `/classic` (redirect), `/robots.txt`, `/sitemap.xml`, FastAPI's `/docs`, `/redoc`, `/openapi.json` and the 47 page routes |
 | Web pages | **47** routes: Home plus five destinations (Explore: GPUs, Find Compute, Markets, Developers; Your workspace: My Jobs), operator tools hidden, access indicator, light/dark themes, keyboard command bar. RL cost (`/rl-cost`) sits under GPUs; Batches (`/batches`, `/batch/{id}`) under My Jobs; the internal Monthly report (`/reports`, `/reports/{month}`) under Markets, locked |
 | Database tables | **133** in a freshly migrated database (132 application tables plus `alembic_version`; Postgres, migrated by Alembic: 48 migrations, head `0047_power_nodal`) |
 | Background jobs | **41** registered when every optional source is configured (**36** with the defaults: no EIA / SEC / Alpaca keys, `POWER_ENABLED` off), beside the per-provider poll loops (rollups, indices, settlement fixings, events, shifts, news, reconciliation, tracking, training-job sync, relaunch and move, batch queues, reservation expiry, alerts, feeds, FX, full cost, capacity streams, uptime and probes, market context, equities, power markets, the monthly market report…; table 15.2) |
@@ -62,7 +62,7 @@ Counts recomputed from the code on 2026-11-13; providers, API operations, jobs a
 | Training jobs | **1** allowlisted template (PyTorch MNIST) end to end: preview → approval → GPU → model artifacts → automatic termination. Built on top, tested against fake provider APIs only: **batches** (a sweep or shard list as one batch: placement across clouds, one budget, one approval), **resume** from a verified checkpoint, opt-in **OOM escalation** and **move** to another GPU; automatic relaunch / OOM escalation and move are off by default (`JOB_AUTO_RELAUNCH_ENABLED`, `JOB_MOVE_ENABLED`) |
 | Settlement fixings | Hourly + daily TWAP fixings for **6** settlement indices, immutable, hash-chained, publicly verifiable |
 | Workload intelligence | GPU memory estimator (text LLMs; recommendations also size audio, image + text and video workloads, section 6c), measured performance from completed real jobs (none yet), project-aware recommendations (`POST /v1/recommend`), local project analyzer, `opengrid` CLI, MCP server (hosted at `/mcp` with an API key: 15 tools, 2 prompts; local via uvx: 16 tools, 3 prompts), grounded assistant, RL post-training cost estimator |
-| Automated tests | **156** Python test files + **14** JavaScript test files, all 170 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
+| Automated tests | **157** Python test files + **14** JavaScript test files, all 171 run in parallel by `tests/run_all.py` (and by CI on every push), + **5** CLI/MCP test files: unit, integration, end-to-end, concurrency, chaos, money-loss invariants, red team, data-visibility leaks, API contract |
 
 ---
 
@@ -745,6 +745,13 @@ Three further datasets support finding sites for small datacenters on spare powe
   county monthly from 2015-05 (internal), with a derived MWh figure. EOG VIIRS (CC BY-NC), the World Bank 2012-2025
   files and Texas RRC were declined on their terms. `python -m power flaring`; `power_forward` runs it at most weekly.
   Reads `/v1/ops/power/curtailment`, `/flaring`.
+- **Site ranking** (`power/siting.py`, methodology/power-siting.md; computed on read, no table): US counties ranked for
+  a small datacenter (1-50 MW) on spare, cheap power. Every part is shown beside the score: idle MW, MW retiring in
+  36 months, large rarely-running plants (EIA-860M / 923); the share of intervals below $20 and $0 at a price location
+  labelled node / zone / hub / none (ERCOT nodes tied to a county only by an exact, unique plant-name key); North
+  Dakota flaring by county; ISO curtailment (regional); queued generation (one source, never summed); EIA-930 net
+  export of the balancing authority. A missing part is null, never 0. Weights are `WEIGHTS` in the module and a read
+  parameter. Reads `/v1/ops/power/sites/ranking`, `/sites/near?lat=&lon=&km=` (internal).
 - **Storage** (migration `0035_power_markets`): `power_series` (the catalogue); `power_days`, one row per series and
   market day with the day's values as a compact `real[]` (24 hourly or 288 five-minute slots, DST days 23/25 or
   276/300) plus the day's mean, min and max; `power_fetches`, raw first: every request (failures and "no data"
@@ -780,7 +787,7 @@ Three further datasets support finding sites for small datacenters on spare powe
   is **not** a provider's cost.
 - **Access**: every read is admin-only under `/v1/ops/power/*` (`sources`, `status`, `series`, `map`,
   `cross/regional`, `cross/leadlag`, `shifts`, `nodes/cheap`, `plants`, `queues`, `sites/status`, `curtailment`,
-  `flaring`), outside the OpenAPI schema. **There is no public power route**;
+  `flaring`, `sites/ranking`, `sites/near`), outside the OpenAPI schema. **There is no public power route**;
   `tests/test_visibility.py` asserts none exists and seeds internal power, gas and derived values to check every
   public route.
 
@@ -1356,7 +1363,7 @@ the app:
 | Watchlists | `/v1/watchlists`, `/v1/watchlists/{id}`, `…/items`, `…/items/{item_id}`, `/v1/alerts`, `/v1/alerts/{id}`, `…/test`, `/v1/alerts/firings` |
 | Reports (internal; `data:read`, never anonymous, not on the Data API host) | `/v1/reports/monthly`, `/v1/reports/monthly/{month}`; admin: `POST /v1/reports/monthly/{month}/regenerate` (section 4.10) |
 | Analytics | `/v1/economics`, `/v1/onboarding`, `/v1/partners/me`, `POST /v1/events/track` (anonymous product analytics) |
-| Admin & ops (89 in the schema, 20 more outside it) | execution control, kill switches, validation, reconciliation, orphans, resources, channels, ops, metrics, traces, checklist, partners, funnel, accounts, credits, draft invoices, fee policies, exposures, feedback, quality and quarantine, product analytics / PostHog, usage, internal-data registry, reservation offers, fixing restatements, methodology change notices; in the schema, `/v1/ops/lium/*` (14); outside the schema: `/v1/ops/power/*` (13), `/v1/ops/context/equities` (2), `/v1/ops/operators` (3) and `/v1/ops/reserved/internal` (1) |
+| Admin & ops (89 in the schema, 22 more outside it) | execution control, kill switches, validation, reconciliation, orphans, resources, channels, ops, metrics, traces, checklist, partners, funnel, accounts, credits, draft invoices, fee policies, exposures, feedback, quality and quarantine, product analytics / PostHog, usage, internal-data registry, reservation offers, fixing restatements, methodology change notices; in the schema, `/v1/ops/lium/*` (14); outside the schema: `/v1/ops/power/*` (15), `/v1/ops/context/equities` (2), `/v1/ops/operators` (3) and `/v1/ops/reserved/internal` (1) |
 
 Counts (from `main.app.openapi()` on a freshly migrated database): 262 operations, 240 under `/v1`, 84 of them under
 `/v1/ops` or `/v1/admin`, 15 under `/internal`, and 7 operator/debug routes at the root (`/health`, `/fetch`,
@@ -1484,9 +1491,9 @@ registered. `news`, `gpuhunt_snapshot` and `monthly_report` are always registere
 
 ## 16. Testing
 
-156 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
+157 Python test files and 14 JavaScript test files in `tests/` (plain scripts, each with its own scratch
 Postgres database, no real provider calls), plus 5 CLI/MCP test files in `cli/tests/`. `tests/run_all.py` runs all
-170 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
+171 in parallel (6 at a time by default; `JOBS`, `TIMEOUT` and name filters adjust it), and GitHub Actions
 (`.github/workflows/tests.yml`) runs it on every push and pull request against a throwaway Postgres 16 whose zone is
 deliberately not UTC. Beyond the per-module tests:
 - unit and integration tests for every analytics module, API and page;
@@ -1648,18 +1655,18 @@ a real GPU provider yet. The next step is one supervised **Lambda validation run
 ## 19. Methodology documents
 
 Every number OpenGrid publishes traces to a document in `methodology/` (also served at
-`/methodology` in the terminal and listed at `GET /v1/methodology`). The 51 documents:
+`/methodology` in the terminal and listed at `GET /v1/methodology`). The 53 documents:
 
 - **Market data:** `data-kinds` · `data-quality` · `data-trust` · `data-visibility` · `freshness` · `capacity` ·
   `live-feeds` · `lium-data` · `families` · `hardware` · `fx` · `gcp-regions`
 - **Market intelligence:** `indices` · `settlement` · `historical-context` · `archived-history` · `dispersion` ·
   `provider-value` · `events` · `shifts` · `opportunities` · `reserved-prices` · `full-cost` · `rl-cost` · `monthly-report`
-- **News and context:** `news` · `news-history` · `market-context` · `power-markets`
+- **News and context:** `news` · `news-history` · `market-context` · `power-markets` · `power-waste` · `power-siting`
 - **Reliability:** `uptime` · `probes` · `reliability`
 - **Execution:** `routing` · `best-execution` · `execution-safety` · `reconciliation` · `provider-capabilities` · `adapter-contract-audit` ·
   `first-live-route` · `routing-quality` · `economics` · `billing`
 - **Jobs, workloads and reservations:** `jobs` · `batches` · `workloads` · `runner` · `recommendations` · `workload-intelligence-review` · `reservations`
 - **Operations:** `alerts` · `security`
 
-Two internal-only methodology notes (`methodology/internal/equities.md`, `methodology/internal/natural-gas.md`) are
-not served on the site.
+Three internal-only methodology notes (`methodology/internal/equities.md`, `methodology/internal/natural-gas.md`,
+`methodology/internal/operators.md`) are not served on the site.
